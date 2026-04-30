@@ -51,23 +51,18 @@ jobs:
 
       - name: Common tests (JVM)
         if: steps.scaffold.outputs.scaffolded == 'true'
-        run: ./gradlew :shared:jvmTest --no-daemon
-        continue-on-error: true
-
-      - name: Android unit tests
-        if: steps.scaffold.outputs.scaffolded == 'true'
-        run: ./gradlew :androidApp:testDebugUnitTest --no-daemon
+        run: ./gradlew :composeApp:testDebugUnitTest --no-daemon
         continue-on-error: true
 
       - name: assembleDebug
         if: steps.scaffold.outputs.scaffolded == 'true'
-        run: ./gradlew :androidApp:assembleDebug --no-daemon
+        run: ./gradlew :composeApp:assembleDebug --no-daemon
 
       - name: Upload debug APK
         if: steps.scaffold.outputs.scaffolded == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/master'
         uses: actions/upload-artifact@v4
         with:
-          name: androidApp-debug-${{ github.sha }}
-          path: androidApp/build/outputs/apk/debug/*.apk
+          name: composeApp-debug-${{ github.sha }}
+          path: composeApp/build/outputs/apk/debug/*.apk
           retention-days: 14
           if-no-files-found: warn

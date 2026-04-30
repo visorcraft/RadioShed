@@ -60,12 +60,12 @@ jobs:
 
       - name: Common tests on iOS simulator
         if: steps.scaffold.outputs.scaffolded == 'true'
-        run: ./gradlew :shared:iosSimulatorArm64Test --no-daemon
+        run: ./gradlew :composeApp:iosSimulatorArm64Test --no-daemon
         continue-on-error: true
 
-      - name: Build shared XCFramework
+      - name: Build iOS framework
         if: steps.scaffold.outputs.scaffolded == 'true'
-        run: ./gradlew :shared:assembleXCFramework --no-daemon
+        run: ./gradlew :composeApp:linkDebugFrameworkIosSimulatorArm64 --no-daemon
         continue-on-error: true
 
       - name: Build iosApp (debug, simulator)
