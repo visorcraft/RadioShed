@@ -61,12 +61,10 @@ jobs:
       - name: Common tests on iOS simulator
         if: steps.scaffold.outputs.scaffolded == 'true'
         run: ./gradlew :composeApp:iosSimulatorArm64Test --no-daemon
-        continue-on-error: true
 
       - name: Build iOS framework
         if: steps.scaffold.outputs.scaffolded == 'true'
         run: ./gradlew :composeApp:linkDebugFrameworkIosSimulatorArm64 --no-daemon
-        continue-on-error: true
 
       - name: Build iosApp (debug, simulator)
         if: steps.scaffold.outputs.scaffolded == 'true' && hashFiles('iosApp/iosApp.xcodeproj/project.pbxproj') != ''
@@ -75,5 +73,5 @@ jobs:
             -project iosApp/iosApp.xcodeproj \
             -scheme iosApp \
             -configuration Debug \
-            -destination 'platform=iOS Simulator,name=iPhone 15,OS=latest' \
+            -destination 'generic/platform=iOS Simulator' \
             build
