@@ -2,9 +2,9 @@ name: Android
 
 on:
   push:
-    branches: [main]
+    branches: [master]
   pull_request:
-    branches: [main]
+    branches: [master]
   workflow_dispatch:
 
 concurrency:
@@ -64,7 +64,7 @@ jobs:
         run: ./gradlew :androidApp:assembleDebug --no-daemon
 
       - name: Upload debug APK
-        if: steps.scaffold.outputs.scaffolded == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: steps.scaffold.outputs.scaffolded == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/master'
         uses: actions/upload-artifact@v4
         with:
           name: androidApp-debug-${{ github.sha }}

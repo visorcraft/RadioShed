@@ -198,7 +198,7 @@ that across repos forfeits the reason to use KMP in the first place.
 
 #### Branching, releases, CI
 
-- **Branching:** trunk-based on `main`. Short-lived feature branches.
+- **Branching:** trunk-based on `master`. Short-lived feature branches.
   Branch protection: required PR reviews + green CI.
 - **Tags drive releases:** pushing `v1.0.0` triggers automated artifact
   builds for both platforms.
@@ -1036,20 +1036,20 @@ for reality.
 
 Goal: repo exists, decisions documented, CI skeleton green.
 
-- [ ] Create **private** GitHub repository with branch protection on `main`
-- [ ] Draft proprietary `LICENSE` file: no redistribution, no resale, no public sharing, no mirroring; reserve all rights; private use of authorized binaries only; recommend lawyer review before launch
-- [ ] Add `.editorconfig`, `.gitignore`, `.gitattributes`
+- [x] Create **private** GitHub repository with branch protection on `master`
+- [x] Draft proprietary `LICENSE` file: no redistribution, no resale, no public sharing, no mirroring; reserve all rights; private use of authorized binaries only (lawyer review still pending before public release)
+- [x] Add `.editorconfig`, `.gitignore`, `.gitattributes`
 - [ ] Add `CONTRIBUTING.md` (private team contribution guide)
-- [ ] Create `docs/decisions/` with ADR template (`0000-template.md`)
+- [x] Create `docs/decisions/` with ADR template (`0000-template.md`)
 - [ ] Document iOS build host strategy in `docs/decisions/0001-ios-build-host.md` (cloud / self-hosted Mac / buy Mac mini)
-- [ ] Create `gradle/libs.versions.toml` with curated dependency versions
-- [ ] Create `version.properties` (single app-version source)
-- [ ] Add ktlint, detekt, swiftformat, swiftlint configs
-- [ ] Set up `pre-commit` hooks
-- [ ] GitHub Actions: Android Linux job skeleton (lint + smoke build)
-- [ ] GitHub Actions: iOS macOS job skeleton (placeholder build, mindful of macOS minute cost on private repo)
-- [ ] Verify Android 13 SDK on the dev machine (already done — see `README.md`)
-- [ ] Move `android13-smoketest/` aside or delete; toolchain check served its purpose
+- [ ] Create `gradle/libs.versions.toml` with curated dependency versions (deferred — KMP wizard will generate, then we'll customize)
+- [x] Create `version.properties` (single app-version source)
+- [ ] Add ktlint, detekt, swiftformat, swiftlint configs (deferred until Kotlin/Swift code exists)
+- [ ] Set up `pre-commit` hooks (deferred until lint configs exist)
+- [x] GitHub Actions: Android Linux job skeleton (lint + smoke build)
+- [x] GitHub Actions: iOS macOS job skeleton (placeholder build, mindful of macOS minute cost on private repo)
+- [x] Verify Android 13 SDK on the dev machine (see `README.md`)
+- [x] Move `android13-smoketest/` aside or delete; toolchain check served its purpose
 
 ### Phase 1 — KMP bootstrap & "hello world" on both platforms (~1–2 weeks)
 
