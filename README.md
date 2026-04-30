@@ -55,7 +55,7 @@ builds require macOS (see "iOS builds" below).
 | --------------------- | ------------------------------------------------------------- |
 | OS                    | Windows 11                                                    |
 | JDK                   | Microsoft OpenJDK 17 — `C:\Program Files\Microsoft\jdk-17.0.18.8-hotspot` |
-| Android SDK           | `C:\Program Files (x86)\Android\android-sdk`                  |
+| Android SDK           | `C:\android-sdk`                  |
 | Android platforms     | `android-33`, `android-35`, `android-36`                      |
 | Build-tools           | `33.0.2`, `35.0.1`, `36.0.0`                                  |
 | Platform-tools        | `36.0.0` (`adb`)                                              |
@@ -66,8 +66,8 @@ builds require macOS (see "iOS builds" below).
 Persistent user-level environment variables set:
 
 ```
-ANDROID_HOME      = C:\Program Files (x86)\Android\android-sdk
-ANDROID_SDK_ROOT  = C:\Program Files (x86)\Android\android-sdk
+ANDROID_HOME      = C:\android-sdk
+ANDROID_SDK_ROOT  = C:\android-sdk
 JAVA_HOME         = C:\Program Files\Microsoft\jdk-17.0.18.8-hotspot
 PATH              += %ANDROID_HOME%\platform-tools
                      %ANDROID_HOME%\cmdline-tools\latest\bin
