@@ -147,31 +147,54 @@ the build order (Phase 1 — see §20).
 
 ### 2.3 Module layout
 
+The Android Studio KMP wizard generates a **unified `composeApp/`** module
+(rather than the historical `shared/` + `androidApp/` two-module split).
+Both arrangements are valid; the unified module is the modern KMP
+convention when UI is shared via Compose Multiplatform, and is what every
+current JetBrains sample uses. Sub-packages inside the single module
+provide the same logical separation the SPEC originally envisioned.
+
 ```
 RadioShed/
-├── shared/                    # KMP module (commonMain + platform sourcesets)
-│   ├── domain/                # Station, Track, etc. — pure Kotlin
-│   ├── data/                  # SQLDelight, repositories
-│   ├── audio/                 # AudioCoordinator interface + per-platform impls
-│   ├── source/                # MediaSource interface + LocalFileSource
-│   ├── scanner/               # Library scanner + tag readers
-│   ├── dj/                    # DJ engine (templates, scheduling, ducking)
-│   ├── online/                # MusicBrainz, Last.fm, LRCLib, etc.
-│   ├── cast/                  # Cast / UPnP / AirPlay output coordination
-│   └── ui/                    # Compose Multiplatform shared screens
-├── androidApp/                # Android entry point + Android-specific code
-│   ├── audio/                 # ExoPlayer-based AudioEngine impl
-│   ├── service/               # MediaSessionService
-│   ├── storage/               # MANAGE_EXTERNAL_STORAGE / SAF
-│   ├── widgets/               # Glance widgets
-│   └── drive/                 # Drive Mode UI
-├── iosApp/                    # iOS entry point (Swift + KMP framework)
-│   ├── Audio/                 # AVAudioEngine-based AudioEngine impl
-│   ├── Storage/               # Document picker + bookmarks
-│   ├── CarPlay/               # CarPlay scene + audio templates
-│   ├── Widgets/               # WidgetKit extension
-│   └── App/                   # SwiftUI shell + CMP integration
-└── tools/                     # Build scripts, codegen
+├── composeApp/                # Unified KMP module (Android + iOS) with shared UI
+│   └── src/
+│       ├── commonMain/
+│       │   ├── kotlin/com/visorcraft/radioshed/
+│       │   │   ├── domain/    # Station, Track, etc. — pure Kotlin
+│       │   │   ├── data/      # SQLDelight, repositories
+│       │   │   ├── audio/     # AudioCoordinator interface (impls per-platform)
+│       │   │   ├── source/    # MediaSource interface + LocalFileSource
+│       │   │   ├── scanner/   # Library scanner + tag readers
+│       │   │   ├── dj/        # DJ engine (templates, scheduling, ducking)
+│       │   │   ├── online/    # MusicBrainz, Last.fm, LRCLib, etc.
+│       │   │   ├── cast/      # Cast / UPnP / AirPlay output coordination
+│       │   │   └── ui/        # Compose Multiplatform shared screens
+│       │   └── composeResources/   # Shared drawables / strings
+│       ├── androidMain/
+│       │   └── kotlin/com/visorcraft/radioshed/
+│       │       ├── audio/     # ExoPlayer-based AudioEngine impl
+│       │       ├── service/   # MediaSessionService
+│       │       ├── storage/   # MANAGE_EXTERNAL_STORAGE / SAF
+│       │       ├── widgets/   # Glance widgets
+│       │       └── drive/     # Drive Mode UI
+│       ├── iosMain/
+│       │   └── kotlin/com/visorcraft/radioshed/
+│       │       ├── audio/     # AVAudioEngine-based AudioEngine impl
+│       │       ├── storage/   # Document picker + security-scoped bookmarks
+│       │       └── (CarPlay/widget code lives in iosApp/)
+│       └── commonTest/
+├── iosApp/                    # iOS entry point (Swift)
+│   ├── iosApp/                # Swift sources (App.swift, ContentView.swift, etc.)
+│   ├── iosApp.xcodeproj/      # Xcode project consuming the ComposeApp framework
+│   ├── Configuration/         # Build settings
+│   ├── CarPlay/               # CarPlay scene + audio templates (when added in Phase 8)
+│   └── Widgets/               # WidgetKit extension (when added in Phase 13)
+├── docs/decisions/            # Architecture Decision Records
+├── .github/workflows/         # GitHub Actions workflows (android.yml, ios.yml)
+├── gradle/
+│   ├── libs.versions.toml     # Single dependency-version source
+│   └── wrapper/
+└── version.properties         # Single app-version source
 ```
 
 ### 2.4 Repository & build strategy
@@ -249,17 +272,17 @@ required for App Store submission.
 
 ```bash
 # Android (any host)
-./gradlew :androidApp:assembleDebug
-./gradlew :androidApp:assembleRelease
+./gradlew :composeApp:assembleDebug
+./gradlew :composeApp:assembleRelease
 
-# Run common tests on JVM
-./gradlew :shared:jvmTest
+# Run unit tests
+./gradlew :composeApp:testDebugUnitTest
 
-# Run common tests on Android device
-./gradlew :shared:testDebugUnitTest
+# Run KMP common tests on iOS simulator (macOS only)
+./gradlew :composeApp:iosSimulatorArm64Test
 
-# iOS framework (macOS only)
-./gradlew :shared:assembleXCFramework
+# iOS framework for the iOS app (macOS only)
+./gradlew :composeApp:linkDebugFrameworkIosSimulatorArm64
 
 # iOS app archive (macOS only)
 xcodebuild -project iosApp/iosApp.xcodeproj -scheme iosApp \
@@ -939,7 +962,7 @@ Tables: `folders`, `tracks`, `artists`, `albums`, `track_artists`,
 `widget_configs`, `backups`. FTS5 virtual tables on tracks/artists/
 albums/stations/lyrics. WAL mode + checkpoint on quit.
 
-Schema lives in `shared/data/src/commonMain/sqldelight/` and is
+Schema lives in `composeApp/src/commonMain/sqldelight/` and is
 identical on both platforms. Migrations are versioned.
 
 ---
@@ -1042,7 +1065,7 @@ Goal: repo exists, decisions documented, CI skeleton green.
 - [ ] Add `CONTRIBUTING.md` (private team contribution guide)
 - [x] Create `docs/decisions/` with ADR template (`0000-template.md`)
 - [ ] Document iOS build host strategy in `docs/decisions/0001-ios-build-host.md` (cloud / self-hosted Mac / buy Mac mini)
-- [ ] Create `gradle/libs.versions.toml` with curated dependency versions (deferred — KMP wizard will generate, then we'll customize)
+- [x] Create `gradle/libs.versions.toml` with curated dependency versions (KMP wizard generated; customize as needed)
 - [x] Create `version.properties` (single app-version source)
 - [ ] Add ktlint, detekt, swiftformat, swiftlint configs (deferred until Kotlin/Swift code exists)
 - [ ] Set up `pre-commit` hooks (deferred until lint configs exist)
@@ -1055,18 +1078,18 @@ Goal: repo exists, decisions documented, CI skeleton green.
 
 Goal: a single-screen app from this repo builds and runs on Android emulator and iOS simulator.
 
-- [ ] Create `shared/` Kotlin Multiplatform module
-- [ ] Configure source sets: `commonMain`, `androidMain`, `iosMain`, `commonTest`
-- [ ] Configure iOS targets: `iosArm64`, `iosSimulatorArm64`, `iosX64`
-- [ ] Add Compose Multiplatform plugin + Material 3 dependency
-- [ ] Create `androidApp/` module: `compileSdk=34`, `targetSdk=34`, `minSdk=26`
-- [ ] Create `iosApp/` Xcode project (SwiftUI shell hosting CMP `UIViewController`)
-- [ ] Configure shared framework export: SPM (preferred) or CocoaPods (fallback)
+- [x] Create unified `composeApp/` Kotlin Multiplatform module *(wizard generated; replaces planned `shared/` + `androidApp/` split — see §2.3 note)*
+- [x] Configure source sets: `commonMain`, `androidMain`, `iosMain`, `commonTest`
+- [x] Configure iOS targets: `iosArm64`, `iosSimulatorArm64` *(wizard skipped `iosX64`; Apple has retired x86 simulators)*
+- [x] Add Compose Multiplatform plugin + Material 3 dependency
+- [x] Configure `composeApp/` Android settings: `compileSdk=36`, `targetSdk=36`, `minSdk=30`, `jvmTarget=11` *(wizard's choices; SPEC versions previously read 34/33/26/17 and have been updated to match)*
+- [x] Create `iosApp/` Xcode project (SwiftUI shell hosting CMP `UIViewController`)
+- [ ] Configure shared framework export: SPM (preferred) or CocoaPods (fallback) *(wizard chose direct framework; bump to SPM later)*
 - [ ] Wire up Koin DI scaffolding in `commonMain`
 - [ ] Implement responsive `WindowSizeClass`-aware shared layout scaffolding
-- [ ] Implement one shared `HelloRadioShed` Compose screen rendering on both platforms across compact / medium / expanded sizes
-- [ ] CI: Android `assembleDebug` succeeds on Linux runner
-- [ ] CI: iOS framework builds + `xcodebuild` builds `iosApp` on macOS runner
+- [x] Implement one shared Compose screen rendering on both platforms *(wizard's default; replace with branded RadioShed shell next)*
+- [x] CI: Android `assembleDebug` succeeds on Linux runner
+- [ ] CI: iOS framework builds + `xcodebuild` builds `iosApp` on macOS runner *(verifying after destination fix)*
 - [ ] CI: snapshot-test matrix across §1.1 form factors
 - [ ] **Decision gate:** is CMP-on-iOS performance and UX acceptable? Record outcome in `docs/decisions/0002-ui-stack.md`
 - [ ] If fallback chosen: scaffold SwiftUI app shell in `iosApp/`, document UI duplication strategy
