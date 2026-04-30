@@ -115,7 +115,7 @@ RadioShed/
 ├── iosApp/                      # Xcode project (SwiftUI shell + KMP framework)
 ├── docs/
 │   └── decisions/               # Architecture Decision Records
-├── ci/                          # GitHub Actions workflows
+├── .github/workflows/           # GitHub Actions workflows (android.yml, ios.yml)
 └── android13-smoketest/         # Temporary; removed in Phase 0
 ```
 

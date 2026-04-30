@@ -1,0 +1,123 @@
+# =============================================================================
+# RadioShed .gitignore
+# Covers: Gradle / Kotlin / Android / Xcode / iOS / Swift / JetBrains IDEs /
+# macOS / Windows / Linux / common editors / secrets
+# =============================================================================
+
+# ---- Gradle ----
+.gradle/
+build/
+out/
+!gradle/wrapper/gradle-wrapper.jar
+gradle-app.setting
+
+# ---- Kotlin / Kotlin Native ----
+.kotlin/
+.konan/
+kotlin-js-store/
+*.klib
+
+# ---- Android ----
+local.properties
+*.apk
+*.aab
+*.dex
+*.class
+*.ap_
+captures/
+proguard/
+.cxx/
+.externalNativeBuild/
+release/
+*.keystore
+*.jks
+keystore.properties
+
+# ---- IntelliJ / Android Studio ----
+.idea/
+!.idea/codeStyles/
+!.idea/inspectionProfiles/
+!.idea/icon.png
+*.iml
+*.ipr
+*.iws
+
+# ---- Xcode / iOS ----
+xcuserdata/
+*.xcuserstate
+DerivedData/
+*.xcscmblueprint
+*.xccheckout
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM
+*.dSYM.zip
+*.xcworkspace/xcuserdata/
+
+# ---- Swift Package Manager ----
+.build/
+Packages/
+.swiftpm/
+Package.resolved
+
+# ---- CocoaPods ----
+Pods/
+Podfile.lock
+
+# ---- Fastlane ----
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/**/*.png
+fastlane/test_output
+
+# ---- macOS ----
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.Spotlight-V100
+.Trashes
+
+# ---- Windows ----
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# ---- Linux ----
+*~
+.directory
+
+# ---- Editors ----
+.vscode/
+.fleet/
+.history/
+*.swp
+*.swo
+
+# ---- Logs / temp ----
+*.log
+logs/
+tmp/
+temp/
+*.bak
+*.tmp
+*.orig
+
+# ---- Secrets / local config ----
+.env
+.env.local
+.env.*.local
+secrets.properties
+api-keys.properties
+*.p12
+google-services.json
+GoogleService-Info.plist
+
+# ---- Project-specific ----
+# Crash logs exported from the app during testing
+crashlogs/
+# Backup zips created during testing
+*-backup-*.zip
