@@ -24,4 +24,7 @@ sealed interface AppScreen {
 
     /** Full-text search across the library. */
     data object Search : AppScreen
+
+    /** Stations Home — list of stations with tap-to-play. */
+    data object Stations : AppScreen
 }

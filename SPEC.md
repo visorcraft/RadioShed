@@ -1169,20 +1169,28 @@ Phase 4 part 1 also added:
 
 Goal: user can create stations; engine plays tracks per source + playback rules.
 
-- [ ] `SourceRule` evaluator: folder, tag filter, smart query, playlist, artist, album, duration, format, path-glob
-- [ ] Set operators: `Union`, `Intersection`, `Difference`, `TopN`
-- [ ] `PlaybackRule` engine: shuffle, sequential, weighted random, smart shuffle
-- [ ] No-repeat memory + artist/album spacing
-- [ ] Weighting policies: uniform, under-played, higher-rated, recent, custom
-- [ ] Adaptive Mix smart query (learns from listening history)
-- [ ] Auto-rotate refresh job for SmartQueries (e.g. Latest Hits re-eval daily)
-- [ ] Built-in presets registry (10 presets per §5, including Smart Mix)
-- [ ] Station editor UI: identity, source builder, playback rules
-- [ ] Drag-to-reorder station list
-- [ ] Station duplicate / delete / rename
-- [ ] Auto-collage station artwork (4-album-cover grid)
-- [ ] Custom artwork upload per station
-- [ ] Onboarding steps 5–6 (taste setup + first custom station)
+- [x] `SourceRule` evaluator: folder, tag filter, smart query, playlist, artist, album (DurationFilter / FileFormatFilter / PathPattern require composition with another source via Intersection — standalone they evaluate to empty, by design)
+- [x] Set operators: `Union`, `Intersection`, `Difference`, `TopN`
+- [x] `PlaybackRule` engine: shuffle, sequential, weighted random, smart shuffle
+- [x] No-repeat memory (artist/album spacing requires per-track artist pre-load — Phase 5 part 2)
+- [x] Weighting policies: `Uniform`, `FavorRecent` *(others fall back to Uniform in v1; need richer per-track stats — Phase 5 part 2)*
+- [ ] Adaptive Mix smart query (learns from listening history) *(falls back to LeastPlayed for v1)*
+- [ ] Auto-rotate refresh job for SmartQueries (e.g. Latest Hits re-eval daily) *(deferred)*
+- [x] Built-in presets registry — 5 v1 presets seeded automatically: Latest Hits, All Music, Discover, Top Rated, Recently Added. Forgotten Gems / Workshop / per-decade / per-genre stations land in part 2 with the editor.
+- [ ] Station editor UI: identity, source builder, playback rules *(Phase 5 part 2)*
+- [ ] Drag-to-reorder station list *(part 2)*
+- [ ] Station duplicate / delete / rename *(part 2)*
+- [ ] Auto-collage station artwork (4-album-cover grid) *(part 2)*
+- [ ] Custom artwork upload per station *(part 2)*
+- [ ] Onboarding steps 5–6 (taste setup + first custom station) *(part 2)*
+
+Phase 5 part 1 also added:
+
+- [x] `StationPlayback` orchestrator — singleton in Koin; auto-advances on `PlayerState.Ended`; tracks `currentStation` + `candidateCount` as `StateFlow`
+- [x] `StationsHomeScreen` replacing the Phase 4 placeholder card; tap → play; current/playing station highlighted
+- [x] `PresetSeeder` runs automatically when onboarding's first scan completes; idempotent
+- [x] Per-station dislike filtering wired through `RatingRepository.dislikedTrackIdsForStation`
+- [x] 7 unit tests on `PlaybackQueue` (sequential wrap, no-repeat depth, depth-clamping when pool < depth, dislike exclusion, FavorRecent bias, empty-queue handling)
 
 ### Phase 6 — Now Playing & core UI (~2 weeks)
 

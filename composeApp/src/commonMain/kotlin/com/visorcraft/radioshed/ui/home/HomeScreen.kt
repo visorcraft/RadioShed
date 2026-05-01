@@ -91,8 +91,7 @@ fun HomeScreen(
                 ) {
                     NavCard(
                         title = "Stations",
-                        subtitle = "Build and play stations from your library",
-                        badge = "Coming in Phase 5",
+                        subtitle = "Built-in presets + your own — tap to play",
                         onClick = onStations,
                         primary = true,
                     )

@@ -18,6 +18,7 @@ import com.visorcraft.radioshed.ui.library.LibrarySettingsScreen
 import com.visorcraft.radioshed.ui.onboarding.OnboardingScreen
 import com.visorcraft.radioshed.ui.player.MiniPlayer
 import com.visorcraft.radioshed.ui.search.SearchScreen
+import com.visorcraft.radioshed.ui.stations.StationsHomeScreen
 import com.visorcraft.radioshed.ui.theme.RadioShedTheme
 import org.koin.compose.koinInject
 
@@ -52,11 +53,7 @@ fun App(settings: SettingsStore = koinInject()) {
                     AppScreen.Home -> HomeScreen(
                         onLibrary = { current = AppScreen.LibrarySettings },
                         onSearch = { current = AppScreen.Search },
-                        onStations = {
-                            // Stations Home lands in Phase 6; for now route to
-                            // Library so the click isn't dead.
-                            current = AppScreen.LibrarySettings
-                        },
+                        onStations = { current = AppScreen.Stations },
                     )
 
                     AppScreen.LibrarySettings -> {
@@ -67,6 +64,11 @@ fun App(settings: SettingsStore = koinInject()) {
                     AppScreen.Search -> {
                         PlatformBackHandler { current = AppScreen.Home }
                         SearchScreen(onBack = { current = AppScreen.Home })
+                    }
+
+                    AppScreen.Stations -> {
+                        PlatformBackHandler { current = AppScreen.Home }
+                        StationsHomeScreen(onBack = { current = AppScreen.Home })
                     }
 
                     AppScreen.Onboarding -> Unit  // handled above

@@ -18,6 +18,9 @@ import com.visorcraft.radioshed.data.StationRepository
 import com.visorcraft.radioshed.data.WidgetConfigRepository
 import com.visorcraft.radioshed.db.RadioShedDatabase
 import com.visorcraft.radioshed.scanner.Scanner
+import com.visorcraft.radioshed.stations.PresetSeeder
+import com.visorcraft.radioshed.stations.SourceRuleEvaluator
+import com.visorcraft.radioshed.stations.StationPlayback
 import org.koin.core.module.Module
 import org.koin.dsl.module
 
@@ -49,6 +52,11 @@ val sharedModule: Module = module {
 
     // Phase 3: scanner. FileEnumerator + TagReader come from platformModule.
     single { Scanner(get(), get(), get(), get()) }
+
+    // Phase 5: stations engine. AudioEngine comes from platformModule.
+    single { SourceRuleEvaluator(get(), get(), get()) }
+    single { StationPlayback(get(), get(), get(), get()) }
+    single { PresetSeeder(get(), get()) }
 }
 
 /** Convenience entry-point used by both platforms. */

@@ -58,6 +58,7 @@ fun OnboardingScreen(
     folderRepo: FolderRepository = koinInject(),
     scanner: Scanner = koinInject(),
     permissions: StoragePermissions = koinInject(),
+    presetSeeder: com.visorcraft.radioshed.stations.PresetSeeder = koinInject(),
 ) {
     val scope = rememberCoroutineScope()
     // On iOS the StoragePermissions stub returns true at startup, so we
@@ -168,7 +169,13 @@ fun OnboardingScreen(
                                         scanFolderId = id
                                         scanner.scanFolder(id).collect { ev ->
                                             scanStatus = ev
-                                            if (ev is ScanProgress.Completed || ev is ScanProgress.Failed) {
+                                            if (ev is ScanProgress.Completed) {
+                                                // Seed the built-in station presets now that
+                                                // the user has tracks indexed. Idempotent — no-op
+                                                // if any stations already exist.
+                                                runCatching { presetSeeder.seedIfEmpty() }
+                                                step = OnboardingStep.Done
+                                            } else if (ev is ScanProgress.Failed) {
                                                 step = OnboardingStep.Done
                                             }
                                         }
