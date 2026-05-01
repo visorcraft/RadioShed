@@ -11,6 +11,9 @@ out/
 !gradle/wrapper/gradle-wrapper.jar
 gradle-app.setting
 
+# ---- Local-only working directory (device backups, scratch, etc.) ----
+.local/
+
 # ---- Kotlin / Kotlin Native ----
 .kotlin/
 .konan/
