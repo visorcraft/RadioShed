@@ -2,6 +2,8 @@ package com.visorcraft.radioshed.di
 
 import com.russhwolf.settings.NSUserDefaultsSettings
 import com.russhwolf.settings.Settings
+import com.visorcraft.radioshed.audio.AudioEngine
+import com.visorcraft.radioshed.audio.AudioEngineIos
 import com.visorcraft.radioshed.data.DatabaseDriverFactory
 import com.visorcraft.radioshed.permissions.StoragePermissions
 import com.visorcraft.radioshed.source.FileEnumerator
@@ -20,4 +22,7 @@ actual val platformModule: Module = module {
     single<FileEnumerator> { IosFileEnumerator() }
     single<TagReader> { IosTagReader() }
     single { StoragePermissions() }
+
+    // Phase 4: audio engine stub
+    single<AudioEngine> { AudioEngineIos() }
 }

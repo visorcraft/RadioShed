@@ -80,6 +80,12 @@ kotlin {
 
             // Audio metadata reader (Phase 3 scanner)
             implementation(libs.jaudiotagger)
+
+            // Audio engine (Phase 4): ExoPlayer + MediaSession for
+            // background playback, lock-screen, BT AVRCP metadata.
+            implementation(libs.androidx.media3.exoplayer)
+            implementation(libs.androidx.media3.session)
+            implementation(libs.androidx.media3.common)
         }
 
         iosMain.dependencies {

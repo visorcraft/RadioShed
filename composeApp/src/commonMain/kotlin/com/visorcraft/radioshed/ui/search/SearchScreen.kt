@@ -1,5 +1,6 @@
 package com.visorcraft.radioshed.ui.search
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -26,6 +27,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.visorcraft.radioshed.audio.AudioEngine
+import com.visorcraft.radioshed.audio.toPlayable
 import com.visorcraft.radioshed.data.SearchRepository
 import com.visorcraft.radioshed.data.SearchResults
 import com.visorcraft.radioshed.domain.Album
@@ -44,6 +47,7 @@ import org.koin.compose.koinInject
 fun SearchScreen(
     onBack: () -> Unit,
     searchRepo: SearchRepository = koinInject(),
+    audioEngine: AudioEngine = koinInject(),
 ) {
     var query by remember { mutableStateOf("") }
     var results by remember { mutableStateOf(SearchResults(emptyList(), emptyList(), emptyList())) }
@@ -125,7 +129,12 @@ fun SearchScreen(
                     }
                     if (results.tracks.isNotEmpty()) {
                         item { SectionHeader("Tracks (${results.tracks.size})") }
-                        items(results.tracks, key = { "track:${it.id}" }) { TrackRow(it) }
+                        items(results.tracks, key = { "track:${it.id}" }) { track ->
+                            TrackRow(
+                                track = track,
+                                onClick = { audioEngine.play(track.toPlayable()) },
+                            )
+                        }
                     }
                 }
             }
@@ -167,8 +176,13 @@ private fun AlbumRow(album: Album) {
 }
 
 @Composable
-private fun TrackRow(track: Track) {
-    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+private fun TrackRow(track: Track, onClick: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 8.dp, horizontal = 4.dp),
+    ) {
         Text(track.title, style = MaterialTheme.typography.bodyLarge)
         Text(
             "${track.format.uppercase()} · ${track.fileName}",

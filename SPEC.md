@@ -1145,19 +1145,25 @@ Also added in Phase 3 part 2:
 
 Goal: tracks play, pause, skip; lock-screen controls work; Bluetooth metadata appears.
 
-- [ ] `AudioEngine` interface in `commonMain`
-- [ ] **(Android)** ExoPlayer-based AudioEngine impl
-- [ ] **(iOS)** AVAudioEngine-based AudioEngine impl
-- [ ] **(Android)** `MediaSessionService` + foreground notification
-- [ ] **(iOS)** `AVAudioSession` configured for `.playback`, `mixWithOthers = false`
-- [ ] **(iOS)** `MPNowPlayingInfoCenter` + `MPRemoteCommandCenter` wiring
-- [ ] Lock-screen / notification controls (play, pause, prev, next, scrub)
-- [ ] Bluetooth AVRCP metadata propagation
-- [ ] Audio focus / interruption handling (call, alarm, route change)
-- [ ] Cue-aware playback (start/end offsets within a single audio file)
-- [ ] Format coverage smoke tests: MP3, AAC, FLAC, OGG, Opus, WAV, ALAC
-- [ ] Bundle FFmpeg for non-native formats: WMA, APE, WV, DSD
-- [ ] Verify contiguous decoding (gapless polish lands in Phase 7)
+- [x] `AudioEngine` interface in `commonMain` (+ `Playable`, `PlayerState`, `Position`, `Track.toPlayable()`)
+- [x] **(Android)** ExoPlayer-based AudioEngine impl — `AudioEngineAndroid` connects to a `MediaSessionService` via `MediaController`, exposing `StateFlow<PlayerState>` / `nowPlaying` / `position`
+- [ ] **(iOS)** AVAudioEngine-based AudioEngine impl *(stub `AudioEngineIos`; needs Mac access)*
+- [x] **(Android)** `MediaSessionService` + foreground notification — `RadioShedMediaSessionService` (Media3 auto-promotes to foreground and posts the notification with transport controls)
+- [ ] **(iOS)** `AVAudioSession` configured for `.playback`, `mixWithOthers = false` *(deferred — needs Mac)*
+- [ ] **(iOS)** `MPNowPlayingInfoCenter` + `MPRemoteCommandCenter` wiring *(deferred — needs Mac)*
+- [x] Lock-screen / notification controls (play, pause, prev, next, scrub) — automatic via Media3 `MediaSession` + standard transport
+- [x] Bluetooth AVRCP metadata propagation — automatic via `MediaItem.mediaMetadata` (title, artist, album, artworkUri)
+- [x] Audio focus / interruption handling (call, alarm, route change) — `AudioAttributes(handleAudioFocus = true)` + `setHandleAudioBecomingNoisy(true)` on the ExoPlayer
+- [x] Cue-aware playback (start/end offsets within a single audio file) — `MediaItem.ClippingConfiguration` set when `Playable.cueOffsetStartMs` / `cueOffsetEndMs` are present
+- [ ] Format coverage smoke tests: MP3, AAC, FLAC, OGG, Opus, WAV, ALAC *(needs physical device + sample files; deferred to verification pass)*
+- [ ] Bundle FFmpeg for non-native formats: WMA, APE, WV, DSD *(deferred — adds ~10–15 MB and needs careful licensing/integration)*
+- [ ] Verify contiguous decoding (gapless polish lands in Phase 7) *(deferred to Phase 7)*
+
+Phase 4 part 1 also added:
+
+- [x] `MiniPlayer` composable — sticky bottom transport bar with art placeholder, title/artist/album, prev/play-pause/next, progress bar; only renders when something is loaded
+- [x] Tap-to-play wiring in `SearchScreen` — clicking a track row calls `audioEngine.play(track.toPlayable())`
+- [x] `App.kt` rework: post-onboarding screens now stack vertically with the `MiniPlayer` below; Onboarding still owns the full screen
 
 ### Phase 5 — Stations engine (~2 weeks)
 

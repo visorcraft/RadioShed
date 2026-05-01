@@ -3,6 +3,8 @@ package com.visorcraft.radioshed.di
 import android.content.Context
 import com.russhwolf.settings.Settings
 import com.russhwolf.settings.SharedPreferencesSettings
+import com.visorcraft.radioshed.audio.AudioEngine
+import com.visorcraft.radioshed.audio.AudioEngineAndroid
 import com.visorcraft.radioshed.data.DatabaseDriverFactory
 import com.visorcraft.radioshed.permissions.StoragePermissions
 import com.visorcraft.radioshed.source.AndroidFileEnumerator
@@ -25,6 +27,9 @@ actual val platformModule: Module = module {
     single<FileEnumerator> { AndroidFileEnumerator() }
     single<TagReader> { AndroidTagReader() }
     single { StoragePermissions(androidContext()) }
+
+    // Phase 4: audio engine
+    single<AudioEngine> { AudioEngineAndroid(androidContext()) }
 }
 
 private const val PREFS_NAME = "radioshed.prefs"

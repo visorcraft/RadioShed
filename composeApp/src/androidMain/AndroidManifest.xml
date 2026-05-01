@@ -31,6 +31,19 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Phase 4: media-playback foreground service. Hosts ExoPlayer +
+             MediaSession; Media3 promotes it to foreground automatically
+             when playback starts and posts a notification with transport
+             controls + lock-screen / Bluetooth metadata. -->
+        <service
+            android:name=".audio.RadioShedMediaSessionService"
+            android:exported="true"
+            android:foregroundServiceType="mediaPlayback">
+            <intent-filter>
+                <action android:name="androidx.media3.session.MediaSessionService" />
+            </intent-filter>
+        </service>
     </application>
 
 </manifest>
