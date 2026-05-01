@@ -61,6 +61,7 @@ CREATE INDEX track_folder_idx ON track(folder_id);
 CREATE INDEX track_album_idx ON track(album_id);
 CREATE INDEX track_added_idx ON track(added_at);
 CREATE INDEX track_format_idx ON track(format);
+CREATE INDEX track_available_idx ON track(is_available);
 
 CREATE TABLE track_artist (
     track_id INTEGER NOT NULL REFERENCES track(id) ON DELETE CASCADE,

@@ -11,18 +11,14 @@ import com.visorcraft.radioshed.domain.Track
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
-import com.visorcraft.radioshed.db.Album as AlbumRow
-import com.visorcraft.radioshed.db.Artist as ArtistRow
-import com.visorcraft.radioshed.db.Track as TrackRow
-import com.visorcraft.radioshed.db.Track_personnel as TrackPersonnelRow
-import com.visorcraft.radioshed.db.Track_tag as TrackTagRow
 
 /**
  * Repository for the core music-library entities: Artist, Album, Track, plus
  * track ↔ artist links, custom tags, and personnel (composer/conductor/etc.).
  *
- * Bigger surface than other repositories because the scanner needs to atomically
- * register a track's artists, album, tags, and personnel in one logical operation.
+ * Multi-step operations (upserts, "replace all tags for a track") are wrapped
+ * in [db.transactionWithResult] / [db.transaction] so concurrent scanner runs
+ * can't observe partially applied state or race on UNIQUE-constraint inserts.
  */
 class LibraryRepository(private val db: RadioShedDatabase) {
 
@@ -30,29 +26,31 @@ class LibraryRepository(private val db: RadioShedDatabase) {
 
     suspend fun upsertArtist(name: String, sortName: String, musicbrainzId: String? = null): Long =
         withContext(IODispatcher) {
-            val existing = db.libraryQueries.selectArtistBySortName(sortName).executeAsOneOrNull()
-            if (existing != null) return@withContext existing.id
-            val now = nowMillis()
-            db.libraryQueries.insertArtist(
-                name = name,
-                sort_name = sortName,
-                musicbrainz_id = musicbrainzId,
-                image_uri = null,
-                bio = null,
-                created_at = now,
-                updated_at = now,
-            ).executeAsOne()
+            db.transactionWithResult {
+                val existing = db.libraryQueries.selectArtistBySortName(sortName).executeAsOneOrNull()
+                if (existing != null) return@transactionWithResult existing.id
+                val now = nowMillis()
+                db.libraryQueries.insertArtist(
+                    name = name,
+                    sort_name = sortName,
+                    musicbrainz_id = musicbrainzId,
+                    image_uri = null,
+                    bio = null,
+                    created_at = now,
+                    updated_at = now,
+                ).executeAsOne()
+            }
         }
 
     suspend fun getArtistById(id: Long): Artist? = withContext(IODispatcher) {
-        db.libraryQueries.selectArtistById(id).executeAsOneOrNull()?.let(::toArtist)
+        db.libraryQueries.selectArtistById(id).executeAsOneOrNull()?.toDomain()
     }
 
     fun observeArtists(): Flow<List<Artist>> =
         db.libraryQueries.selectAllArtists()
             .asFlow()
             .mapToList(IODispatcher)
-            .map { rows -> rows.map(::toArtist) }
+            .map { rows -> rows.map { it.toDomain() } }
 
     suspend fun setArtistImage(id: Long, imageUri: String?) = withContext(IODispatcher) {
         db.libraryQueries.updateArtistImage(imageUri, nowMillis(), id)
@@ -75,31 +73,35 @@ class LibraryRepository(private val db: RadioShedDatabase) {
         year: Int? = null,
         musicbrainzId: String? = null,
     ): Long = withContext(IODispatcher) {
-        val existing = db.libraryQueries.selectAlbumByTitleAndArtist(sortTitle, artistId).executeAsOneOrNull()
-        if (existing != null) return@withContext existing.id
-        val now = nowMillis()
-        db.libraryQueries.insertAlbum(
-            title = title,
-            artist_id = artistId,
-            sort_title = sortTitle,
-            year = year?.toLong(),
-            musicbrainz_id = musicbrainzId,
-            artwork_uri = null,
-            track_count = 0,
-            created_at = now,
-            updated_at = now,
-        ).executeAsOne()
+        db.transactionWithResult {
+            val existing = db.libraryQueries
+                .selectAlbumByTitleAndArtist(sortTitle, artistId)
+                .executeAsOneOrNull()
+            if (existing != null) return@transactionWithResult existing.id
+            val now = nowMillis()
+            db.libraryQueries.insertAlbum(
+                title = title,
+                artist_id = artistId,
+                sort_title = sortTitle,
+                year = year?.toLong(),
+                musicbrainz_id = musicbrainzId,
+                artwork_uri = null,
+                track_count = 0,
+                created_at = now,
+                updated_at = now,
+            ).executeAsOne()
+        }
     }
 
     suspend fun getAlbumById(id: Long): Album? = withContext(IODispatcher) {
-        db.libraryQueries.selectAlbumById(id).executeAsOneOrNull()?.let(::toAlbum)
+        db.libraryQueries.selectAlbumById(id).executeAsOneOrNull()?.toDomain()
     }
 
     fun observeAlbums(): Flow<List<Album>> =
         db.libraryQueries.selectAllAlbums()
             .asFlow()
             .mapToList(IODispatcher)
-            .map { rows -> rows.map(::toAlbum) }
+            .map { rows -> rows.map { it.toDomain() } }
 
     suspend fun setAlbumArtwork(id: Long, artworkUri: String?) = withContext(IODispatcher) {
         db.libraryQueries.updateAlbumArtwork(artworkUri, nowMillis(), id)
@@ -171,24 +173,25 @@ class LibraryRepository(private val db: RadioShedDatabase) {
     }
 
     suspend fun getTrackById(id: Long): Track? = withContext(IODispatcher) {
-        db.libraryQueries.selectTrackById(id).executeAsOneOrNull()?.let(::toTrack)
+        db.libraryQueries.selectTrackById(id).executeAsOneOrNull()?.toDomain()
     }
 
     suspend fun getTrackByPath(path: String): Track? = withContext(IODispatcher) {
-        db.libraryQueries.selectTrackByPath(path).executeAsOneOrNull()?.let(::toTrack)
+        db.libraryQueries.selectTrackByPath(path).executeAsOneOrNull()?.toDomain()
     }
 
     suspend fun listTracksByFolder(folderId: Long): List<Track> = withContext(IODispatcher) {
-        db.libraryQueries.selectTracksByFolder(folderId).executeAsList().map(::toTrack)
+        db.libraryQueries.selectTracksByFolder(folderId).executeAsList().map { it.toDomain() }
     }
 
     suspend fun listAvailableTracks(limit: Long, offset: Long): List<Track> =
         withContext(IODispatcher) {
-            db.libraryQueries.selectAvailableTracks(limit, offset).executeAsList().map(::toTrack)
+            db.libraryQueries.selectAvailableTracks(limit, offset).executeAsList()
+                .map { it.toDomain() }
         }
 
     suspend fun newestTracks(limit: Long): List<Track> = withContext(IODispatcher) {
-        db.libraryQueries.selectNewestTracks(limit).executeAsList().map(::toTrack)
+        db.libraryQueries.selectNewestTracks(limit).executeAsList().map { it.toDomain() }
     }
 
     suspend fun setTrackAvailable(id: Long, available: Boolean) = withContext(IODispatcher) {
@@ -214,6 +217,21 @@ class LibraryRepository(private val db: RadioShedDatabase) {
 
     // ---- Track ↔ Artist ----
 
+    /**
+     * Atomically replaces the artist set for a track. Pass an ordered list — the
+     * first entry's role defaults to "primary"; later entries default to "featured".
+     * Caller can override roles by providing pairs of (artistId, role).
+     */
+    suspend fun setArtistsForTrack(trackId: Long, artistIdsAndRoles: List<Pair<Long, String>>) =
+        withContext(IODispatcher) {
+            db.transaction {
+                db.libraryQueries.unlinkAllArtistsFromTrack(trackId)
+                artistIdsAndRoles.forEachIndexed { index, (artistId, role) ->
+                    db.libraryQueries.linkTrackArtist(trackId, artistId, role, index.toLong())
+                }
+            }
+        }
+
     suspend fun linkTrackToArtist(
         trackId: Long,
         artistId: Long,
@@ -224,11 +242,11 @@ class LibraryRepository(private val db: RadioShedDatabase) {
     }
 
     suspend fun artistsForTrack(trackId: Long): List<Artist> = withContext(IODispatcher) {
-        db.libraryQueries.selectArtistsByTrack(trackId).executeAsList().map(::toArtist)
+        db.libraryQueries.selectArtistsByTrack(trackId).executeAsList().map { it.toDomain() }
     }
 
     suspend fun tracksForArtist(artistId: Long): List<Track> = withContext(IODispatcher) {
-        db.libraryQueries.selectTracksByArtist(artistId).executeAsList().map(::toTrack)
+        db.libraryQueries.selectTracksByArtist(artistId).executeAsList().map { it.toDomain() }
     }
 
     suspend fun unlinkAllArtistsFromTrack(trackId: Long) = withContext(IODispatcher) {
@@ -237,19 +255,22 @@ class LibraryRepository(private val db: RadioShedDatabase) {
 
     // ---- Tags ----
 
+    /** Atomically replaces all tags for the given track. */
     suspend fun setTagsForTrack(trackId: Long, tags: List<Tag>) = withContext(IODispatcher) {
-        db.libraryQueries.deleteAllTagsForTrack(trackId)
-        tags.forEach { tag ->
-            db.libraryQueries.insertTrackTag(trackId, tag.key, tag.value, tag.position.toLong())
+        db.transaction {
+            db.libraryQueries.deleteAllTagsForTrack(trackId)
+            tags.forEach { tag ->
+                db.libraryQueries.insertTrackTag(trackId, tag.key, tag.value, tag.position.toLong())
+            }
         }
     }
 
     suspend fun tagsForTrack(trackId: Long): List<Tag> = withContext(IODispatcher) {
-        db.libraryQueries.selectTagsByTrack(trackId).executeAsList().map(::toTag)
+        db.libraryQueries.selectTagsByTrack(trackId).executeAsList().map { it.toDomain() }
     }
 
     suspend fun tracksByTag(key: String, value: String): List<Track> = withContext(IODispatcher) {
-        db.libraryQueries.selectTracksByTag(key, value).executeAsList().map(::toTrack)
+        db.libraryQueries.selectTracksByTag(key, value).executeAsList().map { it.toDomain() }
     }
 
     suspend fun distinctTagValues(key: String): List<String> = withContext(IODispatcher) {
@@ -258,77 +279,18 @@ class LibraryRepository(private val db: RadioShedDatabase) {
 
     // ---- Personnel ----
 
+    /** Atomically replaces all personnel for the given track. */
     suspend fun setPersonnelForTrack(trackId: Long, personnel: List<Personnel>) =
         withContext(IODispatcher) {
-            db.libraryQueries.deleteAllPersonnelForTrack(trackId)
-            personnel.forEach { p ->
-                db.libraryQueries.insertTrackPersonnel(trackId, p.role, p.name, p.position.toLong())
+            db.transaction {
+                db.libraryQueries.deleteAllPersonnelForTrack(trackId)
+                personnel.forEach { p ->
+                    db.libraryQueries.insertTrackPersonnel(trackId, p.role, p.name, p.position.toLong())
+                }
             }
         }
 
     suspend fun personnelForTrack(trackId: Long): List<Personnel> = withContext(IODispatcher) {
-        db.libraryQueries.selectPersonnelByTrack(trackId).executeAsList().map(::toPersonnel)
+        db.libraryQueries.selectPersonnelByTrack(trackId).executeAsList().map { it.toDomain() }
     }
-
-    // ---- Mappers ----
-
-    private fun toArtist(row: ArtistRow): Artist = Artist(
-        id = row.id,
-        name = row.name,
-        sortName = row.sort_name,
-        musicbrainzId = row.musicbrainz_id,
-        imageUri = row.image_uri,
-        bio = row.bio,
-        createdAt = row.created_at,
-        updatedAt = row.updated_at,
-    )
-
-    private fun toAlbum(row: AlbumRow): Album = Album(
-        id = row.id,
-        title = row.title,
-        artistId = row.artist_id,
-        sortTitle = row.sort_title,
-        year = row.year?.toInt(),
-        musicbrainzId = row.musicbrainz_id,
-        artworkUri = row.artwork_uri,
-        trackCount = row.track_count,
-        createdAt = row.created_at,
-        updatedAt = row.updated_at,
-    )
-
-    private fun toTrack(row: TrackRow): Track = Track(
-        id = row.id,
-        folderId = row.folder_id,
-        path = row.path,
-        fileName = row.file_name,
-        fileSize = row.file_size,
-        fileCtime = row.file_ctime,
-        fileMtime = row.file_mtime,
-        title = row.title,
-        albumId = row.album_id,
-        trackNumber = row.track_number?.toInt(),
-        discNumber = row.disc_number?.toInt(),
-        durationMs = row.duration_ms,
-        bitrateKbps = row.bitrate_kbps?.toInt(),
-        sampleRateHz = row.sample_rate_hz?.toInt(),
-        channels = row.channels?.toInt(),
-        format = row.format,
-        replayGainTrack = row.replay_gain_track,
-        replayGainAlbum = row.replay_gain_album,
-        replayGainTrackPeak = row.replay_gain_track_peak,
-        bpm = row.bpm,
-        musicbrainzId = row.musicbrainz_id,
-        acoustidFingerprint = row.acoustid_fingerprint,
-        cueOffsetStartMs = row.cue_offset_start_ms,
-        cueOffsetEndMs = row.cue_offset_end_ms,
-        isAvailable = row.is_available == 1L,
-        addedAt = row.added_at,
-        updatedAt = row.updated_at,
-    )
-
-    private fun toTag(row: TrackTagRow): Tag =
-        Tag(key = row.key, value = row.value_, position = row.position.toInt())
-
-    private fun toPersonnel(row: TrackPersonnelRow): Personnel =
-        Personnel(role = row.role, name = row.name, position = row.position.toInt())
 }

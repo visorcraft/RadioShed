@@ -7,9 +7,6 @@ import com.visorcraft.radioshed.domain.Folder
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.builtins.ListSerializer
-import kotlinx.serialization.builtins.serializer
-import com.visorcraft.radioshed.db.Folder as FolderRow
 
 class FolderRepository(private val db: RadioShedDatabase) {
 
@@ -17,18 +14,18 @@ class FolderRepository(private val db: RadioShedDatabase) {
         db.foldersQueries.selectAll()
             .asFlow()
             .mapToList(IODispatcher)
-            .map { rows -> rows.map(::toDomain) }
+            .map { rows -> rows.map { it.toDomain() } }
 
     suspend fun list(): List<Folder> = withContext(IODispatcher) {
-        db.foldersQueries.selectAll().executeAsList().map(::toDomain)
+        db.foldersQueries.selectAll().executeAsList().map { it.toDomain() }
     }
 
     suspend fun getById(id: Long): Folder? = withContext(IODispatcher) {
-        db.foldersQueries.selectById(id).executeAsOneOrNull()?.let(::toDomain)
+        db.foldersQueries.selectById(id).executeAsOneOrNull()?.toDomain()
     }
 
     suspend fun getByUri(uri: String): Folder? = withContext(IODispatcher) {
-        db.foldersQueries.selectByUri(uri).executeAsOneOrNull()?.let(::toDomain)
+        db.foldersQueries.selectByUri(uri).executeAsOneOrNull()?.toDomain()
     }
 
     suspend fun insert(
@@ -43,8 +40,8 @@ class FolderRepository(private val db: RadioShedDatabase) {
             display_name = displayName,
             uri = uri,
             recursive = if (recursive) 1L else 0L,
-            include_globs = encodeGlobs(includeGlobs),
-            exclude_globs = encodeGlobs(excludeGlobs),
+            include_globs = encodeStringList(includeGlobs),
+            exclude_globs = encodeStringList(excludeGlobs),
             created_at = now,
             updated_at = now,
         ).executeAsOne()
@@ -68,8 +65,8 @@ class FolderRepository(private val db: RadioShedDatabase) {
         excludeGlobs: List<String>,
     ) = withContext(IODispatcher) {
         db.foldersQueries.setGlobs(
-            include_globs = encodeGlobs(includeGlobs),
-            exclude_globs = encodeGlobs(excludeGlobs),
+            include_globs = encodeStringList(includeGlobs),
+            exclude_globs = encodeStringList(excludeGlobs),
             updated_at = nowMillis(),
             id = id,
         )
@@ -87,26 +84,4 @@ class FolderRepository(private val db: RadioShedDatabase) {
     suspend fun count(): Long = withContext(IODispatcher) {
         db.foldersQueries.count().executeAsOne()
     }
-
-    private fun toDomain(row: FolderRow): Folder = Folder(
-        id = row.id,
-        displayName = row.display_name,
-        uri = row.uri,
-        recursive = row.recursive == 1L,
-        includeGlobs = decodeGlobs(row.include_globs),
-        excludeGlobs = decodeGlobs(row.exclude_globs),
-        lastScannedAt = row.last_scanned_at,
-        trackCount = row.track_count,
-        isAvailable = row.is_available == 1L,
-        createdAt = row.created_at,
-        updatedAt = row.updated_at,
-    )
-
-    private fun encodeGlobs(globs: List<String>): String? =
-        if (globs.isEmpty()) null
-        else RadioShedJson.encodeToString(ListSerializer(String.serializer()), globs)
-
-    private fun decodeGlobs(json: String?): List<String> =
-        if (json.isNullOrBlank()) emptyList()
-        else RadioShedJson.decodeFromString(ListSerializer(String.serializer()), json)
 }

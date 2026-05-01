@@ -4,7 +4,6 @@ import com.visorcraft.radioshed.db.RadioShedDatabase
 import com.visorcraft.radioshed.domain.Rating
 import com.visorcraft.radioshed.domain.Track
 import kotlinx.coroutines.withContext
-import com.visorcraft.radioshed.db.Track as TrackRow
 
 /**
  * Combines: ratings (1-5 stars), skip log, play counts, and per-station dislikes.
@@ -28,14 +27,13 @@ class RatingRepository(private val db: RadioShedDatabase) {
     }
 
     suspend fun listAll(): List<Rating> = withContext(IODispatcher) {
-        db.ratingsQueries.selectAllRatings().executeAsList().map { row ->
-            Rating(trackId = row.track_id, stars = row.stars, ratedAt = row.rated_at)
-        }
+        db.ratingsQueries.selectAllRatings().executeAsList().map { it.toDomain() }
     }
 
     suspend fun topRatedTracks(minStars: Double = 4.0, limit: Long = 100): List<Track> =
         withContext(IODispatcher) {
-            db.ratingsQueries.selectTopRatedTracks(minStars, limit).executeAsList().map(::toTrack)
+            db.ratingsQueries.selectTopRatedTracks(minStars, limit).executeAsList()
+                .map { it.toDomain() }
         }
 
     // ---- Skip log ----
@@ -76,15 +74,15 @@ class RatingRepository(private val db: RadioShedDatabase) {
     }
 
     suspend fun mostPlayedTracks(limit: Long = 100): List<Track> = withContext(IODispatcher) {
-        db.ratingsQueries.selectMostPlayedTracks(limit).executeAsList().map(::toTrack)
+        db.ratingsQueries.selectMostPlayedTracks(limit).executeAsList().map { it.toDomain() }
     }
 
     suspend fun leastPlayedTracks(limit: Long = 100): List<Track> = withContext(IODispatcher) {
-        db.ratingsQueries.selectLeastPlayedTracks(limit).executeAsList().map(::toTrack)
+        db.ratingsQueries.selectLeastPlayedTracks(limit).executeAsList().map { it.toDomain() }
     }
 
     suspend fun neverPlayedTracks(limit: Long = 100): List<Track> = withContext(IODispatcher) {
-        db.ratingsQueries.selectNeverPlayedTracks(limit).executeAsList().map(::toTrack)
+        db.ratingsQueries.selectNeverPlayedTracks(limit).executeAsList().map { it.toDomain() }
     }
 
     // ---- Per-station dislikes ----
@@ -107,36 +105,6 @@ class RatingRepository(private val db: RadioShedDatabase) {
         withContext(IODispatcher) {
             db.ratingsQueries.selectDislikedTrackIdsForStation(stationId).executeAsList()
         }
-
-    private fun toTrack(row: TrackRow): Track = Track(
-        id = row.id,
-        folderId = row.folder_id,
-        path = row.path,
-        fileName = row.file_name,
-        fileSize = row.file_size,
-        fileCtime = row.file_ctime,
-        fileMtime = row.file_mtime,
-        title = row.title,
-        albumId = row.album_id,
-        trackNumber = row.track_number?.toInt(),
-        discNumber = row.disc_number?.toInt(),
-        durationMs = row.duration_ms,
-        bitrateKbps = row.bitrate_kbps?.toInt(),
-        sampleRateHz = row.sample_rate_hz?.toInt(),
-        channels = row.channels?.toInt(),
-        format = row.format,
-        replayGainTrack = row.replay_gain_track,
-        replayGainAlbum = row.replay_gain_album,
-        replayGainTrackPeak = row.replay_gain_track_peak,
-        bpm = row.bpm,
-        musicbrainzId = row.musicbrainz_id,
-        acoustidFingerprint = row.acoustid_fingerprint,
-        cueOffsetStartMs = row.cue_offset_start_ms,
-        cueOffsetEndMs = row.cue_offset_end_ms,
-        isAvailable = row.is_available == 1L,
-        addedAt = row.added_at,
-        updatedAt = row.updated_at,
-    )
 }
 
 data class PlayCountStat(

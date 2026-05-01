@@ -12,7 +12,6 @@ plugins {
 kotlin {
     // Silence the "expect/actual classes in Beta" warning — this is an intentional
     // pattern used throughout for cross-platform driver factories, time helpers, etc.
-    @Suppress("OPT_IN_USAGE")
     compilerOptions {
         freeCompilerArgs.add("-Xexpect-actual-classes")
     }
@@ -30,6 +29,12 @@ kotlin {
         iosTarget.binaries.framework {
             baseName = "ComposeApp"
             isStatic = true
+            // SQLDelight's iOS driver (co.touchlab:sqliter) references
+            // sqlite3_* symbols via cinterop. Static frameworks need the
+            // dependency declared here so Xcode auto-links libsqlite3 when
+            // linking the consumer iOS app — without this, the iosApp
+            // build fails at link time with "Undefined symbols: sqlite3_*".
+            linkerOpts.add("-lsqlite3")
         }
     }
 
