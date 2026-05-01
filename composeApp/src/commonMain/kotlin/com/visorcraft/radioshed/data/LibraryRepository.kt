@@ -152,7 +152,7 @@ class LibraryRepository(private val db: RadioShedDatabase) {
     ): Long = withContext(IODispatcher) {
         db.transactionWithResult {
             val now = nowMillis()
-            db.libraryQueries.insertTrackOrIgnore(
+            db.libraryQueries.upsertTrack(
                 folder_id = folderId,
                 path = path,
                 file_name = fileName,

@@ -25,15 +25,24 @@ class AndroidFileEnumerator : FileEnumerator {
     ): Flow<DiscoveredTrack> = flow {
         val root = File(rootUri)
         if (!root.exists() || !root.isDirectory) return@flow
+        // Resolve once so the prefix-strip below is reliable even if the
+        // input path was relative or contained `..`.
+        val rootAbs = root.canonicalFile
 
-        val sequence = if (recursive) root.walkTopDown() else root.listFiles()?.asSequence() ?: emptySequence()
+        val sequence = if (recursive) rootAbs.walkTopDown() else rootAbs.listFiles()?.asSequence() ?: emptySequence()
         for (file in sequence) {
             if (!file.isFile) continue
             val ext = file.name.audioExtensionOrNull() ?: continue
             if (filter.formats.isNotEmpty() && ext !in filter.formats) continue
-            if (filter.excludeGlobs.any { matchesGlob(file.absolutePath, it) }) continue
+
+            // Globs are matched against the path *relative to the folder root*,
+            // not the absolute path. So a folder rooted at /storage/emulated/0/Music
+            // with exclude glob "Spoken Word/**" will exclude
+            // /storage/emulated/0/Music/Spoken Word/anything as expected.
+            val relativePath = relativizeUnderRoot(rootAbs, file)
+            if (filter.excludeGlobs.any { matchesGlob(relativePath, it) }) continue
             if (filter.includeGlobs.isNotEmpty() &&
-                filter.includeGlobs.none { matchesGlob(file.absolutePath, it) }
+                filter.includeGlobs.none { matchesGlob(relativePath, it) }
             ) {
                 continue
             }
@@ -51,6 +60,22 @@ class AndroidFileEnumerator : FileEnumerator {
             )
         }
     }.flowOn(IODispatcher)
+
+    /**
+     * Returns [file]'s path relative to [root], using forward slashes
+     * regardless of host platform so user-supplied globs are portable.
+     * Returns the bare file name if [file] is somehow not under [root].
+     */
+    private fun relativizeUnderRoot(root: File, file: File): String {
+        val rootPath = root.absolutePath
+        val filePath = file.absolutePath
+        val rel = if (filePath.startsWith(rootPath)) {
+            filePath.substring(rootPath.length).trimStart(File.separatorChar)
+        } else {
+            file.name
+        }
+        return rel.replace(File.separatorChar, '/')
+    }
 
     /**
      * BasicFileAttributes.creationTime() — falls back to lastModified for

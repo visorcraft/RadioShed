@@ -39,7 +39,7 @@ import com.visorcraft.radioshed.domain.Folder
 import com.visorcraft.radioshed.permissions.StoragePermissions
 import com.visorcraft.radioshed.scanner.ScanProgress
 import com.visorcraft.radioshed.scanner.Scanner
-import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
@@ -65,6 +65,10 @@ fun DebugLibraryPanel(
     var folderName by remember { mutableStateOf("") }
     var scanStatus by remember { mutableStateOf<String?>(null) }
     var lastError by remember { mutableStateOf<String?>(null) }
+    // Track the in-flight scan so a second click on "Scan" doesn't kick off
+    // a parallel scan (which would race on the artist/tag junction tables).
+    var scanJob by remember { mutableStateOf<Job?>(null) }
+    val scanInFlight = scanJob?.isActive == true
 
     Card(
         modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp),
@@ -157,18 +161,26 @@ fun DebugLibraryPanel(
                     folders.forEach { folder ->
                         FolderRow(
                             folder = folder,
+                            scanEnabled = !scanInFlight,
                             onScan = {
-                                scope.launch {
-                                    scanStatus = "Starting scan…"
-                                    lastError = null
+                                if (scanInFlight) return@FolderRow
+                                scanStatus = "Starting scan…"
+                                lastError = null
+                                scanJob = scope.launch {
                                     runCatching {
-                                        scanner.scanFolder(folder.id).collectLatest { ev ->
+                                        scanner.scanFolder(folder.id).collect { ev ->
                                             scanStatus = ev.toDebugLine()
+                                            // Failed is an emitted value, not an exception, so the
+                                            // outer runCatching won't catch it — surface it manually.
+                                            if (ev is ScanProgress.Failed) {
+                                                lastError = ev.message
+                                            }
                                         }
-                                    }.onFailure { lastError = "Scan failed: ${it.message}" }
+                                    }.onFailure { lastError = "Scan crashed: ${it.message}" }
                                 }
                             },
                             onDelete = {
+                                if (scanInFlight) return@FolderRow
                                 scope.launch {
                                     runCatching { folderRepo.delete(folder.id) }
                                         .onFailure { lastError = "Delete failed: ${it.message}" }
@@ -232,6 +244,7 @@ private fun PermissionBanner(onRequest: () -> Unit, onRefresh: () -> Unit) {
 @Composable
 private fun FolderRow(
     folder: Folder,
+    scanEnabled: Boolean,
     onScan: () -> Unit,
     onDelete: () -> Unit,
 ) {
@@ -258,8 +271,8 @@ private fun FolderRow(
             )
         }
         Spacer(Modifier.width(8.dp))
-        TextButton(onClick = onScan) { Text("Scan") }
-        TextButton(onClick = onDelete) { Text("✕") }
+        TextButton(onClick = onScan, enabled = scanEnabled) { Text("Scan") }
+        TextButton(onClick = onDelete, enabled = scanEnabled) { Text("✕") }
     }
 }
 

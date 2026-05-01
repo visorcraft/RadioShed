@@ -79,9 +79,9 @@ class AndroidTagReader : TagReader {
             musicbrainzTrackId = tag?.firstOrNull(FieldKey.MUSICBRAINZ_TRACK_ID),
             musicbrainzAlbumId = tag?.firstOrNull(FieldKey.MUSICBRAINZ_RELEASEID),
             musicbrainzArtistId = tag?.firstOrNull(FieldKey.MUSICBRAINZ_ARTISTID),
-            replayGainTrack = parseReplayGainGain(tag?.firstOrNull(FieldKey.RATING)),
-            replayGainAlbum = null, // jaudiotagger surfaces RG via custom keys; safer to skip in v1
-            replayGainTrackPeak = null,
+            replayGainTrack = tag?.let { readReplayGainGain(it, "REPLAYGAIN_TRACK_GAIN") },
+            replayGainAlbum = tag?.let { readReplayGainGain(it, "REPLAYGAIN_ALBUM_GAIN") },
+            replayGainTrackPeak = tag?.let { readReplayGainPeak(it, "REPLAYGAIN_TRACK_PEAK") },
             customTags = customTags,
             personnel = personnel,
         )
@@ -125,13 +125,24 @@ class AndroidTagReader : TagReader {
     }
 
     /**
-     * ReplayGain values are stored as strings like `"-3.42 dB"` in tags.
-     * Strip the unit and parse. Returns null on failure (no replaygain
-     * present, or unparseable).
+     * Read ReplayGain track/album gain by raw Vorbis-comment key. Works
+     * directly for FLAC/OGG/Opus where these are first-class tags. For
+     * ID3v2 (MP3) ReplayGain lives in TXXX frames whose description is
+     * the same string — jaudiotagger's [JTag.getFirst]`(String)` does the
+     * lookup for some but not all formats; we accept null on failure.
+     *
+     * Values are dB strings like `"-3.42 dB"` — strip the optional unit.
      */
-    private fun parseReplayGainGain(raw: String?): Double? {
-        if (raw.isNullOrBlank()) return null
-        val cleaned = raw.replace(Regex("(?i)\\s*db\\s*$"), "").trim()
-        return cleaned.toDoubleOrNull()
+    private fun readReplayGainGain(tag: JTag, vorbisKey: String): Double? {
+        val raw = runCatching { tag.getFirst(vorbisKey) }.getOrNull()?.takeUnless { it.isBlank() }
+            ?: return null
+        return raw.replace(Regex("(?i)\\s*db\\s*$"), "").trim().toDoubleOrNull()
+    }
+
+    /** Peak is a linear ratio, no dB suffix. */
+    private fun readReplayGainPeak(tag: JTag, vorbisKey: String): Double? {
+        val raw = runCatching { tag.getFirst(vorbisKey) }.getOrNull()?.takeUnless { it.isBlank() }
+            ?: return null
+        return raw.trim().toDoubleOrNull()
     }
 }

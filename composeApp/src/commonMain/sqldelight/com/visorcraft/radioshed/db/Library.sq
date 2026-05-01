@@ -164,11 +164,14 @@ DELETE FROM album WHERE id = ?;
 
 -- ==== Track queries ====
 
--- Race-safe insert: ignores conflict on `path UNIQUE` so concurrent scanner
--- coroutines processing the same path don't blow up. Pair with
--- selectTrackIdByPath to retrieve the resulting id.
-insertTrackOrIgnore:
-INSERT OR IGNORE INTO track (
+-- Real upsert: race-safe AND rescan-aware. On first insert, every column is
+-- written. On rescan (path UNIQUE conflict), every metadata column is
+-- refreshed from `excluded.*` so re-tagged files reflect their new state.
+-- We deliberately preserve `added_at` (when first scanned) — only `updated_at`
+-- moves forward. Re-availability is implicit: a track that gets re-scanned
+-- is by definition available, so is_available resets to 1.
+upsertTrack:
+INSERT INTO track (
     folder_id, path, file_name, file_size, file_ctime, file_mtime,
     title, album_id, track_number, disc_number, duration_ms,
     bitrate_kbps, sample_rate_hz, channels, format,
@@ -176,7 +179,32 @@ INSERT OR IGNORE INTO track (
     bpm, musicbrainz_id, acoustid_fingerprint,
     cue_offset_start_ms, cue_offset_end_ms,
     added_at, updated_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT(path) DO UPDATE SET
+    folder_id = excluded.folder_id,
+    file_name = excluded.file_name,
+    file_size = excluded.file_size,
+    file_ctime = excluded.file_ctime,
+    file_mtime = excluded.file_mtime,
+    title = excluded.title,
+    album_id = excluded.album_id,
+    track_number = excluded.track_number,
+    disc_number = excluded.disc_number,
+    duration_ms = excluded.duration_ms,
+    bitrate_kbps = excluded.bitrate_kbps,
+    sample_rate_hz = excluded.sample_rate_hz,
+    channels = excluded.channels,
+    format = excluded.format,
+    replay_gain_track = excluded.replay_gain_track,
+    replay_gain_album = excluded.replay_gain_album,
+    replay_gain_track_peak = excluded.replay_gain_track_peak,
+    bpm = excluded.bpm,
+    musicbrainz_id = excluded.musicbrainz_id,
+    acoustid_fingerprint = excluded.acoustid_fingerprint,
+    cue_offset_start_ms = excluded.cue_offset_start_ms,
+    cue_offset_end_ms = excluded.cue_offset_end_ms,
+    is_available = 1,
+    updated_at = excluded.updated_at;
 
 selectTrackIdByPath:
 SELECT id FROM track WHERE path = ?;
