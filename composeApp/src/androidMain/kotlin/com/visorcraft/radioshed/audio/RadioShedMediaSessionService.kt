@@ -46,11 +46,14 @@ class RadioShedMediaSessionService : MediaSessionService() {
         mediaSession
 
     override fun onTaskRemoved(rootIntent: android.content.Intent?) {
-        // Stop playback when the user swipes the app away from recents.
-        // Without this, music keeps playing with a notification but no UI
-        // entry-point — confusing UX.
+        // Standard music-app behavior: if music is actively playing when the
+        // user swipes the task from recents, leave the service running so
+        // playback continues with the notification as the entry-point back
+        // in. If playback is paused (or there's no player), tear down so we
+        // don't leak a non-functional notification.
         val player = mediaSession?.player
-        if (player != null && !player.playWhenReady) {
+        if (player == null || !player.playWhenReady) {
+            player?.stop()
             stopSelf()
         }
         super.onTaskRemoved(rootIntent)

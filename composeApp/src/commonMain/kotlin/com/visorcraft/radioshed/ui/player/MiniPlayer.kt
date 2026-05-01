@@ -24,6 +24,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.visorcraft.radioshed.audio.AudioEngine
@@ -129,9 +131,15 @@ private fun TransportButton(
     emphasized: Boolean = false,
     onClick: () -> Unit,
 ) {
+    // The visible label is a Unicode glyph (⏮ ▶ ⏸ ⏭) which TalkBack
+    // / VoiceOver pronounce inconsistently across versions. We override
+    // the semantic content description on the modifier so screen readers
+    // announce "Previous" / "Play" / "Pause" / "Next" deterministically.
     TextButton(
         onClick = onClick,
-        modifier = Modifier.size(width = 40.dp, height = 40.dp),
+        modifier = Modifier
+            .size(width = 40.dp, height = 40.dp)
+            .semantics { contentDescription = contentDesc },
     ) {
         Text(
             text = label,
@@ -139,11 +147,6 @@ private fun TransportButton(
                     else MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onSurface,
         )
-        // contentDescription for accessibility — not visually rendered
-        // because TextButton labels are textual, but kept here for
-        // potential later refactor to a proper Icon.
-        @Suppress("UNUSED_EXPRESSION")
-        contentDesc
     }
 }
 

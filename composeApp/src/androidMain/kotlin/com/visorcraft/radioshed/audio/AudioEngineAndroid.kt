@@ -98,7 +98,7 @@ class AudioEngineAndroid(private val appContext: Context) : AudioEngine {
     }
 
     private fun refreshStateFromController(c: MediaController) {
-        _state.value = when {
+        val newState = when {
             c.playerError != null -> PlayerState.Error(
                 c.playerError?.message ?: "Player error",
             )
@@ -108,7 +108,20 @@ class AudioEngineAndroid(private val appContext: Context) : AudioEngine {
             c.playbackState == Player.STATE_ENDED -> PlayerState.Ended
             else -> PlayerState.Idle
         }
-        ensurePositionPolling(c)
+        _state.value = newState
+
+        // Only poll position while there's something meaningful to report.
+        // Without this guard the polling loop runs forever and would call
+        // c.currentPosition on a released controller after stop()/release(),
+        // throwing IllegalStateException, plus burns 2 hops per second on
+        // the Main thread for the entire process lifetime.
+        when (newState) {
+            PlayerState.Playing, PlayerState.Buffering, PlayerState.Paused -> ensurePositionPolling(c)
+            else -> {
+                positionJob?.cancel()
+                positionJob = null
+            }
+        }
     }
 
     private fun ensurePositionPolling(c: MediaController) {
@@ -126,7 +139,7 @@ class AudioEngineAndroid(private val appContext: Context) : AudioEngine {
 
     override fun play(playable: Playable) {
         scope.launch {
-            val c = controllerDeferred.await()
+            val c = awaitControllerOrSurface() ?: return@launch
             c.setMediaItem(playable.toMediaItem())
             c.prepare()
             c.play()
@@ -138,13 +151,28 @@ class AudioEngineAndroid(private val appContext: Context) : AudioEngine {
         if (items.isEmpty()) return
         val safeIndex = startIndex.coerceIn(0, items.size - 1)
         scope.launch {
-            val c = controllerDeferred.await()
+            val c = awaitControllerOrSurface() ?: return@launch
             c.setMediaItems(items.map { it.toMediaItem() }, safeIndex, /* startPositionMs = */ 0L)
             c.prepare()
             c.play()
             _nowPlaying.value = items[safeIndex]
         }
     }
+
+    /**
+     * Awaits the controller, surfacing connection failures as PlayerState.Error
+     * rather than letting them propagate as unhandled-exception coroutine crashes
+     * (the SupervisorJob would route them to the default uncaught handler with no
+     * UI feedback).
+     */
+    private suspend fun awaitControllerOrSurface(): MediaController? =
+        runCatching { controllerDeferred.await() }
+            .getOrElse {
+                _state.value = PlayerState.Error(
+                    "Audio service unavailable: ${it.message ?: it::class.simpleName}",
+                )
+                null
+            }
 
     override fun pause() {
         controller?.pause()
@@ -228,6 +256,8 @@ private fun MediaItem.toPlayable(fallbackDurationMs: Long = 0L): Playable {
         durationMs = fallbackDurationMs,
         artworkUri = md.artworkUri?.toString(),
         cueOffsetStartMs = clipping.startPositionMs.takeIf { it > 0L },
-        cueOffsetEndMs = clipping.endPositionMs.takeIf { it != Long.MIN_VALUE && it > 0L },
+        // Media3's "no end clipping" sentinel is Long.MAX_VALUE, not Long.MIN_VALUE.
+        // The previous check let MAX_VALUE round-trip as a literal end position.
+        cueOffsetEndMs = clipping.endPositionMs.takeIf { it > 0L && it != Long.MAX_VALUE },
     )
 }

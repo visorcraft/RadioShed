@@ -4,6 +4,8 @@ import com.visorcraft.radioshed.db.RadioShedDatabase
 import com.visorcraft.radioshed.domain.Album
 import com.visorcraft.radioshed.domain.Artist
 import com.visorcraft.radioshed.domain.Track
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 
 /**
@@ -42,11 +44,21 @@ class SearchRepository(private val db: RadioShedDatabase) {
 
     suspend fun searchAll(query: String, limitPerCategory: Long = 20): SearchResults =
         withContext(IODispatcher) {
-            SearchResults(
-                tracks = searchTracks(query, limitPerCategory),
-                artists = searchArtists(query, limitPerCategory),
-                albums = searchAlbums(query, limitPerCategory),
-            )
+            // Run the three sub-queries concurrently. SQLite serializes writes
+            // but multiple concurrent reads work fine, and the dispatcher
+            // overlap matters under the 200 ms search debounce on larger
+            // libraries (otherwise the three queries run sequentially even
+            // though the dispatcher could parallelize them).
+            coroutineScope {
+                val tracks = async { searchTracks(query, limitPerCategory) }
+                val artists = async { searchArtists(query, limitPerCategory) }
+                val albums = async { searchAlbums(query, limitPerCategory) }
+                SearchResults(
+                    tracks = tracks.await(),
+                    artists = artists.await(),
+                    albums = albums.await(),
+                )
+            }
         }
 }
 
