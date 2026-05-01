@@ -27,4 +27,7 @@ sealed interface AppScreen {
 
     /** Stations Home — list of stations with tap-to-play. */
     data object Stations : AppScreen
+
+    /** Full-screen Now Playing: art, scrubber, transport, rating. */
+    data object NowPlaying : AppScreen
 }

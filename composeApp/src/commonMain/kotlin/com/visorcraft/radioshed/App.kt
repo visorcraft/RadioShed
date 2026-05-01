@@ -17,6 +17,7 @@ import com.visorcraft.radioshed.ui.home.HomeScreen
 import com.visorcraft.radioshed.ui.library.LibrarySettingsScreen
 import com.visorcraft.radioshed.ui.onboarding.OnboardingScreen
 import com.visorcraft.radioshed.ui.player.MiniPlayer
+import com.visorcraft.radioshed.ui.player.NowPlayingScreen
 import com.visorcraft.radioshed.ui.search.SearchScreen
 import com.visorcraft.radioshed.ui.stations.StationsHomeScreen
 import com.visorcraft.radioshed.ui.theme.RadioShedTheme
@@ -41,6 +42,14 @@ fun App(settings: SettingsStore = koinInject()) {
                     current = AppScreen.Home
                 },
             )
+            return@RadioShedTheme
+        }
+
+        // NowPlaying is full-bleed — it intentionally bypasses the MiniPlayer
+        // strip below since it IS the expanded player.
+        if (current == AppScreen.NowPlaying) {
+            PlatformBackHandler { current = AppScreen.Stations }
+            NowPlayingScreen(onClose = { current = AppScreen.Stations })
             return@RadioShedTheme
         }
 
@@ -71,10 +80,11 @@ fun App(settings: SettingsStore = koinInject()) {
                         StationsHomeScreen(onBack = { current = AppScreen.Home })
                     }
 
-                    AppScreen.Onboarding -> Unit  // handled above
+                    AppScreen.Onboarding,
+                    AppScreen.NowPlaying -> Unit  // handled above
                 }
             }
-            MiniPlayer()
+            MiniPlayer(onExpand = { current = AppScreen.NowPlaying })
         }
     }
 }

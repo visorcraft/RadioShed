@@ -1196,16 +1196,19 @@ Phase 5 part 1 also added:
 
 Goal: app feels like a music app, not a tech demo. Looks great on every form factor.
 
-- [ ] Stations Home: grid + list views, sort/group menus, tile size XS–L, fluid reflow
+**Phase 6 part 1 (done):** responsive Stations Home grid + full-screen Now Playing with scrubber / transport / star rating / long-press dislike menu.
+
+- [x] Stations Home: responsive grid (1 col compact, adaptive ≥240dp tiles for medium+) *(Phase 6 part 1 — sort/group/list-toggle deferred)*
+- [ ] Stations Home: list/grid view toggle, sort menus, tile size XS–L preference
 - [ ] Long-press tile → quick actions (play, edit, duplicate, delete, pin, add to widget)
-- [ ] Now Playing screen: full-screen art, scrubber, controls
-- [ ] Now Playing: 3 layout variants for compact / medium / expanded / large+
-- [ ] Album-art aspect-ratio handling (square crop + blurred letterbox fill)
-- [ ] Gesture handling: swipe, pinch, long-press
+- [x] Now Playing screen: full-screen art, scrubber, controls *(Phase 6 part 1 — placeholder gradient art until Cover Art Archive)*
+- [x] Now Playing: layout variants for compact (stacked) and medium+ (two-pane) *(Phase 6 part 1 — three-pane queue/lyrics deferred)*
+- [ ] Album-art aspect-ratio handling (square crop + blurred letterbox fill) *(needs real artwork — Phase 10)*
+- [ ] Gesture handling: swipe, pinch, long-press *(long-press skip-menu landed; swipe/pinch deferred)*
 - [ ] Lyrics view: synced LRC karaoke + plain text fallback
-- [ ] Star rating UI (1–5 with 0.5 increments) + thumbs up/down toggle
+- [x] Star rating UI (1–5) + tap-same-star-to-clear *(Phase 6 part 1 — half-stars deferred to part 2)*
 - [ ] Skip tracking instrumentation
-- [ ] "Don't play on this station again" dislike menu
+- [x] "Don't play on this station again" dislike menu *(Phase 6 part 1 — long-press skip-next)*
 - [ ] Onboarding steps 7–9 (in-car preview, AI DJ intro, done)
 - [ ] Theme system: light, dark, AMOLED-black, accent color
 - [ ] Material You dynamic color (Android 12+) opt-in
