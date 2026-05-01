@@ -97,6 +97,9 @@ $RECYCLE.BIN/
 *.swp
 *.swo
 
+# ---- Claude Code local state ----
+.claude/settings.local.json
+
 # ---- Logs / temp ----
 *.log
 logs/

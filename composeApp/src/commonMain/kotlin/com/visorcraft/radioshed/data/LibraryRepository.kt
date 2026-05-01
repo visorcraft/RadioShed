@@ -27,10 +27,11 @@ class LibraryRepository(private val db: RadioShedDatabase) {
     suspend fun upsertArtist(name: String, sortName: String, musicbrainzId: String? = null): Long =
         withContext(IODispatcher) {
             db.transactionWithResult {
-                val existing = db.libraryQueries.selectArtistBySortName(sortName).executeAsOneOrNull()
-                if (existing != null) return@transactionWithResult existing.id
                 val now = nowMillis()
-                db.libraryQueries.insertArtist(
+                // INSERT OR IGNORE handles concurrent inserts colliding on
+                // sort_name UNIQUE; the follow-up SELECT returns the id either
+                // way (the row that existed already, or the row we just wrote).
+                db.libraryQueries.insertArtistOrIgnore(
                     name = name,
                     sort_name = sortName,
                     musicbrainz_id = musicbrainzId,
@@ -38,7 +39,8 @@ class LibraryRepository(private val db: RadioShedDatabase) {
                     bio = null,
                     created_at = now,
                     updated_at = now,
-                ).executeAsOne()
+                )
+                db.libraryQueries.selectArtistIdBySortName(sortName).executeAsOne()
             }
         }
 
@@ -74,12 +76,10 @@ class LibraryRepository(private val db: RadioShedDatabase) {
         musicbrainzId: String? = null,
     ): Long = withContext(IODispatcher) {
         db.transactionWithResult {
-            val existing = db.libraryQueries
-                .selectAlbumByTitleAndArtist(sortTitle, artistId)
-                .executeAsOneOrNull()
-            if (existing != null) return@transactionWithResult existing.id
             val now = nowMillis()
-            db.libraryQueries.insertAlbum(
+            // INSERT OR IGNORE handles concurrent upserts colliding on the
+            // (sort_title, artist_id) UNIQUE constraint added in the schema.
+            db.libraryQueries.insertAlbumOrIgnore(
                 title = title,
                 artist_id = artistId,
                 sort_title = sortTitle,
@@ -89,7 +89,8 @@ class LibraryRepository(private val db: RadioShedDatabase) {
                 track_count = 0,
                 created_at = now,
                 updated_at = now,
-            ).executeAsOne()
+            )
+            db.libraryQueries.selectAlbumIdByTitleAndArtist(sortTitle, artistId).executeAsOne()
         }
     }
 
@@ -117,7 +118,14 @@ class LibraryRepository(private val db: RadioShedDatabase) {
 
     // ---- Track ----
 
-    suspend fun insertTrack(
+    /**
+     * Upserts a track by `path` (which is UNIQUE). On first insert, all metadata
+     * fields are persisted. On a subsequent call with the same path (race or rescan),
+     * this is a no-op for metadata and returns the existing track id — the scanner
+     * is expected to call [setArtistsForTrack], [setTagsForTrack], etc. afterwards
+     * to refresh metadata that may have changed in the underlying file.
+     */
+    suspend fun upsertTrack(
         folderId: Long,
         path: String,
         fileName: String,
@@ -142,34 +150,37 @@ class LibraryRepository(private val db: RadioShedDatabase) {
         cueOffsetStartMs: Long? = null,
         cueOffsetEndMs: Long? = null,
     ): Long = withContext(IODispatcher) {
-        val now = nowMillis()
-        db.libraryQueries.insertTrack(
-            folder_id = folderId,
-            path = path,
-            file_name = fileName,
-            file_size = fileSize,
-            file_ctime = fileCtime,
-            file_mtime = fileMtime,
-            title = title,
-            album_id = albumId,
-            track_number = trackNumber?.toLong(),
-            disc_number = discNumber?.toLong(),
-            duration_ms = durationMs,
-            bitrate_kbps = bitrateKbps?.toLong(),
-            sample_rate_hz = sampleRateHz?.toLong(),
-            channels = channels?.toLong(),
-            format = format,
-            replay_gain_track = replayGainTrack,
-            replay_gain_album = replayGainAlbum,
-            replay_gain_track_peak = replayGainTrackPeak,
-            bpm = bpm,
-            musicbrainz_id = musicbrainzId,
-            acoustid_fingerprint = acoustidFingerprint,
-            cue_offset_start_ms = cueOffsetStartMs,
-            cue_offset_end_ms = cueOffsetEndMs,
-            added_at = now,
-            updated_at = now,
-        ).executeAsOne()
+        db.transactionWithResult {
+            val now = nowMillis()
+            db.libraryQueries.insertTrackOrIgnore(
+                folder_id = folderId,
+                path = path,
+                file_name = fileName,
+                file_size = fileSize,
+                file_ctime = fileCtime,
+                file_mtime = fileMtime,
+                title = title,
+                album_id = albumId,
+                track_number = trackNumber?.toLong(),
+                disc_number = discNumber?.toLong(),
+                duration_ms = durationMs,
+                bitrate_kbps = bitrateKbps?.toLong(),
+                sample_rate_hz = sampleRateHz?.toLong(),
+                channels = channels?.toLong(),
+                format = format,
+                replay_gain_track = replayGainTrack,
+                replay_gain_album = replayGainAlbum,
+                replay_gain_track_peak = replayGainTrackPeak,
+                bpm = bpm,
+                musicbrainz_id = musicbrainzId,
+                acoustid_fingerprint = acoustidFingerprint,
+                cue_offset_start_ms = cueOffsetStartMs,
+                cue_offset_end_ms = cueOffsetEndMs,
+                added_at = now,
+                updated_at = now,
+            )
+            db.libraryQueries.selectTrackIdByPath(path).executeAsOne()
+        }
     }
 
     suspend fun getTrackById(id: Long): Track? = withContext(IODispatcher) {

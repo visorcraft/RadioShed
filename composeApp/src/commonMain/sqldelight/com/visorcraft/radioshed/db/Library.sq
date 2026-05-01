@@ -9,7 +9,8 @@ CREATE TABLE artist (
     updated_at INTEGER NOT NULL
 );
 
-CREATE INDEX artist_sort_idx ON artist(sort_name);
+-- Note: `sort_name TEXT NOT NULL UNIQUE` already creates an implicit index;
+-- no separate artist_sort_idx is required.
 
 CREATE TABLE album (
     id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
@@ -21,7 +22,8 @@ CREATE TABLE album (
     artwork_uri TEXT,
     track_count INTEGER NOT NULL DEFAULT 0,
     created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL
+    updated_at INTEGER NOT NULL,
+    UNIQUE (sort_title, artist_id)
 );
 
 CREATE INDEX album_artist_idx ON album(artist_id);
@@ -93,10 +95,15 @@ CREATE TABLE track_personnel (
 
 -- ==== Artist queries ====
 
-insertArtist:
-INSERT INTO artist (name, sort_name, musicbrainz_id, image_uri, bio, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, ?)
-RETURNING id;
+-- Race-safe insert: ignores conflict on `sort_name UNIQUE` so concurrent
+-- scanner coroutines can both call this and the second silently no-ops.
+-- Pair with selectArtistIdBySortName to retrieve the resulting id.
+insertArtistOrIgnore:
+INSERT OR IGNORE INTO artist (name, sort_name, musicbrainz_id, image_uri, bio, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?);
+
+selectArtistIdBySortName:
+SELECT id FROM artist WHERE sort_name = ?;
 
 selectArtistById:
 SELECT * FROM artist WHERE id = ?;
@@ -121,10 +128,15 @@ DELETE FROM artist WHERE id = ?;
 
 -- ==== Album queries ====
 
-insertAlbum:
-INSERT INTO album (title, artist_id, sort_title, year, musicbrainz_id, artwork_uri, track_count, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-RETURNING id;
+-- Race-safe insert: ignores conflict on `(sort_title, artist_id)` UNIQUE so
+-- concurrent scanner coroutines can both call this. Pair with
+-- selectAlbumIdByTitleAndArtist to retrieve the resulting id.
+insertAlbumOrIgnore:
+INSERT OR IGNORE INTO album (title, artist_id, sort_title, year, musicbrainz_id, artwork_uri, track_count, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+selectAlbumIdByTitleAndArtist:
+SELECT id FROM album WHERE sort_title = ? AND artist_id IS ?;
 
 selectAlbumById:
 SELECT * FROM album WHERE id = ?;
@@ -152,8 +164,11 @@ DELETE FROM album WHERE id = ?;
 
 -- ==== Track queries ====
 
-insertTrack:
-INSERT INTO track (
+-- Race-safe insert: ignores conflict on `path UNIQUE` so concurrent scanner
+-- coroutines processing the same path don't blow up. Pair with
+-- selectTrackIdByPath to retrieve the resulting id.
+insertTrackOrIgnore:
+INSERT OR IGNORE INTO track (
     folder_id, path, file_name, file_size, file_ctime, file_mtime,
     title, album_id, track_number, disc_number, duration_ms,
     bitrate_kbps, sample_rate_hz, channels, format,
@@ -161,8 +176,10 @@ INSERT INTO track (
     bpm, musicbrainz_id, acoustid_fingerprint,
     cue_offset_start_ms, cue_offset_end_ms,
     added_at, updated_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-RETURNING id;
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+selectTrackIdByPath:
+SELECT id FROM track WHERE path = ?;
 
 selectTrackById:
 SELECT * FROM track WHERE id = ?;

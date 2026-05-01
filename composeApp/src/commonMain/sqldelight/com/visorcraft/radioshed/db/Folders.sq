@@ -12,7 +12,8 @@ CREATE TABLE folder (
     updated_at INTEGER NOT NULL
 );
 
-CREATE INDEX folder_uri_idx ON folder(uri);
+-- Note: `uri TEXT NOT NULL UNIQUE` already creates an implicit index;
+-- no separate folder_uri_idx is required.
 
 insert:
 INSERT INTO folder (display_name, uri, recursive, include_globs, exclude_globs, created_at, updated_at)

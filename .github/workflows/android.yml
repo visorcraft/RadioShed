@@ -52,7 +52,6 @@ jobs:
       - name: Common tests (JVM)
         if: steps.scaffold.outputs.scaffolded == 'true'
         run: ./gradlew :composeApp:testDebugUnitTest --no-daemon
-        continue-on-error: true
 
       - name: assembleDebug
         if: steps.scaffold.outputs.scaffolded == 'true'

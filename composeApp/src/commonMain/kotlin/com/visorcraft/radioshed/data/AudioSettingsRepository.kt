@@ -149,8 +149,20 @@ class AudioSettingsRepository(private val db: RadioShedDatabase) {
         ).executeAsOne()
     }
 
-    suspend fun setDefaultDjVoice(id: Long) = withContext(IODispatcher) {
-        db.audioSettingsQueries.setDefaultDjVoice(id)
+    /**
+     * Marks the voice with [id] as default and clears the flag on every other row.
+     * Validates that [id] exists first; otherwise the underlying CASE statement
+     * would silently zero out is_default for every voice and leave none default.
+     * Returns true if the voice exists and was promoted, false if [id] was unknown.
+     */
+    suspend fun setDefaultDjVoice(id: Long): Boolean = withContext(IODispatcher) {
+        db.transactionWithResult {
+            val exists = db.audioSettingsQueries.selectDjVoiceById(id).executeAsOneOrNull() != null
+            if (exists) {
+                db.audioSettingsQueries.setDefaultDjVoice(id)
+            }
+            exists
+        }
     }
 
     suspend fun deleteDjVoice(id: Long) = withContext(IODispatcher) {
