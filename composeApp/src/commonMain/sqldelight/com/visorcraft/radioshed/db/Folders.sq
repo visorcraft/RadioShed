@@ -1,0 +1,50 @@
+CREATE TABLE folder (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    display_name TEXT NOT NULL,
+    uri TEXT NOT NULL UNIQUE,
+    recursive INTEGER NOT NULL DEFAULT 1,
+    include_globs TEXT,
+    exclude_globs TEXT,
+    last_scanned_at INTEGER,
+    track_count INTEGER NOT NULL DEFAULT 0,
+    is_available INTEGER NOT NULL DEFAULT 1,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+
+CREATE INDEX folder_uri_idx ON folder(uri);
+
+insert:
+INSERT INTO folder (display_name, uri, recursive, include_globs, exclude_globs, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?)
+RETURNING id;
+
+selectAll:
+SELECT * FROM folder ORDER BY display_name;
+
+selectById:
+SELECT * FROM folder WHERE id = ?;
+
+selectByUri:
+SELECT * FROM folder WHERE uri = ?;
+
+updateScanResult:
+UPDATE folder SET last_scanned_at = ?, track_count = ?, updated_at = ? WHERE id = ?;
+
+setAvailable:
+UPDATE folder SET is_available = ?, updated_at = ? WHERE id = ?;
+
+setRecursive:
+UPDATE folder SET recursive = ?, updated_at = ? WHERE id = ?;
+
+setGlobs:
+UPDATE folder SET include_globs = ?, exclude_globs = ?, updated_at = ? WHERE id = ?;
+
+renameDisplayName:
+UPDATE folder SET display_name = ?, updated_at = ? WHERE id = ?;
+
+deleteById:
+DELETE FROM folder WHERE id = ?;
+
+count:
+SELECT COUNT(*) FROM folder;

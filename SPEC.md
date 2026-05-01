@@ -1085,9 +1085,9 @@ Goal: a single-screen app from this repo builds and runs on Android emulator and
 - [x] Configure `composeApp/` Android settings: `compileSdk=36`, `targetSdk=36`, `minSdk=30`, `jvmTarget=11` *(wizard's choices; SPEC versions previously read 34/33/26/17 and have been updated to match)*
 - [x] Create `iosApp/` Xcode project (SwiftUI shell hosting CMP `UIViewController`)
 - [ ] Configure shared framework export: SPM (preferred) or CocoaPods (fallback) *(wizard chose direct framework; bump to SPM later)*
-- [ ] Wire up Koin DI scaffolding in `commonMain`
-- [ ] Implement responsive `WindowSizeClass`-aware shared layout scaffolding
-- [x] Implement one shared Compose screen rendering on both platforms *(wizard's default; replace with branded RadioShed shell next)*
+- [x] Wire up Koin DI scaffolding in `commonMain` *(Modules.kt + per-platform PlatformModule; RadioShedApp.kt on Android, doInitKoin from iOSApp.swift)*
+- [ ] Implement responsive `WindowSizeClass`-aware shared layout scaffolding *(LandingScreen uses `BoxWithConstraints`; full WindowSizeClass scaffolding pending Stations Home in Phase 6)*
+- [x] Implement one shared Compose screen rendering on both platforms *(branded RadioShed shell — `App.kt` → `RadioShedTheme` → `LandingScreen`)*
 - [x] CI: Android `assembleDebug` succeeds on Linux runner
 - [ ] CI: iOS framework builds + `xcodebuild` builds `iosApp` on macOS runner *(verifying after destination fix)*
 - [ ] CI: snapshot-test matrix across §1.1 form factors
@@ -1098,19 +1098,19 @@ Goal: a single-screen app from this repo builds and runs on Android emulator and
 
 Goal: schema set up, domain models compile, repositories pass basic CRUD tests.
 
-- [ ] Add SQLDelight to shared module (Android + Native drivers)
-- [ ] Schema: `tracks`, `folders`, `artists`, `albums`, `track_artists`, `track_tags`, `track_personnel`
-- [ ] Schema: `stations`, `playlists`, `playlist_tracks`, `station_history`
-- [ ] Schema: `ratings`, `skip_log`, `play_count`
-- [ ] Schema: `artwork_cache`, `lyrics_cache`, `dj_cache`
-- [ ] Schema: `eq_presets`, `eq_output_bindings`, `dj_voices`, `cast_targets`, `widget_configs`, `backups`
-- [ ] FTS5 virtual tables: `tracks_fts`, `artists_fts`, `albums_fts`, `stations_fts`, `lyrics_fts`
-- [ ] Migration directory + migration test harness
-- [ ] Domain models: `Track`, `Station`, `SourceRule`, `PlaybackRule`, `Folder`, `Artist`, `Album`
-- [ ] Repository interfaces + implementations
-- [ ] Settings store via `multiplatform-settings`
-- [ ] Unit tests for all domain models in `commonTest`
-- [ ] Integration tests for repositories on Android + iOS
+- [x] Add SQLDelight to shared module (Android + Native drivers; sqlite-3.38 dialect for `RETURNING` + UPSERT)
+- [x] Schema: `tracks`, `folders`, `artists`, `albums`, `track_artists`, `track_tags`, `track_personnel`
+- [x] Schema: `stations`, `playlists`, `playlist_tracks`, `station_history`
+- [x] Schema: `ratings`, `skip_log`, `play_count`, `station_dislike`
+- [x] Schema: `artwork_cache`, `lyrics_cache`, `dj_cache`
+- [x] Schema: `eq_presets`, `eq_output_bindings`, `dj_voices`, `cast_targets`, `widget_configs`, `backups`
+- [ ] FTS5 virtual tables: `tracks_fts`, `artists_fts`, `albums_fts`, `stations_fts`, `lyrics_fts` *(deferred to Phase 3 — search UI; needs FTS5 dialect verification on iOS Native)*
+- [ ] Migration directory + migration test harness *(deferred until we have an actual migration to verify; baseline schema only for now)*
+- [x] Domain models: `Track`, `Station`, `SourceRule`, `PlaybackRule`, `Folder`, `Artist`, `Album` (+ `Playlist`, `Rating`, `Tag`, `Personnel`, `EqPreset`, `EqBand`, `EqOutputBinding`, `CastTarget`, `DjVoice`, `ConnectivityPolicy`, `SleepTimer`)
+- [x] Repository implementations: `FolderRepository`, `LibraryRepository`, `StationRepository`, `PlaylistRepository`, `RatingRepository`, `ArtworkCacheRepository`, `LyricsCacheRepository`, `DjCacheRepository`, `AudioSettingsRepository`, `CastTargetRepository`, `WidgetConfigRepository`, `BackupRepository`
+- [x] Settings store via `multiplatform-settings` (`SettingsStore` with theme mode, connectivity policy, onboarding state, last station, file-mode browser opt-in)
+- [x] Unit tests for all domain models in `commonTest` (`SourceRuleSerializationTest`, `PlaybackRuleSerializationTest`, `RatingTest`)
+- [ ] Integration tests for repositories on Android + iOS *(deferred — requires DB-backed test harness; pure-domain tests cover model/serialization correctness for now)*
 
 ### Phase 3 — Library & scanner (~2 weeks)
 

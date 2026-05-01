@@ -1,0 +1,24 @@
+CREATE TABLE widget_config (
+    widget_key TEXT NOT NULL PRIMARY KEY,
+    widget_type TEXT NOT NULL,
+    config_json TEXT NOT NULL DEFAULT '{}',
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+
+upsertWidgetConfig:
+INSERT INTO widget_config (widget_key, widget_type, config_json, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?)
+ON CONFLICT(widget_key) DO UPDATE SET
+    widget_type = excluded.widget_type,
+    config_json = excluded.config_json,
+    updated_at = excluded.updated_at;
+
+selectWidgetConfig:
+SELECT * FROM widget_config WHERE widget_key = ?;
+
+selectAllWidgetConfigs:
+SELECT * FROM widget_config;
+
+deleteWidgetConfig:
+DELETE FROM widget_config WHERE widget_key = ?;

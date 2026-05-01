@@ -1,0 +1,256 @@
+CREATE TABLE artist (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    sort_name TEXT NOT NULL UNIQUE,
+    musicbrainz_id TEXT,
+    image_uri TEXT,
+    bio TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+
+CREATE INDEX artist_sort_idx ON artist(sort_name);
+
+CREATE TABLE album (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    artist_id INTEGER REFERENCES artist(id) ON DELETE SET NULL,
+    sort_title TEXT NOT NULL,
+    year INTEGER,
+    musicbrainz_id TEXT,
+    artwork_uri TEXT,
+    track_count INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+
+CREATE INDEX album_artist_idx ON album(artist_id);
+CREATE INDEX album_sort_idx ON album(sort_title);
+
+CREATE TABLE track (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    folder_id INTEGER NOT NULL REFERENCES folder(id) ON DELETE CASCADE,
+    path TEXT NOT NULL UNIQUE,
+    file_name TEXT NOT NULL,
+    file_size INTEGER NOT NULL,
+    file_ctime INTEGER NOT NULL,
+    file_mtime INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    album_id INTEGER REFERENCES album(id) ON DELETE SET NULL,
+    track_number INTEGER,
+    disc_number INTEGER,
+    duration_ms INTEGER NOT NULL,
+    bitrate_kbps INTEGER,
+    sample_rate_hz INTEGER,
+    channels INTEGER,
+    format TEXT NOT NULL,
+    replay_gain_track REAL,
+    replay_gain_album REAL,
+    replay_gain_track_peak REAL,
+    bpm REAL,
+    musicbrainz_id TEXT,
+    acoustid_fingerprint TEXT,
+    cue_offset_start_ms INTEGER,
+    cue_offset_end_ms INTEGER,
+    is_available INTEGER NOT NULL DEFAULT 1,
+    added_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+
+CREATE INDEX track_folder_idx ON track(folder_id);
+CREATE INDEX track_album_idx ON track(album_id);
+CREATE INDEX track_added_idx ON track(added_at);
+CREATE INDEX track_format_idx ON track(format);
+
+CREATE TABLE track_artist (
+    track_id INTEGER NOT NULL REFERENCES track(id) ON DELETE CASCADE,
+    artist_id INTEGER NOT NULL REFERENCES artist(id) ON DELETE CASCADE,
+    role TEXT NOT NULL DEFAULT 'primary',
+    position INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (track_id, artist_id, role)
+);
+
+CREATE INDEX track_artist_a_idx ON track_artist(artist_id);
+
+CREATE TABLE track_tag (
+    track_id INTEGER NOT NULL REFERENCES track(id) ON DELETE CASCADE,
+    key TEXT NOT NULL,
+    value TEXT NOT NULL,
+    position INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (track_id, key, position)
+);
+
+CREATE INDEX track_tag_kv_idx ON track_tag(key, value);
+
+CREATE TABLE track_personnel (
+    track_id INTEGER NOT NULL REFERENCES track(id) ON DELETE CASCADE,
+    role TEXT NOT NULL,
+    name TEXT NOT NULL,
+    position INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (track_id, role, position)
+);
+
+-- ==== Artist queries ====
+
+insertArtist:
+INSERT INTO artist (name, sort_name, musicbrainz_id, image_uri, bio, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?)
+RETURNING id;
+
+selectArtistById:
+SELECT * FROM artist WHERE id = ?;
+
+selectArtistBySortName:
+SELECT * FROM artist WHERE sort_name = ?;
+
+selectAllArtists:
+SELECT * FROM artist ORDER BY sort_name;
+
+countArtists:
+SELECT COUNT(*) FROM artist;
+
+updateArtistImage:
+UPDATE artist SET image_uri = ?, updated_at = ? WHERE id = ?;
+
+updateArtistBio:
+UPDATE artist SET bio = ?, updated_at = ? WHERE id = ?;
+
+deleteArtistById:
+DELETE FROM artist WHERE id = ?;
+
+-- ==== Album queries ====
+
+insertAlbum:
+INSERT INTO album (title, artist_id, sort_title, year, musicbrainz_id, artwork_uri, track_count, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+RETURNING id;
+
+selectAlbumById:
+SELECT * FROM album WHERE id = ?;
+
+selectAlbumByTitleAndArtist:
+SELECT * FROM album WHERE sort_title = ? AND artist_id IS ?;
+
+selectAlbumsByArtist:
+SELECT * FROM album WHERE artist_id = ? ORDER BY year, sort_title;
+
+selectAllAlbums:
+SELECT * FROM album ORDER BY sort_title;
+
+countAlbums:
+SELECT COUNT(*) FROM album;
+
+updateAlbumArtwork:
+UPDATE album SET artwork_uri = ?, updated_at = ? WHERE id = ?;
+
+updateAlbumTrackCount:
+UPDATE album SET track_count = ?, updated_at = ? WHERE id = ?;
+
+deleteAlbumById:
+DELETE FROM album WHERE id = ?;
+
+-- ==== Track queries ====
+
+insertTrack:
+INSERT INTO track (
+    folder_id, path, file_name, file_size, file_ctime, file_mtime,
+    title, album_id, track_number, disc_number, duration_ms,
+    bitrate_kbps, sample_rate_hz, channels, format,
+    replay_gain_track, replay_gain_album, replay_gain_track_peak,
+    bpm, musicbrainz_id, acoustid_fingerprint,
+    cue_offset_start_ms, cue_offset_end_ms,
+    added_at, updated_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+RETURNING id;
+
+selectTrackById:
+SELECT * FROM track WHERE id = ?;
+
+selectTrackByPath:
+SELECT * FROM track WHERE path = ?;
+
+selectTracksByFolder:
+SELECT * FROM track WHERE folder_id = ? ORDER BY path;
+
+selectTracksByAlbum:
+SELECT * FROM track WHERE album_id = ? ORDER BY disc_number, track_number;
+
+selectAvailableTracks:
+SELECT * FROM track WHERE is_available = 1 ORDER BY title LIMIT ? OFFSET ?;
+
+selectNewestTracks:
+SELECT * FROM track WHERE is_available = 1 ORDER BY file_ctime DESC LIMIT ?;
+
+selectTracksByFormat:
+SELECT * FROM track WHERE format = ? AND is_available = 1 ORDER BY title;
+
+countTracks:
+SELECT COUNT(*) FROM track;
+
+countTracksInFolder:
+SELECT COUNT(*) FROM track WHERE folder_id = ?;
+
+setTrackAvailable:
+UPDATE track SET is_available = ?, updated_at = ? WHERE id = ?;
+
+setTracksAvailableByFolder:
+UPDATE track SET is_available = ?, updated_at = ? WHERE folder_id = ?;
+
+updateTrackReplayGain:
+UPDATE track SET replay_gain_track = ?, replay_gain_album = ?, replay_gain_track_peak = ?, updated_at = ? WHERE id = ?;
+
+deleteTrackById:
+DELETE FROM track WHERE id = ?;
+
+deleteTracksByFolder:
+DELETE FROM track WHERE folder_id = ?;
+
+-- ==== Track-artist junction ====
+
+linkTrackArtist:
+INSERT OR IGNORE INTO track_artist (track_id, artist_id, role, position) VALUES (?, ?, ?, ?);
+
+selectArtistsByTrack:
+SELECT artist.* FROM artist
+JOIN track_artist ta ON ta.artist_id = artist.id
+WHERE ta.track_id = ?
+ORDER BY ta.role, ta.position;
+
+selectTracksByArtist:
+SELECT track.* FROM track
+JOIN track_artist ta ON ta.track_id = track.id
+WHERE ta.artist_id = ? AND track.is_available = 1
+ORDER BY track.title;
+
+unlinkAllArtistsFromTrack:
+DELETE FROM track_artist WHERE track_id = ?;
+
+-- ==== Track tags ====
+
+insertTrackTag:
+INSERT INTO track_tag (track_id, key, value, position) VALUES (?, ?, ?, ?);
+
+selectTagsByTrack:
+SELECT * FROM track_tag WHERE track_id = ? ORDER BY key, position;
+
+selectTracksByTag:
+SELECT track.* FROM track
+JOIN track_tag tt ON tt.track_id = track.id
+WHERE tt.key = ? AND tt.value = ? AND track.is_available = 1;
+
+distinctTagValues:
+SELECT DISTINCT value FROM track_tag WHERE key = ? ORDER BY value;
+
+deleteAllTagsForTrack:
+DELETE FROM track_tag WHERE track_id = ?;
+
+-- ==== Track personnel ====
+
+insertTrackPersonnel:
+INSERT INTO track_personnel (track_id, role, name, position) VALUES (?, ?, ?, ?);
+
+selectPersonnelByTrack:
+SELECT * FROM track_personnel WHERE track_id = ? ORDER BY role, position;
+
+deleteAllPersonnelForTrack:
+DELETE FROM track_personnel WHERE track_id = ?;

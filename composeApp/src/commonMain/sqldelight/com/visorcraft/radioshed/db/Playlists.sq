@@ -1,0 +1,66 @@
+CREATE TABLE playlist (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    description TEXT,
+    artwork_uri TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+
+CREATE TABLE playlist_track (
+    playlist_id INTEGER NOT NULL REFERENCES playlist(id) ON DELETE CASCADE,
+    track_id INTEGER NOT NULL REFERENCES track(id) ON DELETE CASCADE,
+    position INTEGER NOT NULL,
+    added_at INTEGER NOT NULL,
+    PRIMARY KEY (playlist_id, track_id)
+);
+
+CREATE INDEX playlist_track_position_idx ON playlist_track(playlist_id, position);
+
+-- ==== Playlist queries ====
+
+insertPlaylist:
+INSERT INTO playlist (name, description, artwork_uri, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?)
+RETURNING id;
+
+selectPlaylistById:
+SELECT * FROM playlist WHERE id = ?;
+
+selectAllPlaylists:
+SELECT * FROM playlist ORDER BY name;
+
+countPlaylists:
+SELECT COUNT(*) FROM playlist;
+
+renamePlaylist:
+UPDATE playlist SET name = ?, updated_at = ? WHERE id = ?;
+
+updatePlaylistDescription:
+UPDATE playlist SET description = ?, updated_at = ? WHERE id = ?;
+
+deletePlaylistById:
+DELETE FROM playlist WHERE id = ?;
+
+-- ==== Playlist-track ====
+
+addTrackToPlaylist:
+INSERT OR IGNORE INTO playlist_track (playlist_id, track_id, position, added_at) VALUES (?, ?, ?, ?);
+
+selectTracksInPlaylist:
+SELECT track.* FROM track
+JOIN playlist_track pt ON pt.track_id = track.id
+WHERE pt.playlist_id = ?
+ORDER BY pt.position;
+
+countTracksInPlaylist:
+SELECT COUNT(*) FROM playlist_track WHERE playlist_id = ?;
+
+reorderPlaylistTrack:
+UPDATE playlist_track SET position = ? WHERE playlist_id = ? AND track_id = ?;
+
+removeTrackFromPlaylist:
+DELETE FROM playlist_track WHERE playlist_id = ? AND track_id = ?;
+
+clearPlaylist:
+DELETE FROM playlist_track WHERE playlist_id = ?;

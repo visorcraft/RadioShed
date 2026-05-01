@@ -1,0 +1,111 @@
+CREATE TABLE rating (
+    track_id INTEGER NOT NULL PRIMARY KEY REFERENCES track(id) ON DELETE CASCADE,
+    stars REAL NOT NULL,
+    rated_at INTEGER NOT NULL
+);
+
+CREATE INDEX rating_stars_idx ON rating(stars);
+
+CREATE TABLE skip_log (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    track_id INTEGER NOT NULL REFERENCES track(id) ON DELETE CASCADE,
+    station_id INTEGER REFERENCES station(id) ON DELETE SET NULL,
+    skipped_at INTEGER NOT NULL,
+    position_ms INTEGER NOT NULL
+);
+
+CREATE INDEX skip_log_track_idx ON skip_log(track_id);
+CREATE INDEX skip_log_station_idx ON skip_log(station_id);
+
+CREATE TABLE play_count (
+    track_id INTEGER NOT NULL PRIMARY KEY REFERENCES track(id) ON DELETE CASCADE,
+    count INTEGER NOT NULL DEFAULT 0,
+    last_played_at INTEGER,
+    total_listen_ms INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE station_dislike (
+    track_id INTEGER NOT NULL REFERENCES track(id) ON DELETE CASCADE,
+    station_id INTEGER NOT NULL REFERENCES station(id) ON DELETE CASCADE,
+    disliked_at INTEGER NOT NULL,
+    PRIMARY KEY (track_id, station_id)
+);
+
+-- ==== Rating queries ====
+
+setRating:
+INSERT OR REPLACE INTO rating (track_id, stars, rated_at) VALUES (?, ?, ?);
+
+selectRating:
+SELECT stars FROM rating WHERE track_id = ?;
+
+selectAllRatings:
+SELECT * FROM rating ORDER BY stars DESC, rated_at DESC;
+
+selectTopRatedTracks:
+SELECT track.* FROM track
+JOIN rating r ON r.track_id = track.id
+WHERE r.stars >= ? AND track.is_available = 1
+ORDER BY r.stars DESC, r.rated_at DESC LIMIT ?;
+
+clearRating:
+DELETE FROM rating WHERE track_id = ?;
+
+-- ==== Skip log queries ====
+
+insertSkip:
+INSERT INTO skip_log (track_id, station_id, skipped_at, position_ms) VALUES (?, ?, ?, ?);
+
+countSkipsForTrack:
+SELECT COUNT(*) FROM skip_log WHERE track_id = ?;
+
+selectRecentSkipsForStation:
+SELECT * FROM skip_log WHERE station_id = ? ORDER BY skipped_at DESC LIMIT ?;
+
+trimSkipsOlderThan:
+DELETE FROM skip_log WHERE skipped_at < ?;
+
+-- ==== Play count queries ====
+
+incrementPlayCount:
+INSERT INTO play_count (track_id, count, last_played_at, total_listen_ms)
+VALUES (?, 1, ?, ?)
+ON CONFLICT(track_id) DO UPDATE SET
+    count = count + 1,
+    last_played_at = excluded.last_played_at,
+    total_listen_ms = total_listen_ms + excluded.total_listen_ms;
+
+selectPlayCount:
+SELECT * FROM play_count WHERE track_id = ?;
+
+selectMostPlayedTracks:
+SELECT track.* FROM track
+JOIN play_count pc ON pc.track_id = track.id
+WHERE track.is_available = 1
+ORDER BY pc.count DESC LIMIT ?;
+
+selectLeastPlayedTracks:
+SELECT track.* FROM track
+LEFT JOIN play_count pc ON pc.track_id = track.id
+WHERE track.is_available = 1
+ORDER BY COALESCE(pc.count, 0) ASC, track.title LIMIT ?;
+
+selectNeverPlayedTracks:
+SELECT track.* FROM track
+LEFT JOIN play_count pc ON pc.track_id = track.id
+WHERE track.is_available = 1 AND pc.track_id IS NULL
+ORDER BY track.title LIMIT ?;
+
+-- ==== Station-dislike queries ====
+
+dislikeForStation:
+INSERT OR REPLACE INTO station_dislike (track_id, station_id, disliked_at) VALUES (?, ?, ?);
+
+undislikeForStation:
+DELETE FROM station_dislike WHERE track_id = ? AND station_id = ?;
+
+isDislikedForStation:
+SELECT COUNT(*) FROM station_dislike WHERE track_id = ? AND station_id = ?;
+
+selectDislikedTrackIdsForStation:
+SELECT track_id FROM station_dislike WHERE station_id = ?;

@@ -1,0 +1,84 @@
+CREATE TABLE eq_preset (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    bands_json TEXT NOT NULL,
+    is_built_in INTEGER NOT NULL DEFAULT 0,
+    pre_amp_db REAL NOT NULL DEFAULT 0.0,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+
+CREATE TABLE eq_output_binding (
+    output_key TEXT NOT NULL PRIMARY KEY,
+    eq_preset_id INTEGER REFERENCES eq_preset(id) ON DELETE SET NULL,
+    bound_at INTEGER NOT NULL
+);
+
+CREATE TABLE dj_voice (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    engine TEXT NOT NULL,
+    voice_id TEXT NOT NULL,
+    rate REAL NOT NULL DEFAULT 1.0,
+    pitch REAL NOT NULL DEFAULT 1.0,
+    is_default INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL
+);
+
+-- ==== EQ presets ====
+
+insertEqPreset:
+INSERT INTO eq_preset (name, bands_json, is_built_in, pre_amp_db, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?)
+RETURNING id;
+
+selectEqPresetById:
+SELECT * FROM eq_preset WHERE id = ?;
+
+selectEqPresetByName:
+SELECT * FROM eq_preset WHERE name = ?;
+
+selectAllEqPresets:
+SELECT * FROM eq_preset ORDER BY is_built_in DESC, name;
+
+updateEqPreset:
+UPDATE eq_preset SET name = ?, bands_json = ?, pre_amp_db = ?, updated_at = ? WHERE id = ?;
+
+deleteEqPreset:
+DELETE FROM eq_preset WHERE id = ? AND is_built_in = 0;
+
+-- ==== Per-output EQ bindings ====
+
+bindEqToOutput:
+INSERT OR REPLACE INTO eq_output_binding (output_key, eq_preset_id, bound_at) VALUES (?, ?, ?);
+
+getEqBindingForOutput:
+SELECT * FROM eq_output_binding WHERE output_key = ?;
+
+selectAllEqBindings:
+SELECT * FROM eq_output_binding;
+
+unbindEqOutput:
+DELETE FROM eq_output_binding WHERE output_key = ?;
+
+-- ==== DJ voices ====
+
+insertDjVoice:
+INSERT INTO dj_voice (name, engine, voice_id, rate, pitch, is_default, created_at)
+VALUES (?, ?, ?, ?, ?, ?, ?)
+RETURNING id;
+
+selectDjVoiceById:
+SELECT * FROM dj_voice WHERE id = ?;
+
+selectAllDjVoices:
+SELECT * FROM dj_voice ORDER BY is_default DESC, name;
+
+selectDefaultDjVoice:
+SELECT * FROM dj_voice WHERE is_default = 1 LIMIT 1;
+
+setDefaultDjVoice:
+UPDATE dj_voice SET is_default = (CASE WHEN id = ? THEN 1 ELSE 0 END);
+
+deleteDjVoice:
+DELETE FROM dj_voice WHERE id = ?;

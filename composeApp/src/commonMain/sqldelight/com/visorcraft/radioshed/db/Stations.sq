@@ -1,0 +1,94 @@
+CREATE TABLE station (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    color INTEGER NOT NULL DEFAULT 0,
+    icon TEXT,
+    artwork_uri TEXT,
+    sort_position INTEGER NOT NULL DEFAULT 0,
+    custom_subtitle TEXT,
+    source_json TEXT NOT NULL,
+    playback_json TEXT NOT NULL,
+    play_count INTEGER NOT NULL DEFAULT 0,
+    last_played_at INTEGER,
+    total_listen_ms INTEGER NOT NULL DEFAULT 0,
+    skip_rate REAL NOT NULL DEFAULT 0.0,
+    is_pinned INTEGER NOT NULL DEFAULT 0,
+    is_built_in INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+
+CREATE INDEX station_sort_idx ON station(sort_position);
+CREATE INDEX station_last_played_idx ON station(last_played_at);
+
+CREATE TABLE station_history (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    station_id INTEGER NOT NULL REFERENCES station(id) ON DELETE CASCADE,
+    track_id INTEGER NOT NULL REFERENCES track(id) ON DELETE CASCADE,
+    played_at INTEGER NOT NULL,
+    completed INTEGER NOT NULL DEFAULT 0,
+    listened_ms INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX station_history_station_idx ON station_history(station_id, played_at);
+CREATE INDEX station_history_track_idx ON station_history(track_id);
+
+-- ==== Station queries ====
+
+insertStation:
+INSERT INTO station (name, color, icon, artwork_uri, sort_position, custom_subtitle, source_json, playback_json, is_built_in, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+RETURNING id;
+
+selectStationById:
+SELECT * FROM station WHERE id = ?;
+
+selectAllStations:
+SELECT * FROM station ORDER BY sort_position, name;
+
+selectPinnedStations:
+SELECT * FROM station WHERE is_pinned = 1 ORDER BY sort_position;
+
+selectRecentlyPlayedStations:
+SELECT * FROM station WHERE last_played_at IS NOT NULL ORDER BY last_played_at DESC LIMIT ?;
+
+countStations:
+SELECT COUNT(*) FROM station;
+
+updateStation:
+UPDATE station SET name = ?, color = ?, icon = ?, artwork_uri = ?, custom_subtitle = ?,
+    source_json = ?, playback_json = ?, updated_at = ? WHERE id = ?;
+
+updateStationStats:
+UPDATE station SET play_count = ?, last_played_at = ?, total_listen_ms = ?, skip_rate = ?, updated_at = ? WHERE id = ?;
+
+reorderStation:
+UPDATE station SET sort_position = ?, updated_at = ? WHERE id = ?;
+
+setStationPinned:
+UPDATE station SET is_pinned = ?, updated_at = ? WHERE id = ?;
+
+deleteStationById:
+DELETE FROM station WHERE id = ?;
+
+-- ==== Station history queries ====
+
+recordPlay:
+INSERT INTO station_history (station_id, track_id, played_at, completed, listened_ms)
+VALUES (?, ?, ?, ?, ?)
+RETURNING id;
+
+selectHistoryByStation:
+SELECT * FROM station_history WHERE station_id = ? ORDER BY played_at DESC LIMIT ?;
+
+selectRecentTrackIdsForStation:
+SELECT track_id FROM station_history WHERE station_id = ? ORDER BY played_at DESC LIMIT ?;
+
+countHistoryForStation:
+SELECT COUNT(*) FROM station_history WHERE station_id = ?;
+
+deleteHistoryByStation:
+DELETE FROM station_history WHERE station_id = ?;
+
+trimHistoryOlderThan:
+DELETE FROM station_history WHERE played_at < ?;
