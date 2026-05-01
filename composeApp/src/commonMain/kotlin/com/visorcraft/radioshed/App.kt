@@ -77,7 +77,10 @@ fun App(settings: SettingsStore = koinInject()) {
 
                     AppScreen.Stations -> {
                         PlatformBackHandler { current = AppScreen.Home }
-                        StationsHomeScreen(onBack = { current = AppScreen.Home })
+                        StationsHomeScreen(
+                            onBack = { current = AppScreen.Home },
+                            onOpenNowPlaying = { current = AppScreen.NowPlaying },
+                        )
                     }
 
                     AppScreen.Onboarding,

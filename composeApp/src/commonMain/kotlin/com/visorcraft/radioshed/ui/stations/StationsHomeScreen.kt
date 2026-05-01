@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -58,7 +59,7 @@ import org.koin.compose.koinInject
  *   expanded        840–1200dp     → 3 columns
  *   car-console     ≥ 1200dp       → 4–5 columns
  *
- * The grid uses `GridCells.Adaptive(minSize=240.dp)` so the column count
+ * The grid uses `GridCells.Adaptive(minSize=280.dp)` so the column count
  * tracks the actual width regardless of platform — same single rule
  * works for phones, tablets, foldables, and head-units.
  *
@@ -69,6 +70,7 @@ import org.koin.compose.koinInject
 @Composable
 fun StationsHomeScreen(
     onBack: () -> Unit,
+    onOpenNowPlaying: () -> Unit = {},
     stationRepo: StationRepository = koinInject(),
     stationPlayback: StationPlayback = koinInject(),
     audioEngine: AudioEngine = koinInject(),
@@ -76,12 +78,16 @@ fun StationsHomeScreen(
     val stations by stationRepo.observeAll().collectAsState(initial = emptyList())
     val currentStation by stationPlayback.currentStation.collectAsState()
     val playerState by audioEngine.state.collectAsState()
+    val nowPlaying by audioEngine.nowPlaying.collectAsState()
     val scope = rememberCoroutineScope()
 
     Scaffold(
         topBar = {
+            // Slim top bar — just the back affordance. The page title moves
+            // into a richer header inside the grid so it can reflow with the
+            // content and breathe more on wide screens.
             TopAppBar(
-                title = { Text("Stations") },
+                title = {},
                 navigationIcon = { TextButton(onClick = onBack) { Text("Back") } },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface,
@@ -90,33 +96,58 @@ fun StationsHomeScreen(
         },
         containerColor = MaterialTheme.colorScheme.background,
     ) { padding ->
-        if (stations.isEmpty()) {
-            Box(
-                modifier = Modifier.fillMaxSize().padding(padding).padding(24.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    "No stations yet.\n\nFinish onboarding (or scan a folder in Library) — built-in presets are seeded automatically.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
-                )
-            }
-            return@Scaffold
-        }
-
         BoxWithConstraints(modifier = Modifier.fillMaxSize().padding(padding)) {
-            // Single-column on compact phones gives more room for the
-            // station name + subtitle; grid kicks in once we have width.
             val isCompact = maxWidth < 600.dp
-            if (isCompact) {
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(1),
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.fillMaxSize(),
-                ) {
-                    items(stations, key = { it.id }) { station ->
+            val outerPadding = if (isCompact) 16.dp else 24.dp
+
+            if (stations.isEmpty()) {
+                EmptyState(
+                    isCompact = isCompact,
+                    modifier = Modifier.fillMaxSize().padding(outerPadding),
+                )
+                return@BoxWithConstraints
+            }
+
+            val columns = if (isCompact) GridCells.Fixed(1)
+                          else GridCells.Adaptive(minSize = 280.dp)
+
+            LazyVerticalGrid(
+                columns = columns,
+                contentPadding = PaddingValues(
+                    start = outerPadding,
+                    end = outerPadding,
+                    top = 8.dp,
+                    bottom = outerPadding,
+                ),
+                verticalArrangement = Arrangement.spacedBy(if (isCompact) 8.dp else 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(if (isCompact) 8.dp else 16.dp),
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                // Page header spanning the full row — replaces the TopAppBar
+                // title with something proportional to a 1290dp screen.
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    StationsPageHeader(
+                        stationCount = stations.size,
+                        builtInCount = stations.count { it.isBuiltIn },
+                        isCompact = isCompact,
+                    )
+                }
+
+                // Continue Listening callout — only when a station is active.
+                currentStation?.let { active ->
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        ContinueListeningCard(
+                            station = active,
+                            isPlaying = playerState == PlayerState.Playing,
+                            trackTitle = nowPlaying?.title,
+                            trackArtist = nowPlaying?.artist,
+                            onTap = onOpenNowPlaying,
+                        )
+                    }
+                }
+
+                items(stations, key = { it.id }) { station ->
+                    if (isCompact) {
                         StationListRow(
                             station = station,
                             isCurrent = station.id == currentStation?.id,
@@ -126,17 +157,7 @@ fun StationsHomeScreen(
                                 scope.launch { stationPlayback.playStation(station.id) }
                             },
                         )
-                    }
-                }
-            } else {
-                LazyVerticalGrid(
-                    columns = GridCells.Adaptive(minSize = 240.dp),
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    modifier = Modifier.fillMaxSize(),
-                ) {
-                    items(stations, key = { it.id }) { station ->
+                    } else {
                         StationGridTile(
                             station = station,
                             isCurrent = station.id == currentStation?.id,
@@ -150,6 +171,146 @@ fun StationsHomeScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun StationsPageHeader(
+    stationCount: Int,
+    builtInCount: Int,
+    isCompact: Boolean,
+) {
+    val customCount = stationCount - builtInCount
+    val subtitleParts = buildList {
+        add("$stationCount station${if (stationCount == 1) "" else "s"}")
+        if (builtInCount > 0) add("$builtInCount built-in")
+        if (customCount > 0) add("$customCount custom")
+    }
+    Column(modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 8.dp)) {
+        Text(
+            "Stations",
+            style = if (isCompact) MaterialTheme.typography.headlineMedium
+                    else MaterialTheme.typography.displaySmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onBackground,
+        )
+        Spacer(Modifier.size(4.dp))
+        Text(
+            subtitleParts.joinToString(" · "),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+        )
+    }
+}
+
+@Composable
+private fun ContinueListeningCard(
+    station: Station,
+    isPlaying: Boolean,
+    trackTitle: String?,
+    trackArtist: String?,
+    onTap: () -> Unit,
+) {
+    val accent = stationColor(station)
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onTap),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer,
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // Tinted gradient swatch — same visual language as the tile header.
+            Box(
+                modifier = Modifier
+                    .size(64.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(
+                        Brush.linearGradient(
+                            colors = listOf(accent, accent.copy(alpha = 0.55f)),
+                        ),
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = if (isPlaying) "▶" else "‖",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = Color.White,
+                )
+            }
+            Spacer(Modifier.size(16.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = if (isPlaying) "Now playing" else "Paused",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
+                )
+                Spacer(Modifier.size(2.dp))
+                Text(
+                    text = trackTitle ?: station.name,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                val subtitleLine = listOfNotNull(
+                    trackArtist,
+                    "from ${station.name}".takeIf { trackTitle != null },
+                ).joinToString(" · ")
+                if (subtitleLine.isNotBlank()) {
+                    Spacer(Modifier.size(2.dp))
+                    Text(
+                        text = subtitleLine,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+            Spacer(Modifier.size(12.dp))
+            Text(
+                text = "Open ›",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+            )
+        }
+    }
+}
+
+@Composable
+private fun EmptyState(isCompact: Boolean, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Text(
+            "Stations",
+            style = if (isCompact) MaterialTheme.typography.headlineMedium
+                    else MaterialTheme.typography.displaySmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onBackground,
+        )
+        Spacer(Modifier.size(12.dp))
+        Text(
+            "No stations yet.",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
+        )
+        Spacer(Modifier.size(8.dp))
+        Text(
+            "Finish onboarding (or scan a folder in Library) — built-in presets are seeded automatically once tracks are indexed.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.55f),
+            modifier = Modifier.padding(horizontal = 24.dp),
+        )
     }
 }
 
@@ -223,8 +384,8 @@ private fun StationListRow(
 }
 
 /**
- * Square-ish tile suitable for grid layouts. Top half is a tinted gradient
- * placeholder; bottom half holds the name + subtitle. The whole card is
+ * Square-ish tile suitable for grid layouts. Top is a tinted gradient
+ * placeholder; bottom holds the name + subtitle. The whole card is
  * tappable; a "Now Playing" overlay shows on the current station.
  */
 @Composable
@@ -241,12 +402,15 @@ private fun StationGridTile(
             containerColor = if (isCurrent) MaterialTheme.colorScheme.primaryContainer
                              else MaterialTheme.colorScheme.surface,
         ),
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = if (isCurrent) 4.dp else 1.dp,
+        ),
     ) {
         Column {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .aspectRatio(1.6f)
+                    .aspectRatio(1.5f)
                     .background(
                         Brush.linearGradient(
                             colors = listOf(accent, accent.copy(alpha = 0.55f)),
@@ -261,7 +425,7 @@ private fun StationGridTile(
                     modifier = Modifier.padding(12.dp),
                 )
             }
-            Column(modifier = Modifier.padding(12.dp)) {
+            Column(modifier = Modifier.padding(16.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         station.name,
@@ -278,7 +442,7 @@ private fun StationGridTile(
                         BuiltInBadge()
                     }
                 }
-                Spacer(Modifier.size(2.dp))
+                Spacer(Modifier.size(4.dp))
                 Text(
                     text = station.customSubtitle
                         ?: station.playback.order.label().replaceFirstChar { it.uppercase() },
@@ -289,7 +453,7 @@ private fun StationGridTile(
                     overflow = TextOverflow.Ellipsis,
                 )
                 if (station.stats.playCount > 0) {
-                    Spacer(Modifier.size(2.dp))
+                    Spacer(Modifier.size(4.dp))
                     Text(
                         "Played ${station.stats.playCount}×",
                         style = MaterialTheme.typography.labelSmall,

@@ -76,6 +76,8 @@ kotlin {
             implementation(libs.androidx.activity.compose)
 
             implementation(libs.sqldelight.androidDriver)
+            // Bundled modern SQLite — see DatabaseDriverFactory.android for why.
+            implementation(libs.requery.sqliteAndroid)
             implementation(libs.koin.android)
 
             // Audio metadata reader (Phase 3 scanner)
