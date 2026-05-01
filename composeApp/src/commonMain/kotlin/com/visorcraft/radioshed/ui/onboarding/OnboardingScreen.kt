@@ -7,14 +7,18 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -51,6 +55,14 @@ private enum class OnboardingStep {
  * Steps that don't apply on a given platform (Permissions on iOS) are
  * skipped automatically. The flow is linear; the user can always go
  * back to the previous step except after Done.
+ *
+ * Layout breakpoints:
+ *   - `< 600dp` (compact phones)  → single-column, hero centered
+ *   - `600–840dp` (medium tablets) → single-column with bigger type
+ *   - `≥ 840dp` (large tablets, car consoles) → two-pane: hero left,
+ *     interactive content in a Card on the right. The first thing the
+ *     user sees on a 1290dp head-unit screen looks intentional rather
+ *     than a stretched phone layout.
  */
 @Composable
 fun OnboardingScreen(
@@ -61,12 +73,7 @@ fun OnboardingScreen(
     presetSeeder: com.visorcraft.radioshed.stations.PresetSeeder = koinInject(),
 ) {
     val scope = rememberCoroutineScope()
-    // On iOS the StoragePermissions stub returns true at startup, so we
-    // skip the Android-specific Permissions step entirely. This is the
-    // "skipped automatically" behavior the doc-comment promises.
     val initiallyGranted = remember { permissions.hasAllFilesAccess() }
-    // Always start on Welcome; the Permissions step is skipped during nav
-    // when [initiallyGranted] is true (see nextStep / previousStep).
     var step by remember { mutableStateOf(OnboardingStep.Welcome) }
     var folderPath by remember { mutableStateOf("/storage/emulated/0/Music") }
     var folderName by remember { mutableStateOf("Music") }
@@ -74,8 +81,6 @@ fun OnboardingScreen(
     var scanStatus by remember { mutableStateOf<ScanProgress?>(null) }
     var permissionGranted by remember { mutableStateOf(initiallyGranted) }
     var addError by remember { mutableStateOf<String?>(null) }
-    // Track the in-flight scan so back navigation can cancel it cleanly,
-    // and so a double-tap on "Scan now" can't fire two parallel inserts.
     var scanJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
 
     Surface(
@@ -84,12 +89,18 @@ fun OnboardingScreen(
     ) {
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
             val isCompact = maxWidth < 600.dp
-            val horizontalPadding = if (isCompact) 24.dp else 64.dp
+            val isWide = maxWidth >= 840.dp
+            val horizontalPadding = when {
+                isWide -> 64.dp
+                isCompact -> 24.dp
+                else -> 40.dp
+            }
+            val verticalPadding = if (isCompact) 24.dp else 40.dp
 
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = horizontalPadding, vertical = 32.dp),
+                    .padding(horizontal = horizontalPadding, vertical = verticalPadding),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 ProgressDots(
@@ -103,15 +114,17 @@ fun OnboardingScreen(
                     contentAlignment = Alignment.Center,
                 ) {
                     when (step) {
-                        OnboardingStep.Welcome -> WelcomeStep(isCompact = isCompact)
+                        OnboardingStep.Welcome -> WelcomeStep(isCompact = isCompact, isWide = isWide)
 
                         OnboardingStep.Permissions -> PermissionsStep(
+                            isWide = isWide,
                             granted = permissionGranted,
                             onRequest = { permissions.requestAllFilesAccess() },
                             onRefresh = { permissionGranted = permissions.hasAllFilesAccess() },
                         )
 
                         OnboardingStep.Folder -> FolderStep(
+                            isWide = isWide,
                             folderPath = folderPath,
                             folderName = folderName,
                             onFolderPathChange = { folderPath = it },
@@ -119,9 +132,9 @@ fun OnboardingScreen(
                             error = addError,
                         )
 
-                        OnboardingStep.Scan -> ScanStep(progress = scanStatus)
+                        OnboardingStep.Scan -> ScanStep(isWide = isWide, progress = scanStatus)
 
-                        OnboardingStep.Done -> DoneStep(scanStatus = scanStatus)
+                        OnboardingStep.Done -> DoneStep(isWide = isWide, scanStatus = scanStatus)
                     }
                 }
 
@@ -131,9 +144,6 @@ fun OnboardingScreen(
                     step = step,
                     canProceed = canProceed(step, permissionGranted, folderPath, scanStatus),
                     onBack = {
-                        // Cancel any in-flight scan when navigating away from
-                        // the Scan step — otherwise a second scan started
-                        // after going Back races with the first.
                         if (step == OnboardingStep.Scan) {
                             scanJob?.cancel()
                             scanJob = null
@@ -152,10 +162,6 @@ fun OnboardingScreen(
                             OnboardingStep.Folder -> {
                                 if (scanJob?.isActive == true) return@NavButtons
                                 addError = null
-                                // Advance the step *first* so the button naturally disables
-                                // (canProceed(Scan) returns false). Without this, a double-tap
-                                // before the launch's first suspension fires two folder inserts
-                                // and the second throws on the UNIQUE(uri) constraint.
                                 step = OnboardingStep.Scan
                                 scanJob = scope.launch {
                                     runCatching {
@@ -170,9 +176,6 @@ fun OnboardingScreen(
                                         scanner.scanFolder(id).collect { ev ->
                                             scanStatus = ev
                                             if (ev is ScanProgress.Completed) {
-                                                // Seed the built-in station presets now that
-                                                // the user has tracks indexed. Idempotent — no-op
-                                                // if any stations already exist.
                                                 runCatching { presetSeeder.seedIfEmpty() }
                                                 step = OnboardingStep.Done
                                             } else if (ev is ScanProgress.Failed) {
@@ -181,15 +184,12 @@ fun OnboardingScreen(
                                         }
                                     }.onFailure {
                                         addError = it.message ?: "Failed to add folder"
-                                        // Revert to Folder step so the user can fix the path
-                                        // and retry rather than being stuck on Scan with no
-                                        // progress events incoming.
                                         step = OnboardingStep.Folder
                                     }
                                 }.also { it.invokeOnCompletion { scanJob = null } }
                             }
                             OnboardingStep.Scan -> {
-                                // No-op — scan is in progress; auto-advances on completion.
+                                // No-op — auto-advances on completion.
                             }
                             OnboardingStep.Done -> onComplete()
                         }
@@ -222,8 +222,94 @@ private fun ProgressDots(current: Int, total: Int) {
     }
 }
 
+/**
+ * Two-pane scaffold used by every step in wide mode. Hero column on the
+ * left holds title + supporting copy; the right pane is a Card the step
+ * fills with its own interactive content.
+ */
 @Composable
-private fun WelcomeStep(isCompact: Boolean) {
+private fun TwoPaneStep(
+    title: String,
+    subtitle: String?,
+    body: String?,
+    titleStyle: androidx.compose.ui.text.TextStyle = MaterialTheme.typography.displayMedium,
+    titleColor: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.onBackground,
+    rightContent: @Composable () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxSize(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(
+            modifier = Modifier.weight(1f).widthIn(max = 720.dp),
+            verticalArrangement = Arrangement.Center,
+        ) {
+            Text(
+                text = title,
+                style = titleStyle,
+                color = titleColor,
+                fontWeight = FontWeight.Bold,
+            )
+            subtitle?.let {
+                Spacer(Modifier.height(16.dp))
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = MaterialTheme.colorScheme.onBackground,
+                )
+            }
+            body?.let {
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f),
+                    modifier = Modifier.widthIn(max = 560.dp),
+                )
+            }
+        }
+        Spacer(Modifier.width(48.dp))
+        Card(
+            modifier = Modifier.weight(1f).widthIn(max = 520.dp).fillMaxHeight(0.7f),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+            ),
+        ) {
+            Box(
+                modifier = Modifier.fillMaxSize().padding(32.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                rightContent()
+            }
+        }
+    }
+}
+
+@Composable
+private fun WelcomeStep(isCompact: Boolean, isWide: Boolean) {
+    if (isWide) {
+        TwoPaneStep(
+            title = "RadioShed",
+            subtitle = "Your music turned into stations.",
+            body = "No subscriptions. No internet required. We'll point at your music folders, scan them, and you build stations from there.",
+            titleStyle = MaterialTheme.typography.displayLarge,
+            titleColor = MaterialTheme.colorScheme.primary,
+            rightContent = {
+                Column(
+                    horizontalAlignment = Alignment.Start,
+                    verticalArrangement = Arrangement.spacedBy(20.dp),
+                ) {
+                    FeatureRow(glyph = "♫", title = "Stations from your library",
+                        body = "Smart shuffle, weighted picks, custom rules — your music, programmed how you like it.")
+                    FeatureRow(glyph = "✈", title = "Works fully offline",
+                        body = "No accounts, no telemetry. Internet is optional, never required.")
+                    FeatureRow(glyph = "▣", title = "Built for the car",
+                        body = "Big-glyph transport, fluid layout, station-centric UI tuned for head-units.")
+                }
+            },
+        )
+        return
+    }
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
             text = "RadioShed",
@@ -251,7 +337,75 @@ private fun WelcomeStep(isCompact: Boolean) {
 }
 
 @Composable
-private fun PermissionsStep(granted: Boolean, onRequest: () -> Unit, onRefresh: () -> Unit) {
+private fun FeatureRow(glyph: String, title: String, body: String) {
+    Row(verticalAlignment = Alignment.Top) {
+        Text(
+            text = glyph,
+            style = MaterialTheme.typography.headlineMedium,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.width(48.dp),
+        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = body,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+            )
+        }
+    }
+}
+
+@Composable
+private fun PermissionsStep(
+    isWide: Boolean,
+    granted: Boolean,
+    onRequest: () -> Unit,
+    onRefresh: () -> Unit,
+) {
+    if (isWide) {
+        TwoPaneStep(
+            title = "All Files Access",
+            subtitle = null,
+            body = "RadioShed needs broad file-read access to scan arbitrary folders fast — including your microSD card. We never modify or upload your files.",
+            titleStyle = MaterialTheme.typography.displaySmall,
+            titleColor = MaterialTheme.colorScheme.onBackground,
+            rightContent = {
+                if (granted) {
+                    Text(
+                        "Granted ✓",
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                } else {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Text(
+                            "Tap to open Android's file-access screen, then return here.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                            textAlign = TextAlign.Center,
+                        )
+                        Button(onClick = onRequest, modifier = Modifier.fillMaxWidth()) {
+                            Text("Open Settings")
+                        }
+                        OutlinedButton(onClick = onRefresh, modifier = Modifier.fillMaxWidth()) {
+                            Text("I granted it")
+                        }
+                    }
+                }
+            },
+        )
+        return
+    }
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
             "All Files Access",
@@ -284,12 +438,51 @@ private fun PermissionsStep(granted: Boolean, onRequest: () -> Unit, onRefresh: 
 
 @Composable
 private fun FolderStep(
+    isWide: Boolean,
     folderPath: String,
     folderName: String,
     onFolderPathChange: (String) -> Unit,
     onFolderNameChange: (String) -> Unit,
     error: String?,
 ) {
+    if (isWide) {
+        TwoPaneStep(
+            title = "Add a music folder",
+            subtitle = null,
+            body = "Type a path to a folder containing your music. /storage/emulated/0/Music is a common default. (A native folder picker lands in a follow-up.)",
+            titleStyle = MaterialTheme.typography.displaySmall,
+            titleColor = MaterialTheme.colorScheme.onBackground,
+            rightContent = {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    OutlinedTextField(
+                        value = folderPath,
+                        onValueChange = onFolderPathChange,
+                        label = { Text("Folder path") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    OutlinedTextField(
+                        value = folderName,
+                        onValueChange = onFolderNameChange,
+                        label = { Text("Display name") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    error?.let {
+                        Text(
+                            it,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
+            },
+        )
+        return
+    }
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
             "Add a music folder",
@@ -332,7 +525,45 @@ private fun FolderStep(
 }
 
 @Composable
-private fun ScanStep(progress: ScanProgress?) {
+private fun ScanStep(isWide: Boolean, progress: ScanProgress?) {
+    val statusText = when (val p = progress) {
+        null -> "Starting…"
+        is ScanProgress.Started -> "Walking the folder…"
+        is ScanProgress.Progress -> "${p.tracksProcessed} tracks · ${p.currentFile}"
+        is ScanProgress.Warning -> "Skipped: ${p.message}"
+        is ScanProgress.Completed -> "Done — ${p.totalTracks} tracks"
+        is ScanProgress.Failed -> "Failed: ${p.message}"
+    }
+
+    if (isWide) {
+        TwoPaneStep(
+            title = "Scanning…",
+            subtitle = null,
+            body = "Reading tags, building the library index. Big libraries can take a minute on the first pass; subsequent rescans only touch changed files.",
+            titleStyle = MaterialTheme.typography.displaySmall,
+            titleColor = MaterialTheme.colorScheme.onBackground,
+            rightContent = {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    LinearProgressIndicator(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 6.dp),
+                    )
+                    Text(
+                        text = statusText,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
+                        textAlign = TextAlign.Center,
+                    )
+                }
+            },
+        )
+        return
+    }
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
             "Scanning…",
@@ -348,14 +579,7 @@ private fun ScanStep(progress: ScanProgress?) {
         )
         Spacer(Modifier.height(16.dp))
         Text(
-            text = when (val p = progress) {
-                null -> "Starting…"
-                is ScanProgress.Started -> "Walking the folder…"
-                is ScanProgress.Progress -> "${p.tracksProcessed} tracks · ${p.currentFile}"
-                is ScanProgress.Warning -> "Skipped: ${p.message}"
-                is ScanProgress.Completed -> "Done — ${p.totalTracks} tracks"
-                is ScanProgress.Failed -> "Failed: ${p.message}"
-            },
+            text = statusText,
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
             textAlign = TextAlign.Center,
@@ -365,22 +589,56 @@ private fun ScanStep(progress: ScanProgress?) {
 }
 
 @Composable
-private fun DoneStep(scanStatus: ScanProgress?) {
+private fun DoneStep(isWide: Boolean, scanStatus: ScanProgress?) {
+    val isFailed = scanStatus is ScanProgress.Failed
+    val title = if (isFailed) "Setup incomplete" else "You're set up"
+    val titleColor = if (isFailed) MaterialTheme.colorScheme.error
+                     else MaterialTheme.colorScheme.primary
+    val body = when (scanStatus) {
+        is ScanProgress.Failed -> scanStatus.message
+        is ScanProgress.Completed ->
+            "Indexed ${scanStatus.totalTracks} tracks. You can add more folders, build stations, and start listening."
+        else -> "Setup complete."
+    }
+
+    if (isWide) {
+        TwoPaneStep(
+            title = title,
+            subtitle = null,
+            body = body,
+            titleStyle = MaterialTheme.typography.displayMedium,
+            titleColor = titleColor,
+            rightContent = {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Text(
+                        text = if (isFailed) "✕" else "✓",
+                        style = MaterialTheme.typography.displayLarge,
+                        color = titleColor,
+                    )
+                    Text(
+                        text = if (isFailed) "Tap Back to retry, or finish anyway and reconfigure later in Library."
+                               else "Tap Open RadioShed to head to the Stations home — built-in presets are seeded and ready to play.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                        textAlign = TextAlign.Center,
+                    )
+                }
+            },
+        )
+        return
+    }
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
-            if (scanStatus is ScanProgress.Failed) "Setup incomplete" else "You're set up",
+            title,
             style = MaterialTheme.typography.headlineSmall,
-            color = if (scanStatus is ScanProgress.Failed) MaterialTheme.colorScheme.error
-                    else MaterialTheme.colorScheme.primary,
+            color = titleColor,
         )
         Spacer(Modifier.height(16.dp))
         Text(
-            text = when (scanStatus) {
-                is ScanProgress.Failed -> scanStatus.message
-                is ScanProgress.Completed ->
-                    "Indexed ${scanStatus.totalTracks} tracks. You can add more folders, build stations, and start listening."
-                else -> "Setup complete."
-            },
+            text = body,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f),
             textAlign = TextAlign.Center,
@@ -431,19 +689,12 @@ private fun canProceed(
     scanStatus: ScanProgress?,
 ): Boolean = when (step) {
     OnboardingStep.Welcome -> true
-    // Allow proceeding even without permission — user can grant later from
-    // Library Settings, scans will just return empty until they do.
     OnboardingStep.Permissions -> true
     OnboardingStep.Folder -> folderPath.isNotBlank()
-    OnboardingStep.Scan -> false   // auto-advances when scan completes
+    OnboardingStep.Scan -> false
     OnboardingStep.Done -> true
 }
 
-/**
- * Returns the next step, skipping [OnboardingStep.Permissions] when the
- * platform doesn't need it (i.e. iOS where access is per-folder via the
- * document picker, or Android where the user already granted before launch).
- */
 private fun nextStep(current: OnboardingStep, skipPermissions: Boolean): OnboardingStep {
     val candidate = OnboardingStep.entries.getOrNull(current.ordinal + 1) ?: current
     return if (candidate == OnboardingStep.Permissions && skipPermissions) {
@@ -451,7 +702,6 @@ private fun nextStep(current: OnboardingStep, skipPermissions: Boolean): Onboard
     } else candidate
 }
 
-/** Mirror of [nextStep] for back navigation. */
 private fun previousStep(current: OnboardingStep, skipPermissions: Boolean): OnboardingStep {
     val candidate = OnboardingStep.entries.getOrNull(current.ordinal - 1) ?: current
     return if (candidate == OnboardingStep.Permissions && skipPermissions) {
