@@ -1,5 +1,6 @@
 [versions]
 agp = "8.11.2"
+jaudiotagger = "3.0.1"
 android-compileSdk = "36"
 android-minSdk = "30"
 android-targetSdk = "36"
@@ -56,6 +57,9 @@ multiplatformSettings-coroutines = { module = "com.russhwolf:multiplatform-setti
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinxSerialization" }
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinxCoroutines" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "kotlinxCoroutines" }
+
+# ---- Phase 3: scanner ----
+jaudiotagger = { module = "net.jthink:jaudiotagger", version.ref = "jaudiotagger" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }

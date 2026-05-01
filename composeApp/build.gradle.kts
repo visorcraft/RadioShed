@@ -77,6 +77,9 @@ kotlin {
 
             implementation(libs.sqldelight.androidDriver)
             implementation(libs.koin.android)
+
+            // Audio metadata reader (Phase 3 scanner)
+            implementation(libs.jaudiotagger)
         }
 
         iosMain.dependencies {

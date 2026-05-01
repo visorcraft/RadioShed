@@ -1116,24 +1116,24 @@ Goal: schema set up, domain models compile, repositories pass basic CRUD tests.
 
 Goal: user can pick folders, app scans and indexes them, search works.
 
-- [ ] `MediaSource` interface in `commonMain`
-- [ ] `LocalFileSource` with `expect/actual` per platform
-- [ ] **(Android)** File enumeration via `MANAGE_EXTERNAL_STORAGE`
-- [ ] **(Android)** SAF tree-URI fallback when MEMS not granted
-- [ ] **(iOS)** Document picker integration (`UIDocumentPickerViewController`)
-- [ ] **(iOS)** Security-scoped bookmark persistence + restoration on launch
-- [ ] **(iOS)** iCloud Drive on-demand download via `NSFileCoordinator`
-- [ ] `TagReader` interface in `commonMain`
-- [ ] **(Android)** jaudiotagger-android impl (incl. composer / multi-value / separators)
-- [ ] **(iOS)** AVAsset metadata + custom ID3/FLAC/Vorbis parsers (incl. composer / multi-value / separators)
-- [ ] Cue-file parser in `commonMain`
-- [ ] Scanner coordinator: queue, batching, progress reporting
-- [ ] Folder management UI (add/remove, recursive toggle, exclude globs)
-- [ ] Optional file-mode browser (power-user toggle, off by default)
-- [ ] Onboarding steps 1–4 (welcome, perms, add folder, initial scan)
-- [ ] Search UI with FTS5 backing
-- [ ] Search DSL parser (`artist:Hendrix year:>1968 genre:rock`)
-- [ ] Stress test: index 50k synthetic tracks within 5 min on mid-tier hardware
+- [x] `MediaSource` interface in `commonMain` (+ `DiscoveredTrack`, `SourceFilter`, `SourceCapabilities`)
+- [x] `LocalFileSource` (commonMain class wrapping platform-specific `FileEnumerator`)
+- [x] **(Android)** File enumeration via `MANAGE_EXTERNAL_STORAGE` (`AndroidFileEnumerator` + glob matcher)
+- [ ] **(Android)** SAF tree-URI fallback when MEMS not granted *(deferred to Phase 3 part 2)*
+- [ ] **(iOS)** Document picker integration (`UIDocumentPickerViewController`) *(stub for now; needs Mac access)*
+- [ ] **(iOS)** Security-scoped bookmark persistence + restoration on launch *(deferred)*
+- [ ] **(iOS)** iCloud Drive on-demand download via `NSFileCoordinator` *(deferred)*
+- [x] `TagReader` interface in `commonMain` (+ `ParsedTags` with composer/personnel/multi-value support)
+- [x] **(Android)** jaudiotagger-android impl (composer, conductor, producer, arranger, lyricist, remixer, multi-value artist/genre/mood/language/label, MusicBrainz IDs)
+- [ ] **(iOS)** AVAsset metadata + custom ID3/FLAC/Vorbis parsers *(stub; needs Mac access)*
+- [x] Cue-file parser in `commonMain` (+ 9 unit tests covering quoted/unquoted strings, multi-FILE cues, INDEX 00 pregap, malformed lines, frame-to-ms conversion)
+- [x] Scanner coordinator: queue, batching, progress reporting via `ScanProgress` flow (Started/Progress/Warning/Completed/Failed)
+- [ ] Folder management UI (add/remove, recursive toggle, exclude globs) *(temporary debug panel exists in `ui/debug/`; proper UI in Phase 3 part 2)*
+- [ ] Optional file-mode browser (power-user toggle, off by default) *(deferred)*
+- [ ] Onboarding steps 1–4 (welcome, perms, add folder, initial scan) *(deferred to Phase 3 part 2)*
+- [ ] Search UI with FTS5 backing *(deferred to Phase 3 part 2)*
+- [ ] Search DSL parser (`artist:Hendrix year:>1968 genre:rock`) *(deferred)*
+- [ ] Stress test: index 50k synthetic tracks within 5 min on mid-tier hardware *(deferred to Phase 3 part 2)*
 
 ### Phase 4 — Audio engine (~2 weeks)
 

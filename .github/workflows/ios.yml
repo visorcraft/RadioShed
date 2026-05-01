@@ -73,5 +73,5 @@ jobs:
             -project iosApp/iosApp.xcodeproj \
             -scheme iosApp \
             -configuration Debug \
-            -destination 'generic/platform=iOS Simulator,arch=arm64' \
+            -destination 'generic/platform=iOS Simulator' \
             build
