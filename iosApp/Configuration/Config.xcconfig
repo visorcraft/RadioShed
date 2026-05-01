@@ -5,3 +5,11 @@ PRODUCT_BUNDLE_IDENTIFIER=com.visorcraft.radioshed.RadioShed$(TEAM_ID)
 
 CURRENT_PROJECT_VERSION=1
 MARKETING_VERSION=1.0
+
+// SQLDelight's iOS native driver (co.touchlab:sqliter) references the system
+// sqlite3 library via cinterop. The Kotlin/Native framework declares this via
+// linkerOpts, but the static framework's modulemap auto-link directive is not
+// reliably honored by xcodebuild's final link of the consumer app. We add the
+// flag here too so the iosApp links libsqlite3 unconditionally. Without this,
+// the link step fails with ~30 undefined sqlite3_* symbols.
+OTHER_LDFLAGS=$(inherited) -lsqlite3
