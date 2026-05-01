@@ -10,6 +10,7 @@ import com.visorcraft.radioshed.permissions.StoragePermissions
 import com.visorcraft.radioshed.source.AndroidFileEnumerator
 import com.visorcraft.radioshed.source.AndroidTagReader
 import com.visorcraft.radioshed.source.FileEnumerator
+import com.visorcraft.radioshed.source.StorageVolumes
 import com.visorcraft.radioshed.source.TagReader
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.module.Module
@@ -27,6 +28,7 @@ actual val platformModule: Module = module {
     single<FileEnumerator> { AndroidFileEnumerator() }
     single<TagReader> { AndroidTagReader() }
     single { StoragePermissions(androidContext()) }
+    single { StorageVolumes(androidContext()) }
 
     // Phase 4: audio engine
     single<AudioEngine> { AudioEngineAndroid(androidContext()) }

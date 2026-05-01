@@ -48,6 +48,8 @@ import com.visorcraft.radioshed.domain.Folder
 import com.visorcraft.radioshed.permissions.StoragePermissions
 import com.visorcraft.radioshed.scanner.ScanProgress
 import com.visorcraft.radioshed.scanner.Scanner
+import com.visorcraft.radioshed.source.DiscoveredVolume
+import com.visorcraft.radioshed.source.StorageVolumes
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
@@ -63,9 +65,13 @@ fun LibrarySettingsScreen(
     folderRepo: FolderRepository = koinInject(),
     scanner: Scanner = koinInject(),
     permissions: StoragePermissions = koinInject(),
+    storageVolumes: StorageVolumes = koinInject(),
 ) {
     val scope = rememberCoroutineScope()
     val folders by folderRepo.observeAll().collectAsState(initial = emptyList())
+    // Re-discovered each time the dialog opens so newly-inserted SD cards
+    // / OTG drives appear without an app restart.
+    val discoveredVolumes = remember { mutableStateOf(storageVolumes.discover()) }
 
     var permissionGranted by remember { mutableStateOf(permissions.hasAllFilesAccess()) }
     var addDialogOpen by remember { mutableStateOf(false) }
@@ -114,7 +120,10 @@ fun LibrarySettingsScreen(
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                 )
-                Button(onClick = { addDialogOpen = true }) { Text("Add folder") }
+                Button(onClick = {
+                    discoveredVolumes.value = storageVolumes.discover()  // refresh on open
+                    addDialogOpen = true
+                }) { Text("Add folder") }
             }
             Spacer(Modifier.height(8.dp))
 
@@ -190,6 +199,7 @@ fun LibrarySettingsScreen(
 
     if (addDialogOpen) {
         AddFolderDialog(
+            volumes = discoveredVolumes.value,
             onDismiss = { addDialogOpen = false },
             onAdd = { path, name ->
                 addDialogOpen = false
@@ -318,10 +328,19 @@ private fun FolderCard(
 
 @Composable
 private fun AddFolderDialog(
+    volumes: List<DiscoveredVolume>,
     onDismiss: () -> Unit,
     onAdd: (path: String, name: String) -> Unit,
 ) {
-    var path by remember { mutableStateOf("/storage/emulated/0/Music") }
+    // Default path: prefer a removable volume's Music folder (the user just
+    // inserted an SD card → that's almost certainly what they want), then
+    // primary internal storage's Music, then the legacy fallback.
+    val defaultPath = remember(volumes) {
+        volumes.firstOrNull { it.isRemovable }?.let { "${it.path}/Music" }
+            ?: volumes.firstOrNull { it.isPrimary }?.let { "${it.path}/Music" }
+            ?: "/storage/emulated/0/Music"
+    }
+    var path by remember { mutableStateOf(defaultPath) }
     var name by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -335,6 +354,23 @@ private fun AddFolderDialog(
         title = { Text("Add folder") },
         text = {
             Column {
+                if (volumes.isNotEmpty()) {
+                    Text(
+                        "Detected volumes",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        volumes.forEach { vol ->
+                            VolumeChip(
+                                volume = vol,
+                                onPick = { sub -> path = if (sub.isBlank()) vol.path else "${vol.path}/$sub" },
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(12.dp))
+                }
                 OutlinedTextField(
                     value = path,
                     onValueChange = { path = it },
@@ -353,6 +389,53 @@ private fun AddFolderDialog(
             }
         },
     )
+}
+
+/**
+ * One volume row inside the Add-folder dialog. Shows the label + path on
+ * the left and three quick-pick buttons on the right that pre-fill the
+ * Folder path field with the volume's `Music`, `Download`, or root path.
+ * Avoids users having to remember exact paths like `/storage/1A2B-3C4D`
+ * for SD cards.
+ */
+@Composable
+private fun VolumeChip(
+    volume: DiscoveredVolume,
+    onPick: (subdir: String) -> Unit,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = if (volume.isRemovable) MaterialTheme.colorScheme.tertiaryContainer
+                else MaterialTheme.colorScheme.surfaceVariant,
+        shape = RoundedCornerShape(8.dp),
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = volume.label + if (volume.isRemovable) " · removable" else "",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
+                    )
+                    Text(
+                        text = volume.path,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                        fontFamily = FontFamily.Monospace,
+                    )
+                }
+            }
+            Spacer(Modifier.height(6.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                TextButton(onClick = { onPick("Music") }) { Text("/Music") }
+                TextButton(onClick = { onPick("") }) { Text("(root)") }
+            }
+        }
+    }
 }
 
 @Composable

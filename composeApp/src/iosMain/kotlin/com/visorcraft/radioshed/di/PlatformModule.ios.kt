@@ -9,6 +9,7 @@ import com.visorcraft.radioshed.permissions.StoragePermissions
 import com.visorcraft.radioshed.source.FileEnumerator
 import com.visorcraft.radioshed.source.IosFileEnumerator
 import com.visorcraft.radioshed.source.IosTagReader
+import com.visorcraft.radioshed.source.StorageVolumes
 import com.visorcraft.radioshed.source.TagReader
 import org.koin.core.module.Module
 import org.koin.dsl.module
@@ -22,6 +23,7 @@ actual val platformModule: Module = module {
     single<FileEnumerator> { IosFileEnumerator() }
     single<TagReader> { IosTagReader() }
     single { StoragePermissions() }
+    single { StorageVolumes() }
 
     // Phase 4: audio engine stub
     single<AudioEngine> { AudioEngineIos() }
