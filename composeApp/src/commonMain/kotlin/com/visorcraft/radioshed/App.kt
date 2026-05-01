@@ -8,6 +8,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.tooling.preview.Preview
 import com.visorcraft.radioshed.data.SettingsStore
 import com.visorcraft.radioshed.nav.AppScreen
+import com.visorcraft.radioshed.nav.PlatformBackHandler
 import com.visorcraft.radioshed.ui.home.HomeScreen
 import com.visorcraft.radioshed.ui.library.LibrarySettingsScreen
 import com.visorcraft.radioshed.ui.onboarding.OnboardingScreen
@@ -43,13 +44,15 @@ fun App(settings: SettingsStore = koinInject()) {
                 },
             )
 
-            AppScreen.LibrarySettings -> LibrarySettingsScreen(
-                onBack = { current = AppScreen.Home },
-            )
+            AppScreen.LibrarySettings -> {
+                PlatformBackHandler { current = AppScreen.Home }
+                LibrarySettingsScreen(onBack = { current = AppScreen.Home })
+            }
 
-            AppScreen.Search -> SearchScreen(
-                onBack = { current = AppScreen.Home },
-            )
+            AppScreen.Search -> {
+                PlatformBackHandler { current = AppScreen.Home }
+                SearchScreen(onBack = { current = AppScreen.Home })
+            }
         }
     }
 }

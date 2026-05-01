@@ -26,9 +26,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.visorcraft.radioshed.BuildInfo
 import com.visorcraft.radioshed.data.FolderRepository
-import com.visorcraft.radioshed.data.LibraryRepository
 import com.visorcraft.radioshed.getPlatform
-import kotlinx.coroutines.flow.combine
 import org.koin.compose.koinInject
 
 /**
@@ -43,7 +41,6 @@ fun HomeScreen(
     onSearch: () -> Unit,
     onStations: () -> Unit,
     folderRepo: FolderRepository = koinInject(),
-    libraryRepo: LibraryRepository = koinInject(),
 ) {
     val folders by folderRepo.observeAll().collectAsState(initial = emptyList())
     val totalTracks = folders.sumOf { it.trackCount }
@@ -95,7 +92,7 @@ fun HomeScreen(
                     NavCard(
                         title = "Stations",
                         subtitle = "Build and play stations from your library",
-                        badge = "Coming in Phase 4",
+                        badge = "Coming in Phase 5",
                         onClick = onStations,
                         primary = true,
                     )

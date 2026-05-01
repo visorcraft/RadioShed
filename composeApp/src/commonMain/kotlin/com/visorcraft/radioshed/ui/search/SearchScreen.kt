@@ -55,6 +55,10 @@ fun SearchScreen(
             isSearching = false
             return@LaunchedEffect
         }
+        // Clear stale results immediately so the user sees feedback the moment
+        // they edit; otherwise the previous query's results linger for the
+        // 200 ms debounce window with no in-flight indicator.
+        results = SearchResults(emptyList(), emptyList(), emptyList())
         isSearching = true
         delay(200)  // debounce
         results = searchRepo.searchAll(query, limitPerCategory = 50)

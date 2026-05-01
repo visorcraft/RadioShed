@@ -60,13 +60,22 @@ fun OnboardingScreen(
     permissions: StoragePermissions = koinInject(),
 ) {
     val scope = rememberCoroutineScope()
+    // On iOS the StoragePermissions stub returns true at startup, so we
+    // skip the Android-specific Permissions step entirely. This is the
+    // "skipped automatically" behavior the doc-comment promises.
+    val initiallyGranted = remember { permissions.hasAllFilesAccess() }
+    // Always start on Welcome; the Permissions step is skipped during nav
+    // when [initiallyGranted] is true (see nextStep / previousStep).
     var step by remember { mutableStateOf(OnboardingStep.Welcome) }
     var folderPath by remember { mutableStateOf("/storage/emulated/0/Music") }
     var folderName by remember { mutableStateOf("Music") }
     var scanFolderId by remember { mutableStateOf<Long?>(null) }
     var scanStatus by remember { mutableStateOf<ScanProgress?>(null) }
-    var permissionGranted by remember { mutableStateOf(permissions.hasAllFilesAccess()) }
+    var permissionGranted by remember { mutableStateOf(initiallyGranted) }
     var addError by remember { mutableStateOf<String?>(null) }
+    // Track the in-flight scan so back navigation can cancel it cleanly,
+    // and so a double-tap on "Scan now" can't fire two parallel inserts.
+    var scanJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -121,19 +130,33 @@ fun OnboardingScreen(
                     step = step,
                     canProceed = canProceed(step, permissionGranted, folderPath, scanStatus),
                     onBack = {
-                        step = OnboardingStep.entries[(step.ordinal - 1).coerceAtLeast(0)]
+                        // Cancel any in-flight scan when navigating away from
+                        // the Scan step — otherwise a second scan started
+                        // after going Back races with the first.
+                        if (step == OnboardingStep.Scan) {
+                            scanJob?.cancel()
+                            scanJob = null
+                            scanStatus = null
+                        }
+                        step = previousStep(step, initiallyGranted)
                     },
                     onNext = {
                         when (step) {
                             OnboardingStep.Welcome -> {
-                                step = OnboardingStep.Permissions
+                                step = nextStep(step, initiallyGranted)
                             }
                             OnboardingStep.Permissions -> {
-                                step = OnboardingStep.Folder
+                                step = nextStep(step, initiallyGranted)
                             }
                             OnboardingStep.Folder -> {
+                                if (scanJob?.isActive == true) return@NavButtons
                                 addError = null
-                                scope.launch {
+                                // Advance the step *first* so the button naturally disables
+                                // (canProceed(Scan) returns false). Without this, a double-tap
+                                // before the launch's first suspension fires two folder inserts
+                                // and the second throws on the UNIQUE(uri) constraint.
+                                step = OnboardingStep.Scan
+                                scanJob = scope.launch {
                                     runCatching {
                                         val id = folderRepo.insert(
                                             displayName = folderName.ifBlank {
@@ -143,16 +166,20 @@ fun OnboardingScreen(
                                             recursive = true,
                                         )
                                         scanFolderId = id
-                                        step = OnboardingStep.Scan
-                                        // kick off scan immediately
                                         scanner.scanFolder(id).collect { ev ->
                                             scanStatus = ev
                                             if (ev is ScanProgress.Completed || ev is ScanProgress.Failed) {
                                                 step = OnboardingStep.Done
                                             }
                                         }
-                                    }.onFailure { addError = it.message ?: "Failed to add folder" }
-                                }
+                                    }.onFailure {
+                                        addError = it.message ?: "Failed to add folder"
+                                        // Revert to Folder step so the user can fix the path
+                                        // and retry rather than being stuck on Scan with no
+                                        // progress events incoming.
+                                        step = OnboardingStep.Folder
+                                    }
+                                }.also { it.invokeOnCompletion { scanJob = null } }
                             }
                             OnboardingStep.Scan -> {
                                 // No-op — scan is in progress; auto-advances on completion.
@@ -161,7 +188,7 @@ fun OnboardingScreen(
                         }
                     },
                     onSkip = if (step == OnboardingStep.Folder || step == OnboardingStep.Permissions) {
-                        { step = OnboardingStep.entries[step.ordinal + 1] }
+                        { step = nextStep(step, initiallyGranted) }
                     } else null,
                 )
             }
@@ -403,4 +430,24 @@ private fun canProceed(
     OnboardingStep.Folder -> folderPath.isNotBlank()
     OnboardingStep.Scan -> false   // auto-advances when scan completes
     OnboardingStep.Done -> true
+}
+
+/**
+ * Returns the next step, skipping [OnboardingStep.Permissions] when the
+ * platform doesn't need it (i.e. iOS where access is per-folder via the
+ * document picker, or Android where the user already granted before launch).
+ */
+private fun nextStep(current: OnboardingStep, skipPermissions: Boolean): OnboardingStep {
+    val candidate = OnboardingStep.entries.getOrNull(current.ordinal + 1) ?: current
+    return if (candidate == OnboardingStep.Permissions && skipPermissions) {
+        OnboardingStep.entries.getOrNull(candidate.ordinal + 1) ?: candidate
+    } else candidate
+}
+
+/** Mirror of [nextStep] for back navigation. */
+private fun previousStep(current: OnboardingStep, skipPermissions: Boolean): OnboardingStep {
+    val candidate = OnboardingStep.entries.getOrNull(current.ordinal - 1) ?: current
+    return if (candidate == OnboardingStep.Permissions && skipPermissions) {
+        OnboardingStep.entries.getOrNull(candidate.ordinal - 1) ?: candidate
+    } else candidate
 }

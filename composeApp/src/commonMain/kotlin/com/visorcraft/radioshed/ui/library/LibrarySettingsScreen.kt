@@ -141,6 +141,12 @@ fun LibrarySettingsScreen(
                                             if (ev is ScanProgress.Failed) scanError = ev.message
                                         }
                                     }.onFailure { scanError = "Scan crashed: ${it.message}" }
+                                }.also { job ->
+                                    // Job.isActive isn't observable State, so a completed job
+                                    // would leave scanInFlight stuck at true until something
+                                    // else triggered recomposition. Explicitly clear the
+                                    // ref on completion so the flag flips reactively.
+                                    job.invokeOnCompletion { scanJob = null }
                                 }
                             },
                             onEdit = { editingFolder = folder },
