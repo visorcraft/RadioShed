@@ -1128,12 +1128,18 @@ Goal: user can pick folders, app scans and indexes them, search works.
 - [ ] **(iOS)** AVAsset metadata + custom ID3/FLAC/Vorbis parsers *(stub; needs Mac access)*
 - [x] Cue-file parser in `commonMain` (+ 9 unit tests covering quoted/unquoted strings, multi-FILE cues, INDEX 00 pregap, malformed lines, frame-to-ms conversion)
 - [x] Scanner coordinator: queue, batching, progress reporting via `ScanProgress` flow (Started/Progress/Warning/Completed/Failed)
-- [ ] Folder management UI (add/remove, recursive toggle, exclude globs) *(temporary debug panel exists in `ui/debug/`; proper UI in Phase 3 part 2)*
-- [ ] Optional file-mode browser (power-user toggle, off by default) *(deferred)*
-- [ ] Onboarding steps 1–4 (welcome, perms, add folder, initial scan) *(deferred to Phase 3 part 2)*
-- [ ] Search UI with FTS5 backing *(deferred to Phase 3 part 2)*
-- [ ] Search DSL parser (`artist:Hendrix year:>1968 genre:rock`) *(deferred)*
-- [ ] Stress test: index 50k synthetic tracks within 5 min on mid-tier hardware *(deferred to Phase 3 part 2)*
+- [x] Folder management UI (add/rename/recursive-toggle/delete) — `ui/library/LibrarySettingsScreen.kt`. Excludes/include globs UI deferred to a later pass.
+- [ ] Optional file-mode browser (power-user toggle, off by default) *(still deferred)*
+- [x] Onboarding steps 1–5 — `ui/onboarding/OnboardingScreen.kt`: Welcome → Permissions → Folder → Scan → Done
+- [x] Search UI — `ui/search/SearchScreen.kt`. *Backing is `LIKE` not FTS5: SQLDelight 2.1's parser crashes on FTS5 `MATCH` queries (and on virtual-table compound `name { ... }` blocks). Acceptable for libraries up to ~10k tracks. Revisit when SQLDelight 3.x lands or we evaluate alternatives.*
+- [ ] Search DSL parser (`artist:Hendrix year:>1968 genre:rock`) *(deferred — plain full-text first)*
+- [ ] Stress test: index 50k synthetic tracks within 5 min on mid-tier hardware *(deferred to Phase 4+ verification)*
+
+Also added in Phase 3 part 2:
+
+- [x] Navigation: lightweight sealed-class state machine (`nav/AppScreen.kt`) — Onboarding / Home / Library / Search. Avoids a full nav library while the surface is small.
+- [x] Post-onboarding `HomeScreen` replacing `LandingScreen`. Wordmark + 3 nav cards (Stations placeholder, Library, Search) + version footer.
+- [x] `SearchRepository` with case-insensitive substring matching across tracks/artists/albums; LIKE patterns properly escape `%`, `_`, `\`.
 
 ### Phase 4 — Audio engine (~2 weeks)
 
