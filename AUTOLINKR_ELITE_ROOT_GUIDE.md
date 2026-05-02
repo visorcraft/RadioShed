@@ -2,14 +2,29 @@
 
 A complete, end-to-end procedure for rooting an **AutoLinkR Elite** (Qualcomm Snapdragon "Bengal" / SM4250, Android 13) using **Magisk** and the official `boot_patch.sh` workflow — driven entirely from a single PC with no second Android device required.
 
-> **Form factor note.** The AutoLinkR Elite is a USB-A wireless-CarPlay dongle with no built-in screen and no buttons. It uses the car's head-unit display while plugged into a vehicle. While plugged into a USB power brick at home, it joins WiFi but renders to nothing — this guide is structured around that constraint.
+> **Form factor note.** The AutoLinkR Elite is a wireless-CarPlay dongle with a single USB-C port (also a microSD slot and a nano-SIM tray), no built-in screen, no buttons, and no battery. It uses the car's head-unit display while plugged into a vehicle. While plugged into a USB power brick at home, it joins WiFi but renders to nothing — this guide is structured around that constraint.
+
+---
+
+## ⚠️ READ THIS FIRST: known brick path
+
+**This guide has soft-bricked at least one AutoLinkR Elite.**
+
+If `boot_patch.sh` (Phase 6) emits the line `Failed to patch` three or more times during its dtb-fstab patching pass, **the resulting boot image has a non-trivial chance of failing to boot to a state where the USB controller initializes**. Without USB enumeration, fastboot recovery is not possible from a host PC, A/B fallback may not auto-engage (the bootloader's retry counter never advances if the device hangs before reaching its decrement point), and the device becomes unrecoverable except via Qualcomm EDL mode (PCB-level test-point shorting, signed Bengal Firehose loader required).
+
+The original maintainer of this guide hit exactly that scenario. The patched image flashed cleanly, hash-verified bit-for-bit, and the device subsequently never brought up USB or WiFi again across 7+ power cycles.
+
+**If you see `Failed to patch` warnings against the dtb during Phase 6, STOP. Do not proceed to Phase 7.** The "Recovery from a soft-brick" section near the end of this guide describes what your remaining options look like, none of which are easy.
+
+If `boot_patch.sh` runs cleanly with no `Failed to patch` warnings, proceeding is reasonable but not risk-free — see the "Pre-flash safety checklist" inside Phase 7.
 
 ---
 
 ## Risks & disclaimers
 
-- **Rooting can brick a device.** This procedure modifies the boot partition. If the patched image fails to load and the A/B fallback doesn't catch it, the device may be unusable until you can flash recovery via fastboot.
+- **Rooting can brick a device.** See the warning above. Without a USB-data fallback path or hardware-level recovery tools, a brick is permanent.
 - The bootloader on the AutoLinkR Elite ships **already unlocked** (`androidboot.verifiedbootstate=orange`). This guide does **not** cover bootloader unlocking because none is needed.
+- A/B fallback is **not** a complete safety net on this device. The retry counter only decrements when the bootloader detects boot failure (typically via a successful-boot heartbeat from later in init). If the kernel hangs before that heartbeat, the bootloader thinks every attempt is succeeding and never falls back.
 - Operating on a device you don't own, or where you don't have authorization, may violate manufacturer terms of service and applicable law. This guide is for owners of devices they purchased.
 - Manufacturer firmware updates may re-lock or re-flash slots. Re-rooting after an OTA may require repeating this procedure against the new boot image.
 
@@ -23,7 +38,7 @@ A complete, end-to-end procedure for rooting an **AutoLinkR Elite** (Qualcomm Sn
 | **Android SDK Platform Tools** (`adb` + `fastboot`) | Recent enough to know mDNS / pair flows is a plus |
 | The AutoLinkR Elite | Powered (any USB power source works) |
 | A WiFi network the AutoLinkR can join | The PC must be on the same network |
-| A USB-A port on the PC | Required only for the **flash** step at the end |
+| A USB-C-data cable (and a free port on the PC) | Required only for Path B of the flash step. Path A doesn't need it. **Charge-only cables won't work** — the PC sees no USB enumeration, just power. |
 | **One-time:** access to a display the AutoLinkR can drive | Either the car's CarPlay screen or any HDMI display via the relevant adapter, in order to tap "Allow debugging" once. After that, headless operation works |
 
 ---
@@ -358,7 +373,17 @@ HEADER_VER      [2]
 CHECKSUM        [<a-different-hash-than-stock>]
 ```
 
-You'll also see lines like `Failed to patch` repeated three times during the dtb-fstab pass. **These are benign** — they're best-effort scrubs of `,avb` flags from fstab nodes that aren't present in this device's dtb. The repack succeeds regardless.
+### ⚠️ DTB patch warnings — NOT necessarily benign
+
+You may see lines like `Failed to patch` repeated during the dtb-fstab pass.
+
+**An earlier version of this guide called these benign. That was wrong.** The original maintainer's AutoLinkR Elite was bricked by flashing a patched image where these warnings appeared three times. The flash itself wrote successfully and hash-verified bit-for-bit. The dongle never booted again — USB controller never initialized, WiFi never came up, A/B fallback never engaged because the kernel hung before the bootloader's success-heartbeat code path executed.
+
+What `Failed to patch` means: Magisk's `magiskboot dtb patch` operation could not find expected `fstab` nodes in this device's compiled device-tree to remove `,avb` flags from. On most devices this is harmless (the flags weren't there to begin with). On *this* device the dtb structure differs enough that we can't tell whether the patcher harmed the dtb or merely no-op'd. The empirical answer was that it harmed it.
+
+**If you see ANY `Failed to patch` warnings during this pass, treat the resulting `new-boot.img` as unusable.** Skip Phase 7. Investigate what's different about your device's dtb, find or build a Magisk fork that handles it correctly, or accept that this device can't currently be Magisk-rooted via `boot_patch.sh`.
+
+A clean run (which is the only run that should be flashed) shows the dtb-fstab pass without any `Failed to patch` lines — only the structured output around `Found fstab file [fstab.default]`, `Found fstab file [fstab.emmc]`, `- Patch fstab in boot image dtb`, and then progresses straight to `- Repacking boot image`.
 
 ### Pull the patched image back to PC
 
@@ -393,13 +418,56 @@ autolinkr-backup/boot_b-magisk-patched.img  # what we'll flash
 
 ---
 
-## Phase 7 — Flash the patched boot image via fastboot
+## Phase 7 — Flash the patched boot image
 
-This is the **only** destructive step in the procedure.
+This is the **only** destructive step in the procedure. **Do not proceed past the safety checklist below** if any of its checks fail.
 
-### Connect the AutoLinkR to the PC over USB
+### Pre-flash safety checklist
 
-Wireless-ADB is fine for shell access but **fastboot is USB-only** on the Qualcomm Bengal platform. Plug the AutoLinkR's USB-A male connector directly into a USB-A port on the PC. Confirm it shows up:
+Before you flash anything, confirm ALL of the following:
+
+| Check | Pass criterion |
+|---|---|
+| **Phase 6 dtb-fstab pass** | Ran cleanly with **zero** `Failed to patch` lines. If even one appeared, abandon. |
+| **Patched image hash matches device side hash** | `sha256sum` of the local `boot_b-magisk-patched.img` matches what the device printed. |
+| **Magic header** | First 8 bytes of `boot_b-magisk-patched.img` are `ANDROID!` (`414e 4452 4f49 4421` in hex). |
+| **Original image saved and verified** | `boot_b-original.img` exists locally with hash matching the device's pre-flash `boot_b`. Without this, recovery is hardware-level. |
+| **A/B slot identified correctly** | `ro.boot.slot_suffix` matches the slot you plan to flash. Flashing the wrong slot is wasted but not destructive; flashing while expecting fallback to "the other slot" assumes the bootloader's retry counter advances, which is **not guaranteed** on this device. |
+
+If any check fails, **stop**. The cost of not flashing is "you didn't get root yet"; the cost of flashing a bad image is "the device is bricked, see Recovery section."
+
+### Two flash paths
+
+Two different ways to write the patched image to the boot partition. Pick one.
+
+#### Path A: Direct dd via root-adbd (no fastboot, no USB-host swap, no reboot to bootloader)
+
+The AutoLinkR Elite ships with `adbd` running as root (`uid=0(root)`, SELinux context `u:r:su:s0`). Block devices like `/dev/block/by-name/boot_b` are writable from any wireless-ADB shell on this device. **You can flash without entering fastboot at all.**
+
+```bash
+D push autolinkr-backup/boot_b-magisk-patched.img /data/local/tmp/magisk-patched.img
+
+# verify hash matches local
+D shell 'sha256sum /data/local/tmp/magisk-patched.img'
+
+# the actual flash
+D shell 'dd if=/data/local/tmp/magisk-patched.img \
+            of=/dev/block/by-name/boot_b bs=4M conv=fsync'
+
+# verify the partition now matches the patched-image hash
+D shell 'sha256sum /dev/block/by-name/boot_b'
+
+# reboot to activate
+D shell 'reboot'
+```
+
+Path A is what the original maintainer used. It's faster and keeps the dongle on whichever USB host it's currently attached to (no need to move it to a PC). **It also offers no protection against a bad image** — if the patched image fails to boot, you cannot fastboot-recover from the same wireless-ADB session because wireless-ADB is gone the moment Android stops booting. Your only safety net at that point is the bootloader's A/B retry mechanism, which (as called out above) may not engage if the kernel hangs early.
+
+#### Path B: fastboot flash (slower, requires USB-data cable to PC, more recovery options)
+
+This path requires the dongle physically connected to the PC by a USB-C-data cable, and assumes the bootloader will enumerate as a fastboot device when entered (which is *probable* on Bengal Qualcomm but not guaranteed for this specific OEM build).
+
+Wireless-ADB is fine for shell access but **fastboot is USB-only** on the Qualcomm Bengal platform. Plug the AutoLinkR's USB-C connector into the PC via a USB-C-to-USB-A or USB-C-to-USB-C data cable. Confirm it shows up:
 
 ```bash
 adb devices
@@ -500,29 +568,73 @@ adb install Magisk-v30.7.apk
 
 ---
 
-## Recovery — rolling back to stock
+## Recovery from a soft-brick
 
-If the device bootloops, fails to boot, or behaves unexpectedly:
+There are three escalating recovery scenarios, ordered by how badly the device is hung. Read them top-to-bottom — each subsection assumes the prior one didn't work.
 
-1. Hold any way you can to interrupt boot — for the AutoLinkR, simply unplug power, wait 5 seconds, plug back in. The bootloader on Qualcomm Bengal will idle in fastboot mode if the boot image is unverifiable; the device's boot retry counter will switch slots after a few failed attempts but you can also force fastboot:
-   ```bash
-   adb reboot bootloader   # while still booted
-   ```
-2. Reflash the original:
-   ```bash
-   fastboot flash boot_b autolinkr-backup/boot_b-original.img
-   fastboot reboot
-   ```
+### Scenario 1: Device boots but is misbehaving (best case)
 
-This restores the device to the exact byte-for-byte state captured in Phase 4. Verify by re-running:
+The patched boot loads to Android, you can ADB or USB into it, things just don't work right. The recovery is straightforward:
 
 ```bash
-adb shell 'sha256sum /dev/block/by-name/boot_b'
+# while wireless ADB or USB ADB is still alive:
+adb shell 'dd if=/data/local/tmp/boot_b-original.img \
+              of=/dev/block/by-name/boot_b bs=4M conv=fsync'
+adb shell 'reboot'
 ```
 
-The hash must match `boot_b-original.img`.
+(You'll need to push `boot_b-original.img` to `/data/local/tmp/` first.) Verify by re-reading the partition hash; it must match the saved original.
 
-> **A/B fallback.** Because the AutoLinkR Elite is an A/B-slot device, even without manual recovery the bootloader may auto-switch to the other slot after several failed boot attempts. This is partial protection, not a substitute for keeping the original image around.
+### Scenario 2: Device hangs at boot, but enters fastboot mode
+
+The bootloader detects boot failure and drops into fastboot device mode (USB enumerates as Google fastboot, VID `0x18d1`). This is the textbook A/B-fallback escape hatch:
+
+```bash
+fastboot flash boot_b autolinkr-backup/boot_b-original.img
+fastboot reboot
+```
+
+### Scenario 3: Device is dark (the brick this guide warns about)
+
+Symptoms: dongle shows power LEDs, but never enumerates anything on USB (not Apple-CarPlay, not fastboot, not EDL), never joins WiFi, doesn't respond to power-cycling. The kernel is hanging early enough that the USB controller is never initialized AND the bootloader's A/B retry counter never advances (because nothing is detecting "boot failure" — the bootloader's success-heartbeat code path is never reached, but neither is its failure-detection code path; it just hands off to a kernel that hangs).
+
+This is the state the original guide author hit. None of the standard recovery options apply because **none of them work without USB enumeration of some kind**.
+
+What you can do, in order of effort:
+
+1. **Wall-charger overnight wait (free, hours).** Some Qualcomm watchdog timers fire after extended hung-state and force a hard reset. Leave the dongle on a high-quality wall charger (not a low-power port) for 8+ hours and check periodically. Each forced reset is another bootloader attempt; eventually the retry counter may advance.
+
+2. **Qualcomm EDL recovery via test points (~4-8 hours, hardware skills required, success uncertain).** This is the proper recovery path for any soft-bricked Qualcomm device. The high-level procedure:
+
+   1. Disassemble the dongle's case (clamshell, plastic clips, sometimes glued seams).
+   2. Locate the EDL test points on the PCB — usually two small unmarked solder pads. There's no AutoLinkR-specific documentation; you may need to compare PCB photos against generic-Bengal references on XDA / 4PDA / similar communities.
+   3. Short the test points to ground while plugging in USB. The SoC will enter EDL (Emergency Download) mode and enumerate as `Qualcomm HS-USB QDLoader 9008` (VID `0x05c6`, PID `0x9008`).
+   4. Use Qualcomm's QPST/QFIL tooling (Windows) or `bkerler/edl.py` (cross-platform) to talk to the device via the Sahara/Firehose protocol.
+   5. Load a **signed Bengal Firehose programmer** — this is the hard part. Firehose loaders are Qualcomm-signed binary blobs specific to the SoC variant and OEM build. Public ones for Bengal exist but may not match this OEM's exact signature requirements.
+   6. Flash `boot_b-original.img` (and possibly other partitions, depending on what you can read back).
+   7. Reset out of EDL.
+
+   The Firehose-loader sourcing is the bottleneck. If you can't find one that matches, you're stuck.
+
+3. **Phone-repair shop ($30-80 typical).** Any shop that handles Qualcomm phone unbricking has the EDL hardware (test-point clips, jumper kits, signed loaders). Bring them the dongle and your `boot_b-original.img`; they'll do the EDL recovery.
+
+4. **Replacement (~$50-80).** Honest assessment: at this dollar value, it may simply be cheaper to replace the dongle than to recover it. The hours involved in a successful EDL recovery, multiplied by "may not actually succeed without the right Firehose loader," means option 4 is often the rational call.
+
+### Why does this guide warn about Scenario 3 so heavily?
+
+Because the brick happened to the original maintainer of this guide, with all of the safety nets we *thought* we had in place:
+- ✅ Bootloader unlocked
+- ✅ A/B device with retry-fallback
+- ✅ Untouched original `boot_b` saved locally and hash-verified
+- ✅ Patched image hash-verified bit-for-bit on device after dd
+- ✅ Same write path used by both Path A and Path B
+
+What we **didn't** have:
+- A way to test the patched image's bootability before committing to the partition write
+- Knowledge that the dtb-fstab `Failed to patch` warnings indicated dtb corruption rather than benign no-ops
+- Understanding that the bootloader's A/B retry counter doesn't advance when the kernel hangs *before* the OS can mark a boot attempt as "failed"
+
+If you see those `Failed to patch` warnings, none of the safety nets you think you have actually catch you. Don't flash.
 
 ---
 
@@ -561,6 +673,8 @@ The hash must match `boot_b-original.img`.
 | 7 | Magisk version skew | `boot_patch.sh` errors mention files (`init-ld`, `stub.apk`) that aren't in the toolkit | Always extract from the same APK release; don't mix files between versions. |
 | 8 | Skipping the `adb_wifi_enabled` persistence step (Phase 1) | Wireless Debugging dies on reboot/USB-host-change; you can't re-enable it without display access; on a screenless dongle that means going back to the car | Run `adb shell settings put global adb_wifi_enabled 1` the **first** time you have wireless ADB alive. This is the single most important command in the guide for screenless devices. |
 | 9 | Plugging dongle into PC USB while in normal Android (CarPlay-target mode) | Windows enumerates as Apple iPhone (VID 0x05AC PID 0x12A8); USB-ADB does not appear; popup says "device requires further installation" looking for iTunes drivers | Expected — the dongle's USB role is locked to CarPlay-protocol while Android is running. Use wireless ADB to issue `adb reboot bootloader`; the bootloader's own USB stack will then expose fastboot on the same USB-C port. |
+| 10 | Treating `Failed to patch` lines during boot_patch.sh's dtb-fstab pass as benign | Patched image flashes cleanly, hash-verifies, then fails to boot. USB controller never initializes. Device shows power LEDs but Windows sees nothing. A/B fallback never engages. | **Stop. Do not flash.** Three or more `Failed to patch` lines indicate the dtb-fstab patcher couldn't find expected nodes; the resulting dtb may be corrupted enough that the kernel can't init the SoC's hardware. The bootloader detects no failure (its success-heartbeat never runs because the kernel hung first) and never falls back. Recovery from this state requires Qualcomm EDL via test points + a signed Bengal Firehose loader — a several-hour hardware procedure with uncertain success. See "Recovery from a soft-brick" → Scenario 3. |
+| 11 | Assuming A/B fallback will save you from any boot failure | Bricked device drains power for hours, never auto-recovers. Power-cycling 7+ times produces no change. | The bootloader's retry counter only decrements when boot is detected as **failed**. If the kernel hangs during early init — before the OS has had a chance to mark the boot attempt one way or the other — the bootloader has no signal that anything went wrong. The retry counter never advances. A/B fallback **does not engage**. This is why the dtb-warning gotcha (#10) is so dangerous: it produces exactly this hung-without-detected-failure state. |
 
 ---
 
