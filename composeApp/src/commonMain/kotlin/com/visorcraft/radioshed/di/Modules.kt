@@ -67,7 +67,7 @@ val sharedModule: Module = module {
     // Lyrics: cache + fetcher + local sidecar loader, orchestrated by LyricsService.
     single { LyricsService(get(), get(), get(), get()) }
 
-    // Backup &amp; restore: JSON dumps of stations + playlists + ratings.
+    // Backup & restore: JSON dumps of stations + playlists + ratings.
     single { BackupService(get(), get(), get(), get(), get()) }
 
     // Phase 5: stations engine. AudioEngine comes from platformModule.

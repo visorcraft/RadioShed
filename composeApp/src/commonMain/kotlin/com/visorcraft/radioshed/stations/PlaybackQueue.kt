@@ -40,6 +40,17 @@ class PlaybackQueue(
      * still applies.
      */
     private val artistByTrackId: Map<Long, Long> = emptyMap(),
+    /**
+     * (trackId → play_count) for FavorUnderPlayed weighting. Empty map
+     * makes the weighting fall back to uniform — fine for ad-hoc
+     * queues where we don't pre-resolve.
+     */
+    private val playCountByTrackId: Map<Long, Long> = emptyMap(),
+    /**
+     * (trackId → stars) for FavorHigherRated weighting. Same fallback
+     * semantics as [playCountByTrackId].
+     */
+    private val ratingByTrackId: Map<Long, Double> = emptyMap(),
 ) {
 
     /**
@@ -215,16 +226,46 @@ class PlaybackQueue(
     private fun pickWeighted(pool: List<Track>): Track {
         if (pool.size == 1) return pool.single()
         return when (rule.weighting) {
+            Weighting.Uniform -> pool[random.nextInt(pool.size)]
             Weighting.FavorRecent -> {
                 // Weight ∝ rank by ctime, oldest=1, newest=N. Cheap softmax-ish.
                 val sorted = pool.sortedBy { it.fileCtime }
                 val weights = sorted.indices.map { (it + 1).toDouble() }
                 weightedPick(sorted, weights)
             }
-            // Other policies fall back to uniform in v1; documented in KDoc.
-            Weighting.Uniform,
-            Weighting.FavorUnderPlayed,
-            Weighting.FavorHigherRated -> pool[random.nextInt(pool.size)]
+            Weighting.FavorUnderPlayed -> {
+                // weight = 1 / (plays + 1) — never-played tracks get
+                // weight 1.0, played-once 0.5, played-twice 0.33, etc.
+                // Smoothly biases toward unheard material without
+                // making popular tracks impossible to recur. Falls
+                // back to uniform when the play-count map is empty.
+                if (playCountByTrackId.isEmpty()) {
+                    pool[random.nextInt(pool.size)]
+                } else {
+                    val weights = pool.map { t ->
+                        val plays = playCountByTrackId[t.id] ?: 0L
+                        1.0 / (plays + 1.0)
+                    }
+                    weightedPick(pool, weights)
+                }
+            }
+            Weighting.FavorHigherRated -> {
+                // Bias proportional to (stars + 1)² so 5★ tracks are
+                // ~6× more likely to be picked than unrated. Unrated
+                // tracks (rating absent from map) treated as 0★ → small
+                // but non-zero weight so the queue doesn't starve when
+                // the user hasn't rated anything yet.
+                if (ratingByTrackId.isEmpty()) {
+                    pool[random.nextInt(pool.size)]
+                } else {
+                    val weights = pool.map { t ->
+                        val stars = ratingByTrackId[t.id] ?: 0.0
+                        val w = stars + 1.0
+                        w * w
+                    }
+                    weightedPick(pool, weights)
+                }
+            }
         }
     }
 

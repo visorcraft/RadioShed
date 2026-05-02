@@ -377,6 +377,16 @@ INSERT INTO track_tag (track_id, key, value, position) VALUES (?, ?, ?, ?);
 selectTagsByTrack:
 SELECT * FROM track_tag WHERE track_id = ? ORDER BY key, position;
 
+-- Update every track_tag row whose key = 'GENRE' and whose lower-cased
+-- value matches the supplied lower-cased target, replacing it with a
+-- canonical-cased value. Used by the one-time genre-case backfill —
+-- consolidates "Rock", "rock", "ROCK" into a single canonical entry
+-- (typically Title Case) so the Genres tab in Library Browser doesn't
+-- show three near-duplicate tiles.
+canonicalizeGenreCase:
+UPDATE track_tag SET value = ?
+WHERE key = 'GENRE' AND LOWER(value) = ? AND value != ?;
+
 selectTracksByTag:
 SELECT track.* FROM track
 JOIN track_tag tt ON tt.track_id = track.id

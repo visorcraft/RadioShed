@@ -33,8 +33,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextButton
 import com.visorcraft.radioshed.audio.EqPreset
 import com.visorcraft.radioshed.audio.EqualizerController
+import com.visorcraft.radioshed.data.CustomEqPreset
+import com.visorcraft.radioshed.data.SettingsStore
 import org.koin.compose.koinInject
 
 /**
@@ -47,15 +56,19 @@ import org.koin.compose.koinInject
  * activate" hint — sliders themselves still mutate state, just have
  * no audible effect yet.
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun EqualizerScreen(
     onBack: () -> Unit,
     eq: EqualizerController = koinInject(),
+    settings: SettingsStore = koinInject(),
 ) {
     val gains by eq.bandGains.collectAsState()
     val enabled by eq.enabled.collectAsState()
     val available by eq.isAvailable.collectAsState()
+    var customPresets by remember { mutableStateOf(settings.getCustomEqPresets()) }
+    var saveDialogOpen by remember { mutableStateOf(false) }
+    var deleteCandidate by remember { mutableStateOf<CustomEqPreset?>(null) }
 
     Scaffold(
         topBar = {
@@ -94,16 +107,29 @@ fun EqualizerScreen(
 
             Spacer(Modifier.height(16.dp))
 
-            Text(
-                "Presets",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f),
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "Presets",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f),
+                )
+                TextButton(
+                    onClick = { saveDialogOpen = true },
+                    enabled = gains.isNotEmpty(),
+                ) { Text("Save current…") }
+            }
             Spacer(Modifier.height(6.dp))
+            // Horizontal-scroll chip row holds both built-in + custom
+            // presets; long-press a custom one to delete. With more
+            // than ~4 chips the row would clip without scroll.
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
             ) {
                 listOf(EqPreset.Flat, EqPreset.BassBoost, EqPreset.Vocal, EqPreset.Treble).forEach { preset ->
                     AssistChip(
@@ -111,6 +137,31 @@ fun EqualizerScreen(
                         label = { Text(preset.label) },
                         colors = AssistChipDefaults.assistChipColors(
                             containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        ),
+                    )
+                }
+                customPresets.forEach { preset ->
+                    AssistChip(
+                        onClick = {
+                            // Apply: write each saved gain back to the
+                            // controller. Lengths mismatch when the
+                            // device's band count differs from when
+                            // the preset was saved — we tolerate that
+                            // by applying min-length and leaving extras
+                            // at their current value.
+                            val n = minOf(preset.gainsDb.size, eq.numBands)
+                            for (i in 0 until n) eq.setBand(i, preset.gainsDb[i])
+                        },
+                        label = { Text(preset.name) },
+                        colors = AssistChipDefaults.assistChipColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        ),
+                        modifier = Modifier.combinedClickable(
+                            onClick = {
+                                val n = minOf(preset.gainsDb.size, eq.numBands)
+                                for (i in 0 until n) eq.setBand(i, preset.gainsDb[i])
+                            },
+                            onLongClick = { deleteCandidate = preset },
                         ),
                     )
                 }
@@ -125,6 +176,69 @@ fun EqualizerScreen(
                 onChange = eq::setBand,
             )
         }
+    }
+
+    if (saveDialogOpen) {
+        var nameText by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { saveDialogOpen = false },
+            title = { Text("Save EQ preset") },
+            text = {
+                Column {
+                    Text(
+                        "Snapshots the current band gains as a named " +
+                            "preset. Tap the chip to recall it.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = nameText,
+                        onValueChange = { nameText = it },
+                        label = { Text("Name") },
+                        singleLine = true,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val n = nameText.trim()
+                        if (n.isNotBlank()) {
+                            settings.saveCustomEqPreset(
+                                CustomEqPreset(name = n, gainsDb = gains.toList()),
+                            )
+                            customPresets = settings.getCustomEqPresets()
+                            saveDialogOpen = false
+                        }
+                    },
+                    enabled = nameText.isNotBlank(),
+                ) { Text("Save") }
+            },
+            dismissButton = {
+                TextButton(onClick = { saveDialogOpen = false }) { Text("Cancel") }
+            },
+        )
+    }
+
+    deleteCandidate?.let { preset ->
+        AlertDialog(
+            onDismissRequest = { deleteCandidate = null },
+            title = { Text("Delete preset?") },
+            text = { Text("\"${preset.name}\" will be removed.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    settings.deleteCustomEqPreset(preset.name)
+                    customPresets = settings.getCustomEqPresets()
+                    deleteCandidate = null
+                }) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { deleteCandidate = null }) { Text("Cancel") }
+            },
+        )
     }
 }
 

@@ -147,6 +147,18 @@ class StationRepository(private val db: RadioShedDatabase) {
         db.stationsQueries.resetAllStationStats(nowMillis())
     }
 
+    /**
+     * Batched (trackId → playCount). Returns 0 for tracks that have
+     * never appeared in `station_history` (i.e. ids absent from the
+     * map should be treated as 0 by callers).
+     */
+    suspend fun playCountForTracks(trackIds: Collection<Long>): Map<Long, Long> =
+        withContext(IODispatcher) {
+            if (trackIds.isEmpty()) return@withContext emptyMap()
+            db.stationsQueries.selectPlayCountForTracks(trackIds).executeAsList()
+                .associate { it.track_id to it.plays }
+        }
+
     suspend fun reorder(id: Long, sortPosition: Int) = withContext(IODispatcher) {
         db.stationsQueries.reorderStation(sortPosition.toLong(), nowMillis(), id)
     }

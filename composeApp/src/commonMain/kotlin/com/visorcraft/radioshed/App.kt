@@ -11,6 +11,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
+import com.visorcraft.radioshed.data.LibraryRepository
 import com.visorcraft.radioshed.data.SettingsStore
 import com.visorcraft.radioshed.nav.AppScreen
 import com.visorcraft.radioshed.stations.StationPlayback
@@ -44,6 +45,7 @@ import org.koin.compose.koinInject
 fun App(
     settings: SettingsStore = koinInject(),
     stationPlayback: StationPlayback = koinInject(),
+    libraryRepo: LibraryRepository = koinInject(),
 ) {
     // Live-mutable theme mode: read once from the persisted setting, then
     // hold in state so the AppSettingsScreen picker can re-theme the whole
@@ -80,6 +82,19 @@ fun App(
                 settings.getAutoResumeLastStation()
             ) {
                 settings.getLastStationId()?.let { stationPlayback.playStation(it) }
+            }
+        }
+
+        // One-shot genre case-canonicalization for libraries indexed
+        // before normalize-on-scan was added. Idempotent + cheap (no-op
+        // when distinct genre values are all already canonical), but
+        // we still gate behind a settings flag so we don't run it on
+        // every launch. Runs in the background; UI surfaces the change
+        // on the next Library Browser entry via observeTrackCount.
+        LaunchedEffect(Unit) {
+            if (!settings.getGenresCanonicalized()) {
+                runCatching { libraryRepo.canonicalizeGenreTags() }
+                settings.setGenresCanonicalized(true)
             }
         }
 

@@ -114,12 +114,28 @@ class StationPlayback(
         // apply artist-spacing without per-pick DB hits. One indexed
         // batch query for the whole candidate set; cheap on typical
         // 100-track stations.
-        val artistMap = libraryRepo.primaryArtistMap(candidates.map { it.id })
+        val candidateIds = candidates.map { it.id }
+        val artistMap = libraryRepo.primaryArtistMap(candidateIds)
+        // Pre-resolve play_count + rating maps too, but only when the
+        // station's weighting actually needs them. Skipping the SQL
+        // for Uniform / FavorRecent stations keeps cold-start cheap.
+        val needsPlayCount = station.playback.weighting ==
+            com.visorcraft.radioshed.domain.Weighting.FavorUnderPlayed
+        val needsRatings = station.playback.weighting ==
+            com.visorcraft.radioshed.domain.Weighting.FavorHigherRated
+        val playCountMap = if (needsPlayCount) {
+            stationRepo.playCountForTracks(candidateIds)
+        } else emptyMap()
+        val ratingMap = if (needsRatings) {
+            ratingRepo.ratingsForTracks(candidateIds)
+        } else emptyMap()
         val newQueue = PlaybackQueue(
             candidates = candidates,
             rule = station.playback,
             dislikedIds = disliked,
             artistByTrackId = artistMap,
+            playCountByTrackId = playCountMap,
+            ratingByTrackId = ratingMap,
         )
 
         advanceMutex.withLock {

@@ -66,7 +66,7 @@ sealed interface AppScreen {
     /** Equalizer — 5-band sliders + presets. */
     data object Equalizer : AppScreen
 
-    /** Backup &amp; restore — list saved JSON bundles, create/restore/delete. */
+    /** Backup & restore — list saved JSON bundles, create/restore/delete. */
     data object BackupRestore : AppScreen
 
     /** Listening stats — total time, top tracks. */

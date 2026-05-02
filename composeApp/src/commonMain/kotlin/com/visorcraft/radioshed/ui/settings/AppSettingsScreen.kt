@@ -200,7 +200,7 @@ fun AppSettingsScreen(
             )
             Spacer(Modifier.height(8.dp))
             NavRow(
-                title = "Backup &amp; restore",
+                title = "Backup & restore",
                 subtitle = "Export stations, playlists, and ratings to a JSON file",
                 onClick = onOpenBackup,
             )

@@ -78,7 +78,7 @@ fun BackupRestoreScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Backup &amp; restore") },
+                title = { Text("Backup & restore") },
                 navigationIcon = { TextButton(onClick = onBack) { Text("Back") } },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface,

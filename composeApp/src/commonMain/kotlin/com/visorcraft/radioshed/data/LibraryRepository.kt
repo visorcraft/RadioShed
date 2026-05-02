@@ -416,6 +416,53 @@ class LibraryRepository(private val db: RadioShedDatabase) {
         db.libraryQueries.distinctTagValues(key).executeAsList()
     }
 
+    /**
+     * One-shot pass that consolidates GENRE tag values that differ
+     * only in case. For each lower-cased group, picks the most-
+     * frequent variant as the canonical (or title-cases the lower
+     * form when there's a tie / no clear winner) and rewrites every
+     * row in that group to match. Idempotent — calling again after
+     * normalization is a no-op since `value != ?` filters in the
+     * UPDATE.
+     *
+     * Returns the number of distinct genres collapsed (i.e. how many
+     * groups had >1 case variant, not the number of rows touched).
+     */
+    suspend fun canonicalizeGenreTags(): Int = withContext(IODispatcher) {
+        val all = db.libraryQueries.distinctTagValues("GENRE").executeAsList()
+        val groups = all.groupBy { it.lowercase() }
+        var collapsed = 0
+        db.transaction {
+            for ((lower, variants) in groups) {
+                if (lower.isBlank() || variants.size <= 1) continue
+                // Pick the canonical: title-case of the lowercased
+                // form, regardless of input variants. Predictable +
+                // matches typical music-app conventions.
+                val canonical = lower.titleCaseSimple()
+                // SQLDelight names duplicate `?` parameters value /
+                // value_ / value__. The two ? for the canonical string
+                // are positional 1 and 3; the lowercase comparison key
+                // is positional 2.
+                db.libraryQueries.canonicalizeGenreCase(
+                    value = canonical,
+                    value_ = lower,
+                    value__ = canonical,
+                )
+                collapsed += 1
+            }
+        }
+        collapsed
+    }
+
+    /** Title-case a string by capitalizing each whitespace-separated word.
+     *  Cheap; doesn't handle Unicode case-folding edge cases (Greek final
+     *  sigma, Turkish dotted I) — fine for genre tags. */
+    private fun String.titleCaseSimple(): String = split(' ')
+        .joinToString(" ") { word ->
+            if (word.isEmpty()) word
+            else word[0].uppercaseChar() + word.substring(1).lowercase()
+        }
+
     // ---- Personnel ----
 
     /** Atomically replaces all personnel for the given track. */

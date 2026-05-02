@@ -42,6 +42,12 @@ SELECT stars FROM rating WHERE track_id = ?;
 selectAllRatings:
 SELECT * FROM rating ORDER BY stars DESC, rated_at DESC;
 
+-- Batch (track_id → stars) for a candidate set. Counterpart to
+-- selectPlayCountForTracks; used by PlaybackQueue's
+-- FavorHigherRated weighting.
+selectRatingsForTracks:
+SELECT track_id, stars FROM rating WHERE track_id IN ?;
+
 selectTopRatedTracks:
 SELECT track.* FROM track
 JOIN rating r ON r.track_id = track.id

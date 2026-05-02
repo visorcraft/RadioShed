@@ -146,6 +146,14 @@ class Scanner(
             }
         }
 
+        // Normalize GENRE tag values to title case at scan time so
+        // the Genres tab consolidates "Rock" / "rock" / "ROCK" into
+        // a single tile. Other tag keys are left untouched — only
+        // GENRE is user-facing in a way that surfaces case duplicates.
+        val normalizedTags = tags.customTags.map { tag ->
+            if (tag.key == "GENRE") tag.copy(value = tag.value.canonicalizeGenre()) else tag
+        }
+
         libraryRepo.upsertTrack(
             folderId = folder.id,
             path = discovered.uri,
@@ -168,7 +176,7 @@ class Scanner(
             bpm = tags.bpm,
             musicbrainzId = tags.musicbrainzTrackId,
             artistIdsAndRoles = artistLinks.takeIf { it.isNotEmpty() },
-            customTags = tags.customTags.takeIf { it.isNotEmpty() },
+            customTags = normalizedTags.takeIf { it.isNotEmpty() },
             personnel = tags.personnel.takeIf { it.isNotEmpty() },
         )
     }
@@ -187,3 +195,20 @@ class Scanner(
  * 95% of the practical "same artist" cases.
  */
 internal fun String.normalizeForSort(): String = trim().lowercase()
+
+/**
+ * Title-case a genre tag value so "Rock", "rock", "ROCK" all collapse
+ * to the same "Rock" entry. Word-by-word capitalization keeps
+ * compound genres readable ("Synth Pop" not "Synth pop"). Ignores
+ * hyphens by treating each space-separated word independently —
+ * "post-rock" stays "Post-rock" rather than "Post-Rock", which is
+ * an acceptable v1 simplification.
+ */
+internal fun String.canonicalizeGenre(): String {
+    val trimmed = trim()
+    if (trimmed.isEmpty()) return trimmed
+    return trimmed.split(' ').joinToString(" ") { word ->
+        if (word.isEmpty()) word
+        else word[0].uppercaseChar() + word.substring(1).lowercase()
+    }
+}

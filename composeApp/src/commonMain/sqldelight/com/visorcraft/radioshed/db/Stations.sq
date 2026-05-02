@@ -91,6 +91,15 @@ UPDATE station SET
     skip_rate = 0.0,
     updated_at = ?;
 
+-- Batch (track_id → play_count) for the candidate set of a station.
+-- Used by PlaybackQueue's FavorUnderPlayed / FavorHigherRated
+-- weighting so it can bias the random pick without a per-pick lookup.
+selectPlayCountForTracks:
+SELECT track_id, COUNT(*) AS plays
+FROM station_history
+WHERE track_id IN ?
+GROUP BY track_id;
+
 reorderStation:
 UPDATE station SET sort_position = ?, updated_at = ? WHERE id = ?;
 

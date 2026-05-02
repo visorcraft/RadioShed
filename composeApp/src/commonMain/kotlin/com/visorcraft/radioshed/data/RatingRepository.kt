@@ -30,6 +30,17 @@ class RatingRepository(private val db: RadioShedDatabase) {
         db.ratingsQueries.selectAllRatings().executeAsList().map { it.toDomain() }
     }
 
+    /**
+     * Batched (trackId → stars). Returns absent ids as missing-from-
+     * map; callers default to 0.0 for "no rating" weighting.
+     */
+    suspend fun ratingsForTracks(trackIds: Collection<Long>): Map<Long, Double> =
+        withContext(IODispatcher) {
+            if (trackIds.isEmpty()) return@withContext emptyMap()
+            db.ratingsQueries.selectRatingsForTracks(trackIds).executeAsList()
+                .associate { it.track_id to it.stars }
+        }
+
     suspend fun topRatedTracks(minStars: Double = 4.0, limit: Long = 100): List<Track> =
         withContext(IODispatcher) {
             db.ratingsQueries.selectTopRatedTracks(minStars, limit).executeAsList()
