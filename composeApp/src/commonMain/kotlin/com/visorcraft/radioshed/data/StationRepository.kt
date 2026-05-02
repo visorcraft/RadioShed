@@ -186,6 +186,18 @@ class StationRepository(private val db: RadioShedDatabase) {
             }
         }
 
+    /**
+     * Rediscover candidates: track ids the user has played at least
+     * once but whose most-recent play is older than [olderThanMs]
+     * milliseconds (compare against [nowMillis]). Returned ordered
+     * oldest-first.
+     */
+    suspend fun rediscoverTrackIds(olderThanMs: Long, limit: Long): List<Long> =
+        withContext(IODispatcher) {
+            db.stationsQueries.selectRediscoverTrackIds(olderThanMs, limit).executeAsList()
+                .map { it.track_id }
+        }
+
     suspend fun totalListenedMs(): Long = withContext(IODispatcher) {
         // The IFNULL wrapping in the SQL ensures a non-null Long even
         // when the table is empty (cold start), so executeAsOne is safe.

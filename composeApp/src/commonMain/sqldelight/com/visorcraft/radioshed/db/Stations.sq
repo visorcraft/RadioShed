@@ -127,6 +127,19 @@ GROUP BY artist.id
 ORDER BY plays DESC, MAX(sh.played_at) DESC
 LIMIT ?;
 
+-- "Rediscover" feed — track ids that the user has played at least
+-- once but whose most-recent play is older than the threshold passed
+-- in. Sorted oldest-first so we surface the longest-forgotten tracks.
+-- The HAVING clause filters on the aggregate so the index on
+-- played_at can still drive the scan.
+selectRediscoverTrackIds:
+SELECT track_id, MAX(played_at) AS last_played_at, COUNT(*) AS plays
+FROM station_history
+GROUP BY track_id
+HAVING last_played_at < ? AND plays >= 1
+ORDER BY last_played_at ASC
+LIMIT ?;
+
 -- Top albums by play count. Tracks without album_id are excluded from
 -- the count. Album artwork URI included so the UI doesn't need a
 -- second per-row query.

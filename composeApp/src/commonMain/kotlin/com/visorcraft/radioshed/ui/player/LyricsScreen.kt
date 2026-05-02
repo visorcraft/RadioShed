@@ -1,5 +1,6 @@
 package com.visorcraft.radioshed.ui.player
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -142,6 +143,7 @@ fun LyricsScreen(
             l != null && !l.synced.isNullOrEmpty() -> SyncedLyrics(
                 lines = l.synced,
                 positionMs = position.currentMs,
+                onSeek = { ms -> audioEngine.seekTo(ms) },
                 modifier = Modifier.fillMaxSize().padding(padding),
             )
             l != null && !l.plain.isNullOrBlank() -> PlainLyrics(
@@ -168,6 +170,7 @@ fun LyricsScreen(
 private fun SyncedLyrics(
     lines: List<LyricLine>,
     positionMs: Long,
+    onSeek: (Long) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     // Find the active line: the last line whose timeMs <= positionMs.
@@ -201,6 +204,11 @@ private fun SyncedLyrics(
         itemsIndexed(lines, key = { i, l -> "$i:${l.timeMs}" }) { i, line ->
             val isActive = i == activeIndex
             val isPast = i < activeIndex
+            // Tap-to-seek: jump player position to this line's
+            // timestamp. The Spotify / Apple Music gesture vocab —
+            // people instinctively tap a lyric line they want to
+            // start from. Lines with no text (instrumental gaps in
+            // the LRC) still seek; that's the right behavior.
             Text(
                 text = line.text.ifBlank { " " },  // preserve breath gaps
                 style = if (isActive) MaterialTheme.typography.headlineSmall
@@ -211,7 +219,10 @@ private fun SyncedLyrics(
                     isPast -> MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
                     else -> MaterialTheme.colorScheme.onBackground.copy(alpha = 0.85f)
                 },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onSeek(line.timeMs) }
+                    .padding(vertical = 4.dp),
                 textAlign = TextAlign.Start,
             )
         }

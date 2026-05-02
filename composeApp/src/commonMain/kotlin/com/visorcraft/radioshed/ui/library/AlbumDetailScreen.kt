@@ -22,13 +22,19 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Shuffle
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarOutline
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -52,11 +58,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.visorcraft.radioshed.data.LibraryRepository
+import com.visorcraft.radioshed.data.RatingRepository
 import com.visorcraft.radioshed.domain.Album
 import com.visorcraft.radioshed.domain.Artist
 import com.visorcraft.radioshed.domain.Track
 import com.visorcraft.radioshed.stations.StationPlayback
 import com.visorcraft.radioshed.ui.playlists.AddToPlaylistSheet
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
 /**
@@ -76,11 +85,14 @@ fun AlbumDetailScreen(
     onArtistTap: (Long) -> Unit,
     libraryRepo: LibraryRepository = koinInject(),
     stationPlayback: StationPlayback = koinInject(),
+    ratingRepo: RatingRepository = koinInject(),
 ) {
     var album by remember { mutableStateOf<Album?>(null) }
     var artist by remember { mutableStateOf<Artist?>(null) }
     var tracks by remember { mutableStateOf<List<Track>>(emptyList()) }
     var addToPlaylistTrackId by remember { mutableStateOf<Long?>(null) }
+    var overflowOpen by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(albumId) {
         album = libraryRepo.getAlbumById(albumId)
@@ -95,6 +107,42 @@ fun AlbumDetailScreen(
             TopAppBar(
                 title = { Text(album?.title ?: "Album", maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 navigationIcon = { TextButton(onClick = onBack) { Text("Back") } },
+                actions = {
+                    Box {
+                        IconButton(onClick = { overflowOpen = true }) {
+                            Icon(Icons.Filled.MoreVert, contentDescription = "More")
+                        }
+                        DropdownMenu(
+                            expanded = overflowOpen,
+                            onDismissRequest = { overflowOpen = false },
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Rate all 5 stars") },
+                                leadingIcon = { Icon(Icons.Filled.Star, null) },
+                                enabled = tracks.isNotEmpty(),
+                                onClick = {
+                                    overflowOpen = false
+                                    val snapshot = tracks
+                                    scope.launch {
+                                        snapshot.forEach { ratingRepo.setRating(it.id, 5.0) }
+                                    }
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Clear all ratings") },
+                                leadingIcon = { Icon(Icons.Filled.StarOutline, null) },
+                                enabled = tracks.isNotEmpty(),
+                                onClick = {
+                                    overflowOpen = false
+                                    val snapshot = tracks
+                                    scope.launch {
+                                        snapshot.forEach { ratingRepo.clearRating(it.id) }
+                                    }
+                                },
+                            )
+                        }
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface,
                 ),

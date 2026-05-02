@@ -137,9 +137,28 @@ fun StationsHomeScreen(
     // we just iterate.
     var recentlyAdded by remember { mutableStateOf<List<Track>>(emptyList()) }
     var recentlyAddedArtwork by remember { mutableStateOf<Map<Long, String?>>(emptyMap()) }
+    var rediscover by remember { mutableStateOf<List<Track>>(emptyList()) }
+    var rediscoverArtwork by remember { mutableStateOf<Map<Long, String?>>(emptyMap()) }
     LaunchedEffect(nowPlaying?.trackId) {
         recentlyAdded = libraryRepo.newestTracks(limit = 12L)
         recentlyAddedArtwork = recentlyAdded
+            .mapNotNull { it.albumId }
+            .distinct()
+            .associateWith { id -> libraryRepo.getAlbumById(id)?.artworkUri }
+
+        // Rediscover: tracks played at least once but not in the last
+        // 30 days. Resolves track ids to full Track objects (skipping
+        // any that have been removed from the library since the play
+        // was recorded). 30-day cutoff matches Spotify's "On Repeat" /
+        // "Repeat Rewind" rotation cadence — past that, the track has
+        // been gone long enough to feel fresh again.
+        val cutoff = com.visorcraft.radioshed.data.nowMillis() -
+            REDISCOVER_THRESHOLD_DAYS * 86_400_000L
+        rediscover = stationRepo.rediscoverTrackIds(
+            olderThanMs = cutoff,
+            limit = 12L,
+        ).mapNotNull { libraryRepo.getTrackById(it) }
+        rediscoverArtwork = rediscover
             .mapNotNull { it.albumId }
             .distinct()
             .associateWith { id -> libraryRepo.getAlbumById(id)?.artworkUri }
@@ -259,6 +278,19 @@ fun StationsHomeScreen(
                             artworkByAlbumId = recentlyAddedArtwork,
                             onPlay = { idx ->
                                 stationPlayback.playTracks(recentlyAdded, startIndex = idx)
+                            },
+                        )
+                    }
+                }
+
+                if (rediscover.isNotEmpty()) {
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        TrackCarouselRow(
+                            label = "Rediscover",
+                            tracks = rediscover,
+                            artworkByAlbumId = rediscoverArtwork,
+                            onPlay = { idx ->
+                                stationPlayback.playTracks(rediscover, startIndex = idx)
                             },
                         )
                     }
@@ -628,16 +660,39 @@ private fun RecentlyAddedRow(
     artworkByAlbumId: Map<Long, String?>,
     onPlay: (Int) -> Unit,
 ) {
+    TrackCarouselRow(
+        label = "Recently added",
+        tracks = tracks,
+        artworkByAlbumId = artworkByAlbumId,
+        onPlay = onPlay,
+    )
+}
+
+/**
+ * Generic horizontal track carousel — one stable component used for
+ * "Recently added" + "Rediscover" + future similar rows so the visual
+ * language stays consistent.
+ */
+@Composable
+private fun TrackCarouselRow(
+    label: String,
+    tracks: List<Track>,
+    artworkByAlbumId: Map<Long, String?>,
+    onPlay: (Int) -> Unit,
+) {
     Column(modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 4.dp)) {
         Text(
-            text = "Recently added",
+            text = label,
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f),
         )
         Spacer(Modifier.size(10.dp))
         LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            lazyItems(tracks.withIndex().toList(), key = { (_, t) -> t.id }) { (idx, track) ->
+            lazyItems(
+                tracks.withIndex().toList(),
+                key = { (_, t) -> "$label:${t.id}" },
+            ) { (idx, track) ->
                 RecentlyAddedTile(
                     track = track,
                     artworkUri = track.albumId?.let { artworkByAlbumId[it] },
@@ -1064,6 +1119,9 @@ private fun BuiltInBadge() {
             .padding(horizontal = 6.dp, vertical = 2.dp),
     )
 }
+
+/** "Forgotten about it" cutoff for the Rediscover carousel, in days. */
+private const val REDISCOVER_THRESHOLD_DAYS: Long = 30L
 
 private fun stationColor(station: Station): Color {
     if (station.color == 0) return Color(0xFFFF7F1A) // brand amber default
