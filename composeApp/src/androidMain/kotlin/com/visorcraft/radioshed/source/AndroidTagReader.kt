@@ -84,8 +84,22 @@ class AndroidTagReader : TagReader {
             replayGainTrackPeak = tag?.let { readReplayGainPeak(it, "REPLAYGAIN_TRACK_PEAK") },
             customTags = customTags,
             personnel = personnel,
+            artworkBytes = tag?.let(::extractArtwork),
         )
     }
+
+    /**
+     * Pull embedded album art from the tag. jaudiotagger normalizes APIC
+     * (ID3v2), METADATA_BLOCK_PICTURE (FLAC/Opus), iTunes "covr" atom (M4A),
+     * and Vorbis-comment "COVERART" into the same Artwork interface — we
+     * just take the first one. Files with no embedded art return null.
+     *
+     * Returns null on any exception; tag readers see all kinds of malformed
+     * art frames in the wild and we don't want one bad file aborting a scan.
+     */
+    private fun extractArtwork(tag: JTag): ByteArray? = runCatching {
+        tag.firstArtwork?.binaryData?.takeIf { it.isNotEmpty() }
+    }.getOrNull()
 
     private fun JTag.firstOrNull(key: FieldKey): String? =
         runCatching { getFirst(key)?.takeUnless { it.isBlank() } }.getOrNull()

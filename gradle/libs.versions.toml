@@ -6,6 +6,7 @@ android-compileSdk = "36"
 android-minSdk = "30"
 android-targetSdk = "36"
 androidx-activity = "1.13.0"
+coil = "3.3.0"
 androidx-appcompat = "1.7.1"
 androidx-core = "1.18.0"
 androidx-espresso = "3.7.0"
@@ -71,6 +72,13 @@ kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-t
 
 # ---- Phase 3: scanner ----
 jaudiotagger = { module = "net.jthink:jaudiotagger", version.ref = "jaudiotagger" }
+
+# ---- Image loading (Coil 3, multiplatform) ----
+# Used to render album art (extracted from ID3/Vorbis/M4A tags during scan,
+# persisted under filesDir/artwork/<sha256>) in NowPlaying, MiniPlayer, and
+# the Continue Listening callout. file:// URIs work out of the box; the
+# `coil-compose` artifact ships with Compose Multiplatform AsyncImage.
+coil-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil" }
 
 # ---- Phase 4: audio engine ----
 androidx-media3-exoplayer = { module = "androidx.media3:media3-exoplayer", version.ref = "media3" }

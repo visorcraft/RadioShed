@@ -141,6 +141,7 @@ fun StationsHomeScreen(
                             isPlaying = playerState == PlayerState.Playing,
                             trackTitle = nowPlaying?.title,
                             trackArtist = nowPlaying?.artist,
+                            artworkUri = nowPlaying?.artworkUri,
                             onTap = onOpenNowPlaying,
                         )
                     }
@@ -209,6 +210,7 @@ private fun ContinueListeningCard(
     isPlaying: Boolean,
     trackTitle: String?,
     trackArtist: String?,
+    artworkUri: String?,
     onTap: () -> Unit,
 ) {
     val accent = stationColor(station)
@@ -225,7 +227,8 @@ private fun ContinueListeningCard(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // Tinted gradient swatch — same visual language as the tile header.
+            // Album art when we have it, otherwise tinted gradient with a
+            // playing/paused glyph overlay (same visual language as tiles).
             Box(
                 modifier = Modifier
                     .size(64.dp)
@@ -237,11 +240,20 @@ private fun ContinueListeningCard(
                     ),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(
-                    text = if (isPlaying) "▶" else "‖",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = Color.White,
-                )
+                if (artworkUri != null) {
+                    coil3.compose.AsyncImage(
+                        model = artworkUri,
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                    )
+                } else {
+                    Text(
+                        text = if (isPlaying) "▶" else "‖",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = Color.White,
+                    )
+                }
             }
             Spacer(Modifier.size(16.dp))
             Column(modifier = Modifier.weight(1f)) {

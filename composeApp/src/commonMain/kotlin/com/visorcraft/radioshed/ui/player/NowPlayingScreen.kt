@@ -204,6 +204,7 @@ private fun CompactLayout(
     ) {
         AlbumArtPlaceholder(
             accent = accent,
+            artworkUri = playable.artworkUri,
             modifier = Modifier
                 .widthIn(max = 480.dp)
                 .fillMaxWidth()
@@ -245,6 +246,7 @@ private fun TwoPaneLayout(
     Row(modifier = Modifier.fillMaxSize().padding(24.dp)) {
         AlbumArtPlaceholder(
             accent = accent,
+            artworkUri = playable.artworkUri,
             modifier = Modifier
                 .fillMaxHeight()
                 .aspectRatio(1f),
@@ -272,7 +274,11 @@ private fun TwoPaneLayout(
 }
 
 @Composable
-private fun AlbumArtPlaceholder(accent: Color, modifier: Modifier = Modifier) {
+private fun AlbumArtPlaceholder(
+    accent: Color,
+    artworkUri: String?,
+    modifier: Modifier = Modifier,
+) {
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(16.dp))
@@ -283,11 +289,23 @@ private fun AlbumArtPlaceholder(accent: Color, modifier: Modifier = Modifier) {
             ),
         contentAlignment = Alignment.Center,
     ) {
-        Text(
-            text = "♫",
-            style = MaterialTheme.typography.displayLarge,
-            color = Color.White.copy(alpha = 0.85f),
-        )
+        if (artworkUri != null) {
+            // Real album art (file:// URI from AndroidArtworkPersister).
+            // Coil renders it on top of the gradient; gradient stays visible
+            // briefly during load and as fallback if decode fails.
+            coil3.compose.AsyncImage(
+                model = artworkUri,
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+            )
+        } else {
+            Text(
+                text = "♫",
+                style = MaterialTheme.typography.displayLarge,
+                color = Color.White.copy(alpha = 0.85f),
+            )
+        }
     }
 }
 

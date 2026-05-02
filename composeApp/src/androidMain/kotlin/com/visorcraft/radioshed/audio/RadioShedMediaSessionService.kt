@@ -2,15 +2,50 @@ package com.visorcraft.radioshed.audio
 
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
+import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.session.LibraryResult
+import androidx.media3.session.MediaLibraryService
 import androidx.media3.session.MediaSession
-import androidx.media3.session.MediaSessionService
+import com.google.common.collect.ImmutableList
+import com.google.common.util.concurrent.Futures
+import com.google.common.util.concurrent.ListenableFuture
+import com.google.common.util.concurrent.SettableFuture
+import com.visorcraft.radioshed.data.StationRepository
+import com.visorcraft.radioshed.stations.StationPlayback
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import org.koin.core.context.GlobalContext
 
 /**
- * Foreground media-playback service. Hosts the actual [ExoPlayer] and
- * [MediaSession]; the in-app [AudioEngineAndroid] talks to this service
- * via a `MediaController`, so playback survives configuration changes
- * and the OS handles foreground promotion + notification automatically.
+ * Foreground media-playback service. Hosts the actual [ExoPlayer] and a
+ * [MediaLibraryService.MediaLibrarySession]; the in-app [AudioEngineAndroid]
+ * talks to this service via a `MediaController`, so playback survives
+ * configuration changes and the OS handles foreground promotion +
+ * notification automatically.
+ *
+ * Because we extend `MediaLibraryService` (rather than the simpler
+ * `MediaSessionService`), this service ALSO exposes a browse hierarchy
+ * that Android Auto, Bluetooth media browsers, and Google Assistant can
+ * query. The browse tree is:
+ *
+ *   root
+ *    └─ "Stations"
+ *        ├─ Latest Hits        (playable)
+ *        ├─ All Music          (playable)
+ *        ├─ Discover           (playable)
+ *        └─ ...                (playable)
+ *
+ * When a client (Auto, in-app, etc.) requests playback of a station media
+ * item, [RadioShedLibraryCallback.onSetMediaItems] intercepts and routes
+ * the request through [StationPlayback], which builds the actual track
+ * queue from the station's source rule and starts playback on this same
+ * service's player. The browser then sees real track metadata in its UI.
  *
  * Audio attributes:
  *  - USAGE_MEDIA + CONTENT_TYPE_MUSIC so the system treats us as a music
@@ -19,13 +54,22 @@ import androidx.media3.session.MediaSessionService
  *  - handleAudioBecomingNoisy = true so unplugging headphones pauses
  *    instead of blasting through the speaker.
  *
- * Manifest: this service is registered with intent-filter
- * `androidx.media3.session.MediaSessionService` and foreground-service
- * type `mediaPlayback`.
+ * Manifest: this service is registered with intent-filter actions
+ * `androidx.media3.session.MediaSessionService` (in-app controller) AND
+ * `android.media.browse.MediaBrowserService` (Auto / system browsers),
+ * with foreground-service type `mediaPlayback`, plus an
+ * `automotive_app_desc.xml` meta-data declaration on the application.
  */
-class RadioShedMediaSessionService : MediaSessionService() {
+class RadioShedMediaSessionService : MediaLibraryService() {
 
-    private var mediaSession: MediaSession? = null
+    private var librarySession: MediaLibrarySession? = null
+
+    /**
+     * Service-scoped supervisor. Used by the library callback to bridge
+     * between Media3's `ListenableFuture`-based API and our coroutine-based
+     * repos. Cancelled in [onDestroy].
+     */
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     override fun onCreate() {
         super.onCreate()
@@ -39,11 +83,12 @@ class RadioShedMediaSessionService : MediaSessionService() {
             .setHandleAudioBecomingNoisy(true)
             .build()
 
-        mediaSession = MediaSession.Builder(this, player).build()
+        librarySession = MediaLibrarySession.Builder(this, player, RadioShedLibraryCallback())
+            .build()
     }
 
-    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? =
-        mediaSession
+    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? =
+        librarySession
 
     override fun onTaskRemoved(rootIntent: android.content.Intent?) {
         // Standard music-app behavior: if music is actively playing when the
@@ -51,7 +96,7 @@ class RadioShedMediaSessionService : MediaSessionService() {
         // playback continues with the notification as the entry-point back
         // in. If playback is paused (or there's no player), tear down so we
         // don't leak a non-functional notification.
-        val player = mediaSession?.player
+        val player = librarySession?.player
         if (player == null || !player.playWhenReady) {
             player?.stop()
             stopSelf()
@@ -60,11 +105,173 @@ class RadioShedMediaSessionService : MediaSessionService() {
     }
 
     override fun onDestroy() {
-        mediaSession?.run {
+        librarySession?.run {
             player.release()
             release()
-            mediaSession = null
         }
+        librarySession = null
+        scope.cancel()
         super.onDestroy()
+    }
+
+    /**
+     * Browse-hierarchy + playback-intercept callback for the
+     * MediaLibrarySession. Android Auto and other system media browsers
+     * call into this to populate their UI and to request playback.
+     */
+    private inner class RadioShedLibraryCallback : MediaLibrarySession.Callback {
+
+        override fun onGetLibraryRoot(
+            session: MediaLibrarySession,
+            browser: MediaSession.ControllerInfo,
+            params: LibraryParams?,
+        ): ListenableFuture<LibraryResult<MediaItem>> {
+            val root = browseableItem(
+                mediaId = MEDIA_ID_ROOT,
+                title = "RadioShed",
+            )
+            return Futures.immediateFuture(LibraryResult.ofItem(root, params))
+        }
+
+        override fun onGetChildren(
+            session: MediaLibrarySession,
+            browser: MediaSession.ControllerInfo,
+            parentId: String,
+            page: Int,
+            pageSize: Int,
+            params: LibraryParams?,
+        ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> = when (parentId) {
+            MEDIA_ID_ROOT -> {
+                // Single category for now: "Stations". Library / Recently
+                // Played / Search lands in a follow-up.
+                val stations = browseableItem(
+                    mediaId = MEDIA_ID_STATIONS,
+                    title = "Stations",
+                )
+                Futures.immediateFuture(
+                    LibraryResult.ofItemList(ImmutableList.of(stations), params),
+                )
+            }
+            MEDIA_ID_STATIONS -> {
+                // Snapshot the station list from the repo. observeAll() is a
+                // Flow; .first() takes one snapshot which is enough — Auto
+                // re-queries onGetChildren when the user re-enters the
+                // category, so live-updating isn't required for v1.
+                val future = SettableFuture.create<LibraryResult<ImmutableList<MediaItem>>>()
+                scope.launch {
+                    runCatching {
+                        val repo = GlobalContext.get().get<StationRepository>()
+                        val stations = repo.observeAll().first()
+                        val items = stations.map { station ->
+                            playableItem(
+                                mediaId = MEDIA_ID_STATION_PREFIX + station.id,
+                                title = station.name,
+                                subtitle = station.customSubtitle,
+                            )
+                        }
+                        future.set(LibraryResult.ofItemList(ImmutableList.copyOf(items), params))
+                    }.onFailure {
+                        future.set(LibraryResult.ofError(LibraryResult.RESULT_ERROR_UNKNOWN))
+                    }
+                }
+                future
+            }
+            else ->
+                Futures.immediateFuture(
+                    LibraryResult.ofError(LibraryResult.RESULT_ERROR_BAD_VALUE),
+                )
+        }
+
+        /**
+         * Intercept playback of station media items. When Android Auto (or
+         * any other browser) sets a station as the player's media item,
+         * we route the request through [StationPlayback] so the queue,
+         * weighting, dislike-filtering, and SmartShuffle policies all
+         * apply — instead of the player trying to literally play a URI of
+         * `station_<id>` (which has no actual audio data behind it).
+         *
+         * Returning an empty list with `INDEX_UNSET` tells the player not
+         * to alter its current item set; [StationPlayback] then calls
+         * `audioEngine.play(...)` with a real track which arrives at the
+         * player via the in-app `MediaController` and updates Auto's UI
+         * with proper track metadata.
+         */
+        override fun onSetMediaItems(
+            mediaSession: MediaSession,
+            controller: MediaSession.ControllerInfo,
+            mediaItems: MutableList<MediaItem>,
+            startIndex: Int,
+            startPositionMs: Long,
+        ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> {
+            val firstStationId = mediaItems
+                .firstOrNull { it.mediaId.startsWith(MEDIA_ID_STATION_PREFIX) }
+                ?.mediaId
+                ?.removePrefix(MEDIA_ID_STATION_PREFIX)
+                ?.toLongOrNull()
+
+            if (firstStationId != null) {
+                scope.launch {
+                    runCatching {
+                        GlobalContext.get().get<StationPlayback>().playStation(firstStationId)
+                    }
+                }
+                // Keep the player's queue untouched — StationPlayback will
+                // populate it via the in-app controller momentarily.
+                return Futures.immediateFuture(
+                    MediaSession.MediaItemsWithStartPosition(
+                        ImmutableList.of(),
+                        C.INDEX_UNSET,
+                        C.TIME_UNSET,
+                    ),
+                )
+            }
+
+            // Default behavior for non-station items (e.g. ad-hoc playback
+            // from the audio file VIEW intent): hand them straight to the
+            // player.
+            return Futures.immediateFuture(
+                MediaSession.MediaItemsWithStartPosition(
+                    ImmutableList.copyOf(mediaItems),
+                    startIndex,
+                    startPositionMs,
+                ),
+            )
+        }
+    }
+
+    private fun browseableItem(mediaId: String, title: String): MediaItem =
+        MediaItem.Builder()
+            .setMediaId(mediaId)
+            .setMediaMetadata(
+                MediaMetadata.Builder()
+                    .setTitle(title)
+                    .setIsBrowsable(true)
+                    .setIsPlayable(false)
+                    .setMediaType(MediaMetadata.MEDIA_TYPE_FOLDER_MIXED)
+                    .build(),
+            )
+            .build()
+
+    private fun playableItem(
+        mediaId: String,
+        title: String,
+        subtitle: String?,
+    ): MediaItem = MediaItem.Builder()
+        .setMediaId(mediaId)
+        .setMediaMetadata(
+            MediaMetadata.Builder()
+                .setTitle(title)
+                .setSubtitle(subtitle ?: "")
+                .setIsBrowsable(false)
+                .setIsPlayable(true)
+                .setMediaType(MediaMetadata.MEDIA_TYPE_RADIO_STATION)
+                .build(),
+        )
+        .build()
+
+    private companion object {
+        const val MEDIA_ID_ROOT = "root"
+        const val MEDIA_ID_STATIONS = "stations"
+        const val MEDIA_ID_STATION_PREFIX = "station_"
     }
 }

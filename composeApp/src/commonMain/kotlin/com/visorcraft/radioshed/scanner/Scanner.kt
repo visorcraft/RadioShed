@@ -4,6 +4,7 @@ import com.visorcraft.radioshed.data.FolderRepository
 import com.visorcraft.radioshed.data.LibraryRepository
 import com.visorcraft.radioshed.data.nowMillis
 import com.visorcraft.radioshed.domain.Folder
+import com.visorcraft.radioshed.source.ArtworkPersister
 import com.visorcraft.radioshed.source.DiscoveredTrack
 import com.visorcraft.radioshed.source.FileEnumerator
 import com.visorcraft.radioshed.source.LocalFileSource
@@ -30,6 +31,7 @@ class Scanner(
     private val libraryRepo: LibraryRepository,
     private val fileEnumerator: FileEnumerator,
     private val tagReader: TagReader,
+    private val artworkPersister: ArtworkPersister,
 ) {
 
     fun scanFolder(folderId: Long): Flow<ScanProgress> = flow {
@@ -42,11 +44,18 @@ class Scanner(
         emit(ScanProgress.Started(folderId))
 
         var processed = 0
+        // Tracks album ids whose embedded art we've already persisted this
+        // scan. Without this, every track of an album re-writes (no-op due
+        // to content hashing) and re-UPDATEs the album row, which is just
+        // wasted work — and on compilation albums where each track ships
+        // its own art, we'd flicker between covers as the scan progresses.
+        // First-seen wins.
+        val albumsWithArtwork = mutableSetOf<Long>()
         val source = LocalFileSource(folder = folder, enumerator = fileEnumerator)
 
         source.listTracks().collect { discovered ->
             try {
-                persistTrack(folder, discovered)
+                persistTrack(folder, discovered, albumsWithArtwork)
                 processed += 1
                 if (processed % PROGRESS_BATCH == 0) {
                     emit(ScanProgress.Progress(folderId, processed, discovered.fileName))
@@ -76,7 +85,11 @@ class Scanner(
         )
     }
 
-    private suspend fun persistTrack(folder: Folder, discovered: DiscoveredTrack) {
+    private suspend fun persistTrack(
+        folder: Folder,
+        discovered: DiscoveredTrack,
+        albumsWithArtwork: MutableSet<Long>,
+    ) {
         val tags = tagReader.read(discovered.uri) ?: ParsedTags()
 
         // Upsert artist + album. Album-artist falls back to the track artist
@@ -100,6 +113,19 @@ class Scanner(
                 year = tags.year,
                 musicbrainzId = tags.musicbrainzAlbumId,
             )
+        }
+
+        // Persist embedded album art the first time we see it for each album
+        // in this scan. ArtworkPersister is content-addressed (SHA-256), so
+        // duplicate bytes across tracks share a single on-disk file even
+        // across scans.
+        if (albumId != null && albumId !in albumsWithArtwork) {
+            tags.artworkBytes?.let { bytes ->
+                artworkPersister.persist(bytes)?.let { uri ->
+                    libraryRepo.setAlbumArtwork(albumId, uri)
+                }
+            }
+            albumsWithArtwork += albumId
         }
 
         val title = tags.title

@@ -51,11 +51,11 @@ val sharedModule: Module = module {
     single { BackupRepository(get()) }
 
     // Phase 3: scanner. FileEnumerator + TagReader come from platformModule.
-    single { Scanner(get(), get(), get(), get()) }
+    single { Scanner(get(), get(), get(), get(), get()) }
 
     // Phase 5: stations engine. AudioEngine comes from platformModule.
     single { SourceRuleEvaluator(get(), get(), get()) }
-    single { StationPlayback(get(), get(), get(), get()) }
+    single { StationPlayback(get(), get(), get(), get(), get()) }
     single { PresetSeeder(get(), get()) }
 }
 

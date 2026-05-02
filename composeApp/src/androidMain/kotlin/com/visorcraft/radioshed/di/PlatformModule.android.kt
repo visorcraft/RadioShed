@@ -7,8 +7,10 @@ import com.visorcraft.radioshed.audio.AudioEngine
 import com.visorcraft.radioshed.audio.AudioEngineAndroid
 import com.visorcraft.radioshed.data.DatabaseDriverFactory
 import com.visorcraft.radioshed.permissions.StoragePermissions
+import com.visorcraft.radioshed.source.AndroidArtworkPersister
 import com.visorcraft.radioshed.source.AndroidFileEnumerator
 import com.visorcraft.radioshed.source.AndroidTagReader
+import com.visorcraft.radioshed.source.ArtworkPersister
 import com.visorcraft.radioshed.source.FileEnumerator
 import com.visorcraft.radioshed.source.StorageVolumes
 import com.visorcraft.radioshed.source.TagReader
@@ -27,6 +29,7 @@ actual val platformModule: Module = module {
     // Phase 3: scanner platform impls
     single<FileEnumerator> { AndroidFileEnumerator() }
     single<TagReader> { AndroidTagReader() }
+    single<ArtworkPersister> { AndroidArtworkPersister(androidContext()) }
     single { StoragePermissions(androidContext()) }
     single { StorageVolumes(androidContext()) }
 

@@ -22,6 +22,17 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
+
+        <!-- Android Auto: declares RadioShed as an Auto-compatible media app.
+             Required for the app to appear in Auto's media picker alongside
+             Spotify / YouTube Music. The descriptor lists which Auto surfaces
+             we participate in (just "media" for now). Without this meta-data
+             Auto won't query our MediaLibraryService no matter how cleanly
+             it's implemented. -->
+        <meta-data
+            android:name="com.google.android.gms.car.application"
+            android:resource="@xml/automotive_app_desc" />
+
         <activity
             android:exported="true"
             android:launchMode="singleTask"
@@ -72,15 +83,23 @@
         </activity>
 
         <!-- Phase 4: media-playback foreground service. Hosts ExoPlayer +
-             MediaSession; Media3 promotes it to foreground automatically
+             MediaLibrarySession; Media3 promotes it to foreground automatically
              when playback starts and posts a notification with transport
-             controls + lock-screen / Bluetooth metadata. -->
+             controls + lock-screen / Bluetooth metadata.
+
+             This service ALSO acts as the MediaBrowserService that Android
+             Auto queries to build its browse UI. The two intent-filter
+             actions cover both cases: in-app MediaController access uses
+             `androidx.media3.session.MediaSessionService`, while Auto and
+             other system browsers (Bluetooth, Assistant) use
+             `android.media.browse.MediaBrowserService`. -->
         <service
             android:name=".audio.RadioShedMediaSessionService"
             android:exported="true"
             android:foregroundServiceType="mediaPlayback">
             <intent-filter>
                 <action android:name="androidx.media3.session.MediaSessionService" />
+                <action android:name="android.media.browse.MediaBrowserService" />
             </intent-filter>
         </service>
     </application>

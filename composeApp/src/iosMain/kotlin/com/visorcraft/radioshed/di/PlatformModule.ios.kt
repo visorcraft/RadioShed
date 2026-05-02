@@ -6,7 +6,9 @@ import com.visorcraft.radioshed.audio.AudioEngine
 import com.visorcraft.radioshed.audio.AudioEngineIos
 import com.visorcraft.radioshed.data.DatabaseDriverFactory
 import com.visorcraft.radioshed.permissions.StoragePermissions
+import com.visorcraft.radioshed.source.ArtworkPersister
 import com.visorcraft.radioshed.source.FileEnumerator
+import com.visorcraft.radioshed.source.IosArtworkPersister
 import com.visorcraft.radioshed.source.IosFileEnumerator
 import com.visorcraft.radioshed.source.IosTagReader
 import com.visorcraft.radioshed.source.StorageVolumes
@@ -22,6 +24,7 @@ actual val platformModule: Module = module {
     // Phase 3: scanner platform impls (stubs until Mac-side iOS work lands)
     single<FileEnumerator> { IosFileEnumerator() }
     single<TagReader> { IosTagReader() }
+    single<ArtworkPersister> { IosArtworkPersister() }
     single { StoragePermissions() }
     single { StorageVolumes() }
 

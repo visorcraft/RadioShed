@@ -50,4 +50,11 @@ data class ParsedTags(
     val customTags: List<Tag> = emptyList(),
     /** Composers, conductors, performers — keyed by role. */
     val personnel: List<Personnel> = emptyList(),
+    /**
+     * Embedded album art (cover.jpg / APIC frame / FLAC METADATA_BLOCK_PICTURE).
+     * Null when the file has none. Equality on this field is reference-based
+     * intentionally — comparing 50KB byte arrays for `==` is too expensive
+     * and we don't compare ParsedTags instances by value anywhere.
+     */
+    val artworkBytes: ByteArray? = null,
 )

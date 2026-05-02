@@ -3,6 +3,7 @@ package com.visorcraft.radioshed.stations
 import com.visorcraft.radioshed.audio.AudioEngine
 import com.visorcraft.radioshed.audio.PlayerState
 import com.visorcraft.radioshed.audio.toPlayable
+import com.visorcraft.radioshed.data.LibraryRepository
 import com.visorcraft.radioshed.data.RatingRepository
 import com.visorcraft.radioshed.data.StationRepository
 import com.visorcraft.radioshed.data.nowMillis
@@ -33,6 +34,7 @@ class StationPlayback(
     private val ratingRepo: RatingRepository,
     private val sourceEvaluator: SourceRuleEvaluator,
     private val audioEngine: AudioEngine,
+    private val libraryRepo: LibraryRepository,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -102,6 +104,14 @@ class StationPlayback(
             audioEngine.stop()
             return
         }
-        audioEngine.play(next.toPlayable())
+        // Resolve the track's album artwork URI before handing the Playable
+        // to the player. The lookup is one indexed primary-key SELECT and
+        // takes <1ms; doing it inline (as a launch) keeps advance order
+        // stable and avoids a flicker where the player loads then the UI
+        // belatedly populates artwork.
+        scope.launch {
+            val artworkUri = next.albumId?.let { libraryRepo.getAlbumById(it)?.artworkUri }
+            audioEngine.play(next.toPlayable(artworkUri = artworkUri))
+        }
     }
 }

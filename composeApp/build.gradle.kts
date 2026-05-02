@@ -64,6 +64,10 @@ kotlin {
             // Serialization + coroutines
             implementation(libs.kotlinx.serialization.json)
             implementation(libs.kotlinx.coroutines.core)
+
+            // Image loading (Coil 3 KMP) — renders album art from file://
+            // URIs persisted by AndroidArtworkPersister.
+            implementation(libs.coil.compose)
         }
 
         commonTest.dependencies {
