@@ -111,3 +111,32 @@ SELECT IFNULL(SUM(listened_ms), 0) FROM station_history;
 
 countAllPlays:
 SELECT COUNT(*) FROM station_history;
+
+-- Top artists by play count, joining through track_artist (primary
+-- role only — features / album-artist links would over-count). Returns
+-- (artistId, artistName, plays). Album/album-artist counted as plays
+-- of the primary artist of each track regardless.
+selectTopPlayedArtists:
+SELECT artist.id AS artist_id, artist.name AS artist_name, COUNT(*) AS plays
+FROM station_history sh
+JOIN track t ON t.id = sh.track_id
+JOIN track_artist ta ON ta.track_id = t.id
+JOIN artist ON artist.id = ta.artist_id
+WHERE ta.role = 'primary'
+GROUP BY artist.id
+ORDER BY plays DESC, MAX(sh.played_at) DESC
+LIMIT ?;
+
+-- Top albums by play count. Tracks without album_id are excluded from
+-- the count. Album artwork URI included so the UI doesn't need a
+-- second per-row query.
+selectTopPlayedAlbums:
+SELECT album.id AS album_id, album.title AS album_title,
+       album.artwork_uri AS artwork_uri, COUNT(*) AS plays
+FROM station_history sh
+JOIN track t ON t.id = sh.track_id
+JOIN album ON album.id = t.album_id
+WHERE t.album_id IS NOT NULL
+GROUP BY album.id
+ORDER BY plays DESC, MAX(sh.played_at) DESC
+LIMIT ?;

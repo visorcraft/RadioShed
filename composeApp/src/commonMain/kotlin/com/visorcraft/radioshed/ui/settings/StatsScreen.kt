@@ -16,8 +16,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -40,8 +43,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.layout.ContentScale
 import com.visorcraft.radioshed.data.LibraryRepository
 import com.visorcraft.radioshed.data.StationRepository
+import com.visorcraft.radioshed.data.TopAlbumEntry
+import com.visorcraft.radioshed.data.TopArtistEntry
 import com.visorcraft.radioshed.domain.Track
 import com.visorcraft.radioshed.stations.StationPlayback
 import org.koin.compose.koinInject
@@ -61,6 +67,8 @@ import org.koin.compose.koinInject
 @Composable
 fun StatsScreen(
     onBack: () -> Unit,
+    onArtistTap: (Long) -> Unit = {},
+    onAlbumTap: (Long) -> Unit = {},
     stationRepo: StationRepository = koinInject(),
     libraryRepo: LibraryRepository = koinInject(),
     stationPlayback: StationPlayback = koinInject(),
@@ -70,6 +78,8 @@ fun StatsScreen(
     var topTracks by remember {
         mutableStateOf<List<Pair<Track, Long>>>(emptyList())
     }
+    var topArtists by remember { mutableStateOf<List<TopArtistEntry>>(emptyList()) }
+    var topAlbums by remember { mutableStateOf<List<TopAlbumEntry>>(emptyList()) }
 
     LaunchedEffect(Unit) {
         totalMs = stationRepo.totalListenedMs()
@@ -80,6 +90,8 @@ fun StatsScreen(
             .mapNotNull { (id, count) ->
                 libraryRepo.getTrackById(id)?.let { it to count }
             }
+        topArtists = stationRepo.topPlayedArtists(limit = 10L)
+        topAlbums = stationRepo.topPlayedAlbums(limit = 10L)
     }
 
     Scaffold(
@@ -118,7 +130,7 @@ fun StatsScreen(
                 Spacer(Modifier.height(20.dp))
             }
 
-            if (topTracks.isEmpty()) {
+            if (topTracks.isEmpty() && topArtists.isEmpty() && topAlbums.isEmpty()) {
                 item {
                     Text(
                         "No listening data yet — play some music to populate.",
@@ -126,17 +138,36 @@ fun StatsScreen(
                         color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
                     )
                 }
-            } else {
-                item {
-                    Text(
-                        "Top played tracks",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f),
+                return@LazyColumn
+            }
+
+            if (topArtists.isNotEmpty()) {
+                item { SectionHeader("Top played artists") }
+                items(topArtists, key = { "ar:${it.id}" }) { artist ->
+                    TopArtistRow(
+                        artist = artist,
+                        rank = topArtists.indexOfFirst { it.id == artist.id } + 1,
+                        onTap = { onArtistTap(artist.id) },
                     )
-                    Spacer(Modifier.height(4.dp))
                 }
-                items(topTracks, key = { (t, _) -> t.id }) { (track, plays) ->
+                item { Spacer(Modifier.height(16.dp)) }
+            }
+
+            if (topAlbums.isNotEmpty()) {
+                item { SectionHeader("Top played albums") }
+                items(topAlbums, key = { "al:${it.id}" }) { album ->
+                    TopAlbumRow(
+                        album = album,
+                        rank = topAlbums.indexOfFirst { it.id == album.id } + 1,
+                        onTap = { onAlbumTap(album.id) },
+                    )
+                }
+                item { Spacer(Modifier.height(16.dp)) }
+            }
+
+            if (topTracks.isNotEmpty()) {
+                item { SectionHeader("Top played tracks") }
+                items(topTracks, key = { (t, _) -> "tr:${t.id}" }) { (track, plays) ->
                     TopTrackRow(
                         track = track,
                         plays = plays,
@@ -152,6 +183,127 @@ fun StatsScreen(
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun SectionHeader(label: String) {
+    Text(
+        label,
+        style = MaterialTheme.typography.titleSmall,
+        fontWeight = FontWeight.SemiBold,
+        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f),
+    )
+    Spacer(Modifier.height(4.dp))
+}
+
+@Composable
+private fun TopArtistRow(artist: TopArtistEntry, rank: Int, onTap: () -> Unit) {
+    Surface(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onTap),
+        color = Color.Transparent,
+    ) {
+        Row(
+            modifier = Modifier.padding(vertical = 8.dp, horizontal = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "$rank",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(28.dp),
+            )
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(MaterialTheme.colorScheme.primaryContainer),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Person,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+            }
+            Spacer(Modifier.size(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = artist.name,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Text(
+                text = "${artist.plays} play${if (artist.plays == 1L) "" else "s"}",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+            )
+        }
+    }
+}
+
+@Composable
+private fun TopAlbumRow(album: TopAlbumEntry, rank: Int, onTap: () -> Unit) {
+    Surface(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onTap),
+        color = Color.Transparent,
+    ) {
+        Row(
+            modifier = Modifier.padding(vertical = 8.dp, horizontal = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "$rank",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(28.dp),
+            )
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .aspectRatio(1f),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (album.artworkUri != null) {
+                    coil3.compose.AsyncImage(
+                        model = album.artworkUri,
+                        contentDescription = null,
+                        modifier = Modifier.size(36.dp),
+                        contentScale = ContentScale.Crop,
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Filled.Album,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            Spacer(Modifier.size(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = album.title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Text(
+                text = "${album.plays} play${if (album.plays == 1L) "" else "s"}",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+            )
         }
     }
 }

@@ -64,8 +64,8 @@ val sharedModule: Module = module {
     // Sleep timer — singleton so multiple UI surfaces observe the same state.
     single { SleepTimer(get()) }
 
-    // Lyrics: cache + fetcher, orchestrated by LyricsService.
-    single { LyricsService(get(), get(), get()) }
+    // Lyrics: cache + fetcher + local sidecar loader, orchestrated by LyricsService.
+    single { LyricsService(get(), get(), get(), get()) }
 
     // Backup &amp; restore: JSON dumps of stations + playlists + ratings.
     single { BackupService(get(), get(), get(), get(), get()) }

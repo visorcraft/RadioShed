@@ -205,6 +205,10 @@ fun NowPlayingScreen(
                                 sleepMenuOpen = false
                                 sleepTimer.startEndOfTrack()
                             },
+                            onExtend = { mins ->
+                                sleepMenuOpen = false
+                                sleepTimer.extend(mins * 60_000L)
+                            },
                             onCancel = {
                                 sleepMenuOpen = false
                                 sleepTimer.cancel()
@@ -996,9 +1000,20 @@ private fun SleepTimerMenu(
     onDismiss: () -> Unit,
     onPickMinutes: (Long) -> Unit,
     onEndOfTrack: () -> Unit,
+    onExtend: (Long) -> Unit,
     onCancel: () -> Unit,
 ) {
     DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
+        // When a timer is already running, surface the +15 min extend
+        // FIRST. The user just opened the menu — odds are they wanted
+        // to push the deadline back, not start a fresh one.
+        if (currentState is SleepTimer.State.Running) {
+            DropdownMenuItem(
+                text = { Text("+15 minutes") },
+                onClick = { onExtend(15L) },
+            )
+            HorizontalDivider()
+        }
         // Discrete durations covering common use cases (commute,
         // before-bed). Skipping anything > 60 min — for longer "playlists"
         // the queue itself naturally bounds runtime.

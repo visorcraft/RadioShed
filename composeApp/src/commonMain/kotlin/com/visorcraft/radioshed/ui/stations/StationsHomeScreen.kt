@@ -130,9 +130,19 @@ fun StationsHomeScreen(
     // Recently-added tracks — pulled from the library by file ctime
     // (when the file was first scanned). Refreshes when the active
     // track changes so a fresh scan/index shows up promptly.
+    //
+    // Pre-resolve a Map<albumId, artworkUri> in the same pass so the
+    // tile renderer can show cover art without doing one DB lookup
+    // per recompose. The set is small (≤ 12 tracks → ≤ 12 albums) so
+    // we just iterate.
     var recentlyAdded by remember { mutableStateOf<List<Track>>(emptyList()) }
+    var recentlyAddedArtwork by remember { mutableStateOf<Map<Long, String?>>(emptyMap()) }
     LaunchedEffect(nowPlaying?.trackId) {
         recentlyAdded = libraryRepo.newestTracks(limit = 12L)
+        recentlyAddedArtwork = recentlyAdded
+            .mapNotNull { it.albumId }
+            .distinct()
+            .associateWith { id -> libraryRepo.getAlbumById(id)?.artworkUri }
     }
 
     // Long-press → action sheet state. Holds the station id whose sheet
@@ -246,6 +256,7 @@ fun StationsHomeScreen(
                     item(span = { GridItemSpan(maxLineSpan) }) {
                         RecentlyAddedRow(
                             tracks = recentlyAdded,
+                            artworkByAlbumId = recentlyAddedArtwork,
                             onPlay = { idx ->
                                 stationPlayback.playTracks(recentlyAdded, startIndex = idx)
                             },
@@ -614,6 +625,7 @@ private fun RecentlyPlayedRow(
 @Composable
 private fun RecentlyAddedRow(
     tracks: List<Track>,
+    artworkByAlbumId: Map<Long, String?>,
     onPlay: (Int) -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 4.dp)) {
@@ -626,14 +638,22 @@ private fun RecentlyAddedRow(
         Spacer(Modifier.size(10.dp))
         LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             lazyItems(tracks.withIndex().toList(), key = { (_, t) -> t.id }) { (idx, track) ->
-                RecentlyAddedTile(track = track, onTap = { onPlay(idx) })
+                RecentlyAddedTile(
+                    track = track,
+                    artworkUri = track.albumId?.let { artworkByAlbumId[it] },
+                    onTap = { onPlay(idx) },
+                )
             }
         }
     }
 }
 
 @Composable
-private fun RecentlyAddedTile(track: Track, onTap: () -> Unit) {
+private fun RecentlyAddedTile(
+    track: Track,
+    artworkUri: String?,
+    onTap: () -> Unit,
+) {
     Column(
         modifier = Modifier
             .width(120.dp)
@@ -647,16 +667,21 @@ private fun RecentlyAddedTile(track: Track, onTap: () -> Unit) {
                 .background(MaterialTheme.colorScheme.surfaceVariant),
             contentAlignment = Alignment.Center,
         ) {
-            // We don't have direct access to the album's artwork URI from
-            // the Track domain object here without a DB hit, so we fall
-            // back to the music-note placeholder. A future pass could
-            // join album.artwork_uri into the newestTracks query.
-            Icon(
-                imageVector = Icons.Filled.MusicNote,
-                contentDescription = null,
-                modifier = Modifier.size(36.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            if (artworkUri != null) {
+                coil3.compose.AsyncImage(
+                    model = artworkUri,
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                )
+            } else {
+                Icon(
+                    imageVector = Icons.Filled.MusicNote,
+                    contentDescription = null,
+                    modifier = Modifier.size(36.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
         Spacer(Modifier.size(6.dp))
         Text(

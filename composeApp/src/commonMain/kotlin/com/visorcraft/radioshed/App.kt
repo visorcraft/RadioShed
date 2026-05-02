@@ -189,7 +189,11 @@ fun App(
 
                     AppScreen.Stats -> {
                         PlatformBackHandler { current = AppScreen.AppSettings }
-                        StatsScreen(onBack = { current = AppScreen.AppSettings })
+                        StatsScreen(
+                            onBack = { current = AppScreen.AppSettings },
+                            onArtistTap = { id -> current = AppScreen.ArtistDetail(id) },
+                            onAlbumTap = { id -> current = AppScreen.AlbumDetail(id) },
+                        )
                     }
 
                     AppScreen.Equalizer -> {

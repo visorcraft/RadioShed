@@ -196,6 +196,31 @@ class StationRepository(private val db: RadioShedDatabase) {
         db.stationsQueries.countAllPlays().executeAsOne()
     }
 
+    /** Top artists by play count. Returned as (artistId, artistName, plays). */
+    suspend fun topPlayedArtists(limit: Long): List<TopArtistEntry> =
+        withContext(IODispatcher) {
+            db.stationsQueries.selectTopPlayedArtists(limit).executeAsList().map { row ->
+                TopArtistEntry(
+                    id = row.artist_id,
+                    name = row.artist_name,
+                    plays = row.plays,
+                )
+            }
+        }
+
+    /** Top albums by play count, including pre-resolved artwork URI. */
+    suspend fun topPlayedAlbums(limit: Long): List<TopAlbumEntry> =
+        withContext(IODispatcher) {
+            db.stationsQueries.selectTopPlayedAlbums(limit).executeAsList().map { row ->
+                TopAlbumEntry(
+                    id = row.album_id,
+                    title = row.album_title,
+                    artworkUri = row.artwork_uri,
+                    plays = row.plays,
+                )
+            }
+        }
+
     // ---- Mappers ----
 
     private fun toStation(row: StationRow): Station = Station(
@@ -240,4 +265,13 @@ data class HistoryEntry(
     val playedAt: Long,
     val completed: Boolean,
     val listenedMs: Long,
+)
+
+data class TopArtistEntry(val id: Long, val name: String, val plays: Long)
+
+data class TopAlbumEntry(
+    val id: Long,
+    val title: String,
+    val artworkUri: String?,
+    val plays: Long,
 )

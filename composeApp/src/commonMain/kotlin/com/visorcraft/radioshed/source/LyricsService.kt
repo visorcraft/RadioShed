@@ -26,6 +26,7 @@ class LyricsService(
     private val libraryRepo: LibraryRepository,
     private val cache: LyricsCacheRepository,
     private val fetcher: LyricsFetcher,
+    private val localLoader: LocalLyricsLoader,
 ) {
 
     suspend fun resolve(trackId: Long, forceRefresh: Boolean = false): Lyrics? {
@@ -36,6 +37,28 @@ class LyricsService(
         }
 
         val track = libraryRepo.getTrackById(trackId) ?: return null
+
+        // Local sidecar (.lrc / .txt) wins over the network fetcher.
+        // User-curated files are typically more accurate than what's
+        // on LRClib — and they work offline. Cached with source="local"
+        // so subsequent loads short-circuit through the cache.
+        val local = localLoader.load(track.path)
+        if (local != null) {
+            cache.put(
+                trackId = trackId,
+                syncedLrc = local.synced,
+                plainText = local.plain,
+                source = LOCAL_SOURCE,
+            )
+            return Lyrics(
+                trackId = trackId,
+                synced = local.synced?.let { parseLrc(it) },
+                plain = local.plain,
+                instrumental = false,
+                source = LOCAL_SOURCE,
+            )
+        }
+
         val artistName = libraryRepo.artistsForTrack(trackId)
             .firstOrNull { it.name.isNotBlank() }?.name
             ?: track.fileName  // fallback so the fetcher still attempts
@@ -128,5 +151,6 @@ class LyricsService(
     private companion object {
         const val MISS_SENTINEL = "lrclib:miss"
         const val INSTRUMENTAL_SENTINEL = "lrclib:instrumental"
+        const val LOCAL_SOURCE = "local"
     }
 }

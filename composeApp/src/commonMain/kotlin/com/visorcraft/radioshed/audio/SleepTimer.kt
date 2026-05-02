@@ -124,6 +124,23 @@ class SleepTimer(private val audioEngine: AudioEngine) {
         _state.value = State.Idle
     }
 
+    /**
+     * Add [extendByMs] to the currently running timer. No-op when the
+     * timer is idle or in EndOfTrack mode (extending an end-of-track
+     * trigger doesn't make sense).
+     *
+     * Implementation: read the remaining time, cancel + restart with
+     * `remaining + extendByMs`. The brief gap leaves volume restored
+     * (cancel restores capturedVolume) before [start] re-captures —
+     * imperceptible since both calls happen synchronously here.
+     */
+    fun extend(extendByMs: Long) {
+        val running = _state.value as? State.Running ?: return
+        if (extendByMs <= 0L) return
+        val newDuration = running.remainingMs + extendByMs
+        start(newDuration)
+    }
+
     sealed interface State {
         data object Idle : State
         data class Running(val remainingMs: Long) : State
