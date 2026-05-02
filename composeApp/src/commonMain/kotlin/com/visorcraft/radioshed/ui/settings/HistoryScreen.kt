@@ -16,9 +16,14 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -39,12 +44,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.Box as LayoutBox
+import androidx.compose.runtime.rememberCoroutineScope
 import com.visorcraft.radioshed.data.HistoryEntryWithStation
 import com.visorcraft.radioshed.data.LibraryRepository
 import com.visorcraft.radioshed.data.StationRepository
 import com.visorcraft.radioshed.data.nowMillis
 import com.visorcraft.radioshed.domain.Track
 import com.visorcraft.radioshed.stations.StationPlayback
+import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
 /**
@@ -63,13 +71,12 @@ fun HistoryScreen(
 ) {
     var entries by remember { mutableStateOf<List<HistoryEntryWithStation>>(emptyList()) }
     var trackById by remember { mutableStateOf<Map<Long, Track>>(emptyMap()) }
+    var menuOpen by remember { mutableStateOf(false) }
+    var clearConfirmOpen by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
-    LaunchedEffect(Unit) {
+    suspend fun reload() {
         entries = stationRepo.allHistory(limit = 200L)
-        // Resolve track titles for the visible window. Skip ids whose
-        // tracks have been removed from the library since the play was
-        // recorded; those rows still render with a placeholder so the
-        // history isn't lossy.
         trackById = entries
             .map { it.trackId }
             .distinct()
@@ -77,11 +84,33 @@ fun HistoryScreen(
             .toMap()
     }
 
+    LaunchedEffect(Unit) { reload() }
+
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Listening history") },
                 navigationIcon = { TextButton(onClick = onBack) { Text("Back") } },
+                actions = {
+                    LayoutBox {
+                        IconButton(onClick = { menuOpen = true }) {
+                            Icon(Icons.Filled.MoreVert, contentDescription = "More")
+                        }
+                        DropdownMenu(
+                            expanded = menuOpen,
+                            onDismissRequest = { menuOpen = false },
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Clear history") },
+                                enabled = entries.isNotEmpty(),
+                                onClick = {
+                                    menuOpen = false
+                                    clearConfirmOpen = true
+                                },
+                            )
+                        }
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface,
                 ),
@@ -123,6 +152,34 @@ fun HistoryScreen(
                 }
             }
         }
+    }
+
+    if (clearConfirmOpen) {
+        AlertDialog(
+            onDismissRequest = { clearConfirmOpen = false },
+            title = { Text("Clear listening history?") },
+            text = {
+                Text(
+                    "This deletes every play record but leaves the library, " +
+                        "ratings, playlists, and stations untouched. Top played " +
+                        "stats will reset to zero.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    clearConfirmOpen = false
+                    scope.launch {
+                        stationRepo.clearAllHistory()
+                        reload()
+                    }
+                }) {
+                    Text("Clear", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { clearConfirmOpen = false }) { Text("Cancel") }
+            },
+        )
     }
 }
 

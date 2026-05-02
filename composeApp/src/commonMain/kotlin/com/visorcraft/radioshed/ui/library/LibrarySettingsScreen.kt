@@ -134,10 +134,43 @@ fun LibrarySettingsScreen(
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                 )
-                Button(onClick = {
-                    discoveredVolumes.value = storageVolumes.discover()  // refresh on open
-                    addDialogOpen = true
-                }) { Text("Add folder") }
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    if (folders.size > 1) {
+                        // Sequential rescan-all. We can't run concurrent
+                        // scans (Scanner stages writes through the same
+                        // SQLDelight transactions and we don't want to
+                        // race), so we walk the list one at a time.
+                        TextButton(
+                            onClick = {
+                                if (scanInFlight) return@TextButton
+                                scanError = null
+                                scanJob = scope.launch {
+                                    val targets = folders
+                                    targets.forEachIndexed { index, folder ->
+                                        scanStatus = "Scanning ${folder.displayName} " +
+                                            "(${index + 1}/${targets.size})…"
+                                        runCatching {
+                                            scanner.scanFolder(folder.id).collect { ev ->
+                                                if (ev is ScanProgress.Failed) {
+                                                    scanError = ev.message
+                                                }
+                                            }
+                                        }.onFailure { scanError = "Scan crashed: ${it.message}" }
+                                    }
+                                    scanStatus = "Scanned ${targets.size} folder" +
+                                        if (targets.size == 1) "" else "s"
+                                }.also { job ->
+                                    job.invokeOnCompletion { scanJob = null }
+                                }
+                            },
+                            enabled = !scanInFlight,
+                        ) { Text("Rescan all") }
+                    }
+                    Button(onClick = {
+                        discoveredVolumes.value = storageVolumes.discover()  // refresh on open
+                        addDialogOpen = true
+                    }) { Text("Add folder") }
+                }
             }
             Spacer(Modifier.height(8.dp))
 

@@ -103,6 +103,9 @@ DELETE FROM station_history WHERE station_id = ?;
 trimHistoryOlderThan:
 DELETE FROM station_history WHERE played_at < ?;
 
+clearAllHistory:
+DELETE FROM station_history;
+
 -- Aggregated listening stats. Used by the Listening Stats screen.
 -- Top tracks across all stations (most plays first); ties broken by
 -- most-recent play so the user always sees something fresh.

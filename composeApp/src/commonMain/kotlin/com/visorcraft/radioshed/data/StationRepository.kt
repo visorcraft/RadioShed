@@ -198,6 +198,10 @@ class StationRepository(private val db: RadioShedDatabase) {
         db.stationsQueries.trimHistoryOlderThan(threshold)
     }
 
+    suspend fun clearAllHistory() = withContext(IODispatcher) {
+        db.stationsQueries.clearAllHistory()
+    }
+
     /** Top played tracks across all stations. Returned as (trackId, playCount). */
     suspend fun topPlayedTracks(limit: Long): List<Pair<Long, Long>> =
         withContext(IODispatcher) {

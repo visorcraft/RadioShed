@@ -115,6 +115,30 @@ class SettingsStore(private val settings: Settings) {
     fun getLibrarySongSort(): String = settings.getStringOrNull(KEY_LIB_SONG_SORT) ?: "TitleAsc"
     fun setLibrarySongSort(sort: String) = settings.putString(KEY_LIB_SONG_SORT, sort)
 
+    // ---- Search history ----
+
+    /**
+     * Recent search queries, newest first. Stored as a single
+     * tab-delimited string so we don't need a JSON parser hop for
+     * what's at most 10 short strings. Tab is reserved (not allowed in
+     * actual queries since it's not typeable on most keyboards) and
+     * keeps each entry intact under split.
+     */
+    fun getRecentSearches(): List<String> {
+        val raw = settings.getStringOrNull(KEY_SEARCH_HISTORY) ?: return emptyList()
+        return raw.split('\t').filter { it.isNotBlank() }
+    }
+
+    fun pushRecentSearch(query: String) {
+        val trimmed = query.trim()
+        if (trimmed.isEmpty()) return
+        val current = getRecentSearches().filter { !it.equals(trimmed, ignoreCase = true) }
+        val updated = (listOf(trimmed) + current).take(SEARCH_HISTORY_CAP)
+        settings.putString(KEY_SEARCH_HISTORY, updated.joinToString("\t"))
+    }
+
+    fun clearRecentSearches() = settings.remove(KEY_SEARCH_HISTORY)
+
     private companion object {
         const val KEY_THEME_MODE = "ui.themeMode"
         const val KEY_MATERIAL_YOU = "ui.materialYou"
@@ -131,5 +155,7 @@ class SettingsStore(private val settings: Settings) {
         const val KEY_REPLAY_GAIN_PREAMP = "audio.replayGain.preampDb"
         const val KEY_AUTO_RESUME_STATION = "playback.autoResumeLastStation"
         const val KEY_DRIVE_MODE = "ui.driveMode"
+        const val KEY_SEARCH_HISTORY = "search.recentQueries"
+        const val SEARCH_HISTORY_CAP = 10
     }
 }

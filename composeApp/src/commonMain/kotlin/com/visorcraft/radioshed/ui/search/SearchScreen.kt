@@ -3,7 +3,11 @@ package com.visorcraft.radioshed.ui.search
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.AssistChip
+import androidx.compose.ui.Alignment
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -34,6 +38,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.visorcraft.radioshed.data.SearchRepository
 import com.visorcraft.radioshed.data.SearchResults
+import com.visorcraft.radioshed.data.SettingsStore
 import com.visorcraft.radioshed.domain.Album
 import com.visorcraft.radioshed.domain.Artist
 import com.visorcraft.radioshed.domain.Track
@@ -53,12 +58,17 @@ fun SearchScreen(
     onBack: () -> Unit,
     searchRepo: SearchRepository = koinInject(),
     stationPlayback: StationPlayback = koinInject(),
+    settings: SettingsStore = koinInject(),
 ) {
     var query by remember { mutableStateOf("") }
     var results by remember { mutableStateOf(SearchResults(emptyList(), emptyList(), emptyList())) }
     var isSearching by remember { mutableStateOf(false) }
     var addToPlaylistTrackId by remember { mutableStateOf<Long?>(null) }
     var scope by remember { mutableStateOf(SearchScope.All) }
+    // Read once on entry; we maintain it in-state and only flush back
+    // to settings when a query produces results (so abandoned typing
+    // doesn't pollute the list).
+    var recentQueries by remember { mutableStateOf(settings.getRecentSearches()) }
 
     LaunchedEffect(query) {
         if (query.isBlank()) {
@@ -72,8 +82,15 @@ fun SearchScreen(
         results = SearchResults(emptyList(), emptyList(), emptyList())
         isSearching = true
         delay(200)  // debounce
-        results = searchRepo.searchAll(query, limitPerCategory = 50)
+        val r = searchRepo.searchAll(query, limitPerCategory = 50)
+        results = r
         isSearching = false
+        // Save to history when the query produced anything — abandoned
+        // typing ("R", "Re", "Rea"...) shouldn't fill the list.
+        if (!r.isEmpty) {
+            settings.pushRecentSearch(query)
+            recentQueries = settings.getRecentSearches()
+        }
     }
 
     Scaffold(
@@ -123,10 +140,13 @@ fun SearchScreen(
             Spacer(Modifier.height(8.dp))
 
             when {
-                query.isBlank() -> Text(
-                    "Type to search across your library.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                query.isBlank() -> RecentSearchesBlock(
+                    queries = recentQueries,
+                    onPick = { q -> query = q },
+                    onClear = {
+                        settings.clearRecentSearches()
+                        recentQueries = emptyList()
+                    },
                 )
                 isSearching && results.isEmpty -> Text(
                     "Searching…",
@@ -194,6 +214,59 @@ fun SearchScreen(
             trackId = id,
             onDismiss = { addToPlaylistTrackId = null },
         )
+    }
+}
+
+/**
+ * Empty-state block: header + recent-query chips + clear button. Tap a
+ * chip to populate the query field; tap "Clear" to wipe the saved
+ * history. Hidden entirely until the user has searched at least once.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun RecentSearchesBlock(
+    queries: List<String>,
+    onPick: (String) -> Unit,
+    onClear: () -> Unit,
+) {
+    if (queries.isEmpty()) {
+        Text(
+            "Type to search across your library.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+        )
+        return
+    }
+    Column {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                "Recent searches",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f),
+            )
+            TextButton(onClick = onClear) { Text("Clear") }
+        }
+        Spacer(Modifier.height(4.dp))
+        // FlowRow would wrap nicely but adds an extra dep. A horizontal
+        // scrolling Row is good enough for ≤10 chips.
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            queries.forEach { q ->
+                AssistChip(
+                    onClick = { onPick(q) },
+                    label = { Text(q) },
+                )
+            }
+        }
     }
 }
 
