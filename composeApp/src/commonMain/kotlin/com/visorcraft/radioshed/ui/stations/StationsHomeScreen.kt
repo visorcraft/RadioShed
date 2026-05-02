@@ -1,7 +1,9 @@
 package com.visorcraft.radioshed.ui.stations
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -20,8 +22,11 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -32,7 +37,10 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -66,11 +74,13 @@ import org.koin.compose.koinInject
  * Drag-reorder, sort/group menus, and the "Add station" entry point land
  * with the Station Editor in Phase 5 part 2.
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun StationsHomeScreen(
     onBack: () -> Unit,
     onOpenNowPlaying: () -> Unit = {},
+    onAddStation: () -> Unit = {},
+    onEditStation: (Long) -> Unit = {},
     stationRepo: StationRepository = koinInject(),
     stationPlayback: StationPlayback = koinInject(),
     audioEngine: AudioEngine = koinInject(),
@@ -130,6 +140,7 @@ fun StationsHomeScreen(
                         stationCount = stations.size,
                         builtInCount = stations.count { it.isBuiltIn },
                         isCompact = isCompact,
+                        onAddStation = onAddStation,
                     )
                 }
 
@@ -157,6 +168,7 @@ fun StationsHomeScreen(
                             onPlay = {
                                 scope.launch { stationPlayback.playStation(station.id) }
                             },
+                            onLongPress = { onEditStation(station.id) },
                         )
                     } else {
                         StationGridTile(
@@ -167,6 +179,7 @@ fun StationsHomeScreen(
                             onPlay = {
                                 scope.launch { stationPlayback.playStation(station.id) }
                             },
+                            onEdit = { onEditStation(station.id) },
                         )
                     }
                 }
@@ -180,6 +193,7 @@ private fun StationsPageHeader(
     stationCount: Int,
     builtInCount: Int,
     isCompact: Boolean,
+    onAddStation: () -> Unit,
 ) {
     val customCount = stationCount - builtInCount
     val subtitleParts = buildList {
@@ -187,20 +201,27 @@ private fun StationsPageHeader(
         if (builtInCount > 0) add("$builtInCount built-in")
         if (customCount > 0) add("$customCount custom")
     }
-    Column(modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 8.dp)) {
-        Text(
-            "Stations",
-            style = if (isCompact) MaterialTheme.typography.headlineMedium
-                    else MaterialTheme.typography.displaySmall,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onBackground,
-        )
-        Spacer(Modifier.size(4.dp))
-        Text(
-            subtitleParts.joinToString(" · "),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
-        )
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                "Stations",
+                style = if (isCompact) MaterialTheme.typography.headlineMedium
+                        else MaterialTheme.typography.displaySmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground,
+            )
+            Spacer(Modifier.size(4.dp))
+            Text(
+                subtitleParts.joinToString(" · "),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+            )
+        }
+        Button(onClick = onAddStation) { Text("+ Add station") }
     }
 }
 
@@ -326,15 +347,20 @@ private fun EmptyState(isCompact: Boolean, modifier: Modifier = Modifier) {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun StationListRow(
     station: Station,
     isCurrent: Boolean,
     isPlaying: Boolean,
     onPlay: () -> Unit,
+    onLongPress: () -> Unit,
 ) {
     Card(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onPlay),
+        modifier = Modifier.fillMaxWidth().combinedClickable(
+            onClick = onPlay,
+            onLongClick = onLongPress,
+        ),
         colors = CardDefaults.cardColors(
             containerColor = if (isCurrent) MaterialTheme.colorScheme.primaryContainer
                              else MaterialTheme.colorScheme.surface,
@@ -400,16 +426,21 @@ private fun StationListRow(
  * placeholder; bottom holds the name + subtitle. The whole card is
  * tappable; a "Now Playing" overlay shows on the current station.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun StationGridTile(
     station: Station,
     isCurrent: Boolean,
     isPlaying: Boolean,
     onPlay: () -> Unit,
+    onEdit: () -> Unit,
 ) {
     val accent = stationColor(station)
     Card(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onPlay),
+        modifier = Modifier.fillMaxWidth().combinedClickable(
+            onClick = onPlay,
+            onLongClick = onEdit,
+        ),
         colors = CardDefaults.cardColors(
             containerColor = if (isCurrent) MaterialTheme.colorScheme.primaryContainer
                              else MaterialTheme.colorScheme.surface,

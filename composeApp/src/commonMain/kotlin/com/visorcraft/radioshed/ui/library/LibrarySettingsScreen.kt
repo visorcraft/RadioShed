@@ -50,6 +50,7 @@ import com.visorcraft.radioshed.scanner.ScanProgress
 import com.visorcraft.radioshed.scanner.Scanner
 import com.visorcraft.radioshed.source.DiscoveredVolume
 import com.visorcraft.radioshed.source.StorageVolumes
+import com.visorcraft.radioshed.ui.util.OnResume
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
@@ -74,6 +75,14 @@ fun LibrarySettingsScreen(
     val discoveredVolumes = remember { mutableStateOf(storageVolumes.discover()) }
 
     var permissionGranted by remember { mutableStateOf(permissions.hasAllFilesAccess()) }
+
+    // Auto-recheck on return from system Settings — see OnResume kdoc.
+    OnResume {
+        if (!permissionGranted) {
+            permissionGranted = permissions.hasAllFilesAccess()
+        }
+    }
+
     var addDialogOpen by remember { mutableStateOf(false) }
     var editingFolder by remember { mutableStateOf<Folder?>(null) }
     var scanStatus by remember { mutableStateOf<String?>(null) }
@@ -342,6 +351,8 @@ private fun AddFolderDialog(
     }
     var path by remember { mutableStateOf(defaultPath) }
     var name by remember { mutableStateOf("") }
+    var browserOpen by remember { mutableStateOf(false) }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
@@ -371,10 +382,15 @@ private fun AddFolderDialog(
                     }
                     Spacer(Modifier.height(12.dp))
                 }
+                Button(
+                    onClick = { browserOpen = true },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Browse for folder…") }
+                Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
                     value = path,
                     onValueChange = { path = it },
-                    label = { Text("Folder path") },
+                    label = { Text("Folder path (or use Browse above)") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -389,6 +405,22 @@ private fun AddFolderDialog(
             }
         },
     )
+
+    if (browserOpen) {
+        // Start the browser at the current path's parent directory so the
+        // user sees neighbors of whatever's pre-filled (e.g. if they tapped
+        // the SD card chip, /Music auto-fills, browser opens at the SD root
+        // showing /Music alongside /Pictures, /Downloads, etc.).
+        val startPath = path.substringBeforeLast('/').ifBlank { "/storage" }
+        FolderBrowserDialog(
+            initialPath = startPath,
+            onSelect = { picked ->
+                path = picked
+                browserOpen = false
+            },
+            onDismiss = { browserOpen = false },
+        )
+    }
 }
 
 /**

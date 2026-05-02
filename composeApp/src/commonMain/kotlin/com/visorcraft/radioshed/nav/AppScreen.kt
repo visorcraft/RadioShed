@@ -30,4 +30,18 @@ sealed interface AppScreen {
 
     /** Full-screen Now Playing: art, scrubber, transport, rating. */
     data object NowPlaying : AppScreen
+
+    /**
+     * Station Editor — create a new station from scratch.
+     * The editor itself is the same screen used for [EditStation] but
+     * with no pre-filled values; we use a distinct route for clarity.
+     */
+    data object NewStation : AppScreen
+
+    /**
+     * Station Editor — edit an existing station by id.
+     * Built-in stations open a constrained editor (cosmetic fields only:
+     * name, subtitle, color); user-created stations get the full surface.
+     */
+    data class EditStation(val stationId: Long) : AppScreen
 }

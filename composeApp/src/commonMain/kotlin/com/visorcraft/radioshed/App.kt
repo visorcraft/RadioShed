@@ -19,6 +19,7 @@ import com.visorcraft.radioshed.ui.onboarding.OnboardingScreen
 import com.visorcraft.radioshed.ui.player.MiniPlayer
 import com.visorcraft.radioshed.ui.player.NowPlayingScreen
 import com.visorcraft.radioshed.ui.search.SearchScreen
+import com.visorcraft.radioshed.ui.stations.StationEditorScreen
 import com.visorcraft.radioshed.ui.stations.StationsHomeScreen
 import com.visorcraft.radioshed.ui.theme.RadioShedTheme
 import org.koin.compose.koinInject
@@ -53,6 +54,22 @@ fun App(settings: SettingsStore = koinInject()) {
             return@RadioShedTheme
         }
 
+        // Station Editor is also full-bleed — full-form scrolling page,
+        // no point keeping the MiniPlayer below clipping the save row.
+        val currentRoute = current
+        if (currentRoute is AppScreen.NewStation || currentRoute is AppScreen.EditStation) {
+            val editingId: Long? = when (currentRoute) {
+                is AppScreen.EditStation -> currentRoute.stationId
+                else -> null
+            }
+            PlatformBackHandler { current = AppScreen.Stations }
+            StationEditorScreen(
+                stationId = editingId,
+                onClose = { current = AppScreen.Stations },
+            )
+            return@RadioShedTheme
+        }
+
         // Post-onboarding screens are stacked in a Column so the MiniPlayer
         // sits below the active screen content. The active screen takes the
         // remaining space; the MiniPlayer hides itself when nothing is loaded.
@@ -80,11 +97,15 @@ fun App(settings: SettingsStore = koinInject()) {
                         StationsHomeScreen(
                             onBack = { current = AppScreen.Home },
                             onOpenNowPlaying = { current = AppScreen.NowPlaying },
+                            onAddStation = { current = AppScreen.NewStation },
+                            onEditStation = { id -> current = AppScreen.EditStation(id) },
                         )
                     }
 
                     AppScreen.Onboarding,
-                    AppScreen.NowPlaying -> Unit  // handled above
+                    AppScreen.NowPlaying,
+                    AppScreen.NewStation,
+                    is AppScreen.EditStation -> Unit  // handled above
                 }
             }
             MiniPlayer(onExpand = { current = AppScreen.NowPlaying })

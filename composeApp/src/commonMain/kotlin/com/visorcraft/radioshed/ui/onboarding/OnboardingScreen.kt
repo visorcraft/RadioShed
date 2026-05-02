@@ -41,6 +41,7 @@ import com.visorcraft.radioshed.data.FolderRepository
 import com.visorcraft.radioshed.permissions.StoragePermissions
 import com.visorcraft.radioshed.scanner.ScanProgress
 import com.visorcraft.radioshed.scanner.Scanner
+import com.visorcraft.radioshed.ui.util.OnResume
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
@@ -80,6 +81,16 @@ fun OnboardingScreen(
     var scanFolderId by remember { mutableStateOf<Long?>(null) }
     var scanStatus by remember { mutableStateOf<ScanProgress?>(null) }
     var permissionGranted by remember { mutableStateOf(initiallyGranted) }
+
+    // Auto-recheck the permission whenever we come back from system Settings.
+    // Without this the user has to manually tap "I granted it" — fine when the
+    // permission system fires a result callback, but `MANAGE_EXTERNAL_STORAGE`
+    // doesn't, so the only signal is the activity resuming.
+    OnResume {
+        if (!permissionGranted) {
+            permissionGranted = permissions.hasAllFilesAccess()
+        }
+    }
     var addError by remember { mutableStateOf<String?>(null) }
     var scanJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
 
@@ -194,9 +205,19 @@ fun OnboardingScreen(
                             OnboardingStep.Done -> onComplete()
                         }
                     },
-                    onSkip = if (step == OnboardingStep.Folder || step == OnboardingStep.Permissions) {
-                        { step = nextStep(step, initiallyGranted) }
-                    } else null,
+                    onSkip = when (step) {
+                        // Skipping permissions is fine — user can grant later from Library Settings.
+                        OnboardingStep.Permissions -> {
+                            { step = nextStep(step, initiallyGranted) }
+                        }
+                        // Skipping folder = no folders to scan, so jump straight
+                        // to Done. Going to Scan would strand the user on
+                        // "Starting…" forever because there's no scan to run.
+                        OnboardingStep.Folder -> {
+                            { step = OnboardingStep.Done }
+                        }
+                        else -> null
+                    },
                 )
             }
         }
