@@ -32,9 +32,21 @@ class SettingsStore(private val settings: Settings) {
      * Drive Mode bumps transport / rating tap targets to be safer
      * to hit while driving. Off by default; users opt in once and
      * the setting follows them across sessions.
+     *
+     * The `_driveModeFlow` mirror gives consumers (NowPlayingScreen)
+     * a live signal so toggling it from another tab takes effect
+     * immediately, without the user having to close + reopen Now
+     * Playing.
      */
+    private val _driveModeFlow =
+        kotlinx.coroutines.flow.MutableStateFlow(settings.getBoolean(KEY_DRIVE_MODE, false))
+    val driveModeFlow: kotlinx.coroutines.flow.StateFlow<Boolean> = _driveModeFlow
+
     fun getDriveMode(): Boolean = settings.getBoolean(KEY_DRIVE_MODE, false)
-    fun setDriveMode(enabled: Boolean) = settings.putBoolean(KEY_DRIVE_MODE, enabled)
+    fun setDriveMode(enabled: Boolean) {
+        settings.putBoolean(KEY_DRIVE_MODE, enabled)
+        _driveModeFlow.value = enabled
+    }
 
     // ---- Connectivity ----
 

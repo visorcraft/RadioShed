@@ -37,7 +37,17 @@ class AndroidArtworkPersister(private val context: Context) : ArtworkPersister {
                 // ~50KB image, but cheap to do right).
                 val tmp = File(artworkDir, "$hash.tmp")
                 tmp.writeBytes(bytes)
-                tmp.renameTo(target)
+                if (!tmp.renameTo(target)) {
+                    // renameTo can fail across filesystems or when the
+                    // target was created by a concurrent persist of the
+                    // same bytes. Clean up the tmp and fall through to
+                    // verifying that the (already-existing) target is
+                    // valid — its sha256 matches by construction.
+                    tmp.delete()
+                    if (!target.exists() || target.length().toInt() != bytes.size) {
+                        return@runCatching null
+                    }
+                }
             }
             "file://${target.absolutePath}"
         }.getOrNull()

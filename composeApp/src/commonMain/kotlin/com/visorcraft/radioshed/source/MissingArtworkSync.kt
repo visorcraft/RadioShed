@@ -37,6 +37,11 @@ class MissingArtworkSync(
         data class Completed(val found: Int, val missing: Int, val failed: Int) : Progress
     }
 
+    private companion object {
+        /** Per-request delay during a sweep — be polite to CAA. */
+        const val REQUEST_DELAY_MS = 200L
+    }
+
     fun sweep(): Flow<Progress> = flow {
         val targets = libraryRepo.albumsMissingArtwork()
         emit(Progress.Started(total = targets.size))
@@ -49,6 +54,13 @@ class MissingArtworkSync(
         var missing = 0
         var failed = 0
         targets.forEachIndexed { index, (albumId, mbid) ->
+            // Light rate-limit between requests. Cover Art Archive
+            // doesn't publish a hard rate limit, but bursting hundreds
+            // of GETs in a few seconds is impolite and risks 429s
+            // (which `runCatching` would surface as `failed` —
+            // misleading the user when the real cause is throttle).
+            // 200ms gap = max ~5 req/s, comfortable headroom.
+            if (index > 0) kotlinx.coroutines.delay(REQUEST_DELAY_MS)
             emit(Progress.Fetching(albumId = albumId, index = index, total = targets.size))
             val outcome = runCatching { coverArtFetcher.fetchByReleaseMbid(mbid) }
             val bytes = outcome.getOrNull()

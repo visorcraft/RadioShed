@@ -139,7 +139,16 @@ fun StationsHomeScreen(
     var recentlyAddedArtwork by remember { mutableStateOf<Map<Long, String?>>(emptyMap()) }
     var rediscover by remember { mutableStateOf<List<Track>>(emptyList()) }
     var rediscoverArtwork by remember { mutableStateOf<Map<Long, String?>>(emptyMap()) }
-    LaunchedEffect(nowPlaying?.trackId) {
+
+    // Reload Recently Added + Rediscover whenever the library track
+    // count changes (a scan completed) OR the active track changes
+    // (Rediscover should re-evaluate after a play crosses the
+    // 30-day-ago threshold). Previously the dep was only
+    // nowPlaying?.trackId, which meant a fresh folder scan didn't
+    // surface in the carousel until the user changed tracks.
+    val libraryTrackCount by libraryRepo.observeTrackCount().collectAsState(initial = -1L)
+    LaunchedEffect(nowPlaying?.trackId, libraryTrackCount) {
+        if (libraryTrackCount < 0L) return@LaunchedEffect
         recentlyAdded = libraryRepo.newestTracks(limit = 12L)
         recentlyAddedArtwork = recentlyAdded
             .mapNotNull { it.albumId }

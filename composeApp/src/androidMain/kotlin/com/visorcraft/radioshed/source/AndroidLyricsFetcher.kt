@@ -32,11 +32,20 @@ class AndroidLyricsFetcher : LyricsFetcher {
         durationSeconds: Long?,
     ): RawLyricsResponse? = withContext(IODispatcher) {
         if (artist.isBlank() || title.isBlank()) return@withContext null
+        // URLEncoder.encode produces application/x-www-form-urlencoded
+        // (spaces → '+', and `/` → `%2F`). For URL query strings we
+        // technically want RFC 3986 percent-encoding (spaces → '%20').
+        // LRClib accepts both, but normalize to '%20' so weird CDN /
+        // proxy layers in front of the API don't get tripped up by the
+        // form encoding's looser rules.
+        fun urlEncode(s: String): String =
+            URLEncoder.encode(s, "UTF-8").replace("+", "%20")
+
         val params = buildString {
-            append("artist_name=").append(URLEncoder.encode(artist, "UTF-8"))
-            append("&track_name=").append(URLEncoder.encode(title, "UTF-8"))
+            append("artist_name=").append(urlEncode(artist))
+            append("&track_name=").append(urlEncode(title))
             album?.takeIf { it.isNotBlank() }?.let {
-                append("&album_name=").append(URLEncoder.encode(it, "UTF-8"))
+                append("&album_name=").append(urlEncode(it))
             }
             durationSeconds?.takeIf { it > 0 }?.let {
                 append("&duration=").append(it)

@@ -43,7 +43,7 @@ import com.visorcraft.radioshed.domain.Album
 import com.visorcraft.radioshed.domain.Artist
 import com.visorcraft.radioshed.domain.Track
 import com.visorcraft.radioshed.stations.StationPlayback
-import com.visorcraft.radioshed.ui.playlists.AddToPlaylistSheet
+import com.visorcraft.radioshed.ui.playlists.TrackContextSheet
 import kotlinx.coroutines.delay
 import org.koin.compose.koinInject
 
@@ -63,7 +63,7 @@ fun SearchScreen(
     var query by remember { mutableStateOf("") }
     var results by remember { mutableStateOf(SearchResults(emptyList(), emptyList(), emptyList())) }
     var isSearching by remember { mutableStateOf(false) }
-    var addToPlaylistTrackId by remember { mutableStateOf<Long?>(null) }
+    var contextTrackId by remember { mutableStateOf<Long?>(null) }
     var scope by remember { mutableStateOf(SearchScope.All) }
     // Read once on entry; we maintain it in-state and only flush back
     // to settings when a query produces results (so abandoned typing
@@ -76,6 +76,11 @@ fun SearchScreen(
             isSearching = false
             return@LaunchedEffect
         }
+        // Reset the scope chip on a fresh query — sticky scope state
+        // confused users who searched in Artists scope, then changed
+        // the query to a track and got "No matches in this scope" with
+        // no clear explanation.
+        scope = SearchScope.All
         // Clear stale results immediately so the user sees feedback the moment
         // they edit; otherwise the previous query's results linger for the
         // 200 ms debounce window with no in-flight indicator.
@@ -191,7 +196,7 @@ fun SearchScreen(
                                     val idx = results.tracks.indexOf(track).coerceAtLeast(0)
                                     stationPlayback.playTracks(results.tracks, startIndex = idx)
                                 },
-                                onLongPress = { addToPlaylistTrackId = track.id },
+                                onLongPress = { contextTrackId = track.id },
                             )
                         }
                     }
@@ -209,10 +214,10 @@ fun SearchScreen(
         }
     }
 
-    addToPlaylistTrackId?.let { id ->
-        AddToPlaylistSheet(
+    contextTrackId?.let { id ->
+        TrackContextSheet(
             trackId = id,
-            onDismiss = { addToPlaylistTrackId = null },
+            onDismiss = { contextTrackId = null },
         )
     }
 }

@@ -1,10 +1,8 @@
 package com.visorcraft.radioshed.ui.player
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.Orientation
-import androidx.compose.foundation.gestures.draggable
-import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -35,9 +33,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -73,36 +70,47 @@ fun MiniPlayer(
 
     val playable = nowPlaying ?: return
 
-    // Vertical-drag accumulator. Each drag-up tick subtracts (negative
-    // delta means upward); when the user crosses the SWIPE_THRESHOLD_PX
-    // we route to the same expand handler as a tap. Reset on stop so
-    // partial drags don't leak into the next gesture.
-    var dragAccumulator by remember { mutableStateOf(0f) }
-    val draggableState = rememberDraggableState { delta -> dragAccumulator += delta }
-
     Surface(
         // The MiniPlayer sits at the bottom of App.kt's outer Column, OUTSIDE
         // any Scaffold. We use enableEdgeToEdge() in MainActivity, so the
         // window draws under the system gesture/navigation bar; without this
         // padding the transport buttons render BEHIND the system 3-button
         // navigation strip on phones that use it (Galaxy Z Fold 7, etc.).
+        //
+        // Tap + swipe-up are handled in a SINGLE pointerInput so they
+        // can coexist. The previous combo of `.draggable + .clickable`
+        // had a known Compose interaction issue: a slow deliberate tap
+        // that crossed touchSlop got consumed by `draggable` and the
+        // clickable never fired. detectTapGestures and
+        // detectVerticalDragGestures inside one pointerInput cooperate
+        // through the gesture-resolution algorithm — taps fire on
+        // up-event without exceeding touchSlop, drags fire when slop
+        // is crossed.
+        //
+        // Note: the Surface still gets ripple via the underlying
+        // Material container; we lose the per-press ripple animation
+        // here for the tap-to-expand. That's an acceptable tradeoff —
+        // the transport buttons inside still get their own ripples.
         modifier = Modifier
             .fillMaxWidth()
             .windowInsetsPadding(WindowInsets.navigationBars)
-            .draggable(
-                state = draggableState,
-                orientation = Orientation.Vertical,
-                onDragStopped = {
-                    // Negative delta = upward swipe. The threshold is
-                    // intentionally small (60 px ≈ 20 dp) so a flick
-                    // counts even though most user gestures travel
-                    // farther — matches the feel of Spotify / Apple
-                    // Music's swipe-up.
-                    if (dragAccumulator < -SWIPE_THRESHOLD_PX) onExpand()
-                    dragAccumulator = 0f
-                },
-            )
-            .clickable(onClick = onExpand),
+            .pointerInput(Unit) {
+                detectTapGestures(onTap = { onExpand() })
+            }
+            .pointerInput(Unit) {
+                var accum = 0f
+                detectVerticalDragGestures(
+                    onDragStart = { accum = 0f },
+                    onDragEnd = {
+                        // Negative accum = upward swipe. ~20dp threshold
+                        // matches Spotify / Apple Music swipe-up feel.
+                        if (accum < -SWIPE_THRESHOLD_PX) onExpand()
+                        accum = 0f
+                    },
+                    onDragCancel = { accum = 0f },
+                    onVerticalDrag = { _, dy -> accum += dy },
+                )
+            },
         color = MaterialTheme.colorScheme.surface,
         tonalElevation = 6.dp,
     ) {

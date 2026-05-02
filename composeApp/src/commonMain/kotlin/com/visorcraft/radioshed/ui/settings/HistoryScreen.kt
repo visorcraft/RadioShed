@@ -139,14 +139,24 @@ fun HistoryScreen(
                         entry = entry,
                         track = trackById[entry.trackId],
                         onTap = {
-                            // Seed a queue from the resolved tracks of
-                            // the visible history slice (skip the rows
-                            // whose tracks have been deleted). Start at
-                            // the tapped row.
-                            val resolved = entries.mapNotNull { trackById[it.trackId] }
-                            val target = trackById[entry.trackId] ?: return@HistoryRow
-                            val idx = resolved.indexOf(target).coerceAtLeast(0)
-                            stationPlayback.playTracks(resolved, startIndex = idx)
+                            // Build a parallel pair-list keyed by the
+                            // history-row id, then find the index by
+                            // entry.id rather than Track-object
+                            // identity. Using indexOf(track) was wrong
+                            // because the same track plays multiple
+                            // times resolve to the SAME Track instance,
+                            // so every tap on any occurrence of that
+                            // track jumped to the position of the
+                            // first-seen play in the resolved list.
+                            val pairs = entries.mapNotNull { e ->
+                                trackById[e.trackId]?.let { e.id to it }
+                            }
+                            val idx = pairs.indexOfFirst { it.first == entry.id }
+                            if (idx < 0) return@HistoryRow
+                            stationPlayback.playTracks(
+                                pairs.map { it.second },
+                                startIndex = idx,
+                            )
                         },
                     )
                 }
@@ -160,9 +170,10 @@ fun HistoryScreen(
             title = { Text("Clear listening history?") },
             text = {
                 Text(
-                    "This deletes every play record but leaves the library, " +
-                        "ratings, playlists, and stations untouched. Top played " +
-                        "stats will reset to zero.",
+                    "This deletes every play record AND resets per-station play " +
+                        "counts. Library, ratings, playlists, and station " +
+                        "definitions are untouched. Top played tracks / artists " +
+                        "/ albums and Top Stations all reset to zero.",
                 )
             },
             confirmButton = {

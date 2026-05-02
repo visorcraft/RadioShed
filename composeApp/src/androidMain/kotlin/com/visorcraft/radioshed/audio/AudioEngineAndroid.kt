@@ -66,6 +66,11 @@ class AudioEngineAndroid(private val appContext: Context) : AudioEngine {
             try {
                 val c = future.get()
                 controller = c
+                // Sync the volume StateFlow with the actual controller
+                // volume so consumers (SleepTimer fade, ReplayGain) see
+                // the real value rather than the construction-time
+                // default of 1f.
+                _volume.value = c.volume.coerceIn(0f, 1f)
                 wireListeners(c)
                 refreshStateFromController(c)
                 controllerDeferred.complete(c)
@@ -206,6 +211,11 @@ class AudioEngineAndroid(private val appContext: Context) : AudioEngine {
         controller?.stop()
         _nowPlaying.value = null
         _position.value = Position(0L, 0L)
+        // Reset volume to unity so a future session doesn't start at
+        // whatever fade fraction the SleepTimer left behind. ReplayGain
+        // re-applies on the next track load anyway.
+        runCatching { controller?.volume = 1f }
+        _volume.value = 1f
     }
 
     override fun setVolume(fraction: Float) {
@@ -216,7 +226,11 @@ class AudioEngineAndroid(private val appContext: Context) : AudioEngine {
         // (which would just clip) and keeps us out of negative-fraction
         // territory.
         val clamped = fraction.coerceIn(0f, 1f)
-        controller?.volume = clamped
+        // Wrap in runCatching: the controller may already be released
+        // (e.g. SleepTimer fade ticker still firing after the service
+        // is destroyed), and Media3 throws IllegalStateException on
+        // operations against a released MediaController.
+        runCatching { controller?.volume = clamped }
         _volume.value = clamped
     }
 

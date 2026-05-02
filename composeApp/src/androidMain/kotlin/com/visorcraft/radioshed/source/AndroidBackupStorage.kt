@@ -46,7 +46,14 @@ class AndroidBackupStorage(private val context: Context) : BackupStorage {
                 // half-written would be invalid JSON and refuse to import.
                 val tmp = File(backupDir, "$safe.tmp")
                 tmp.writeBytes(bytes)
-                tmp.renameTo(target)
+                if (!tmp.renameTo(target)) {
+                    // Cross-filesystem move or concurrent target creation.
+                    // Don't return a URI to the orphaned tmp file — the
+                    // caller would store a broken pointer. Clean up and
+                    // fail explicitly.
+                    tmp.delete()
+                    return@runCatching null
+                }
                 BackupFile(
                     uri = "file://${target.absolutePath}",
                     displayName = target.name,

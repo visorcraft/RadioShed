@@ -25,6 +25,9 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -151,31 +154,61 @@ private fun BandSliders(
     // render it horizontally and stack vertically). Simpler than rotating.
     Column(modifier = Modifier.fillMaxWidth()) {
         gains.forEachIndexed { i, value ->
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = formatHz(frequencies.getOrNull(i) ?: 0),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
-                    modifier = Modifier.width(56.dp),
-                )
-                Slider(
-                    value = value,
-                    onValueChange = { onChange(i, it) },
-                    valueRange = gainRangeDb,
-                    steps = 0,
-                    modifier = Modifier.weight(1f),
-                )
-                Text(
-                    text = "${if (value >= 0) "+" else ""}${"%.1f".format(value)} dB",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onBackground,
-                    modifier = Modifier.width(64.dp),
-                )
-            }
+            BandSliderRow(
+                index = i,
+                authoritativeGain = value,
+                centerHz = frequencies.getOrNull(i) ?: 0,
+                gainRangeDb = gainRangeDb,
+                onChange = onChange,
+            )
         }
+    }
+}
+
+/**
+ * One band's row. Holds a local `pendingValue` state that the slider
+ * binds to, calling `onChange` only on `onValueChangeFinished` —
+ * dragging used to fire setBandLevel hundreds of times per second,
+ * which produces audible level stuttering and burns the audiofx
+ * dispatcher. The `pendingValue` resets to the authoritative gain
+ * whenever the parent's gain changes (preset applied, restored from
+ * cache, etc.).
+ */
+@Composable
+private fun BandSliderRow(
+    index: Int,
+    authoritativeGain: Float,
+    centerHz: Int,
+    gainRangeDb: ClosedFloatingPointRange<Float>,
+    onChange: (Int, Float) -> Unit,
+) {
+    var pendingValue by remember(authoritativeGain) {
+        mutableStateOf(authoritativeGain)
+    }
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = formatHz(centerHz),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
+            modifier = Modifier.width(56.dp),
+        )
+        Slider(
+            value = pendingValue,
+            onValueChange = { pendingValue = it },
+            onValueChangeFinished = { onChange(index, pendingValue) },
+            valueRange = gainRangeDb,
+            steps = 0,
+            modifier = Modifier.weight(1f),
+        )
+        Text(
+            text = "${if (pendingValue >= 0) "+" else ""}${"%.1f".format(pendingValue)} dB",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onBackground,
+            modifier = Modifier.width(64.dp),
+        )
     }
 }
 

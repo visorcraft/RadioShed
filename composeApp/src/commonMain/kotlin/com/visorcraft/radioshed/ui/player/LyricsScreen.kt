@@ -81,9 +81,16 @@ fun LyricsScreen(
         loading = true
         notFound = false
         val resolved = lyricsService.resolve(id)
-        lyrics = resolved
-        notFound = resolved == null
-        loading = false
+        // Guard against late writes from a previous track's resolve
+        // landing on the new track's screen. If the track id changed
+        // while we were suspended, drop the result on the floor —
+        // the new LaunchedEffect for the new id has already started
+        // its own resolve.
+        if (nowPlaying?.trackId == id) {
+            lyrics = resolved
+            notFound = resolved == null
+            loading = false
+        }
     }
 
     Scaffold(
@@ -119,9 +126,16 @@ fun LyricsScreen(
                                     notFound = false
                                     lyricsService.forget(id)
                                     val resolved = lyricsService.resolve(id, forceRefresh = true)
-                                    lyrics = resolved
-                                    notFound = resolved == null
-                                    loading = false
+                                    // Same stale-write guard as the
+                                    // LaunchedEffect above — if the user
+                                    // navigated to a different track
+                                    // mid-refresh, don't clobber the new
+                                    // screen's state.
+                                    if (nowPlaying?.trackId == id) {
+                                        lyrics = resolved
+                                        notFound = resolved == null
+                                        loading = false
+                                    }
                                 }
                             }) { Text("Refresh") }
                         }

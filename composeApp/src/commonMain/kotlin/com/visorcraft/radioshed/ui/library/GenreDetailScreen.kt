@@ -50,7 +50,7 @@ import androidx.compose.ui.unit.dp
 import com.visorcraft.radioshed.data.LibraryRepository
 import com.visorcraft.radioshed.domain.Track
 import com.visorcraft.radioshed.stations.StationPlayback
-import com.visorcraft.radioshed.ui.playlists.AddToPlaylistSheet
+import com.visorcraft.radioshed.ui.playlists.TrackContextSheet
 import org.koin.compose.koinInject
 
 /**
@@ -68,7 +68,7 @@ fun GenreDetailScreen(
     stationPlayback: StationPlayback = koinInject(),
 ) {
     var tracks by remember { mutableStateOf<List<Track>>(emptyList()) }
-    var addToPlaylistTrackId by remember { mutableStateOf<Long?>(null) }
+    var contextTrackId by remember { mutableStateOf<Long?>(null) }
 
     LaunchedEffect(genre) {
         tracks = libraryRepo.tracksByTag(key = "GENRE", value = genre)
@@ -140,17 +140,17 @@ fun GenreDetailScreen(
                             val idx = tracks.indexOf(track).coerceAtLeast(0)
                             stationPlayback.playTracks(tracks, startIndex = idx)
                         },
-                        onLongPress = { addToPlaylistTrackId = track.id },
+                        onLongPress = { contextTrackId = track.id },
                     )
                 }
             }
         }
     }
 
-    addToPlaylistTrackId?.let { id ->
-        AddToPlaylistSheet(
+    contextTrackId?.let { id ->
+        TrackContextSheet(
             trackId = id,
-            onDismiss = { addToPlaylistTrackId = null },
+            onDismiss = { contextTrackId = null },
         )
     }
 }

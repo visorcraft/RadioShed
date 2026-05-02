@@ -57,7 +57,7 @@ import com.visorcraft.radioshed.domain.Album
 import com.visorcraft.radioshed.domain.Artist
 import com.visorcraft.radioshed.domain.Track
 import com.visorcraft.radioshed.stations.StationPlayback
-import com.visorcraft.radioshed.ui.playlists.AddToPlaylistSheet
+import com.visorcraft.radioshed.ui.playlists.TrackContextSheet
 import org.koin.compose.koinInject
 
 /**
@@ -78,7 +78,7 @@ fun ArtistDetailScreen(
     var artist by remember { mutableStateOf<Artist?>(null) }
     var albums by remember { mutableStateOf<List<Album>>(emptyList()) }
     var tracks by remember { mutableStateOf<List<Track>>(emptyList()) }
-    var addToPlaylistTrackId by remember { mutableStateOf<Long?>(null) }
+    var contextTrackId by remember { mutableStateOf<Long?>(null) }
 
     LaunchedEffect(artistId) {
         artist = libraryRepo.getArtistById(artistId)
@@ -190,17 +190,17 @@ fun ArtistDetailScreen(
                             val idx = tracks.indexOf(track).coerceAtLeast(0)
                             stationPlayback.playTracks(tracks, startIndex = idx)
                         },
-                        onLongPress = { addToPlaylistTrackId = track.id },
+                        onLongPress = { contextTrackId = track.id },
                     )
                 }
             }
         }
     }
 
-    addToPlaylistTrackId?.let { id ->
-        AddToPlaylistSheet(
+    contextTrackId?.let { id ->
+        TrackContextSheet(
             trackId = id,
-            onDismiss = { addToPlaylistTrackId = null },
+            onDismiss = { contextTrackId = null },
         )
     }
 }

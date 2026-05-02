@@ -122,9 +122,12 @@ fun NowPlayingScreen(
     libraryRepo: LibraryRepository = koinInject(),
     settings: SettingsStore = koinInject(),
 ) {
-    // Drive Mode: read once per composition. Sticky preference, doesn't
-    // need live updates within a single Now Playing session.
-    val driveMode = remember { settings.getDriveMode() }
+    // Drive Mode is observed live so a toggle from Settings takes
+    // effect immediately, even if Now Playing is the active screen
+    // (e.g. settings opened in a different tab on a foldable). The
+    // mirror StateFlow in SettingsStore propagates writes from any
+    // setDriveMode() call.
+    val driveMode by settings.driveModeFlow.collectAsState()
     val nowPlaying by audioEngine.nowPlaying.collectAsState()
     val state by audioEngine.state.collectAsState()
     val position by audioEngine.position.collectAsState()
@@ -243,10 +246,15 @@ fun NowPlayingScreen(
                                     track?.trackId?.let { addToPlaylistTrackId = it }
                                 },
                             )
+                            // For Go-to-album / Go-to-artist we use the
+                            // metadata stamped on the Playable rather
+                            // than DB lookups for the enabled state, so
+                            // tracks with no album/artist tags don't
+                            // appear actionable when they aren't.
                             DropdownMenuItem(
                                 text = { Text("Go to album") },
                                 leadingIcon = { Icon(Icons.Filled.Album, null) },
-                                enabled = track != null,
+                                enabled = track != null && !track.album.isNullOrBlank(),
                                 onClick = {
                                     overflowMenuOpen = false
                                     val tid = track?.trackId ?: return@DropdownMenuItem
@@ -258,7 +266,7 @@ fun NowPlayingScreen(
                             DropdownMenuItem(
                                 text = { Text("Go to artist") },
                                 leadingIcon = { Icon(Icons.Filled.Person, null) },
-                                enabled = track != null,
+                                enabled = track != null && !track.artist.isNullOrBlank(),
                                 onClick = {
                                     overflowMenuOpen = false
                                     val tid = track?.trackId ?: return@DropdownMenuItem

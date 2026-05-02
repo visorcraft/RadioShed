@@ -63,7 +63,7 @@ import com.visorcraft.radioshed.domain.Album
 import com.visorcraft.radioshed.domain.Artist
 import com.visorcraft.radioshed.domain.Track
 import com.visorcraft.radioshed.stations.StationPlayback
-import com.visorcraft.radioshed.ui.playlists.AddToPlaylistSheet
+import com.visorcraft.radioshed.ui.playlists.TrackContextSheet
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
@@ -90,8 +90,9 @@ fun AlbumDetailScreen(
     var album by remember { mutableStateOf<Album?>(null) }
     var artist by remember { mutableStateOf<Artist?>(null) }
     var tracks by remember { mutableStateOf<List<Track>>(emptyList()) }
-    var addToPlaylistTrackId by remember { mutableStateOf<Long?>(null) }
+    var contextTrackId by remember { mutableStateOf<Long?>(null) }
     var overflowOpen by remember { mutableStateOf(false) }
+    var massRateConfirm by remember { mutableStateOf<MassRateAction?>(null) }
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(albumId) {
@@ -122,10 +123,7 @@ fun AlbumDetailScreen(
                                 enabled = tracks.isNotEmpty(),
                                 onClick = {
                                     overflowOpen = false
-                                    val snapshot = tracks
-                                    scope.launch {
-                                        snapshot.forEach { ratingRepo.setRating(it.id, 5.0) }
-                                    }
+                                    massRateConfirm = MassRateAction.RateFive
                                 },
                             )
                             DropdownMenuItem(
@@ -134,10 +132,7 @@ fun AlbumDetailScreen(
                                 enabled = tracks.isNotEmpty(),
                                 onClick = {
                                     overflowOpen = false
-                                    val snapshot = tracks
-                                    scope.launch {
-                                        snapshot.forEach { ratingRepo.clearRating(it.id) }
-                                    }
+                                    massRateConfirm = MassRateAction.Clear
                                 },
                             )
                         }
@@ -226,7 +221,7 @@ fun AlbumDetailScreen(
                                 val idx = tracks.indexOf(track).coerceAtLeast(0)
                                 stationPlayback.playTracks(tracks, startIndex = idx)
                             },
-                            onLongPress = { addToPlaylistTrackId = track.id },
+                            onLongPress = { contextTrackId = track.id },
                         )
                     }
                 }
@@ -234,13 +229,71 @@ fun AlbumDetailScreen(
         }
     }
 
-    addToPlaylistTrackId?.let { id ->
-        AddToPlaylistSheet(
+    contextTrackId?.let { id ->
+        TrackContextSheet(
             trackId = id,
-            onDismiss = { addToPlaylistTrackId = null },
+            onDismiss = { contextTrackId = null },
+        )
+    }
+
+    massRateConfirm?.let { action ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { massRateConfirm = null },
+            title = {
+                Text(
+                    when (action) {
+                        MassRateAction.RateFive -> "Rate every track 5 stars?"
+                        MassRateAction.Clear -> "Clear ratings on every track?"
+                    },
+                )
+            },
+            text = {
+                Text(
+                    when (action) {
+                        MassRateAction.RateFive ->
+                            "This overwrites the ratings on all ${tracks.size} tracks " +
+                                "in this album. Existing ratings (including 1★ tracks " +
+                                "you've explicitly downvoted) will be replaced with 5★."
+                        MassRateAction.Clear ->
+                            "Removes the rating from all ${tracks.size} tracks in " +
+                                "this album. Top Rated and Forgotten Gems stations " +
+                                "won't include them anymore."
+                    },
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val snapshot = tracks
+                    val applied = action
+                    massRateConfirm = null
+                    scope.launch {
+                        snapshot.forEach { t ->
+                            when (applied) {
+                                MassRateAction.RateFive -> ratingRepo.setRating(t.id, 5.0)
+                                MassRateAction.Clear -> ratingRepo.clearRating(t.id)
+                            }
+                        }
+                    }
+                }) {
+                    Text(
+                        when (action) {
+                            MassRateAction.RateFive -> "Rate all"
+                            MassRateAction.Clear -> "Clear"
+                        },
+                        color = if (action == MassRateAction.Clear)
+                            MaterialTheme.colorScheme.error
+                        else MaterialTheme.colorScheme.primary,
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { massRateConfirm = null }) { Text("Cancel") }
+            },
         )
     }
 }
+
+private enum class MassRateAction { RateFive, Clear }
 
 @Composable
 private fun AlbumHeaderCompact(

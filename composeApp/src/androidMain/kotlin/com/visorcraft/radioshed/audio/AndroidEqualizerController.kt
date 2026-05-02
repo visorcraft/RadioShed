@@ -105,6 +105,13 @@ class AndroidEqualizerController(
         settings.setEqEnabled(enabled)
     }
 
+    override fun release() {
+        runCatching { equalizer?.release() }
+        equalizer = null
+        currentSessionId = 0
+        _isAvailable.value = false
+    }
+
     override fun applyPreset(preset: EqPreset) {
         if (preset == EqPreset.Custom) return
         // Pad / truncate the preset's 5 hard-coded gains to match the

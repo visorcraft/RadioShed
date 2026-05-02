@@ -302,20 +302,26 @@ fun StationEditorScreen(
                 Spacer(Modifier.height(8.dp))
             }
 
+            // Confirmation gate before destructive delete. Without this,
+            // a user editing a station who tapped "Delete" by mistake
+            // (it sits adjacent to the Save button) lost the station
+            // and all its custom configuration immediately.
+            var deleteConfirmOpen by remember { mutableStateOf(false) }
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                if (isEditing && !isBuiltIn && stationId != null) {
+                // `isEditing` already implies `stationId != null`, so the
+                // explicit second check was redundant (Kotlin warned
+                // "Condition is always 'true'"). Guard only on built-in
+                // status here.
+                if (isEditing && !isBuiltIn) {
                     OutlinedButton(
                         onClick = {
                             if (saving) return@OutlinedButton
-                            scope.launch {
-                                runCatching { stationRepo.delete(stationId) }
-                                    .onSuccess { onClose() }
-                                    .onFailure { saveError = "Delete failed: ${it.message}" }
-                            }
+                            deleteConfirmOpen = true
                         },
                     ) { Text("Delete") }
                 } else {
@@ -356,6 +362,35 @@ fun StationEditorScreen(
                 ) { Text(if (isEditing) "Save" else "Create") }
             }
             Spacer(Modifier.height(16.dp))
+
+            if (deleteConfirmOpen && stationId != null) {
+                androidx.compose.material3.AlertDialog(
+                    onDismissRequest = { deleteConfirmOpen = false },
+                    title = { Text("Delete station?") },
+                    text = {
+                        Text(
+                            "\"${name.trim().ifBlank { "this station" }}\" will be removed. " +
+                                "Tracks themselves stay in your library and can still be " +
+                                "added to other stations.",
+                        )
+                    },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            deleteConfirmOpen = false
+                            scope.launch {
+                                runCatching { stationRepo.delete(stationId) }
+                                    .onSuccess { onClose() }
+                                    .onFailure { saveError = "Delete failed: ${it.message}" }
+                            }
+                        }) {
+                            Text("Delete", color = MaterialTheme.colorScheme.error)
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { deleteConfirmOpen = false }) { Text("Cancel") }
+                    },
+                )
+            }
         }
     }
 }

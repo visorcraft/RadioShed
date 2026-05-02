@@ -132,7 +132,21 @@ class Scanner(
             ?.takeIf { it.isNotBlank() }
             ?: discovered.fileName.substringBeforeLast('.', discovered.fileName)
 
-        val trackId = libraryRepo.upsertTrack(
+        // Build artist links + tags + personnel up-front so the
+        // upsertTrack call can apply them inside the same transaction.
+        // Without atomicity, a play recorded between the track upsert
+        // and the (separate) setArtistsForTrack call would have no
+        // 'primary' artist link and be silently excluded from
+        // selectTopPlayedArtists forever.
+        val artistLinks = buildList {
+            primaryArtistId?.let { add(it to "primary") }
+            // Album artist gets linked too if it's a different artist than the track artist.
+            if (albumArtistId != null && albumArtistId != primaryArtistId) {
+                add(albumArtistId to "album_artist")
+            }
+        }
+
+        libraryRepo.upsertTrack(
             folderId = folder.id,
             path = discovered.uri,
             fileName = discovered.fileName,
@@ -153,19 +167,10 @@ class Scanner(
             replayGainTrackPeak = tags.replayGainTrackPeak,
             bpm = tags.bpm,
             musicbrainzId = tags.musicbrainzTrackId,
+            artistIdsAndRoles = artistLinks.takeIf { it.isNotEmpty() },
+            customTags = tags.customTags.takeIf { it.isNotEmpty() },
+            personnel = tags.personnel.takeIf { it.isNotEmpty() },
         )
-
-        // Wire up junctions / multi-value tags / personnel atomically.
-        val artistLinks = buildList {
-            primaryArtistId?.let { add(it to "primary") }
-            // Album artist gets linked too if it's a different artist than the track artist.
-            if (albumArtistId != null && albumArtistId != primaryArtistId) {
-                add(albumArtistId to "album_artist")
-            }
-        }
-        if (artistLinks.isNotEmpty()) libraryRepo.setArtistsForTrack(trackId, artistLinks)
-        if (tags.customTags.isNotEmpty()) libraryRepo.setTagsForTrack(trackId, tags.customTags)
-        if (tags.personnel.isNotEmpty()) libraryRepo.setPersonnelForTrack(trackId, tags.personnel)
     }
 
     companion object {

@@ -125,6 +125,28 @@ class StationRepository(private val db: RadioShedDatabase) {
         )
     }
 
+    /** Atomic +1 on play_count + last_played_at. Race-safe vs concurrent starts. */
+    suspend fun bumpStationPlayCount(id: Long, playedAt: Long = nowMillis()) =
+        withContext(IODispatcher) {
+            db.stationsQueries.bumpStationPlayCount(playedAt, nowMillis(), id)
+        }
+
+    /** Add [deltaMs] to total_listen_ms atomically. */
+    suspend fun bumpStationListenedMs(id: Long, deltaMs: Long) = withContext(IODispatcher) {
+        if (deltaMs <= 0L) return@withContext
+        db.stationsQueries.bumpStationListenedMs(deltaMs, nowMillis(), id)
+    }
+
+    /**
+     * Wipe denormalized per-station play counters. Paired with
+     * [clearAllHistory] so a "Clear history" action resets both the
+     * full history table and the cached counters that the Stats
+     * screen reads from `station.play_count`.
+     */
+    suspend fun resetAllStationStats() = withContext(IODispatcher) {
+        db.stationsQueries.resetAllStationStats(nowMillis())
+    }
+
     suspend fun reorder(id: Long, sortPosition: Int) = withContext(IODispatcher) {
         db.stationsQueries.reorderStation(sortPosition.toLong(), nowMillis(), id)
     }
@@ -199,7 +221,12 @@ class StationRepository(private val db: RadioShedDatabase) {
     }
 
     suspend fun clearAllHistory() = withContext(IODispatcher) {
+        // Wipe both the granular history rows AND the denormalized
+        // station-level counters so the Stats screen's Top Stations
+        // section actually resets (it reads station.play_count, not
+        // station_history aggregates).
         db.stationsQueries.clearAllHistory()
+        db.stationsQueries.resetAllStationStats(nowMillis())
     }
 
     /** Top played tracks across all stations. Returned as (trackId, playCount). */

@@ -94,12 +94,12 @@ class SourceRuleEvaluator(
             .distinctBy { it.id }
 
     private suspend fun evaluateAlbums(rule: SourceRule.AlbumSelector): List<Track> {
-        // No bulk-by-album query in the repo yet; iterate. v1 stations rarely
-        // pin >5 albums so this is cheap; can add a multi-id query later.
-        return rule.albumIds.flatMap { albumId ->
-            libraryRepo.listAvailableTracks(absoluteCeiling, 0L)
-                .filter { it.albumId == albumId }
-        }.distinctBy { it.id }
+        // Use the indexed per-album query rather than scanning the
+        // whole library once per album id. The previous implementation
+        // was O(albums × N) where N could be 100k tracks; this is
+        // O(sum-of-albums) using the album_id index.
+        return rule.albumIds.flatMap { libraryRepo.tracksForAlbum(it) }
+            .distinctBy { it.id }
     }
 
     private suspend fun evaluateTagFilter(rule: SourceRule.TagFilter): List<Track> {

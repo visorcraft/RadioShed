@@ -159,24 +159,39 @@ fun PlaylistDetailScreen(
                 }
             }
             Spacer(Modifier.height(8.dp))
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(vertical = 4.dp),
-            ) {
-                items(tracks, key = { it.id }) { track ->
-                    PlaylistTrackRow(
-                        track = track,
-                        onTap = {
-                            val idx = tracks.indexOf(track).coerceAtLeast(0)
-                            stationPlayback.playTracks(tracks, startIndex = idx)
-                        },
-                        onRemove = {
-                            scope.launch {
-                                repo.removeTrack(playlistId, track.id)
-                                reload()
-                            }
-                        },
+            if (tracks.isEmpty()) {
+                Box(
+                    modifier = Modifier.fillMaxSize().padding(top = 40.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        "No tracks yet — long-press a track in your Library, " +
+                            "Album, or Search results and pick \"Add to playlist\".",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                     )
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(vertical = 4.dp),
+                ) {
+                    items(tracks, key = { it.id }) { track ->
+                        PlaylistTrackRow(
+                            track = track,
+                            onTap = {
+                                val idx = tracks.indexOf(track).coerceAtLeast(0)
+                                stationPlayback.playTracks(tracks, startIndex = idx)
+                            },
+                            onRemove = {
+                                scope.launch {
+                                    repo.removeTrack(playlistId, track.id)
+                                    reload()
+                                }
+                            },
+                        )
+                    }
                 }
             }
         }

@@ -78,9 +78,21 @@ internal val DefaultPresets: List<StationPreset> = listOf(
 )
 
 /**
- * Idempotently seeds the built-in presets. Skips entirely when the user
- * already has any stations (so we don't undo their edits or re-create
- * presets they intentionally deleted).
+ * Idempotently seeds the built-in presets.
+ *
+ * Two-mode behaviour:
+ *  - **First-run** (zero stations exist): seed the entire [DefaultPresets]
+ *    set after a folder is registered. Skipped if no folders yet so the
+ *    user sees their first scan complete before stations appear.
+ *  - **Upgrade** (at least one station exists): seed only the built-in
+ *    presets the user is **missing** by name. This is how new built-ins
+ *    (e.g. Forgotten Gems, added in a later release) reach existing
+ *    users without resurrecting presets they intentionally deleted —
+ *    the test is "preset name not currently present", so a user who
+ *    deletes "Latest Hits" won't have it re-created.
+ *
+ * Both paths preserve user customizations to existing presets — we
+ * only insert; we never overwrite.
  */
 class PresetSeeder(
     private val stationRepo: StationRepository,
@@ -88,11 +100,14 @@ class PresetSeeder(
 ) {
 
     suspend fun seedIfEmpty(): SeedResult {
-        if (stationRepo.count() > 0) return SeedResult.AlreadyHasStations
         if (folderRepo.count() == 0L) return SeedResult.NoLibraryYet
 
+        val existingNames = stationRepo.list().map { it.name }.toSet()
+        val missing = DefaultPresets.filter { it.name !in existingNames }
+        if (missing.isEmpty()) return SeedResult.AlreadyHasStations
+
         var inserted = 0
-        for (preset in DefaultPresets) {
+        for (preset in missing) {
             stationRepo.insert(
                 name = preset.name,
                 source = preset.source,

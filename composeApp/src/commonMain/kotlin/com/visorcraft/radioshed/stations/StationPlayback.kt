@@ -19,6 +19,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlin.math.pow
 
 /**
@@ -43,6 +45,24 @@ class StationPlayback(
     private val settings: SettingsStore,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    /**
+     * Serializes all queue-mutating operations so the auto-advance
+     * collector and explicit skipNext / playStation / playTracks
+     * calls can't race. Without this, two concurrent advances would
+     * pop two tracks from the queue, double-record station_history,
+     * and leave one track flashing past unplayed.
+     */
+    private val advanceMutex = Mutex()
+
+    /**
+     * Suppresses the Ended → advance bridge while we're transitioning
+     * between stations. ExoPlayer's setMediaItem path can emit Ended
+     * for the prior item just as the new station's first track is
+     * being scheduled — without this guard the collector would advance
+     * past the new station's first track immediately.
+     */
+    @Volatile private var suppressAutoAdvance: Boolean = false
 
     private val _currentStation = MutableStateFlow<Station?>(null)
     val currentStation: StateFlow<Station?> = _currentStation.asStateFlow()
@@ -69,9 +89,13 @@ class StationPlayback(
         // Auto-advance: when the engine reports Ended, ask the queue for the
         // next track. StateFlow already deduplicates emissions, so a plain
         // collect is enough — we'll only see Ended once per real transition.
+        // Calls go through advanceMutex so they can't race with explicit
+        // skipNext / playStation / playTracks invocations.
         scope.launch {
             audioEngine.state.collect { state ->
-                if (state == PlayerState.Ended) advanceToNext()
+                if (state == PlayerState.Ended && !suppressAutoAdvance) {
+                    advanceMutex.withLock { advanceToNext() }
+                }
             }
         }
     }
@@ -79,8 +103,11 @@ class StationPlayback(
     /** Start (or restart) the given station. Replaces any current queue. */
     suspend fun playStation(stationId: Long) {
         val station = stationRepo.getById(stationId) ?: return
-        _currentStation.value = station
 
+        // Pre-build everything that depends on suspending I/O *before*
+        // taking the mutex and mutating shared state. If the coroutine is
+        // cancelled mid-build, queue/currentStation stay coherent (still
+        // pointing at the previous station, not partial new state).
         val candidates = sourceEvaluator.evaluate(station.source)
         val disliked = ratingRepo.dislikedTrackIdsForStation(stationId).toSet()
         // Pre-resolve trackId → primaryArtistId so PlaybackQueue can
@@ -94,36 +121,92 @@ class StationPlayback(
             dislikedIds = disliked,
             artistByTrackId = artistMap,
         )
-        queue = newQueue
-        _candidateCount.value = newQueue.candidateCount
 
-        // Switching stations clears history — the previous station's tracks
-        // aren't a logical "back" target from the new station's playback.
-        history.clear()
-        currentTrack = null
+        advanceMutex.withLock {
+            // Record the in-flight track BEFORE swapping currentStation —
+            // otherwise the listening session gets attributed to the new
+            // station the user just switched to.
+            recordPreviousIfAny()
 
-        // Persist as the last-played station so the auto-resume-on-launch
-        // path in App.kt can find it next time. We do this every time the
-        // station starts (not just on app exit) so a kill / crash mid-
-        // session still has a valid "last station" pointer.
-        settings.setLastStationId(stationId)
+            _currentStation.value = station
+            queue = newQueue
+            _candidateCount.value = newQueue.candidateCount
 
-        // Bump station stats. Don't await — fire-and-forget keeps UI snappy.
-        scope.launch {
-            stationRepo.updateStats(
-                id = stationId,
-                stats = station.stats.copy(
-                    playCount = station.stats.playCount + 1,
-                    lastPlayedAt = nowMillis(),
-                ),
-            )
+            // Switching stations clears history — the previous station's tracks
+            // aren't a logical "back" target from the new station's playback.
+            history.clear()
+            currentTrack = null
+            trackStartedAtMs = null
+
+            // Persist as the last-played station so the auto-resume-on-launch
+            // path in App.kt can find it next time. We do this every time the
+            // station starts (not just on app exit) so a kill / crash mid-
+            // session still has a valid "last station" pointer.
+            settings.setLastStationId(stationId)
+
+            // Suppress the Ended-bridge for the brief window between
+            // setMediaItem swap and the new track's first audio frame.
+            suppressAutoAdvance = true
+
+            // Bump play_count atomically (single-statement increment) so
+            // two stations starting in rapid succession don't clobber
+            // each other's count via read-modify-write race. The delayed
+            // un-suppress is launched from inside the lock so a caller-
+            // side cancellation between the lock and any code after it
+            // can't strand the flag at `true` forever.
+            scope.launch {
+                stationRepo.bumpStationPlayCount(stationId, nowMillis())
+            }
+            scheduleClearSuppress()
+
+            advanceToNext()
         }
+    }
 
-        advanceToNext()
+    /**
+     * Schedule the [suppressAutoAdvance] flag back to false after a
+     * grace window. Always launched into [scope] from inside the
+     * mutex so caller-side cancellation can't leave the flag stuck.
+     */
+    private fun scheduleClearSuppress() {
+        scope.launch {
+            kotlinx.coroutines.delay(SUPPRESS_GRACE_MS)
+            suppressAutoAdvance = false
+        }
     }
 
     fun skipNext() {
-        advanceToNext()
+        scope.launch {
+            advanceMutex.withLock { advanceToNext() }
+        }
+    }
+
+    /**
+     * Inject [track] to play immediately after the current track. If
+     * nothing is queued (no station, no prior playTracks), starts
+     * playback with [track] as the head of an ad-hoc one-item queue.
+     */
+    fun playNext(track: Track) {
+        val q = queue
+        if (q == null) {
+            playTracks(listOf(track), startIndex = 0)
+            return
+        }
+        q.enqueueNext(track)
+    }
+
+    /**
+     * Append [track] to the end of the in-memory priority buffer. Same
+     * empty-queue fallback as [playNext]: no station active means the
+     * track just becomes the only thing.
+     */
+    fun addToQueue(track: Track) {
+        val q = queue
+        if (q == null) {
+            playTracks(listOf(track), startIndex = 0)
+            return
+        }
+        q.enqueueLast(track)
     }
 
     /**
@@ -136,17 +219,28 @@ class StationPlayback(
      */
     fun playTracks(tracks: List<Track>, startIndex: Int = 0) {
         if (tracks.isEmpty()) return
-        _currentStation.value = null
-        history.clear()
-        currentTrack = null
-        val newQueue = PlaybackQueue(
-            candidates = tracks,
-            rule = PlaybackRule(order = PlayOrder.Sequential),
-            initialSequentialCursor = startIndex.coerceIn(0, tracks.size - 1),
-        )
-        queue = newQueue
-        _candidateCount.value = newQueue.candidateCount
-        advanceToNext()
+        scope.launch {
+            advanceMutex.withLock {
+                // Record the previous track's listening session before
+                // we tear down the station context so it doesn't get
+                // silently dropped on tap-to-play from a list view.
+                recordPreviousIfAny()
+                _currentStation.value = null
+                history.clear()
+                currentTrack = null
+                trackStartedAtMs = null
+                val newQueue = PlaybackQueue(
+                    candidates = tracks,
+                    rule = PlaybackRule(order = PlayOrder.Sequential),
+                    initialSequentialCursor = startIndex.coerceIn(0, tracks.size - 1),
+                )
+                queue = newQueue
+                _candidateCount.value = newQueue.candidateCount
+                suppressAutoAdvance = true
+                scheduleClearSuppress()
+                advanceToNext()
+            }
+        }
     }
 
     /**
@@ -171,21 +265,33 @@ class StationPlayback(
             audioEngine.seekTo(0L)
             return
         }
-        playTrack(prev, recordHistory = false)
+        scope.launch {
+            advanceMutex.withLock {
+                recordPreviousIfAny()
+                playTrack(prev, recordHistory = false)
+            }
+        }
     }
 
     fun stop() {
-        // Record the in-flight track first so its listening time isn't
-        // lost; THEN clear state. Order matters — once currentStation
-        // and currentTrack are nulled, recordPreviousIfAny is a no-op.
-        recordPreviousIfAny()
-        audioEngine.stop()
-        _currentStation.value = null
-        _candidateCount.value = 0
-        queue = null
-        history.clear()
-        currentTrack = null
-        trackStartedAtMs = null
+        // Pre-clear suppression so the Ended event from audioEngine.stop()
+        // doesn't get swallowed if it ever needs to re-trigger.
+        scope.launch {
+            advanceMutex.withLock {
+                // Record the in-flight track first so its listening time isn't
+                // lost; THEN clear state. Order matters — once currentStation
+                // and currentTrack are nulled, recordPreviousIfAny is a no-op.
+                recordPreviousIfAny()
+                suppressAutoAdvance = true
+                audioEngine.stop()
+                _currentStation.value = null
+                _candidateCount.value = 0
+                queue = null
+                history.clear()
+                currentTrack = null
+                trackStartedAtMs = null
+            }
+        }
     }
 
     /**
@@ -194,11 +300,18 @@ class StationPlayback(
      * no station, or no recorded start time. The "completed" flag uses
      * the Last.fm convention of 80% playthrough — anything less is
      * counted as a skip.
+     *
+     * Idempotent: nulls out trackStartedAtMs immediately so a re-entrant
+     * call (e.g. stop() racing with a delayed Ended event) is a no-op
+     * the second time around.
      */
     private fun recordPreviousIfAny() {
         val prev = currentTrack ?: return
         val stationId = _currentStation.value?.id ?: return
         val startedAt = trackStartedAtMs ?: return
+        // Capture and immediately null so any concurrent caller short-
+        // circuits at the trackStartedAtMs == null guard above.
+        trackStartedAtMs = null
         val listenedMs = (nowMillis() - startedAt).coerceAtLeast(0L)
         val completed = prev.durationMs > 0L &&
             listenedMs >= (prev.durationMs * COMPLETION_FRACTION).toLong()
@@ -211,6 +324,10 @@ class StationPlayback(
                     completed = completed,
                     listenedMs = listenedMs,
                 )
+                // Bump the denormalized total_listen_ms column so the
+                // Stats screen's "Top stations" subtitle reflects real
+                // accumulated time without re-querying station_history.
+                stationRepo.bumpStationListenedMs(stationId, listenedMs)
             }
         }
     }
@@ -314,5 +431,11 @@ class StationPlayback(
          *  this fraction of its duration counts as a real listen rather
          *  than a skip. 0.8 (80%) is the canonical value. */
         const val COMPLETION_FRACTION = 0.8
+
+        /** How long [suppressAutoAdvance] stays raised after a station
+         *  switch / playTracks / stop. Long enough for ExoPlayer to
+         *  emit any spurious Ended from the prior media item; short
+         *  enough that a real natural-end fires through promptly. */
+        const val SUPPRESS_GRACE_MS = 600L
     }
 }

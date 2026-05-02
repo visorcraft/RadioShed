@@ -28,7 +28,7 @@ import kotlin.random.Random
  * [random] is parametric so unit tests can pin a deterministic seed.
  */
 class PlaybackQueue(
-    private val candidates: List<Track>,
+    candidates: List<Track>,
     private val rule: PlaybackRule,
     private val dislikedIds: Set<Long> = emptySet(),
     private val random: Random = Random.Default,
@@ -41,6 +41,17 @@ class PlaybackQueue(
      */
     private val artistByTrackId: Map<Long, Long> = emptyMap(),
 ) {
+
+    /**
+     * Pre-filter dislikes once at construction time and use the
+     * resulting list everywhere. Prevents an indexing mismatch where
+     * sequentialCursor referred to the unfiltered candidate list while
+     * `pool` (the actual playable set) was disliked-filtered — a
+     * `startIndex = 7` could land on the wrong track if any of the
+     * first 7 candidates was disliked. Now the cursor and pool share
+     * the same index space.
+     */
+    private val candidates: List<Track> = candidates.filter { it.id !in dislikedIds }
 
     /** Recently-played track ids, oldest first. Bounded at `2 × noRepeatDepth`. */
     private val recent: ArrayDeque<Long> = ArrayDeque()
@@ -56,6 +67,24 @@ class PlaybackQueue(
     private val recentAlbums: ArrayDeque<Long> = ArrayDeque()
 
     /**
+     * User-injected "play next" / "add to queue" buffer. Drained by
+     * [next] BEFORE consulting the rule-driven candidate pool so a
+     * tap on "Play next" is honored even on a station mid-shuffle.
+     *
+     * Insertion ergonomics:
+     *  - "Play next" → [enqueueNext] addFirst (LIFO so successive
+     *    "Play next" picks queue with the most-recently-picked first,
+     *    matching Spotify / Apple Music semantics).
+     *  - "Add to queue" → [enqueueLast] addLast (FIFO append).
+     *
+     * No-repeat / album / artist spacing buffers DO get bumped when
+     * priority items play, so they correctly affect subsequent rule-
+     * driven picks even if all the priority items came from the
+     * same album.
+     */
+    private val priority: ArrayDeque<Track> = ArrayDeque()
+
+    /**
      * Recently-picked primary-artist ids. Sized smaller than album
      * spacing because users notice "same artist twice in a row" more
      * than "same album twice in a row" — we want to be tighter here.
@@ -67,23 +96,41 @@ class PlaybackQueue(
     /** Index for sequential mode. */
     private var sequentialCursor: Int = initialSequentialCursor.coerceAtLeast(0)
 
-    val isEmpty: Boolean get() = candidates.all { it.id in dislikedIds }
+    val isEmpty: Boolean get() = candidates.isEmpty()
 
-    val candidateCount: Int get() = candidates.count { it.id !in dislikedIds }
+    val candidateCount: Int get() = candidates.size
 
     /** Pick the next track, advancing internal state. Returns null if no
      *  candidates remain (after dislikes are filtered). */
     fun next(): Track? {
+        // Priority items always come first — even if the candidate pool
+        // is empty (e.g., last station candidate just played), a queued
+        // "Play next" track still resolves.
+        if (priority.isNotEmpty()) {
+            val picked = priority.removeFirst()
+            recordPlayed(picked.id, picked.albumId, primaryArtistOf(picked))
+            return picked
+        }
         if (candidates.isEmpty()) return null
-        val pool = candidates.filter { it.id !in dislikedIds }
-        if (pool.isEmpty()) return null
-
         return when (rule.order) {
-            PlayOrder.Sequential -> nextSequential(pool)
+            PlayOrder.Sequential -> nextSequential(candidates)
             PlayOrder.Shuffle, PlayOrder.SmartShuffle, PlayOrder.WeightedRandom ->
-                nextSmartShuffle(pool)
+                nextSmartShuffle(candidates)
         }
     }
+
+    /** Inject [track] to play before the next rule-driven pick. LIFO. */
+    fun enqueueNext(track: Track) {
+        priority.addFirst(track)
+    }
+
+    /** Append [track] to the priority buffer's tail. FIFO append. */
+    fun enqueueLast(track: Track) {
+        priority.addLast(track)
+    }
+
+    /** Snapshot of the priority buffer for the UI (Up Next sheet). */
+    fun prioritySnapshot(): List<Track> = priority.toList()
 
     private fun nextSequential(pool: List<Track>): Track {
         val track = pool[sequentialCursor.coerceIn(0, pool.size - 1)]
@@ -131,18 +178,20 @@ class PlaybackQueue(
         return picked
     }
 
-    /** Last [ALBUM_SPACING] picked album ids — used to space repeats. */
+    /** Last `rule.albumSpacing` picked album ids — used to space repeats. */
     private fun effectiveAlbumAvoidSet(): Set<Long> {
-        if (recentAlbums.isEmpty()) return emptySet()
+        val depth = rule.albumSpacing.coerceAtLeast(0)
+        if (depth == 0 || recentAlbums.isEmpty()) return emptySet()
         val end = recentAlbums.size
-        val start = (end - ALBUM_SPACING).coerceAtLeast(0)
+        val start = (end - depth).coerceAtLeast(0)
         return recentAlbums.toList().subList(start, end).toSet()
     }
 
     private fun effectiveArtistAvoidSet(): Set<Long> {
-        if (recentArtists.isEmpty()) return emptySet()
+        val depth = rule.artistSpacing.coerceAtLeast(0)
+        if (depth == 0 || recentArtists.isEmpty()) return emptySet()
         val end = recentArtists.size
-        val start = (end - ARTIST_SPACING).coerceAtLeast(0)
+        val start = (end - depth).coerceAtLeast(0)
         return recentArtists.toList().subList(start, end).toSet()
     }
 
@@ -196,14 +245,17 @@ class PlaybackQueue(
         while (recent.size > cap) recent.removeFirst()
         if (albumId != null) {
             recentAlbums.addLast(albumId)
-            // Album buffer just needs to be at least ALBUM_SPACING long;
-            // 2× gives some slack so we don't fall back to immediate
-            // re-eligibility on the next pick.
-            while (recentAlbums.size > ALBUM_SPACING * 2) recentAlbums.removeFirst()
+            // 2× the spacing gives slack so we don't fall back to
+            // immediate re-eligibility on the next pick. Cap at a
+            // small floor (4) for stations with spacing=0 to avoid
+            // unbounded growth.
+            val albumCap = (rule.albumSpacing * 2).coerceAtLeast(MIN_SPACING_CAP)
+            while (recentAlbums.size > albumCap) recentAlbums.removeFirst()
         }
         if (artistId != null) {
             recentArtists.addLast(artistId)
-            while (recentArtists.size > ARTIST_SPACING * 2) recentArtists.removeFirst()
+            val artistCap = (rule.artistSpacing * 2).coerceAtLeast(MIN_SPACING_CAP)
+            while (recentArtists.size > artistCap) recentArtists.removeFirst()
         }
     }
 
@@ -224,38 +276,47 @@ class PlaybackQueue(
      * shuffle station.
      */
     fun peekUpcoming(count: Int): List<Track> {
-        if (count <= 0 || candidates.isEmpty()) return emptyList()
-        val pool = candidates.filter { it.id !in dislikedIds }
-        if (pool.isEmpty()) return emptyList()
-        return when (rule.order) {
+        if (count <= 0) return emptyList()
+        // Priority items come first — they're guaranteed to play in
+        // that order regardless of shuffle mode. Then the rule-driven
+        // preview fills the rest of the requested count.
+        val priorityHead = priority.toList().take(count)
+        val remainingCount = count - priorityHead.size
+        if (remainingCount <= 0 || candidates.isEmpty()) return priorityHead
+        val ruleSlice = when (rule.order) {
             PlayOrder.Sequential -> {
-                val n = count.coerceAtMost(pool.size)
+                val n = remainingCount.coerceAtMost(candidates.size)
                 (0 until n).map { offset ->
-                    pool[(sequentialCursor + offset) % pool.size]
+                    candidates[(sequentialCursor + offset) % candidates.size]
                 }
             }
             PlayOrder.Shuffle, PlayOrder.SmartShuffle, PlayOrder.WeightedRandom -> {
-                val avoid = effectiveAvoidSet(pool.size)
-                val available = pool.filter { it.id !in avoid }
-                available.take(count)
+                // Apply the SAME three filters as next() so the preview
+                // matches what the queue will actually pick from. Without
+                // album/artist filtering, the Up Next sheet on a heavy-
+                // shuffle station shows tracks that next() will actively
+                // skip past.
+                val avoid = effectiveAvoidSet(candidates.size)
+                val avoidAlbums = effectiveAlbumAvoidSet()
+                val avoidArtists = effectiveArtistAvoidSet()
+                val available = candidates.filter {
+                    it.id !in avoid &&
+                        it.albumId !in avoidAlbums &&
+                        primaryArtistOf(it) !in avoidArtists
+                }
+                available.take(remainingCount)
             }
         }
+        return priorityHead + ruleSlice
     }
 
     private companion object {
         const val MIN_RECENT_CAP = 16
 
-        /** How many of the most recent picks' album ids to avoid. Larger
-         *  values feel more diverse but starve small libraries. 3 is a
-         *  reasonable default that keeps "three songs from the same
-         *  album in a row" from happening without preventing the same
-         *  album from ever recurring on a small set. */
-        const val ALBUM_SPACING = 3
-
-        /** Same idea as [ALBUM_SPACING] but for artists. 2 is tighter on
-         *  purpose — listeners recognize "same artist twice" more
-         *  quickly than "same album twice" since a single artist
-         *  typically spans multiple albums in the candidate set. */
-        const val ARTIST_SPACING = 2
+        /** Lower bound for the album/artist recent-deque size so we
+         *  always retain *some* spacing memory even when a station has
+         *  spacing configured to 0. Keeps the buffer-shrink behaviour
+         *  predictable. */
+        const val MIN_SPACING_CAP = 4
     }
 }

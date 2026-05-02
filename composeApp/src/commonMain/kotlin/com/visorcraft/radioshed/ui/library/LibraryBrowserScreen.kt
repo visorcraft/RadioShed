@@ -67,7 +67,7 @@ import com.visorcraft.radioshed.domain.Album
 import com.visorcraft.radioshed.domain.Artist
 import com.visorcraft.radioshed.domain.Track
 import com.visorcraft.radioshed.stations.StationPlayback
-import com.visorcraft.radioshed.ui.playlists.AddToPlaylistSheet
+import com.visorcraft.radioshed.ui.playlists.TrackContextSheet
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
@@ -101,9 +101,15 @@ fun LibraryBrowserScreen(
     settings: SettingsStore = koinInject(),
 ) {
     val scope = rememberCoroutineScope()
-    var addToPlaylistTrackId by remember { mutableStateOf<Long?>(null) }
+    var contextTrackId by remember { mutableStateOf<Long?>(null) }
     val artists by libraryRepo.observeArtists().collectAsState(initial = emptyList())
     val albums by libraryRepo.observeAlbums().collectAsState(initial = emptyList())
+    // Re-load the eager track list and genre list whenever the total
+    // track count changes — covers the "user scanned a folder while
+    // Library was open" case. Without this trigger, allTracks stayed
+    // at whatever was loaded on first composition until the user left
+    // and re-entered the screen.
+    val trackCount by libraryRepo.observeTrackCount().collectAsState(initial = -1L)
     var allTracks by remember { mutableStateOf<List<Track>>(emptyList()) }
     var genres by remember { mutableStateOf<List<String>>(emptyList()) }
 
@@ -111,7 +117,10 @@ fun LibraryBrowserScreen(
     // become a memory issue; we'd page or virtualize then. For typical
     // libraries (<5k tracks) it's fine and lets us filter / sort in-memory
     // without re-querying the DB.
-    LaunchedEffect(Unit) {
+    LaunchedEffect(trackCount) {
+        // Initial collectAsState gives -1L; skip until SQLDelight emits
+        // the real count (≥ 0).
+        if (trackCount < 0L) return@LaunchedEffect
         allTracks = libraryRepo.listAvailableTracks(limit = 100_000L, offset = 0L)
         // Distinct genre tag values. Index already exists on track_tag(key,
         // value) so this is a fast index scan even on large libraries.
@@ -269,7 +278,7 @@ fun LibraryBrowserScreen(
                                 val idx = artistTracks.indexOf(track).coerceAtLeast(0)
                                 stationPlayback.playTracks(artistTracks, startIndex = idx)
                             },
-                            onLongPress = { track -> addToPlaylistTrackId = track.id },
+                            onLongPress = { track -> contextTrackId = track.id },
                         )
                     } else {
                         SongList(
@@ -278,7 +287,7 @@ fun LibraryBrowserScreen(
                                 val idx = sorted.indexOf(track).coerceAtLeast(0)
                                 stationPlayback.playTracks(sorted, startIndex = idx)
                             },
-                            onLongPress = { track -> addToPlaylistTrackId = track.id },
+                            onLongPress = { track -> contextTrackId = track.id },
                         )
                     }
                 }
@@ -309,10 +318,10 @@ fun LibraryBrowserScreen(
         }
     }
 
-    addToPlaylistTrackId?.let { id ->
-        AddToPlaylistSheet(
+    contextTrackId?.let { id ->
+        TrackContextSheet(
             trackId = id,
-            onDismiss = { addToPlaylistTrackId = null },
+            onDismiss = { contextTrackId = null },
         )
     }
 }

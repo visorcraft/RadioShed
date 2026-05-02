@@ -40,6 +40,15 @@ interface EqualizerController {
     fun setBand(index: Int, gainDb: Float)
     fun setEnabled(enabled: Boolean)
     fun applyPreset(preset: EqPreset)
+
+    /**
+     * Release any native audio-effect resources. Called from the
+     * media service's onDestroy. Android's `audiofx.Equalizer`
+     * holds a reference-counted native handle; leaking it
+     * eventually causes new effect instantiations to fail with
+     * `IllegalStateException: too many effects`.
+     */
+    fun release()
 }
 
 /**
@@ -72,4 +81,5 @@ class NullEqualizerController : EqualizerController {
     override fun setBand(index: Int, gainDb: Float) = Unit
     override fun setEnabled(enabled: Boolean) = Unit
     override fun applyPreset(preset: EqPreset) = Unit
+    override fun release() = Unit
 }

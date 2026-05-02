@@ -96,16 +96,22 @@ class BackupService(
         }.getOrElse {
             return RestoreResult.Failed("Backup file is corrupted: ${it.message ?: "decode failed"}")
         }
-        if (bundle.version > BackupBundle.CURRENT_VERSION) {
+        if (bundle.version < 1 || bundle.version > BackupBundle.CURRENT_VERSION) {
             return RestoreResult.Failed(
-                "Backup format version ${bundle.version} is newer than this app supports.",
+                "Backup format version ${bundle.version} is incompatible with this app " +
+                    "(supported: 1..${BackupBundle.CURRENT_VERSION}).",
             )
         }
 
         var stationsAdded = 0
         bundle.stations.forEach { s ->
             runCatching {
-                stationRepo.insert(
+                // StationRepository.insert returns the new row's id via
+                // RETURNING. Use it directly to set the pinned flag —
+                // the previous "list().lastOrNull { name == s.name }"
+                // pattern silently picked the wrong row when names
+                // collided.
+                val newId = stationRepo.insert(
                     name = s.name,
                     source = RadioShedJson.decodeFromString(s.sourceJson),
                     playback = RadioShedJson.decodeFromString(s.playbackJson),
@@ -116,9 +122,7 @@ class BackupService(
                     isBuiltIn = false,
                 )
                 if (s.isPinned) {
-                    // Newly-inserted id isn't returned in the same row; refetch.
-                    val match = stationRepo.list().lastOrNull { it.name == s.name }
-                    match?.let { stationRepo.setPinned(it.id, true) }
+                    stationRepo.setPinned(newId, true)
                 }
                 stationsAdded += 1
             }

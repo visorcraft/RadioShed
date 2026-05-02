@@ -62,6 +62,35 @@ UPDATE station SET name = ?, color = ?, icon = ?, artwork_uri = ?, custom_subtit
 updateStationStats:
 UPDATE station SET play_count = ?, last_played_at = ?, total_listen_ms = ?, skip_rate = ?, updated_at = ? WHERE id = ?;
 
+-- Atomic +1 increment on play_count + last_played_at refresh. Race-
+-- safe across concurrent station starts (two read-modify-write callers
+-- would clobber each other; this single statement can't).
+bumpStationPlayCount:
+UPDATE station SET
+    play_count = play_count + 1,
+    last_played_at = ?,
+    updated_at = ?
+WHERE id = ?;
+
+-- Atomic accumulation of listened time (called per-track-end).
+bumpStationListenedMs:
+UPDATE station SET
+    total_listen_ms = total_listen_ms + ?,
+    updated_at = ?
+WHERE id = ?;
+
+-- Wipe denormalized per-station counters. Paired with clearAllHistory
+-- so the Stats screen's Top Stations section actually resets when
+-- the user clears history (Top Stations reads station.play_count, not
+-- station_history aggregates).
+resetAllStationStats:
+UPDATE station SET
+    play_count = 0,
+    last_played_at = NULL,
+    total_listen_ms = 0,
+    skip_rate = 0.0,
+    updated_at = ?;
+
 reorderStation:
 UPDATE station SET sort_position = ?, updated_at = ? WHERE id = ?;
 

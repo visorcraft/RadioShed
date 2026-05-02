@@ -104,13 +104,15 @@ class RadioShedMediaSessionService : MediaLibraryService() {
                 }
             },
             onSkipPrevious = {
-                // For now skip-previous restarts the current track (Spotify-
-                // style: tap once = restart). True history-aware previous
-                // requires tracking played history in StationPlayback —
-                // future work. seekTo(0) on the underlying ExoPlayer is the
-                // right escape hatch since ForwardingPlayer.seekToPrevious
-                // is overridden above.
-                exoPlayer.seekTo(0)
+                // Route through StationPlayback for full Spotify-style
+                // semantics: > 3s into the track restarts; otherwise pops
+                // history. Previously this was a `seekTo(0)` shortcut
+                // that broke "back to actually previous" on Auto / lock
+                // screen / Bluetooth — they got a restart-only behaviour
+                // that didn't match the in-app NowPlaying experience.
+                runCatching {
+                    GlobalContext.get().get<StationPlayback>().skipPrevious()
+                }
             },
         )
 
@@ -147,6 +149,12 @@ class RadioShedMediaSessionService : MediaLibraryService() {
         // don't leak a non-functional notification.
         val player = librarySession?.player
         if (player == null || !player.playWhenReady) {
+            // Cancel the sleep timer ticker before stopping the player —
+            // otherwise the fade ramp keeps calling into a controller
+            // that's about to be released.
+            runCatching {
+                GlobalContext.get().get<com.visorcraft.radioshed.audio.SleepTimer>().cancel()
+            }
             player?.stop()
             stopSelf()
         }
@@ -154,6 +162,20 @@ class RadioShedMediaSessionService : MediaLibraryService() {
     }
 
     override fun onDestroy() {
+        // Tear down the equalizer + sleep timer FIRST. The equalizer
+        // holds a native AudioEffect reference scoped to ExoPlayer's
+        // audio session; releasing the player without first releasing
+        // the effect can leak the native handle. The sleep timer's
+        // ticker calls into `audioEngine.setVolume`, which would throw
+        // IllegalStateException on a released MediaController if we
+        // didn't cancel it here.
+        runCatching {
+            val ctrl = GlobalContext.get().get<com.visorcraft.radioshed.audio.EqualizerController>()
+            ctrl.release()
+        }
+        runCatching {
+            GlobalContext.get().get<com.visorcraft.radioshed.audio.SleepTimer>().cancel()
+        }
         librarySession?.run {
             player.release()
             release()

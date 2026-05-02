@@ -9,6 +9,7 @@ import com.visorcraft.radioshed.domain.Personnel
 import com.visorcraft.radioshed.domain.Tag
 import com.visorcraft.radioshed.domain.Track
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 
@@ -178,6 +179,16 @@ class LibraryRepository(private val db: RadioShedDatabase) {
         acoustidFingerprint: String? = null,
         cueOffsetStartMs: Long? = null,
         cueOffsetEndMs: Long? = null,
+        /**
+         * Optional artist links + custom tags + personnel applied
+         * inside the same transaction as the track upsert. Wrapping
+         * everything atomically prevents a window where the track row
+         * exists but its artist links don't (which made
+         * `selectTopPlayedArtists` silently miss those plays).
+         */
+        artistIdsAndRoles: List<Pair<Long, String>>? = null,
+        customTags: List<Tag>? = null,
+        personnel: List<Personnel>? = null,
     ): Long = withContext(IODispatcher) {
         db.transactionWithResult {
             val now = nowMillis()
@@ -210,6 +221,39 @@ class LibraryRepository(private val db: RadioShedDatabase) {
             val trackId = db.libraryQueries.selectTrackIdByPath(path).executeAsOne()
             if (folderId != null) {
                 db.libraryQueries.addTrackToFolder(trackId, folderId)
+            }
+            if (artistIdsAndRoles != null) {
+                db.libraryQueries.unlinkAllArtistsFromTrack(trackId)
+                artistIdsAndRoles.forEachIndexed { index, (artistId, role) ->
+                    db.libraryQueries.linkTrackArtist(
+                        trackId,
+                        artistId,
+                        role,
+                        index.toLong(),
+                    )
+                }
+            }
+            if (customTags != null) {
+                db.libraryQueries.deleteAllTagsForTrack(trackId)
+                customTags.forEach { tag ->
+                    db.libraryQueries.insertTrackTag(
+                        trackId,
+                        tag.key,
+                        tag.value,
+                        tag.position.toLong(),
+                    )
+                }
+            }
+            if (personnel != null) {
+                db.libraryQueries.deleteAllPersonnelForTrack(trackId)
+                personnel.forEach { p ->
+                    db.libraryQueries.insertTrackPersonnel(
+                        trackId,
+                        p.role,
+                        p.name,
+                        p.position.toLong(),
+                    )
+                }
             }
             trackId
         }
@@ -276,6 +320,19 @@ class LibraryRepository(private val db: RadioShedDatabase) {
     suspend fun countTracks(): Long = withContext(IODispatcher) {
         db.libraryQueries.countTracks().executeAsOne()
     }
+
+    /**
+     * Live track count. Used as a "library has changed" signal by
+     * screens (Library Browser) that load track lists eagerly and
+     * need to refresh when a scan adds rows. Counter-based rather
+     * than direct list observation because the in-memory list of
+     * 50k tracks is too heavy for a Flow without pagination.
+     */
+    fun observeTrackCount(): Flow<Long> =
+        db.libraryQueries.countTracks()
+            .asFlow()
+            .map { it.executeAsOne() }
+            .flowOn(IODispatcher)
 
     // ---- Track ↔ Artist ----
 

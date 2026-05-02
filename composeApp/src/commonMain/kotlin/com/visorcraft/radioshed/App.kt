@@ -55,6 +55,20 @@ fun App(
             if (settings.isOnboardingComplete()) AppScreen.Home else AppScreen.Onboarding
         }
         var current by remember { mutableStateOf<AppScreen>(startScreen) }
+        // Track the screen the user came from when they opened
+        // NowPlaying so Close / Back can return there instead of
+        // unconditionally collapsing to Stations. Reset to null any
+        // time we leave NowPlaying — we only need it for that one
+        // round-trip.
+        var nowPlayingReturnTo by remember { mutableStateOf<AppScreen?>(null) }
+        // Wrap navigation so any transition INTO NowPlaying records
+        // the source screen. Other screens use plain `current = ...`.
+        val navTo: (AppScreen) -> Unit = { target ->
+            if (target == AppScreen.NowPlaying && current != AppScreen.NowPlaying) {
+                nowPlayingReturnTo = current
+            }
+            current = target
+        }
 
         // Auto-resume the last station once per process lifetime — gated
         // by an opt-in setting (off by default). LaunchedEffect(Unit)
@@ -84,9 +98,19 @@ fun App(
         // NowPlaying is full-bleed — it intentionally bypasses the MiniPlayer
         // strip below since it IS the expanded player.
         if (current == AppScreen.NowPlaying) {
-            PlatformBackHandler { current = AppScreen.Stations }
+            // Return to wherever the user opened NowPlaying from, falling
+            // back to Stations if no source was tracked (e.g. opened via
+            // an external intent or quick-tile in the future).
+            val back = nowPlayingReturnTo ?: AppScreen.Stations
+            PlatformBackHandler {
+                current = back
+                nowPlayingReturnTo = null
+            }
             NowPlayingScreen(
-                onClose = { current = AppScreen.Stations },
+                onClose = {
+                    current = back
+                    nowPlayingReturnTo = null
+                },
                 onOpenLyrics = { current = AppScreen.Lyrics },
                 onOpenAlbum = { id -> current = AppScreen.AlbumDetail(id) },
                 onOpenArtist = { id -> current = AppScreen.ArtistDetail(id) },
@@ -239,27 +263,26 @@ fun App(
                         PlatformBackHandler { current = AppScreen.Home }
                         StationsHomeScreen(
                             onBack = { current = AppScreen.Home },
-                            onOpenNowPlaying = { current = AppScreen.NowPlaying },
+                            onOpenNowPlaying = { navTo(AppScreen.NowPlaying) },
                             onAddStation = { current = AppScreen.NewStation },
                             onEditStation = { id -> current = AppScreen.EditStation(id) },
                         )
                     }
 
+                    // The following branches are handled at the outer
+                    // level before this `when` is even reached (see the
+                    // `if (current == ...)` checks above the Column);
+                    // we still need the exhaustive cases so the sealed-
+                    // class check passes.
                     AppScreen.Onboarding,
                     AppScreen.NowPlaying,
                     AppScreen.Lyrics,
                     AppScreen.NewStation,
                     is AppScreen.EditStation,
-                    -> Unit  // handled above (NowPlaying / editor / onboarding)
-
-                    // already handled above
-                    is AppScreen.AlbumDetail,
-                    is AppScreen.ArtistDetail,
-                    is AppScreen.GenreDetail,
                     -> Unit
                 }
             }
-            MiniPlayer(onExpand = { current = AppScreen.NowPlaying })
+            MiniPlayer(onExpand = { navTo(AppScreen.NowPlaying) })
         }
     }
 }

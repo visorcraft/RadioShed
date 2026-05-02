@@ -81,11 +81,15 @@ fun AppSettingsScreen(
     settings: SettingsStore = koinInject(),
     artworkSync: MissingArtworkSync = koinInject(),
 ) {
-    var reduceMotion by remember { mutableStateOf(settings.getReduceMotion()) }
-    var replayGain by remember { mutableStateOf(settings.getReplayGainEnabled()) }
-    var preampDb by remember { mutableStateOf(settings.getReplayGainPreampDb()) }
-    var autoResume by remember { mutableStateOf(settings.getAutoResumeLastStation()) }
-    var driveMode by remember { mutableStateOf(settings.getDriveMode()) }
+    // Re-read settings on every recomposition into local state so they
+    // re-render correctly when this screen is reopened (the user might
+    // have changed a value in another tab via a quick-tile or backup-
+    // restore). `remember(Unit)` would freeze them at first composition.
+    var reduceMotion by remember(settings) { mutableStateOf(settings.getReduceMotion()) }
+    var replayGain by remember(settings) { mutableStateOf(settings.getReplayGainEnabled()) }
+    var preampDb by remember(settings) { mutableStateOf(settings.getReplayGainPreampDb()) }
+    var autoResume by remember(settings) { mutableStateOf(settings.getAutoResumeLastStation()) }
+    var driveMode by remember(settings) { mutableStateOf(settings.getDriveMode()) }
     var artworkState by remember { mutableStateOf<ArtworkSyncState>(ArtworkSyncState.Idle) }
     var artworkJob by remember { mutableStateOf<Job?>(null) }
     val scope = rememberCoroutineScope()
