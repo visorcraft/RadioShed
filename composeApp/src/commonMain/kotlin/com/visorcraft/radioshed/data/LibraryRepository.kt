@@ -125,8 +125,18 @@ class LibraryRepository(private val db: RadioShedDatabase) {
      * is expected to call [setArtistsForTrack], [setTagsForTrack], etc. afterwards
      * to refresh metadata that may have changed in the underlying file.
      */
+    /**
+     * Upsert a track and (optionally) link it to [folderId] in one
+     * transaction. Pass folderId=null to upsert the track without
+     * touching its folder membership — useful when something other than
+     * the scanner writes a track row.
+     *
+     * Schema v2: a track can belong to multiple folders (junction table
+     * `track_folder`). Subsequent calls with different folderIds for the
+     * same track add additional folder memberships rather than overwriting.
+     */
     suspend fun upsertTrack(
-        folderId: Long,
+        folderId: Long?,
         path: String,
         fileName: String,
         fileSize: Long,
@@ -153,7 +163,6 @@ class LibraryRepository(private val db: RadioShedDatabase) {
         db.transactionWithResult {
             val now = nowMillis()
             db.libraryQueries.upsertTrack(
-                folder_id = folderId,
                 path = path,
                 file_name = fileName,
                 file_size = fileSize,
@@ -179,9 +188,32 @@ class LibraryRepository(private val db: RadioShedDatabase) {
                 added_at = now,
                 updated_at = now,
             )
-            db.libraryQueries.selectTrackIdByPath(path).executeAsOne()
+            val trackId = db.libraryQueries.selectTrackIdByPath(path).executeAsOne()
+            if (folderId != null) {
+                db.libraryQueries.addTrackToFolder(trackId, folderId)
+            }
+            trackId
         }
     }
+
+    /** Add a track ↔ folder membership. INSERT OR IGNORE; safe to re-run. */
+    suspend fun addTrackToFolder(trackId: Long, folderId: Long) = withContext(IODispatcher) {
+        db.libraryQueries.addTrackToFolder(trackId, folderId)
+    }
+
+    /**
+     * Bulk variant: pass the track ids to register with [folderId] as a
+     * Set/List, persists in one transaction. Used by the scanner when
+     * scanning a folder that overlaps with a previously-scanned one and
+     * we want to claim tracks the file walker discovered without re-
+     * upserting their full metadata.
+     */
+    suspend fun addTracksToFolder(trackIds: Collection<Long>, folderId: Long) =
+        withContext(IODispatcher) {
+            db.transaction {
+                trackIds.forEach { db.libraryQueries.addTrackToFolder(it, folderId) }
+            }
+        }
 
     suspend fun getTrackById(id: Long): Track? = withContext(IODispatcher) {
         db.libraryQueries.selectTrackById(id).executeAsOneOrNull()?.toDomain()

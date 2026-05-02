@@ -31,7 +31,6 @@ CREATE INDEX album_sort_idx ON album(sort_title);
 
 CREATE TABLE track (
     id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-    folder_id INTEGER NOT NULL REFERENCES folder(id) ON DELETE CASCADE,
     path TEXT NOT NULL UNIQUE,
     file_name TEXT NOT NULL,
     file_size INTEGER NOT NULL,
@@ -59,11 +58,28 @@ CREATE TABLE track (
     updated_at INTEGER NOT NULL
 );
 
-CREATE INDEX track_folder_idx ON track(folder_id);
 CREATE INDEX track_album_idx ON track(album_id);
 CREATE INDEX track_added_idx ON track(added_at);
 CREATE INDEX track_format_idx ON track(format);
 CREATE INDEX track_available_idx ON track(is_available);
+
+-- Track ↔ Folder junction. Many-to-many because a single audio file can be
+-- inside multiple registered folders simultaneously (e.g. user registers
+-- both `/Music` and `/Music/Rock` — every Rock track belongs to both, and
+-- a station scoped to either folder should include it). Replaces the
+-- single `track.folder_id` column from v1, which silently moved tracks
+-- between folders depending on scan order.
+--
+-- ON DELETE CASCADE on both sides: deleting a track or a folder cleanly
+-- removes its junction entries. Deleting a folder NEVER deletes tracks
+-- anymore — they may still be referenced from other registered folders.
+CREATE TABLE track_folder (
+    track_id INTEGER NOT NULL REFERENCES track(id) ON DELETE CASCADE,
+    folder_id INTEGER NOT NULL REFERENCES folder(id) ON DELETE CASCADE,
+    PRIMARY KEY (track_id, folder_id)
+);
+
+CREATE INDEX track_folder_folder_idx ON track_folder(folder_id);
 
 CREATE TABLE track_artist (
     track_id INTEGER NOT NULL REFERENCES track(id) ON DELETE CASCADE,
@@ -172,16 +188,15 @@ DELETE FROM album WHERE id = ?;
 -- is by definition available, so is_available resets to 1.
 upsertTrack:
 INSERT INTO track (
-    folder_id, path, file_name, file_size, file_ctime, file_mtime,
+    path, file_name, file_size, file_ctime, file_mtime,
     title, album_id, track_number, disc_number, duration_ms,
     bitrate_kbps, sample_rate_hz, channels, format,
     replay_gain_track, replay_gain_album, replay_gain_track_peak,
     bpm, musicbrainz_id, acoustid_fingerprint,
     cue_offset_start_ms, cue_offset_end_ms,
     added_at, updated_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(path) DO UPDATE SET
-    folder_id = excluded.folder_id,
     file_name = excluded.file_name,
     file_size = excluded.file_size,
     file_ctime = excluded.file_ctime,
@@ -216,7 +231,19 @@ selectTrackByPath:
 SELECT * FROM track WHERE path = ?;
 
 selectTracksByFolder:
-SELECT * FROM track WHERE folder_id = ? ORDER BY path;
+SELECT track.* FROM track
+JOIN track_folder tf ON tf.track_id = track.id
+WHERE tf.folder_id = ?
+ORDER BY track.path;
+
+-- Multi-folder selector (used by SourceRule.FolderSelector). Returns each
+-- track at most once even if it belongs to several of the requested
+-- folders.
+selectTracksByFolderIds:
+SELECT DISTINCT track.* FROM track
+JOIN track_folder tf ON tf.track_id = track.id
+WHERE tf.folder_id IN ?
+ORDER BY track.path;
 
 selectTracksByAlbum:
 SELECT * FROM track WHERE album_id = ? ORDER BY disc_number, track_number;
@@ -258,13 +285,14 @@ countTracks:
 SELECT COUNT(*) FROM track;
 
 countTracksInFolder:
-SELECT COUNT(*) FROM track WHERE folder_id = ?;
+SELECT COUNT(DISTINCT track_id) FROM track_folder WHERE folder_id = ?;
 
 setTrackAvailable:
 UPDATE track SET is_available = ?, updated_at = ? WHERE id = ?;
 
 setTracksAvailableByFolder:
-UPDATE track SET is_available = ?, updated_at = ? WHERE folder_id = ?;
+UPDATE track SET is_available = ?, updated_at = ?
+WHERE id IN (SELECT track_id FROM track_folder WHERE folder_id = ?);
 
 updateTrackReplayGain:
 UPDATE track SET replay_gain_track = ?, replay_gain_album = ?, replay_gain_track_peak = ?, updated_at = ? WHERE id = ?;
@@ -272,8 +300,28 @@ UPDATE track SET replay_gain_track = ?, replay_gain_album = ?, replay_gain_track
 deleteTrackById:
 DELETE FROM track WHERE id = ?;
 
+-- Removes the folder's claim on its tracks. Tracks themselves stay (they
+-- may still be referenced from other registered folders); orphan-cleanup
+-- of tracks with no remaining track_folder rows is a separate optional
+-- maintenance pass. ON DELETE CASCADE on track_folder.folder_id makes
+-- this query a no-op when called as part of folder deletion — it's
+-- here for explicit "remove from this folder" use cases.
 deleteTracksByFolder:
-DELETE FROM track WHERE folder_id = ?;
+DELETE FROM track_folder WHERE folder_id = ?;
+
+-- Junction-table writes. Called by the scanner once per discovered track
+-- per folder being scanned; INSERT OR IGNORE so re-scans don't error on
+-- the existing PK.
+addTrackToFolder:
+INSERT OR IGNORE INTO track_folder (track_id, folder_id) VALUES (?, ?);
+
+removeTrackFromFolder:
+DELETE FROM track_folder WHERE track_id = ? AND folder_id = ?;
+
+-- How many folders does this track currently live in? Useful for orphan
+-- cleanup decisions.
+countFoldersForTrack:
+SELECT COUNT(*) FROM track_folder WHERE track_id = ?;
 
 -- ==== Track-artist junction ====
 

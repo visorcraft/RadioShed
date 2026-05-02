@@ -5,7 +5,6 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class Track(
     val id: Long,
-    val folderId: Long,
     val path: String,
     val fileName: String,
     val fileSize: Long,

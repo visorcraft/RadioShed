@@ -26,7 +26,6 @@ import com.visorcraft.radioshed.db.Track_tag as TrackTagRow
 
 internal fun TrackRow.toDomain(): Track = Track(
     id = id,
-    folderId = folder_id,
     path = path,
     fileName = file_name,
     fileSize = file_size,

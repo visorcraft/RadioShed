@@ -41,6 +41,7 @@ import com.visorcraft.radioshed.data.FolderRepository
 import com.visorcraft.radioshed.permissions.StoragePermissions
 import com.visorcraft.radioshed.scanner.ScanProgress
 import com.visorcraft.radioshed.scanner.Scanner
+import com.visorcraft.radioshed.ui.library.FolderBrowserDialog
 import com.visorcraft.radioshed.ui.util.OnResume
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
@@ -466,11 +467,15 @@ private fun FolderStep(
     onFolderNameChange: (String) -> Unit,
     error: String?,
 ) {
+    var browserOpen by remember { mutableStateOf(false) }
+    val bodyCopy = "Tap Browse to pick a folder, or type a path manually if you know it. " +
+        "Most music libraries live under /storage/emulated/0/Music or on an SD card."
+
     if (isWide) {
         TwoPaneStep(
             title = "Add a music folder",
             subtitle = null,
-            body = "Type a path to a folder containing your music. /storage/emulated/0/Music is a common default. (A native folder picker lands in a follow-up.)",
+            body = bodyCopy,
             titleStyle = MaterialTheme.typography.displaySmall,
             titleColor = MaterialTheme.colorScheme.onBackground,
             rightContent = {
@@ -478,6 +483,10 @@ private fun FolderStep(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
+                    Button(
+                        onClick = { browserOpen = true },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text("Browse for folder…") }
                     OutlinedTextField(
                         value = folderPath,
                         onValueChange = onFolderPathChange,
@@ -502,46 +511,72 @@ private fun FolderStep(
                 }
             },
         )
-        return
-    }
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(
-            "Add a music folder",
-            style = MaterialTheme.typography.headlineSmall,
-            color = MaterialTheme.colorScheme.onBackground,
-        )
-        Spacer(Modifier.height(16.dp))
-        Text(
-            "Type a path to a folder containing your music. /storage/emulated/0/Music is a common default. (Folder picker UI lands in a follow-up.)",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f),
-            textAlign = TextAlign.Center,
-            modifier = Modifier.widthIn(max = 480.dp),
-        )
-        Spacer(Modifier.height(24.dp))
-        OutlinedTextField(
-            value = folderPath,
-            onValueChange = onFolderPathChange,
-            label = { Text("Folder path") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth().widthIn(max = 480.dp),
-        )
-        Spacer(Modifier.height(8.dp))
-        OutlinedTextField(
-            value = folderName,
-            onValueChange = onFolderNameChange,
-            label = { Text("Display name") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth().widthIn(max = 480.dp),
-        )
-        error?.let {
-            Spacer(Modifier.height(12.dp))
+    } else {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
-                it,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error,
+                "Add a music folder",
+                style = MaterialTheme.typography.headlineSmall,
+                color = MaterialTheme.colorScheme.onBackground,
             )
+            Spacer(Modifier.height(16.dp))
+            Text(
+                bodyCopy,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.widthIn(max = 480.dp),
+            )
+            Spacer(Modifier.height(20.dp))
+            Button(
+                onClick = { browserOpen = true },
+                modifier = Modifier.fillMaxWidth().widthIn(max = 480.dp),
+            ) { Text("Browse for folder…") }
+            Spacer(Modifier.height(12.dp))
+            OutlinedTextField(
+                value = folderPath,
+                onValueChange = onFolderPathChange,
+                label = { Text("Folder path") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth().widthIn(max = 480.dp),
+            )
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                value = folderName,
+                onValueChange = onFolderNameChange,
+                label = { Text("Display name") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth().widthIn(max = 480.dp),
+            )
+            error?.let {
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
         }
+    }
+
+    if (browserOpen) {
+        // Start the browser at the parent of whatever's currently typed in,
+        // so the user sees neighbors of the pre-fill (e.g. opens at
+        // /storage/emulated/0 with /Music, /Pictures, /Download visible
+        // as options).
+        val startPath = folderPath.substringBeforeLast('/').ifBlank { "/storage" }
+        FolderBrowserDialog(
+            initialPath = startPath,
+            onSelect = { picked ->
+                onFolderPathChange(picked)
+                // Auto-fill display name from picked dir, but only if the
+                // user hasn't already customized it.
+                if (folderName.isBlank()) {
+                    onFolderNameChange(picked.substringAfterLast('/').ifBlank { picked })
+                }
+                browserOpen = false
+            },
+            onDismiss = { browserOpen = false },
+        )
     }
 }
 

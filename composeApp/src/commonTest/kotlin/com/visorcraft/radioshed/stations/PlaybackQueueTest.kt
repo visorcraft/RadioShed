@@ -16,7 +16,6 @@ class PlaybackQueueTest {
     private fun track(id: Long, title: String = "T$id", ctime: Long = id * 1000L): Track =
         Track(
             id = id,
-            folderId = 1L,
             path = "/x/$id.mp3",
             fileName = "$id.mp3",
             fileSize = 1L,
