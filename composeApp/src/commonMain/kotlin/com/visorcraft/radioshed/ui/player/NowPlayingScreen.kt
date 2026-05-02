@@ -2,6 +2,7 @@ package com.visorcraft.radioshed.ui.player
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -31,6 +33,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarHalf
 import androidx.compose.material.icons.outlined.StarOutline
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -545,34 +548,76 @@ private fun BigIconButton(
 
 @Composable
 private fun RatingRow(current: Double, onRate: (Double) -> Unit) {
+    // Half-star precision: each star is split into two 24dp-wide tap zones.
+    // Tapping the LEFT half sets rating to (n - 0.5), RIGHT half sets to n.
+    // Tapping the same value you've already given clears the rating.
+    // Display rules per star n:
+    //   current >= n          → Filled
+    //   current >= n - 0.5    → Half
+    //   else                   → Outlined
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        (1..5).forEach { star ->
-            val filled = star <= current
-            TextButton(
-                onClick = {
-                    // Tap on the same star you've already given clears the rating.
-                    val newValue = if (current == star.toDouble()) 0.0 else star.toDouble()
-                    onRate(newValue)
-                },
+        (1..5).forEach { n ->
+            val nDouble = n.toDouble()
+            val halfValue = nDouble - 0.5
+            val starState = when {
+                current >= nDouble -> StarState.Full
+                current >= halfValue -> StarState.Half
+                else -> StarState.Empty
+            }
+            // Each star occupies one 48dp box. Inside, we render the icon
+            // centered, then overlay TWO transparent tap zones (left half
+            // → half-star value, right half → full-star value). Compose
+            // dispatches taps to the topmost composable, so the overlay
+            // wins.
+            Box(
                 modifier = Modifier
                     .size(48.dp)
-                    .semantics { contentDescription = "$star star${if (star == 1) "" else "s"}" },
+                    .semantics { contentDescription = "Rating star $n" },
+                contentAlignment = Alignment.Center,
             ) {
                 Icon(
-                    imageVector = if (filled) Icons.Filled.Star else Icons.Outlined.StarOutline,
+                    imageVector = when (starState) {
+                        StarState.Full -> Icons.Filled.Star
+                        StarState.Half -> Icons.Filled.StarHalf
+                        StarState.Empty -> Icons.Outlined.StarOutline
+                    },
                     contentDescription = null,
-                    modifier = Modifier.size(28.dp),
-                    tint = if (filled) MaterialTheme.colorScheme.primary
-                           else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f),
+                    modifier = Modifier.size(32.dp),
+                    tint = when (starState) {
+                        StarState.Empty -> MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f)
+                        else -> MaterialTheme.colorScheme.primary
+                    },
                 )
+                Row(modifier = Modifier.fillMaxSize()) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .clickable {
+                                val target = if (current == halfValue) 0.0 else halfValue
+                                onRate(target)
+                            },
+                    )
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .clickable {
+                                val target = if (current == nDouble) 0.0 else nDouble
+                                onRate(target)
+                            },
+                    )
+                }
             }
         }
     }
 }
+
+private enum class StarState { Empty, Half, Full }
 
 private fun stationAccent(packedColor: Int?): Color {
     if (packedColor == null || packedColor == 0) return Color(0xFFFF7F1A) // brand amber default

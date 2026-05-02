@@ -172,6 +172,23 @@ SELECT COUNT(*) FROM album;
 updateAlbumArtwork:
 UPDATE album SET artwork_uri = ?, updated_at = ? WHERE id = ?;
 
+-- Albums whose embedded scan didn't find art but which DO carry a
+-- MusicBrainz Release ID (extracted from the file's tags). These are
+-- the candidates for Cover Art Archive auto-fetch — we already know the
+-- exact release, so no MusicBrainz search step is needed.
+selectAlbumsMissingArtwork:
+SELECT id, musicbrainz_id FROM album
+WHERE musicbrainz_id IS NOT NULL
+  AND TRIM(musicbrainz_id) != ''
+  AND (artwork_uri IS NULL OR TRIM(artwork_uri) = '')
+ORDER BY id;
+
+countAlbumsMissingArtwork:
+SELECT COUNT(*) FROM album
+WHERE musicbrainz_id IS NOT NULL
+  AND TRIM(musicbrainz_id) != ''
+  AND (artwork_uri IS NULL OR TRIM(artwork_uri) = '');
+
 updateAlbumTrackCount:
 UPDATE album SET track_count = ?, updated_at = ? WHERE id = ?;
 

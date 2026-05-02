@@ -14,6 +14,7 @@ import com.visorcraft.radioshed.data.SettingsStore
 import com.visorcraft.radioshed.nav.AppScreen
 import com.visorcraft.radioshed.nav.PlatformBackHandler
 import com.visorcraft.radioshed.ui.home.HomeScreen
+import com.visorcraft.radioshed.ui.library.LibraryBrowserScreen
 import com.visorcraft.radioshed.ui.library.LibrarySettingsScreen
 import com.visorcraft.radioshed.ui.onboarding.OnboardingScreen
 import com.visorcraft.radioshed.ui.player.MiniPlayer
@@ -83,15 +84,23 @@ fun App(settings: SettingsStore = koinInject()) {
             Box(modifier = Modifier.weight(1f)) {
                 when (current) {
                     AppScreen.Home -> HomeScreen(
-                        onLibrary = { current = AppScreen.LibrarySettings },
+                        onLibrary = { current = AppScreen.Library },
                         onSearch = { current = AppScreen.Search },
                         onStations = { current = AppScreen.Stations },
                         onSettings = { current = AppScreen.AppSettings },
                     )
 
-                    AppScreen.LibrarySettings -> {
+                    AppScreen.Library -> {
                         PlatformBackHandler { current = AppScreen.Home }
-                        LibrarySettingsScreen(onBack = { current = AppScreen.Home })
+                        LibraryBrowserScreen(
+                            onBack = { current = AppScreen.Home },
+                            onManage = { current = AppScreen.LibrarySettings },
+                        )
+                    }
+
+                    AppScreen.LibrarySettings -> {
+                        PlatformBackHandler { current = AppScreen.Library }
+                        LibrarySettingsScreen(onBack = { current = AppScreen.Library })
                     }
 
                     AppScreen.AppSettings -> {
@@ -122,7 +131,7 @@ fun App(settings: SettingsStore = koinInject()) {
                     AppScreen.NowPlaying,
                     AppScreen.NewStation,
                     is AppScreen.EditStation,
-                    -> Unit  // handled above
+                    -> Unit  // handled above (NowPlaying / editor / onboarding)
                 }
             }
             MiniPlayer(onExpand = { current = AppScreen.NowPlaying })

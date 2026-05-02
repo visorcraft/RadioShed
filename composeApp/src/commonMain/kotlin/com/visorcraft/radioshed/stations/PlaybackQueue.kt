@@ -32,13 +32,14 @@ class PlaybackQueue(
     private val rule: PlaybackRule,
     private val dislikedIds: Set<Long> = emptySet(),
     private val random: Random = Random.Default,
+    initialSequentialCursor: Int = 0,
 ) {
 
     /** Recently-played track ids, oldest first. Bounded at `2 × noRepeatDepth`. */
     private val recent: ArrayDeque<Long> = ArrayDeque()
 
     /** Index for sequential mode. */
-    private var sequentialCursor: Int = 0
+    private var sequentialCursor: Int = initialSequentialCursor.coerceAtLeast(0)
 
     val isEmpty: Boolean get() = candidates.all { it.id in dislikedIds }
 

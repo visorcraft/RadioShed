@@ -108,6 +108,25 @@ class LibraryRepository(private val db: RadioShedDatabase) {
         db.libraryQueries.updateAlbumArtwork(artworkUri, nowMillis(), id)
     }
 
+    /**
+     * Albums that have a MusicBrainz Release ID embedded in their tags
+     * but no artwork on disk yet. Used by Cover Art Archive sync.
+     * Returns (albumId, mbid) pairs.
+     */
+    suspend fun albumsMissingArtwork(): List<Pair<Long, String>> = withContext(IODispatcher) {
+        // The SQL query already filters out NULL/blank mbids so the column
+        // comes back non-null, but we still drop pure-whitespace defensively.
+        db.libraryQueries.selectAlbumsMissingArtwork().executeAsList()
+            .mapNotNull { row ->
+                val mbid = row.musicbrainz_id.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                row.id to mbid
+            }
+    }
+
+    suspend fun countAlbumsMissingArtwork(): Long = withContext(IODispatcher) {
+        db.libraryQueries.countAlbumsMissingArtwork().executeAsOne()
+    }
+
     suspend fun setAlbumTrackCount(id: Long, trackCount: Long) = withContext(IODispatcher) {
         db.libraryQueries.updateAlbumTrackCount(trackCount, nowMillis(), id)
     }

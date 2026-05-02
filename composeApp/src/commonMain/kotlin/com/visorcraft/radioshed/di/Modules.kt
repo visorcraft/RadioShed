@@ -18,6 +18,7 @@ import com.visorcraft.radioshed.data.StationRepository
 import com.visorcraft.radioshed.data.WidgetConfigRepository
 import com.visorcraft.radioshed.db.RadioShedDatabase
 import com.visorcraft.radioshed.scanner.Scanner
+import com.visorcraft.radioshed.source.MissingArtworkSync
 import com.visorcraft.radioshed.stations.PresetSeeder
 import com.visorcraft.radioshed.stations.SourceRuleEvaluator
 import com.visorcraft.radioshed.stations.StationPlayback
@@ -52,6 +53,10 @@ val sharedModule: Module = module {
 
     // Phase 3: scanner. FileEnumerator + TagReader come from platformModule.
     single { Scanner(get(), get(), get(), get(), get()) }
+
+    // Cover Art Archive sweep. CoverArtFetcher is platform-specific
+    // (Android uses HttpURLConnection; iOS is a Null stub for now).
+    single { MissingArtworkSync(get(), get(), get()) }
 
     // Phase 5: stations engine. AudioEngine comes from platformModule.
     single { SourceRuleEvaluator(get(), get(), get()) }

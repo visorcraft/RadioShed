@@ -64,6 +64,16 @@ class SettingsStore(private val settings: Settings) {
     fun setFileModeBrowserEnabled(enabled: Boolean) =
         settings.putBoolean(KEY_FILE_MODE_BROWSER, enabled)
 
+    // ---- Library Browser persisted state ----
+
+    /** Tab index restored on entry. 0 = Songs, 1 = Artists, 2 = Albums. */
+    fun getLibraryTabIndex(): Int = settings.getInt(KEY_LIB_TAB, 0).coerceIn(0, 2)
+    fun setLibraryTabIndex(index: Int) = settings.putInt(KEY_LIB_TAB, index)
+
+    /** Songs tab sort order — string-encoded enum name. */
+    fun getLibrarySongSort(): String = settings.getStringOrNull(KEY_LIB_SONG_SORT) ?: "TitleAsc"
+    fun setLibrarySongSort(sort: String) = settings.putString(KEY_LIB_SONG_SORT, sort)
+
     private companion object {
         const val KEY_THEME_MODE = "ui.themeMode"
         const val KEY_MATERIAL_YOU = "ui.materialYou"
@@ -72,5 +82,7 @@ class SettingsStore(private val settings: Settings) {
         const val KEY_ONBOARDING_DONE = "onboarding.complete"
         const val KEY_LAST_STATION_ID = "playback.lastStationId"
         const val KEY_FILE_MODE_BROWSER = "library.fileModeBrowser"
+        const val KEY_LIB_TAB = "library.browser.tab"
+        const val KEY_LIB_SONG_SORT = "library.browser.songSort"
     }
 }

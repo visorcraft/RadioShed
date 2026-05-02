@@ -7,6 +7,8 @@ import com.visorcraft.radioshed.data.LibraryRepository
 import com.visorcraft.radioshed.data.RatingRepository
 import com.visorcraft.radioshed.data.StationRepository
 import com.visorcraft.radioshed.data.nowMillis
+import com.visorcraft.radioshed.domain.PlayOrder
+import com.visorcraft.radioshed.domain.PlaybackRule
 import com.visorcraft.radioshed.domain.Station
 import com.visorcraft.radioshed.domain.Track
 import kotlinx.coroutines.CoroutineScope
@@ -101,6 +103,29 @@ class StationPlayback(
     }
 
     fun skipNext() {
+        advanceToNext()
+    }
+
+    /**
+     * Ad-hoc playback: play [tracks] sequentially starting at [startIndex].
+     * Used by the Library Browser when the user taps a track — the rest of
+     * the visible list becomes the queue, so skip-next walks through it
+     * and skip-previous goes back through history. There's no station
+     * selected during ad-hoc playback (`currentStation` is null), so the
+     * "Continue Listening" callout on Stations Home stays hidden.
+     */
+    fun playTracks(tracks: List<Track>, startIndex: Int = 0) {
+        if (tracks.isEmpty()) return
+        _currentStation.value = null
+        history.clear()
+        currentTrack = null
+        val newQueue = PlaybackQueue(
+            candidates = tracks,
+            rule = PlaybackRule(order = PlayOrder.Sequential),
+            initialSequentialCursor = startIndex.coerceIn(0, tracks.size - 1),
+        )
+        queue = newQueue
+        _candidateCount.value = newQueue.candidateCount
         advanceToNext()
     }
 

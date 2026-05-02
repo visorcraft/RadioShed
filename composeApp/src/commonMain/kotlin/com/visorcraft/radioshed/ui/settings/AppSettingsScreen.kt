@@ -21,9 +21,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Brightness4
 import androidx.compose.material.icons.filled.Brightness7
 import androidx.compose.material.icons.filled.Brightness6
+import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.NightsStay
+import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -33,9 +36,11 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -44,7 +49,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.visorcraft.radioshed.BuildInfo
 import com.visorcraft.radioshed.data.SettingsStore
+import com.visorcraft.radioshed.source.MissingArtworkSync
 import com.visorcraft.radioshed.ui.theme.ThemeMode
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
 /**
@@ -65,8 +74,12 @@ fun AppSettingsScreen(
     currentThemeMode: ThemeMode,
     onThemeModeChange: (ThemeMode) -> Unit,
     settings: SettingsStore = koinInject(),
+    artworkSync: MissingArtworkSync = koinInject(),
 ) {
     var reduceMotion by remember { mutableStateOf(settings.getReduceMotion()) }
+    var artworkState by remember { mutableStateOf<ArtworkSyncState>(ArtworkSyncState.Idle) }
+    var artworkJob by remember { mutableStateOf<Job?>(null) }
+    val scope = rememberCoroutineScope()
 
     Scaffold(
         topBar = {
@@ -109,6 +122,24 @@ fun AppSettingsScreen(
                 onCheckedChange = { v ->
                     reduceMotion = v
                     settings.setReduceMotion(v)
+                },
+            )
+
+            Spacer(Modifier.height(24.dp))
+
+            // ---- Library maintenance ----
+            SectionHeader("Library")
+            ArtworkSyncCard(
+                state = artworkState,
+                onStart = {
+                    artworkJob = scope.launch {
+                        artworkSync.sweep().collect { p -> artworkState = artworkState.advance(p) }
+                    }
+                },
+                onCancel = {
+                    artworkJob?.cancel()
+                    artworkJob = null
+                    artworkState = ArtworkSyncState.Idle
                 },
             )
 
@@ -257,6 +288,117 @@ private fun ToggleRow(
             }
             Spacer(Modifier.size(12.dp))
             Switch(checked = checked, onCheckedChange = onCheckedChange)
+        }
+    }
+}
+
+/**
+ * Lightweight UI-side projection of the [MissingArtworkSync] flow.
+ * Kept here (not in source/) because rendering is the only caller —
+ * MissingArtworkSync emits a stream of granular events and the UI just
+ * needs "what should I show right now" + final tally.
+ */
+private sealed interface ArtworkSyncState {
+    object Idle : ArtworkSyncState
+    data class Running(val index: Int, val total: Int, val found: Int) : ArtworkSyncState
+    data class Done(val found: Int, val missing: Int, val failed: Int) : ArtworkSyncState
+}
+
+private fun ArtworkSyncState.advance(p: MissingArtworkSync.Progress): ArtworkSyncState = when (p) {
+    is MissingArtworkSync.Progress.Started -> ArtworkSyncState.Running(0, p.total, 0)
+    is MissingArtworkSync.Progress.Fetching -> {
+        val cur = (this as? ArtworkSyncState.Running) ?: ArtworkSyncState.Running(0, p.total, 0)
+        cur.copy(index = p.index, total = p.total)
+    }
+    is MissingArtworkSync.Progress.Found -> {
+        val cur = (this as? ArtworkSyncState.Running) ?: return this
+        cur.copy(found = cur.found + 1)
+    }
+    is MissingArtworkSync.Progress.Missing,
+    is MissingArtworkSync.Progress.Failed -> this
+    is MissingArtworkSync.Progress.Completed ->
+        ArtworkSyncState.Done(found = p.found, missing = p.missing, failed = p.failed)
+}
+
+@Composable
+private fun ArtworkSyncCard(
+    state: ArtworkSyncState,
+    onStart: () -> Unit,
+    onCancel: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+        shape = RoundedCornerShape(12.dp),
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .background(MaterialTheme.colorScheme.surface, CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.CloudDownload,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                        tint = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+                Spacer(Modifier.size(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Fetch missing album art",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        "Downloads cover art from the Cover Art Archive for albums " +
+                            "with a MusicBrainz ID but no embedded artwork. Uses the network.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
+
+            when (state) {
+                is ArtworkSyncState.Idle -> {
+                    Button(onClick = onStart, modifier = Modifier.fillMaxWidth()) {
+                        Text("Start sweep")
+                    }
+                }
+                is ArtworkSyncState.Running -> {
+                    val pct = if (state.total > 0) state.index.toFloat() / state.total else 0f
+                    LinearProgressIndicator(
+                        progress = { pct },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "${state.index + 1} of ${state.total} — found ${state.found}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    TextButton(onClick = onCancel) { Text("Cancel") }
+                }
+                is ArtworkSyncState.Done -> {
+                    Text(
+                        "Found ${state.found}, missing ${state.missing}" +
+                            (if (state.failed > 0) ", failed ${state.failed}" else ""),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Button(onClick = onStart, modifier = Modifier.fillMaxWidth()) {
+                        Text("Sweep again")
+                    }
+                }
+            }
         }
     }
 }
