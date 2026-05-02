@@ -91,6 +91,7 @@ import com.visorcraft.radioshed.audio.PlayerState
 import com.visorcraft.radioshed.audio.SleepTimer
 import com.visorcraft.radioshed.data.LibraryRepository
 import com.visorcraft.radioshed.data.RatingRepository
+import com.visorcraft.radioshed.data.SettingsStore
 import com.visorcraft.radioshed.domain.Track
 import com.visorcraft.radioshed.stations.StationPlayback
 import com.visorcraft.radioshed.ui.playlists.AddToPlaylistSheet
@@ -118,7 +119,11 @@ fun NowPlayingScreen(
     ratingRepo: RatingRepository = koinInject(),
     sleepTimer: SleepTimer = koinInject(),
     libraryRepo: LibraryRepository = koinInject(),
+    settings: SettingsStore = koinInject(),
 ) {
+    // Drive Mode: read once per composition. Sticky preference, doesn't
+    // need live updates within a single Now Playing session.
+    val driveMode = remember { settings.getDriveMode() }
     val nowPlaying by audioEngine.nowPlaying.collectAsState()
     val state by audioEngine.state.collectAsState()
     val position by audioEngine.position.collectAsState()
@@ -359,6 +364,7 @@ fun NowPlayingScreen(
                             stationPlayback.skipNext()
                         }
                     },
+                    driveMode = driveMode,
                 )
             } else {
                 TwoPaneLayout(
@@ -386,6 +392,7 @@ fun NowPlayingScreen(
                             stationPlayback.skipNext()
                         }
                     },
+                    driveMode = driveMode,
                 )
             }
         }
@@ -407,6 +414,7 @@ private fun CompactLayout(
     onNext: () -> Unit,
     onRate: (Double) -> Unit,
     onDislikeOnStation: () -> Unit,
+    driveMode: Boolean,
 ) {
     Column(
         modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 16.dp),
@@ -431,6 +439,7 @@ private fun CompactLayout(
             onPrev = onPrev,
             onNext = onNext,
             onDislikeOnStation = onDislikeOnStation,
+            driveMode = driveMode,
         )
         Spacer(Modifier.height(20.dp))
         RatingRow(current = rating, onRate = onRate)
@@ -452,6 +461,7 @@ private fun TwoPaneLayout(
     onNext: () -> Unit,
     onRate: (Double) -> Unit,
     onDislikeOnStation: () -> Unit,
+    driveMode: Boolean,
 ) {
     Row(
         modifier = Modifier.fillMaxSize().padding(24.dp),
@@ -495,6 +505,7 @@ private fun TwoPaneLayout(
                 onPrev = onPrev,
                 onNext = onNext,
                 onDislikeOnStation = onDislikeOnStation,
+                driveMode = driveMode,
             )
             Spacer(Modifier.height(28.dp))
             RatingRow(current = rating, onRate = onRate)
@@ -636,9 +647,18 @@ private fun TransportRow(
     onPrev: () -> Unit,
     onNext: () -> Unit,
     onDislikeOnStation: () -> Unit,
+    driveMode: Boolean,
 ) {
     var dislikeMenuOpen by remember { mutableStateOf(false) }
     val playing = state == PlayerState.Playing
+
+    // Drive Mode bumps every transport hit-target by 25% so they're
+    // unambiguous to hit while glancing at the screen at speed. Non-
+    // drive sizes match the original Material recommendation.
+    val baseSize = if (driveMode) 80.dp else 64.dp
+    val emphasizedSize = if (driveMode) 100.dp else 80.dp
+    val iconSize = if (driveMode) 44.dp else 36.dp
+    val emphasizedIconSize = if (driveMode) 60.dp else 48.dp
 
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -648,13 +668,16 @@ private fun TransportRow(
         BigIconButton(
             icon = Icons.Filled.SkipPrevious,
             description = "Previous",
+            buttonSize = baseSize,
+            iconSize = iconSize,
             onClick = onPrev,
         )
 
         BigIconButton(
             icon = if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
             description = if (playing) "Pause" else "Play",
-            emphasized = true,
+            buttonSize = emphasizedSize,
+            iconSize = emphasizedIconSize,
             onClick = onTogglePlayPause,
         )
 
@@ -663,8 +686,8 @@ private fun TransportRow(
             Surface(
                 color = Color.Transparent,
                 modifier = Modifier
-                    .size(64.dp)
-                    .clip(RoundedCornerShape(32.dp))
+                    .size(baseSize)
+                    .clip(RoundedCornerShape(baseSize / 2))
                     .combinedClickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
@@ -680,7 +703,7 @@ private fun TransportRow(
                     Icon(
                         imageVector = Icons.Filled.SkipNext,
                         contentDescription = null,
-                        modifier = Modifier.size(36.dp),
+                        modifier = Modifier.size(iconSize),
                         tint = MaterialTheme.colorScheme.onBackground,
                     )
                 }
@@ -712,7 +735,8 @@ private fun TransportRow(
 private fun BigIconButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     description: String,
-    emphasized: Boolean = false,
+    buttonSize: androidx.compose.ui.unit.Dp,
+    iconSize: androidx.compose.ui.unit.Dp,
     onClick: () -> Unit,
 ) {
     // Vector icons everywhere — see MiniPlayer.TransportIconButton for why
@@ -721,13 +745,13 @@ private fun BigIconButton(
     IconButton(
         onClick = onClick,
         modifier = Modifier
-            .size(if (emphasized) 80.dp else 64.dp)
+            .size(buttonSize)
             .semantics { contentDescription = description },
     ) {
         Icon(
             imageVector = icon,
             contentDescription = null,  // outer modifier already labels it
-            modifier = Modifier.size(if (emphasized) 48.dp else 36.dp),
+            modifier = Modifier.size(iconSize),
             tint = MaterialTheme.colorScheme.onBackground,
         )
     }

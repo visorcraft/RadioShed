@@ -84,6 +84,7 @@ fun AppSettingsScreen(
     var replayGain by remember { mutableStateOf(settings.getReplayGainEnabled()) }
     var preampDb by remember { mutableStateOf(settings.getReplayGainPreampDb()) }
     var autoResume by remember { mutableStateOf(settings.getAutoResumeLastStation()) }
+    var driveMode by remember { mutableStateOf(settings.getDriveMode()) }
     var artworkState by remember { mutableStateOf<ArtworkSyncState>(ArtworkSyncState.Idle) }
     var artworkJob by remember { mutableStateOf<Job?>(null) }
     val scope = rememberCoroutineScope()
@@ -129,6 +130,17 @@ fun AppSettingsScreen(
                 onCheckedChange = { v ->
                     reduceMotion = v
                     settings.setReduceMotion(v)
+                },
+            )
+            Spacer(Modifier.height(8.dp))
+            ToggleRow(
+                title = "Drive Mode",
+                subtitle = "Larger transport buttons on Now Playing — easier to hit at a glance " +
+                    "while driving. Takes effect the next time you open Now Playing.",
+                checked = driveMode,
+                onCheckedChange = { v ->
+                    driveMode = v
+                    settings.setDriveMode(v)
                 },
             )
 

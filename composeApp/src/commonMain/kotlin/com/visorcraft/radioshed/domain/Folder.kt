@@ -13,6 +13,12 @@ data class Folder(
     val lastScannedAt: Long? = null,
     val trackCount: Long = 0,
     val isAvailable: Boolean = true,
+    /**
+     * Optional per-folder accent color (ARGB packed), used for visual
+     * organization in LibrarySettings. Null = no tag, default surface
+     * styling.
+     */
+    val accentColor: Int? = null,
     val createdAt: Long,
     val updatedAt: Long,
 )

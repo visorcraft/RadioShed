@@ -1,0 +1,10 @@
+-- Migration v2 → v3: optional per-folder accent color.
+--
+-- Adds an `accent_color` column on `folder` so users can color-code
+-- their music folders for visual organization in LibrarySettings.
+-- Nullable INTEGER (ARGB-packed) — null means "no tag" and renders
+-- with default surface styling. ALTER TABLE ADD COLUMN with no NOT
+-- NULL constraint is safe on every SQLite version we ship (3.35+ on
+-- Android via requery, 3.32+ on system iOS 16).
+
+ALTER TABLE folder ADD COLUMN accent_color INTEGER;

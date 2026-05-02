@@ -1,6 +1,7 @@
 package com.visorcraft.radioshed.ui.library
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -12,10 +13,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -181,6 +186,12 @@ fun LibrarySettingsScreen(
                                         .onFailure { scanError = it.message }
                                 }
                             },
+                            onPickColor = { color ->
+                                scope.launch {
+                                    runCatching { folderRepo.setAccentColor(folder.id, color) }
+                                        .onFailure { scanError = it.message }
+                                }
+                            },
                         )
                     }
                 }
@@ -279,6 +290,7 @@ private fun FolderCard(
     onEdit: () -> Unit,
     onToggleRecursive: () -> Unit,
     onDelete: () -> Unit,
+    onPickColor: (Int?) -> Unit,
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -286,6 +298,18 @@ private fun FolderCard(
             containerColor = MaterialTheme.colorScheme.surface,
         ),
     ) {
+        // Folder accent bar at the top of the card. Visible only when
+        // a color is set; renders as a 4dp colored strip across the
+        // card's full width so users can scan a list of folders and
+        // pick out their personal colorings at a glance.
+        folder.accentColor?.let { color ->
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(4.dp)
+                    .background(Color(color.toLong() and 0xFFFFFFFFL)),
+            )
+        }
         Column(modifier = Modifier.padding(12.dp)) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -313,6 +337,11 @@ private fun FolderCard(
                 }
             }
             Spacer(Modifier.height(8.dp))
+            FolderColorRow(
+                current = folder.accentColor,
+                onPick = onPickColor,
+            )
+            Spacer(Modifier.height(8.dp))
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -334,6 +363,80 @@ private fun FolderCard(
         }
     }
 }
+
+/**
+ * Compact swatch row — one bordered circle per palette entry plus a
+ * "no color" first slot. Tapping a swatch sets it; tapping the
+ * currently-selected swatch clears the tag (so users can toggle
+ * without an explicit "remove" affordance).
+ */
+@Composable
+private fun FolderColorRow(
+    current: Int?,
+    onPick: (Int?) -> Unit,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text(
+            "Tag",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+        )
+        // "No color" slot. Visually a hollow swatch matching surface.
+        ColorSwatch(
+            color = null,
+            selected = current == null,
+            onClick = { onPick(null) },
+        )
+        FolderTagPalette.forEach { color ->
+            ColorSwatch(
+                color = color,
+                selected = current == color,
+                onClick = { onPick(if (current == color) null else color) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun ColorSwatch(
+    color: Int?,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    val fill = color?.let { Color(it.toLong() and 0xFFFFFFFFL) }
+        ?: MaterialTheme.colorScheme.surfaceVariant
+    val borderColor = if (selected) MaterialTheme.colorScheme.primary
+                      else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f)
+    Box(
+        modifier = Modifier
+            .size(24.dp)
+            .clip(CircleShape)
+            .clickable(onClick = onClick)
+            .border(
+                width = if (selected) 2.dp else 1.dp,
+                color = borderColor,
+                shape = CircleShape,
+            )
+            .background(fill, CircleShape),
+    )
+}
+
+/**
+ * Six-color palette — same accent hues used elsewhere in the app
+ * (matches the Stations preset color set so the palettes feel
+ * consistent when a folder + station share a tag).
+ */
+private val FolderTagPalette: List<Int> = listOf(
+    0xFFFF7F1A.toInt(),  // brand amber
+    0xFFFFC107.toInt(),  // gold
+    0xFF4ECDC4.toInt(),  // teal
+    0xFF7B68EE.toInt(),  // medium slate blue
+    0xFFFF6B6B.toInt(),  // coral
+    0xFF607D8B.toInt(),  // blue grey
+)
 
 @Composable
 private fun AddFolderDialog(

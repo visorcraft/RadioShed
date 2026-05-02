@@ -28,6 +28,14 @@ class SettingsStore(private val settings: Settings) {
     fun getReduceMotion(): Boolean = settings.getBoolean(KEY_REDUCE_MOTION, false)
     fun setReduceMotion(enabled: Boolean) = settings.putBoolean(KEY_REDUCE_MOTION, enabled)
 
+    /**
+     * Drive Mode bumps transport / rating tap targets to be safer
+     * to hit while driving. Off by default; users opt in once and
+     * the setting follows them across sessions.
+     */
+    fun getDriveMode(): Boolean = settings.getBoolean(KEY_DRIVE_MODE, false)
+    fun setDriveMode(enabled: Boolean) = settings.putBoolean(KEY_DRIVE_MODE, enabled)
+
     // ---- Connectivity ----
 
     fun getConnectivityPolicy(): ConnectivityPolicy {
@@ -122,5 +130,6 @@ class SettingsStore(private val settings: Settings) {
         const val KEY_REPLAY_GAIN = "audio.replayGain.enabled"
         const val KEY_REPLAY_GAIN_PREAMP = "audio.replayGain.preampDb"
         const val KEY_AUTO_RESUME_STATION = "playback.autoResumeLastStation"
+        const val KEY_DRIVE_MODE = "ui.driveMode"
     }
 }

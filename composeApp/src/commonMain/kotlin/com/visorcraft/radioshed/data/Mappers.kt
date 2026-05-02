@@ -87,6 +87,7 @@ internal fun FolderRow.toDomain(): Folder = Folder(
     lastScannedAt = last_scanned_at,
     trackCount = track_count,
     isAvailable = is_available == 1L,
+    accentColor = accent_color?.toInt(),
     createdAt = created_at,
     updatedAt = updated_at,
 )

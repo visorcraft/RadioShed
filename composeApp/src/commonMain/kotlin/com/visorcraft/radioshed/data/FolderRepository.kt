@@ -51,6 +51,11 @@ class FolderRepository(private val db: RadioShedDatabase) {
         db.foldersQueries.renameDisplayName(displayName, nowMillis(), id)
     }
 
+    /** Set or clear the folder's accent color. Pass null to clear. */
+    suspend fun setAccentColor(id: Long, color: Int?) = withContext(IODispatcher) {
+        db.foldersQueries.setAccentColor(color?.toLong(), nowMillis(), id)
+    }
+
     suspend fun setAvailable(id: Long, available: Boolean) = withContext(IODispatcher) {
         db.foldersQueries.setAvailable(if (available) 1L else 0L, nowMillis(), id)
     }

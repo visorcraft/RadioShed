@@ -12,7 +12,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.Row
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -55,6 +58,7 @@ fun SearchScreen(
     var results by remember { mutableStateOf(SearchResults(emptyList(), emptyList(), emptyList())) }
     var isSearching by remember { mutableStateOf(false) }
     var addToPlaylistTrackId by remember { mutableStateOf<Long?>(null) }
+    var scope by remember { mutableStateOf(SearchScope.All) }
 
     LaunchedEffect(query) {
         if (query.isBlank()) {
@@ -101,6 +105,22 @@ fun SearchScreen(
                 modifier = Modifier.fillMaxWidth(),
             )
             Spacer(Modifier.height(8.dp))
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                SearchScope.entries.forEach { s ->
+                    FilterChip(
+                        selected = scope == s,
+                        onClick = { scope = s },
+                        label = { Text(s.label) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                        ),
+                    )
+                }
+            }
+            Spacer(Modifier.height(8.dp))
 
             when {
                 query.isBlank() -> Text(
@@ -122,15 +142,22 @@ fun SearchScreen(
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                     modifier = Modifier.fillMaxSize(),
                 ) {
-                    if (results.artists.isNotEmpty()) {
+                    val showArtists = (scope == SearchScope.All || scope == SearchScope.Artists) &&
+                        results.artists.isNotEmpty()
+                    val showAlbums = (scope == SearchScope.All || scope == SearchScope.Albums) &&
+                        results.albums.isNotEmpty()
+                    val showTracks = (scope == SearchScope.All || scope == SearchScope.Tracks) &&
+                        results.tracks.isNotEmpty()
+
+                    if (showArtists) {
                         item { SectionHeader("Artists (${results.artists.size})") }
                         items(results.artists, key = { "artist:${it.id}" }) { ArtistRow(it) }
                     }
-                    if (results.albums.isNotEmpty()) {
+                    if (showAlbums) {
                         item { SectionHeader("Albums (${results.albums.size})") }
                         items(results.albums, key = { "album:${it.id}" }) { AlbumRow(it) }
                     }
-                    if (results.tracks.isNotEmpty()) {
+                    if (showTracks) {
                         item { SectionHeader("Tracks (${results.tracks.size})") }
                         items(results.tracks, key = { "track:${it.id}" }) { track ->
                             // Mirror the Library Browser: tap seeds an
@@ -148,6 +175,15 @@ fun SearchScreen(
                             )
                         }
                     }
+                    if (!showArtists && !showAlbums && !showTracks) {
+                        item {
+                            Text(
+                                "No matches in this scope.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -159,6 +195,14 @@ fun SearchScreen(
             onDismiss = { addToPlaylistTrackId = null },
         )
     }
+}
+
+/** Filter chips above results — narrows what's shown without re-querying. */
+private enum class SearchScope(val label: String) {
+    All("All"),
+    Tracks("Tracks"),
+    Artists("Artists"),
+    Albums("Albums"),
 }
 
 @Composable
