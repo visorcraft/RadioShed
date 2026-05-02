@@ -64,6 +64,18 @@ class SettingsStore(private val settings: Settings) {
     fun setFileModeBrowserEnabled(enabled: Boolean) =
         settings.putBoolean(KEY_FILE_MODE_BROWSER, enabled)
 
+    // ---- Equalizer ----
+
+    fun getEqEnabled(): Boolean = settings.getBoolean(KEY_EQ_ENABLED, false)
+    fun setEqEnabled(enabled: Boolean) = settings.putBoolean(KEY_EQ_ENABLED, enabled)
+
+    /** Per-band gain in dB. Returns 0f for any band that hasn't been set. */
+    fun getEqBandGain(bandIndex: Int): Float =
+        settings.getFloat("$KEY_EQ_BAND_PREFIX$bandIndex", 0f)
+
+    fun setEqBandGain(bandIndex: Int, gainDb: Float) =
+        settings.putFloat("$KEY_EQ_BAND_PREFIX$bandIndex", gainDb)
+
     // ---- Library Browser persisted state ----
 
     /** Tab index restored on entry. 0 = Songs, 1 = Artists, 2 = Albums. */
@@ -84,5 +96,7 @@ class SettingsStore(private val settings: Settings) {
         const val KEY_FILE_MODE_BROWSER = "library.fileModeBrowser"
         const val KEY_LIB_TAB = "library.browser.tab"
         const val KEY_LIB_SONG_SORT = "library.browser.songSort"
+        const val KEY_EQ_ENABLED = "audio.eq.enabled"
+        const val KEY_EQ_BAND_PREFIX = "audio.eq.band."
     }
 }

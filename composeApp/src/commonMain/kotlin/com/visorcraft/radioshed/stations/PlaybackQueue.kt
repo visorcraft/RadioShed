@@ -134,6 +134,38 @@ class PlaybackQueue(
     /** Snapshot of recently-played ids, oldest first. Useful for tests. */
     fun recentSnapshot(): List<Long> = recent.toList()
 
+    /**
+     * Peek up to [count] upcoming tracks WITHOUT advancing internal state.
+     *
+     * For [PlayOrder.Sequential] the result is exact — same tracks in
+     * the same order the queue would actually play.
+     *
+     * For shuffle / weighted modes the next pick is randomized, so the
+     * returned list is a "preview pool" — the eligible candidates after
+     * applying no-repeat memory and dislikes, NOT a literal prediction
+     * of what the queue will actually pick. The Up Next UI labels this
+     * accordingly so users don't expect deterministic ordering on a
+     * shuffle station.
+     */
+    fun peekUpcoming(count: Int): List<Track> {
+        if (count <= 0 || candidates.isEmpty()) return emptyList()
+        val pool = candidates.filter { it.id !in dislikedIds }
+        if (pool.isEmpty()) return emptyList()
+        return when (rule.order) {
+            PlayOrder.Sequential -> {
+                val n = count.coerceAtMost(pool.size)
+                (0 until n).map { offset ->
+                    pool[(sequentialCursor + offset) % pool.size]
+                }
+            }
+            PlayOrder.Shuffle, PlayOrder.SmartShuffle, PlayOrder.WeightedRandom -> {
+                val avoid = effectiveAvoidSet(pool.size)
+                val available = pool.filter { it.id !in avoid }
+                available.take(count)
+            }
+        }
+    }
+
     private companion object {
         const val MIN_RECENT_CAP = 16
     }

@@ -1,7 +1,9 @@
 package com.visorcraft.radioshed.ui.library
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,14 +15,18 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
@@ -61,6 +67,7 @@ import com.visorcraft.radioshed.domain.Album
 import com.visorcraft.radioshed.domain.Artist
 import com.visorcraft.radioshed.domain.Track
 import com.visorcraft.radioshed.stations.StationPlayback
+import com.visorcraft.radioshed.ui.playlists.AddToPlaylistSheet
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
@@ -80,7 +87,7 @@ import org.koin.compose.koinInject
  * queue around it). Future improvement: tap-to-play seeds a temporary
  * "queue from this point" so prev/next walk the visible list.
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun LibraryBrowserScreen(
     onBack: () -> Unit,
@@ -93,6 +100,7 @@ fun LibraryBrowserScreen(
     settings: SettingsStore = koinInject(),
 ) {
     val scope = rememberCoroutineScope()
+    var addToPlaylistTrackId by remember { mutableStateOf<Long?>(null) }
     val artists by libraryRepo.observeArtists().collectAsState(initial = emptyList())
     val albums by libraryRepo.observeAlbums().collectAsState(initial = emptyList())
     var allTracks by remember { mutableStateOf<List<Track>>(emptyList()) }
@@ -255,6 +263,7 @@ fun LibraryBrowserScreen(
                                 val idx = artistTracks.indexOf(track).coerceAtLeast(0)
                                 stationPlayback.playTracks(artistTracks, startIndex = idx)
                             },
+                            onLongPress = { track -> addToPlaylistTrackId = track.id },
                         )
                     } else {
                         SongList(
@@ -263,6 +272,7 @@ fun LibraryBrowserScreen(
                                 val idx = sorted.indexOf(track).coerceAtLeast(0)
                                 stationPlayback.playTracks(sorted, startIndex = idx)
                             },
+                            onLongPress = { track -> addToPlaylistTrackId = track.id },
                         )
                     }
                 }
@@ -286,6 +296,13 @@ fun LibraryBrowserScreen(
             }
         }
     }
+
+    addToPlaylistTrackId?.let { id ->
+        AddToPlaylistSheet(
+            trackId = id,
+            onDismiss = { addToPlaylistTrackId = null },
+        )
+    }
 }
 
 private enum class LibraryTab(val label: String) {
@@ -305,6 +322,7 @@ private enum class SongSort(val label: String) {
 private fun SongList(
     tracks: List<Track>,
     onPlay: (Track) -> Unit,
+    onLongPress: (Track) -> Unit = {},
 ) {
     if (tracks.isEmpty()) {
         EmptyHint("No songs match this view.")
@@ -315,17 +333,22 @@ private fun SongList(
         contentPadding = PaddingValues(vertical = 4.dp),
     ) {
         items(tracks, key = { it.id }) { track ->
-            SongRow(track = track, onTap = { onPlay(track) })
+            SongRow(
+                track = track,
+                onTap = { onPlay(track) },
+                onLongPress = { onLongPress(track) },
+            )
         }
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun SongRow(track: Track, onTap: () -> Unit) {
+private fun SongRow(track: Track, onTap: () -> Unit, onLongPress: () -> Unit = {}) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onTap),
+            .combinedClickable(onClick = onTap, onLongClick = onLongPress),
         color = Color.Transparent,
     ) {
         Row(
@@ -371,17 +394,20 @@ private fun ArtistList(artists: List<Artist>, onPick: (Artist) -> Unit) {
         EmptyHint("No artists yet — scan a folder with tagged music to populate.")
         return
     }
-    LazyColumn(
+    // Tile grid with circular initials. We don't have artist photos in v1
+    // (MusicBrainz/Discogs photo fetch is a future pass), so a colored
+    // initial avatar reads cleaner than a generic person icon at every
+    // tile. Hash artist name → hue so the same artist is always the same
+    // color across sessions.
+    LazyVerticalGrid(
+        columns = GridCells.Adaptive(minSize = 120.dp),
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(vertical = 4.dp),
+        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        items(artists, key = { it.id }) { artist ->
-            EntityRow(
-                title = artist.name,
-                subtitle = null,
-                icon = Icons.Filled.Person,
-                onTap = { onPick(artist) },
-            )
+        gridItems(artists, key = { it.id }) { artist ->
+            ArtistTile(artist = artist, onTap = { onPick(artist) })
         }
     }
 }
@@ -392,68 +418,96 @@ private fun AlbumList(albums: List<Album>, onPick: (Album) -> Unit) {
         EmptyHint("No albums yet — scan a folder with tagged music to populate.")
         return
     }
-    LazyColumn(
+    LazyVerticalGrid(
+        columns = GridCells.Adaptive(minSize = 140.dp),
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(vertical = 4.dp),
+        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        items(albums, key = { it.id }) { album ->
-            EntityRow(
-                title = album.title,
-                subtitle = album.year?.toString(),
-                icon = Icons.Filled.Album,
-                onTap = { onPick(album) },
+        gridItems(albums, key = { it.id }) { album ->
+            AlbumTile(album = album, onTap = { onPick(album) })
+        }
+    }
+}
+
+@Composable
+private fun AlbumTile(album: Album, onTap: () -> Unit) {
+    Column(modifier = Modifier.clickable(onClick = onTap)) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(1f)
+                .clip(RoundedCornerShape(8.dp)),
+            color = MaterialTheme.colorScheme.surfaceVariant,
+        ) {
+            if (album.artworkUri != null) {
+                coil3.compose.AsyncImage(
+                    model = album.artworkUri,
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                )
+            } else {
+                Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                    Icon(
+                        imageVector = Icons.Filled.Album,
+                        contentDescription = null,
+                        modifier = Modifier.size(40.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            text = album.title,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        album.year?.let { y ->
+            Text(
+                text = "$y",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
             )
         }
     }
 }
 
 @Composable
-private fun EntityRow(
-    title: String,
-    subtitle: String?,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    onTap: () -> Unit,
-) {
-    Surface(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onTap),
-        color = Color.Transparent,
+private fun ArtistTile(artist: Artist, onTap: () -> Unit) {
+    val hue = (artist.sortName.hashCode().rem(360) + 360).rem(360).toFloat()
+    val tint = androidx.compose.ui.graphics.Color.hsv(hue, 0.55f, 0.85f)
+    Column(
+        modifier = Modifier.clickable(onClick = onTap),
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(1f)
+                .clip(CircleShape)
+                .background(tint),
+            contentAlignment = Alignment.Center,
         ) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(MaterialTheme.colorScheme.primaryContainer),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    modifier = Modifier.size(22.dp),
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                )
-            }
-            Spacer(Modifier.size(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                if (subtitle != null) {
-                    Text(
-                        text = subtitle,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
-                    )
-                }
-            }
+            Text(
+                text = artist.name.firstOrNull()?.uppercase() ?: "?",
+                style = MaterialTheme.typography.displaySmall,
+                fontWeight = FontWeight.SemiBold,
+                color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.95f),
+            )
         }
+        Spacer(Modifier.height(8.dp))
+        Text(
+            text = artist.name,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 

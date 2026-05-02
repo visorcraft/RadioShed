@@ -163,6 +163,20 @@ class StationPlayback(
         currentTrack = null
     }
 
+    /**
+     * Upcoming tracks for the Up Next UI. Sequential queues return an
+     * exact projection; shuffle queues return an unordered candidate
+     * pool (see [PlaybackQueue.peekUpcoming]).
+     */
+    fun upcoming(count: Int = 12): List<Track> = queue?.peekUpcoming(count).orEmpty()
+
+    /**
+     * Recently-played tracks, oldest first → newest at the END. Used by
+     * the Up Next sheet to also show a short "just played" slice above
+     * the upcoming list. Skip-previous reads from the same buffer.
+     */
+    fun recentSnapshot(): List<Track> = history.toList()
+
     private fun advanceToNext() {
         val q = queue ?: return
         val next = q.next() ?: run {

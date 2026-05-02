@@ -73,6 +73,8 @@ fun AppSettingsScreen(
     onBack: () -> Unit,
     currentThemeMode: ThemeMode,
     onThemeModeChange: (ThemeMode) -> Unit,
+    onOpenEqualizer: () -> Unit = {},
+    onOpenPlaylists: () -> Unit = {},
     settings: SettingsStore = koinInject(),
     artworkSync: MissingArtworkSync = koinInject(),
 ) {
@@ -123,6 +125,22 @@ fun AppSettingsScreen(
                     reduceMotion = v
                     settings.setReduceMotion(v)
                 },
+            )
+
+            Spacer(Modifier.height(24.dp))
+
+            // ---- Audio ----
+            SectionHeader("Audio")
+            NavRow(
+                title = "Equalizer",
+                subtitle = "5-band EQ with Bass / Vocal / Treble presets",
+                onClick = onOpenEqualizer,
+            )
+            Spacer(Modifier.height(8.dp))
+            NavRow(
+                title = "Playlists",
+                subtitle = "Create, edit, and play your custom collections",
+                onClick = onOpenPlaylists,
             )
 
             Spacer(Modifier.height(24.dp))
@@ -251,6 +269,45 @@ private fun ThemeChoiceRow(
                             else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun NavRow(
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+        shape = RoundedCornerShape(12.dp),
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    title,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                )
+            }
+            Text(
+                "›",
+                style = MaterialTheme.typography.headlineSmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+            )
         }
     }
 }

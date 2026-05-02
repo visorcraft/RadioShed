@@ -4,6 +4,8 @@ import com.russhwolf.settings.NSUserDefaultsSettings
 import com.russhwolf.settings.Settings
 import com.visorcraft.radioshed.audio.AudioEngine
 import com.visorcraft.radioshed.audio.AudioEngineIos
+import com.visorcraft.radioshed.audio.EqualizerController
+import com.visorcraft.radioshed.audio.NullEqualizerController
 import com.visorcraft.radioshed.data.DatabaseDriverFactory
 import com.visorcraft.radioshed.permissions.StoragePermissions
 import com.visorcraft.radioshed.source.ArtworkPersister
@@ -14,7 +16,9 @@ import com.visorcraft.radioshed.source.IosArtworkPersister
 import com.visorcraft.radioshed.source.IosFileBrowser
 import com.visorcraft.radioshed.source.IosFileEnumerator
 import com.visorcraft.radioshed.source.IosTagReader
+import com.visorcraft.radioshed.source.LyricsFetcher
 import com.visorcraft.radioshed.source.NullCoverArtFetcher
+import com.visorcraft.radioshed.source.NullLyricsFetcher
 import com.visorcraft.radioshed.source.StorageVolumes
 import com.visorcraft.radioshed.source.TagReader
 import org.koin.core.module.Module
@@ -30,10 +34,12 @@ actual val platformModule: Module = module {
     single<TagReader> { IosTagReader() }
     single<ArtworkPersister> { IosArtworkPersister() }
     single<CoverArtFetcher> { NullCoverArtFetcher() }
+    single<LyricsFetcher> { NullLyricsFetcher() }
     single<FileBrowser> { IosFileBrowser() }
     single { StoragePermissions() }
     single { StorageVolumes() }
 
     // Phase 4: audio engine stub
     single<AudioEngine> { AudioEngineIos() }
+    single<EqualizerController> { NullEqualizerController() }
 }

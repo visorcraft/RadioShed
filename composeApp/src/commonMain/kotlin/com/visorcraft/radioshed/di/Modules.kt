@@ -19,6 +19,7 @@ import com.visorcraft.radioshed.data.WidgetConfigRepository
 import com.visorcraft.radioshed.db.RadioShedDatabase
 import com.visorcraft.radioshed.audio.SleepTimer
 import com.visorcraft.radioshed.scanner.Scanner
+import com.visorcraft.radioshed.source.LyricsService
 import com.visorcraft.radioshed.source.MissingArtworkSync
 import com.visorcraft.radioshed.stations.PresetSeeder
 import com.visorcraft.radioshed.stations.SourceRuleEvaluator
@@ -61,6 +62,9 @@ val sharedModule: Module = module {
 
     // Sleep timer — singleton so multiple UI surfaces observe the same state.
     single { SleepTimer(get()) }
+
+    // Lyrics: cache + fetcher, orchestrated by LyricsService.
+    single { LyricsService(get(), get(), get()) }
 
     // Phase 5: stations engine. AudioEngine comes from platformModule.
     single { SourceRuleEvaluator(get(), get(), get()) }

@@ -1,7 +1,9 @@
 package com.visorcraft.radioshed.ui.library
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -55,6 +57,7 @@ import com.visorcraft.radioshed.domain.Album
 import com.visorcraft.radioshed.domain.Artist
 import com.visorcraft.radioshed.domain.Track
 import com.visorcraft.radioshed.stations.StationPlayback
+import com.visorcraft.radioshed.ui.playlists.AddToPlaylistSheet
 import org.koin.compose.koinInject
 
 /**
@@ -63,7 +66,7 @@ import org.koin.compose.koinInject
  * (not just the album subset) so the user can hear everything by them
  * with one tap.
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun ArtistDetailScreen(
     artistId: Long,
@@ -75,6 +78,7 @@ fun ArtistDetailScreen(
     var artist by remember { mutableStateOf<Artist?>(null) }
     var albums by remember { mutableStateOf<List<Album>>(emptyList()) }
     var tracks by remember { mutableStateOf<List<Track>>(emptyList()) }
+    var addToPlaylistTrackId by remember { mutableStateOf<Long?>(null) }
 
     LaunchedEffect(artistId) {
         artist = libraryRepo.getArtistById(artistId)
@@ -186,10 +190,18 @@ fun ArtistDetailScreen(
                             val idx = tracks.indexOf(track).coerceAtLeast(0)
                             stationPlayback.playTracks(tracks, startIndex = idx)
                         },
+                        onLongPress = { addToPlaylistTrackId = track.id },
                     )
                 }
             }
         }
+    }
+
+    addToPlaylistTrackId?.let { id ->
+        AddToPlaylistSheet(
+            trackId = id,
+            onDismiss = { addToPlaylistTrackId = null },
+        )
     }
 }
 
@@ -241,10 +253,13 @@ private fun AlbumCard(album: Album, onTap: () -> Unit) {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ArtistTrackRow(track: Track, onTap: () -> Unit) {
+private fun ArtistTrackRow(track: Track, onTap: () -> Unit, onLongPress: () -> Unit = {}) {
     Surface(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onTap),
+        modifier = Modifier
+            .fillMaxWidth()
+            .combinedClickable(onClick = onTap, onLongClick = onLongPress),
         color = Color.Transparent,
     ) {
         Row(

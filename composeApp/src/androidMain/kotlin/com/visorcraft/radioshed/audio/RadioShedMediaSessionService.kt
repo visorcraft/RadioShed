@@ -108,6 +108,24 @@ class RadioShedMediaSessionService : MediaLibraryService() {
             },
         )
 
+        // Forward ExoPlayer's audio session id to the equalizer so it can
+        // (re)attach. The session id is 0 until AudioSink binds on first
+        // playback; subsequent track transitions can re-issue the event.
+        // We listen on the underlying ExoPlayer (not the StationAwarePlayer
+        // wrapper) so the wrapper's command-override logic stays separate
+        // from effects routing.
+        exoPlayer.addListener(object : androidx.media3.common.Player.Listener {
+            override fun onAudioSessionIdChanged(audioSessionId: Int) {
+                runCatching {
+                    val ctrl = GlobalContext.get()
+                        .get<com.visorcraft.radioshed.audio.EqualizerController>()
+                    if (ctrl is com.visorcraft.radioshed.audio.AndroidEqualizerController) {
+                        ctrl.onAudioSessionIdChanged(audioSessionId)
+                    }
+                }
+            }
+        })
+
         librarySession = MediaLibrarySession.Builder(this, player, RadioShedLibraryCallback())
             .build()
     }

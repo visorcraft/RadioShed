@@ -1,7 +1,9 @@
 package com.visorcraft.radioshed.ui.library
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -54,6 +56,7 @@ import com.visorcraft.radioshed.domain.Album
 import com.visorcraft.radioshed.domain.Artist
 import com.visorcraft.radioshed.domain.Track
 import com.visorcraft.radioshed.stations.StationPlayback
+import com.visorcraft.radioshed.ui.playlists.AddToPlaylistSheet
 import org.koin.compose.koinInject
 
 /**
@@ -65,7 +68,7 @@ import org.koin.compose.koinInject
  * 600dp+ it sits side-by-side. Same breakpoint as Now Playing's
  * compact / two-pane split for visual consistency.
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun AlbumDetailScreen(
     albumId: Long,
@@ -77,6 +80,7 @@ fun AlbumDetailScreen(
     var album by remember { mutableStateOf<Album?>(null) }
     var artist by remember { mutableStateOf<Artist?>(null) }
     var tracks by remember { mutableStateOf<List<Track>>(emptyList()) }
+    var addToPlaylistTrackId by remember { mutableStateOf<Long?>(null) }
 
     LaunchedEffect(albumId) {
         album = libraryRepo.getAlbumById(albumId)
@@ -174,11 +178,19 @@ fun AlbumDetailScreen(
                                 val idx = tracks.indexOf(track).coerceAtLeast(0)
                                 stationPlayback.playTracks(tracks, startIndex = idx)
                             },
+                            onLongPress = { addToPlaylistTrackId = track.id },
                         )
                     }
                 }
             }
         }
+    }
+
+    addToPlaylistTrackId?.let { id ->
+        AddToPlaylistSheet(
+            trackId = id,
+            onDismiss = { addToPlaylistTrackId = null },
+        )
     }
 }
 
@@ -280,10 +292,13 @@ private fun AlbumCover(artworkUri: String?, modifier: Modifier = Modifier) {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun AlbumTrackRow(track: Track, onTap: () -> Unit) {
+private fun AlbumTrackRow(track: Track, onTap: () -> Unit, onLongPress: () -> Unit = {}) {
     Surface(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onTap),
+        modifier = Modifier
+            .fillMaxWidth()
+            .combinedClickable(onClick = onTap, onLongClick = onLongPress),
         color = Color.Transparent,
     ) {
         Row(

@@ -19,10 +19,14 @@ import com.visorcraft.radioshed.ui.library.ArtistDetailScreen
 import com.visorcraft.radioshed.ui.library.LibraryBrowserScreen
 import com.visorcraft.radioshed.ui.library.LibrarySettingsScreen
 import com.visorcraft.radioshed.ui.onboarding.OnboardingScreen
+import com.visorcraft.radioshed.ui.player.LyricsScreen
 import com.visorcraft.radioshed.ui.player.MiniPlayer
 import com.visorcraft.radioshed.ui.player.NowPlayingScreen
+import com.visorcraft.radioshed.ui.playlists.PlaylistDetailScreen
+import com.visorcraft.radioshed.ui.playlists.PlaylistsScreen
 import com.visorcraft.radioshed.ui.search.SearchScreen
 import com.visorcraft.radioshed.ui.settings.AppSettingsScreen
+import com.visorcraft.radioshed.ui.settings.EqualizerScreen
 import com.visorcraft.radioshed.ui.stations.StationEditorScreen
 import com.visorcraft.radioshed.ui.stations.StationsHomeScreen
 import com.visorcraft.radioshed.ui.theme.RadioShedTheme
@@ -59,7 +63,17 @@ fun App(settings: SettingsStore = koinInject()) {
         // strip below since it IS the expanded player.
         if (current == AppScreen.NowPlaying) {
             PlatformBackHandler { current = AppScreen.Stations }
-            NowPlayingScreen(onClose = { current = AppScreen.Stations })
+            NowPlayingScreen(
+                onClose = { current = AppScreen.Stations },
+                onOpenLyrics = { current = AppScreen.Lyrics },
+            )
+            return@RadioShedTheme
+        }
+
+        // Lyrics — full-bleed, opened from Now Playing.
+        if (current == AppScreen.Lyrics) {
+            PlatformBackHandler { current = AppScreen.NowPlaying }
+            LyricsScreen(onBack = { current = AppScreen.NowPlaying })
             return@RadioShedTheme
         }
 
@@ -133,6 +147,30 @@ fun App(settings: SettingsStore = koinInject()) {
                             onBack = { current = AppScreen.Home },
                             currentThemeMode = themeMode,
                             onThemeModeChange = { themeMode = it },
+                            onOpenEqualizer = { current = AppScreen.Equalizer },
+                            onOpenPlaylists = { current = AppScreen.Playlists },
+                        )
+                    }
+
+                    AppScreen.Equalizer -> {
+                        PlatformBackHandler { current = AppScreen.AppSettings }
+                        EqualizerScreen(onBack = { current = AppScreen.AppSettings })
+                    }
+
+                    AppScreen.Playlists -> {
+                        PlatformBackHandler { current = AppScreen.AppSettings }
+                        PlaylistsScreen(
+                            onBack = { current = AppScreen.AppSettings },
+                            onOpenPlaylist = { id -> current = AppScreen.PlaylistDetail(id) },
+                        )
+                    }
+
+                    is AppScreen.PlaylistDetail -> {
+                        val pid = (current as AppScreen.PlaylistDetail).playlistId
+                        PlatformBackHandler { current = AppScreen.Playlists }
+                        PlaylistDetailScreen(
+                            playlistId = pid,
+                            onBack = { current = AppScreen.Playlists },
                         )
                     }
 
@@ -153,6 +191,7 @@ fun App(settings: SettingsStore = koinInject()) {
 
                     AppScreen.Onboarding,
                     AppScreen.NowPlaying,
+                    AppScreen.Lyrics,
                     AppScreen.NewStation,
                     is AppScreen.EditStation,
                     -> Unit  // handled above (NowPlaying / editor / onboarding)

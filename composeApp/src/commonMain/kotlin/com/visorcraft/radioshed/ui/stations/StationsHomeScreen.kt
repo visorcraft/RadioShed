@@ -17,10 +17,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.items as lazyItems
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
@@ -47,6 +50,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -102,6 +106,14 @@ fun StationsHomeScreen(
     val playerState by audioEngine.state.collectAsState()
     val nowPlaying by audioEngine.nowPlaying.collectAsState()
     val scope = rememberCoroutineScope()
+
+    // Recently played snapshot. We re-query whenever the active station
+    // changes (so a tap immediately refreshes the row's order) — the
+    // underlying query is cheap (LIMIT 6, indexed by last_played_at).
+    var recent by remember { mutableStateOf<List<Station>>(emptyList()) }
+    LaunchedEffect(currentStation?.id, playerState) {
+        recent = stationRepo.listRecentlyPlayed(limit = 6L)
+    }
 
     Scaffold(
         topBar = {
@@ -166,6 +178,21 @@ fun StationsHomeScreen(
                             trackArtist = nowPlaying?.artist,
                             artworkUri = nowPlaying?.artworkUri,
                             onTap = onOpenNowPlaying,
+                        )
+                    }
+                }
+
+                // Recently Played horizontal row — shown only after the
+                // user has actually played something. Filters out the
+                // currently-playing station (it's already pinned above
+                // in the Continue Listening card).
+                val recentToShow = recent
+                    .filter { it.id != currentStation?.id && it.stats.lastPlayedAt != null }
+                if (recentToShow.isNotEmpty()) {
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        RecentlyPlayedRow(
+                            stations = recentToShow,
+                            onPlay = { id -> scope.launch { stationPlayback.playStation(id) } },
                         )
                     }
                 }
@@ -327,6 +354,67 @@ private fun ContinueListeningCard(
                 color = MaterialTheme.colorScheme.onPrimaryContainer,
             )
         }
+    }
+}
+
+/**
+ * Horizontal row of recently-played station chips. Compact "stamp"-style
+ * tiles — colored circle + station name. Tapping starts the station
+ * directly without opening the editor / detail view.
+ */
+@Composable
+private fun RecentlyPlayedRow(
+    stations: List<Station>,
+    onPlay: (Long) -> Unit,
+) {
+    Column(modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 4.dp)) {
+        Text(
+            text = "Recently played",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f),
+        )
+        Spacer(Modifier.size(10.dp))
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            lazyItems(stations, key = { it.id }) { station ->
+                RecentChip(station = station, onTap = { onPlay(station.id) })
+            }
+        }
+    }
+}
+
+@Composable
+private fun RecentChip(station: Station, onTap: () -> Unit) {
+    val accent = stationColor(station)
+    Column(
+        modifier = Modifier
+            .width(96.dp)
+            .clickable(onClick = onTap),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(72.dp)
+                .clip(RoundedCornerShape(36.dp))
+                .background(stationGradient(accent)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = presetIconFor(station),
+                contentDescription = null,
+                modifier = Modifier.size(36.dp),
+                tint = Color.White.copy(alpha = 0.92f),
+            )
+        }
+        Spacer(Modifier.size(6.dp))
+        Text(
+            text = station.name,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onBackground,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 

@@ -56,4 +56,16 @@ sealed interface AppScreen {
 
     /** Artist detail — albums + tracks for an artist, drill-in to album. */
     data class ArtistDetail(val artistId: Long) : AppScreen
+
+    /** Full-screen synced lyrics, opened from Now Playing. */
+    data object Lyrics : AppScreen
+
+    /** Equalizer — 5-band sliders + presets. */
+    data object Equalizer : AppScreen
+
+    /** Playlist library — list of all playlists with create button. */
+    data object Playlists : AppScreen
+
+    /** Single playlist detail — track list with play/shuffle/remove. */
+    data class PlaylistDetail(val playlistId: Long) : AppScreen
 }

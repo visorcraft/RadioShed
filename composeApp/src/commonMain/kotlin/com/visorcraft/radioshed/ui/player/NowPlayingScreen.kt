@@ -12,6 +12,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -32,6 +35,8 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.QueueMusic
+import androidx.compose.material.icons.filled.Lyrics
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Star
@@ -41,9 +46,11 @@ import androidx.compose.material.icons.outlined.StarOutline
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -52,6 +59,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -77,6 +85,7 @@ import com.visorcraft.radioshed.audio.AudioEngine
 import com.visorcraft.radioshed.audio.PlayerState
 import com.visorcraft.radioshed.audio.SleepTimer
 import com.visorcraft.radioshed.data.RatingRepository
+import com.visorcraft.radioshed.domain.Track
 import com.visorcraft.radioshed.stations.StationPlayback
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
@@ -94,6 +103,7 @@ import org.koin.compose.koinInject
 @Composable
 fun NowPlayingScreen(
     onClose: () -> Unit,
+    onOpenLyrics: () -> Unit = {},
     audioEngine: AudioEngine = koinInject(),
     stationPlayback: StationPlayback = koinInject(),
     ratingRepo: RatingRepository = koinInject(),
@@ -106,6 +116,18 @@ fun NowPlayingScreen(
     val sleepState by sleepTimer.state.collectAsState()
     val scope = rememberCoroutineScope()
     var sleepMenuOpen by remember { mutableStateOf(false) }
+    var queueSheetOpen by remember { mutableStateOf(false) }
+    // Snapshot taken when the sheet opens; refresh each time the sheet is
+    // re-opened so the user sees the current upcoming/recent at that
+    // moment without having to subscribe to a live flow we don't have.
+    var upcoming by remember { mutableStateOf<List<Track>>(emptyList()) }
+    var recent by remember { mutableStateOf<List<Track>>(emptyList()) }
+    LaunchedEffect(queueSheetOpen, nowPlaying?.trackId) {
+        if (queueSheetOpen) {
+            upcoming = stationPlayback.upcoming(count = 20)
+            recent = stationPlayback.recentSnapshot().reversed()  // newest first
+        }
+    }
 
     var rating by remember { mutableStateOf(0.0) }
     LaunchedEffect(nowPlaying?.trackId) {
@@ -133,6 +155,20 @@ fun NowPlayingScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = onOpenLyrics) {
+                        Icon(
+                            imageVector = Icons.Filled.Lyrics,
+                            contentDescription = "Lyrics",
+                            tint = MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
+                    IconButton(onClick = { queueSheetOpen = true }) {
+                        Icon(
+                            imageVector = Icons.Filled.QueueMusic,
+                            contentDescription = "Queue",
+                            tint = MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
                     Box {
                         IconButton(onClick = { sleepMenuOpen = true }) {
                             Icon(
@@ -185,6 +221,21 @@ fun NowPlayingScreen(
             return@Scaffold
         }
 
+        if (queueSheetOpen) {
+            QueueBottomSheet(
+                upcoming = upcoming,
+                recent = recent,
+                isShuffleMode = currentStation?.playback?.order != com.visorcraft.radioshed.domain.PlayOrder.Sequential
+                    && currentStation != null,
+                onDismiss = { queueSheetOpen = false },
+                onJumpUpcoming = { idx ->
+                    if (upcoming.isNotEmpty()) {
+                        stationPlayback.playTracks(upcoming, startIndex = idx)
+                        queueSheetOpen = false
+                    }
+                },
+            )
+        }
         BoxWithConstraints(modifier = Modifier.fillMaxSize().padding(padding)) {
             val isCompact = maxWidth < 600.dp
             val accent = stationAccent(currentStation?.color)
@@ -673,6 +724,107 @@ private fun formatMs(ms: Long): String {
     val mins = totalSeconds / 60L
     val secs = totalSeconds % 60L
     return "$mins:${secs.toString().padStart(2, '0')}"
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun QueueBottomSheet(
+    upcoming: List<Track>,
+    recent: List<Track>,
+    isShuffleMode: Boolean,
+    onDismiss: () -> Unit,
+    onJumpUpcoming: (Int) -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+    ) {
+        LazyColumn(
+            modifier = Modifier.fillMaxWidth(),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                horizontal = 16.dp, vertical = 8.dp,
+            ),
+        ) {
+            if (recent.isNotEmpty()) {
+                item { QueueSectionHeader("Just played") }
+                items(recent, key = { "r:${it.id}" }) { track ->
+                    QueueTrackRow(track = track, dim = true, onTap = null)
+                }
+                item { Spacer(Modifier.height(8.dp)) }
+                item { HorizontalDivider() }
+                item { Spacer(Modifier.height(8.dp)) }
+            }
+            item {
+                QueueSectionHeader(
+                    if (isShuffleMode) "Up next (shuffle pool)" else "Up next",
+                )
+            }
+            if (upcoming.isEmpty()) {
+                item {
+                    Text(
+                        text = "Nothing queued.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                        modifier = Modifier.padding(vertical = 8.dp),
+                    )
+                }
+            } else {
+                itemsIndexed(
+                    upcoming, key = { _, t -> "u:${t.id}" },
+                ) { idx, track ->
+                    QueueTrackRow(
+                        track = track,
+                        dim = false,
+                        onTap = { onJumpUpcoming(idx) },
+                    )
+                }
+            }
+            item { Spacer(Modifier.height(24.dp)) }
+        }
+    }
+}
+
+@Composable
+private fun QueueSectionHeader(label: String) {
+    Text(
+        text = label,
+        style = MaterialTheme.typography.titleSmall,
+        fontWeight = FontWeight.SemiBold,
+        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
+        modifier = Modifier.padding(vertical = 6.dp),
+    )
+}
+
+@Composable
+private fun QueueTrackRow(
+    track: Track,
+    dim: Boolean,
+    onTap: (() -> Unit)?,
+) {
+    val baseColor = if (dim) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+                    else MaterialTheme.colorScheme.onSurface
+    val rowMod = if (onTap != null) Modifier.fillMaxWidth().clickable(onClick = onTap)
+                 else Modifier.fillMaxWidth()
+    Row(
+        modifier = rowMod.padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            imageVector = Icons.Filled.MusicNote,
+            contentDescription = null,
+            modifier = Modifier.size(18.dp),
+            tint = baseColor.copy(alpha = 0.6f),
+        )
+        Spacer(Modifier.size(10.dp))
+        Text(
+            text = track.title.ifBlank { track.fileName },
+            style = MaterialTheme.typography.bodyMedium,
+            color = baseColor,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
 }
 
 /**
