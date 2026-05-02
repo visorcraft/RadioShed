@@ -48,6 +48,21 @@ JOIN rating r ON r.track_id = track.id
 WHERE r.stars >= ? AND track.is_available = 1
 ORDER BY r.stars DESC, r.rated_at DESC LIMIT ?;
 
+-- "Forgotten Gems" — highly-rated tracks the user hasn't played
+-- recently. Joins rating + station_history; tracks never played
+-- (NULL last_played_at via the LEFT JOIN aggregate) match too via
+-- the IFNULL coalesce. Sort by recency ASC so the longest-forgotten
+-- one comes first.
+selectForgottenGemTracks:
+SELECT track.* FROM track
+JOIN rating r ON r.track_id = track.id
+LEFT JOIN station_history sh ON sh.track_id = track.id
+WHERE r.stars >= ? AND track.is_available = 1
+GROUP BY track.id
+HAVING IFNULL(MAX(sh.played_at), 0) < ?
+ORDER BY IFNULL(MAX(sh.played_at), 0) ASC, r.stars DESC
+LIMIT ?;
+
 clearRating:
 DELETE FROM rating WHERE track_id = ?;
 

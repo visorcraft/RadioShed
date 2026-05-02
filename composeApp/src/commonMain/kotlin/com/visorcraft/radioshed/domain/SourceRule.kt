@@ -87,6 +87,12 @@ enum class SmartQueryKind {
     RecentlyRated,
     NeverPlayed,
     AdaptiveMix,
+    /**
+     * Highly-rated tracks (≥4★) that haven't been played in 90+ days.
+     * Distinct from [LongestUnheard] which is "least played by count" —
+     * Forgotten Gems is "loved but recently neglected".
+     */
+    ForgottenGems,
 }
 
 @Serializable

@@ -67,6 +67,14 @@ internal val DefaultPresets: List<StationPreset> = listOf(
         sortPosition = 4,
         customSubtitle = "Newest 50 by file ctime",
     ),
+    StationPreset(
+        name = "Forgotten Gems",
+        color = 0xFFFF6B6B.toInt(),
+        source = SourceRule.SmartQuery(SmartQueryKind.ForgottenGems, limit = 100),
+        playback = PlaybackRule(order = PlayOrder.SmartShuffle),
+        sortPosition = 5,
+        customSubtitle = "4★+ tracks you haven't heard in months",
+    ),
 )
 
 /**

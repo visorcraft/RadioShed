@@ -169,6 +169,26 @@ class StationRepository(private val db: RadioShedDatabase) {
             }
         }
 
+    /**
+     * Global play history across every station, newest first. Includes
+     * the station's name pre-joined so the History screen doesn't need
+     * a second per-row lookup.
+     */
+    suspend fun allHistory(limit: Long = 200): List<HistoryEntryWithStation> =
+        withContext(IODispatcher) {
+            db.stationsQueries.selectAllHistory(limit).executeAsList().map { row ->
+                HistoryEntryWithStation(
+                    id = row.history_id,
+                    trackId = row.track_id,
+                    stationId = row.station_id,
+                    stationName = row.station_name,
+                    playedAt = row.played_at,
+                    completed = row.completed == 1L,
+                    listenedMs = row.listened_ms,
+                )
+            }
+        }
+
     suspend fun recentTrackIdsForStation(stationId: Long, limit: Long): List<Long> =
         withContext(IODispatcher) {
             db.stationsQueries.selectRecentTrackIdsForStation(stationId, limit).executeAsList()
@@ -286,4 +306,14 @@ data class TopAlbumEntry(
     val title: String,
     val artworkUri: String?,
     val plays: Long,
+)
+
+data class HistoryEntryWithStation(
+    val id: Long,
+    val trackId: Long,
+    val stationId: Long,
+    val stationName: String,
+    val playedAt: Long,
+    val completed: Boolean,
+    val listenedMs: Long,
 )

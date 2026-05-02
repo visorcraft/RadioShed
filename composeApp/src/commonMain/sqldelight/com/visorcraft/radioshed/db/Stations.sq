@@ -81,6 +81,16 @@ RETURNING id;
 selectHistoryByStation:
 SELECT * FROM station_history WHERE station_id = ? ORDER BY played_at DESC LIMIT ?;
 
+-- Global play history across all stations, newest first. Joins station
+-- name in so the UI doesn't have to do a per-row station lookup.
+selectAllHistory:
+SELECT sh.id AS history_id, sh.track_id, sh.station_id, sh.played_at,
+       sh.completed, sh.listened_ms, station.name AS station_name
+FROM station_history sh
+JOIN station ON station.id = sh.station_id
+ORDER BY sh.played_at DESC
+LIMIT ?;
+
 selectRecentTrackIdsForStation:
 SELECT track_id FROM station_history WHERE station_id = ? ORDER BY played_at DESC LIMIT ?;
 

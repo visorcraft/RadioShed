@@ -31,6 +31,7 @@ import com.visorcraft.radioshed.ui.search.SearchScreen
 import com.visorcraft.radioshed.ui.settings.AppSettingsScreen
 import com.visorcraft.radioshed.ui.settings.BackupRestoreScreen
 import com.visorcraft.radioshed.ui.settings.EqualizerScreen
+import com.visorcraft.radioshed.ui.settings.HistoryScreen
 import com.visorcraft.radioshed.ui.settings.StatsScreen
 import com.visorcraft.radioshed.ui.stations.StationEditorScreen
 import com.visorcraft.radioshed.ui.stations.StationsHomeScreen
@@ -184,6 +185,7 @@ fun App(
                             onOpenPlaylists = { current = AppScreen.Playlists },
                             onOpenBackup = { current = AppScreen.BackupRestore },
                             onOpenStats = { current = AppScreen.Stats },
+                            onOpenHistory = { current = AppScreen.History },
                         )
                     }
 
@@ -194,6 +196,11 @@ fun App(
                             onArtistTap = { id -> current = AppScreen.ArtistDetail(id) },
                             onAlbumTap = { id -> current = AppScreen.AlbumDetail(id) },
                         )
+                    }
+
+                    AppScreen.History -> {
+                        PlatformBackHandler { current = AppScreen.AppSettings }
+                        HistoryScreen(onBack = { current = AppScreen.AppSettings })
                     }
 
                     AppScreen.Equalizer -> {

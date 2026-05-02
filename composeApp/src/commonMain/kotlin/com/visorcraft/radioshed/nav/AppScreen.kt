@@ -72,6 +72,9 @@ sealed interface AppScreen {
     /** Listening stats — total time, top tracks. */
     data object Stats : AppScreen
 
+    /** Listening history — chronological play log. */
+    data object History : AppScreen
+
     /** Playlist library — list of all playlists with create button. */
     data object Playlists : AppScreen
 

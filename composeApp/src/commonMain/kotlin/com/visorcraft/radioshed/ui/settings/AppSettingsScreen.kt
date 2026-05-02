@@ -77,6 +77,7 @@ fun AppSettingsScreen(
     onOpenPlaylists: () -> Unit = {},
     onOpenBackup: () -> Unit = {},
     onOpenStats: () -> Unit = {},
+    onOpenHistory: () -> Unit = {},
     settings: SettingsStore = koinInject(),
     artworkSync: MissingArtworkSync = koinInject(),
 ) {
@@ -204,6 +205,12 @@ fun AppSettingsScreen(
                 title = "Listening stats",
                 subtitle = "Total time, play count, top tracks",
                 onClick = onOpenStats,
+            )
+            Spacer(Modifier.height(8.dp))
+            NavRow(
+                title = "Listening history",
+                subtitle = "Chronological log of every track you've played",
+                onClick = onOpenHistory,
             )
 
             Spacer(Modifier.height(24.dp))

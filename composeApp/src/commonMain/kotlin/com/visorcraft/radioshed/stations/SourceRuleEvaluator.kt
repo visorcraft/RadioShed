@@ -71,8 +71,23 @@ class SourceRuleEvaluator(
                 ratingRepo.topRatedTracks(minStars = 4.0, limit = limit)
             SmartQueryKind.NeverPlayed ->
                 ratingRepo.neverPlayedTracks(limit)
+            SmartQueryKind.ForgottenGems -> {
+                // 90 days ago. We could expose this as a parameter on
+                // the SmartQuery rule itself in a later schema bump,
+                // but a fixed cutoff matches Spotify / Apple Music's
+                // "On Repeat" / "Time Capsule" cadence.
+                val cutoff = nowMs() - FORGOTTEN_GEMS_THRESHOLD_DAYS * 86_400_000L
+                ratingRepo.forgottenGemTracks(
+                    minStars = 4.0,
+                    olderThanMs = cutoff,
+                    limit = limit,
+                )
+            }
         }
     }
+
+    /** Hook so tests can pin a deterministic clock; production = nowMillis(). */
+    private fun nowMs(): Long = com.visorcraft.radioshed.data.nowMillis()
 
     private suspend fun evaluateArtists(rule: SourceRule.ArtistSelector): List<Track> =
         rule.artistIds.flatMap { libraryRepo.tracksForArtist(it) }
@@ -122,6 +137,11 @@ class SourceRuleEvaluator(
         if (left.isEmpty()) return emptyList()
         val rightIds = evaluate(rule.right).mapTo(mutableSetOf()) { it.id }
         return left.filterNot { it.id in rightIds }
+    }
+
+    private companion object {
+        /** "Loved but neglected" cutoff for ForgottenGems, in days. */
+        const val FORGOTTEN_GEMS_THRESHOLD_DAYS = 90L
     }
 
     private suspend fun evaluateTopN(rule: SourceRule.TopN): List<Track> {

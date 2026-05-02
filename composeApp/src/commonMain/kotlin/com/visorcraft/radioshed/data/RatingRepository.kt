@@ -36,6 +36,20 @@ class RatingRepository(private val db: RadioShedDatabase) {
                 .map { it.toDomain() }
         }
 
+    /**
+     * "Forgotten Gems": tracks rated ≥ [minStars] whose most-recent
+     * play in `station_history` is older than [olderThanMs]. A track
+     * never played at all matches via the LEFT JOIN coalesce → 0 < t.
+     */
+    suspend fun forgottenGemTracks(
+        minStars: Double = 4.0,
+        olderThanMs: Long,
+        limit: Long = 100,
+    ): List<Track> = withContext(IODispatcher) {
+        db.ratingsQueries.selectForgottenGemTracks(minStars, olderThanMs, limit)
+            .executeAsList().map { it.toDomain() }
+    }
+
     // ---- Skip log ----
 
     suspend fun recordSkip(

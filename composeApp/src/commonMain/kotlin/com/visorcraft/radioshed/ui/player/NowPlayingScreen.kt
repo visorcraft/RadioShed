@@ -76,6 +76,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -337,6 +338,34 @@ fun NowPlayingScreen(
         BoxWithConstraints(modifier = Modifier.fillMaxSize().padding(padding)) {
             val isCompact = maxWidth < 600.dp
             val accent = stationAccent(currentStation?.color)
+
+            // Ambient cover-art backdrop. Renders the current artwork
+            // fullscreen + heavily blurred so the foreground album art
+            // floats over a tinted impression of itself. Modifier.blur
+            // is GPU-accelerated on Android 12+; on older versions
+            // Compose silently falls back to no-blur, which is fine —
+            // the scrim alone still reads as a tinted backdrop.
+            playable.artworkUri?.let { uri ->
+                coil3.compose.AsyncImage(
+                    model = uri,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .blur(radius = 80.dp),
+                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                    alpha = 0.6f,
+                )
+                // Scrim on top of the blurred image so the bright
+                // blurred saturation doesn't fight with the foreground
+                // album art and controls.
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            MaterialTheme.colorScheme.background.copy(alpha = 0.55f),
+                        ),
+                )
+            }
 
             if (isCompact) {
                 CompactLayout(
