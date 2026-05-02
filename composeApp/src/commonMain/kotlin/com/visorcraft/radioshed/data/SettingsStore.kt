@@ -86,6 +86,21 @@ class SettingsStore(private val settings: Settings) {
     fun setAutoResumeLastStation(enabled: Boolean) =
         settings.putBoolean(KEY_AUTO_RESUME_STATION, enabled)
 
+    // ---- Auto-backup ----
+
+    /**
+     * If enabled, the app fires an export-to-JSON pass at most once
+     * every [AUTO_BACKUP_INTERVAL_MS] (7 days) on first launch
+     * crossing that threshold. A safety net for users who forget to
+     * back up manually. Off by default — silent background writes
+     * shouldn't be opt-out.
+     */
+    fun getAutoBackupEnabled(): Boolean = settings.getBoolean(KEY_AUTO_BACKUP, false)
+    fun setAutoBackupEnabled(enabled: Boolean) = settings.putBoolean(KEY_AUTO_BACKUP, enabled)
+
+    fun getLastAutoBackupAt(): Long = settings.getLong(KEY_AUTO_BACKUP_LAST, 0L)
+    fun setLastAutoBackupAt(ts: Long) = settings.putLong(KEY_AUTO_BACKUP_LAST, ts)
+
     // ---- One-shot migrations (set on first run, never re-run) ----
 
     /**
@@ -229,7 +244,13 @@ class SettingsStore(private val settings: Settings) {
         const val KEY_REPLAY_GAIN = "audio.replayGain.enabled"
         const val KEY_REPLAY_GAIN_PREAMP = "audio.replayGain.preampDb"
         const val KEY_AUTO_RESUME_STATION = "playback.autoResumeLastStation"
+        const val KEY_AUTO_BACKUP = "backup.autoEnabled"
+        const val KEY_AUTO_BACKUP_LAST = "backup.autoLastAt"
         const val KEY_DRIVE_MODE = "ui.driveMode"
+        /** Cadence for the auto-backup background export. 7 days = once
+         *  per week, which matches typical user back-up cadence
+         *  expectations (Google's auto-backup, Time Machine, etc.). */
+        const val AUTO_BACKUP_INTERVAL_MS = 7L * 24L * 60L * 60L * 1_000L
         const val KEY_SEARCH_HISTORY = "search.recentQueries"
         const val SEARCH_HISTORY_CAP = 10
     }

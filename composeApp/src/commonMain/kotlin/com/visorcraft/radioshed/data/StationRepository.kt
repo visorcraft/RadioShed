@@ -160,6 +160,23 @@ class StationRepository(private val db: RadioShedDatabase) {
         }
 
     /**
+     * Map of (stationId → (plays, skips)) computed from
+     * `station_history`. Used by Stations Home tiles to render
+     * "X plays · Y% skip". Stations with no history are absent —
+     * callers treat absence as 0 plays.
+     */
+    suspend fun stationCompletionRates(): Map<Long, Pair<Long, Long>> =
+        withContext(IODispatcher) {
+            db.stationsQueries.selectStationCompletionRates().executeAsList()
+                .associate { row ->
+                    // SUM over zero-row groups can't fire because GROUP
+                    // BY only emits stations with ≥1 history row, but
+                    // SQLDelight types skips as Long? regardless.
+                    row.station_id to (row.plays to (row.skips ?: 0L))
+                }
+        }
+
+    /**
      * Aggregate play stats for a single track. Returns zero counts
      * when the track has no history rows yet (every field except
      * trackId is non-null thanks to the SUM/IFNULL coalesces).

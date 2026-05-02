@@ -13,7 +13,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import com.visorcraft.radioshed.data.LibraryRepository
 import com.visorcraft.radioshed.data.SettingsStore
+import com.visorcraft.radioshed.data.nowMillis
 import com.visorcraft.radioshed.nav.AppScreen
+import com.visorcraft.radioshed.source.BackupService
 import com.visorcraft.radioshed.stations.StationPlayback
 import com.visorcraft.radioshed.nav.PlatformBackHandler
 import com.visorcraft.radioshed.ui.home.HomeScreen
@@ -46,6 +48,7 @@ fun App(
     settings: SettingsStore = koinInject(),
     stationPlayback: StationPlayback = koinInject(),
     libraryRepo: LibraryRepository = koinInject(),
+    backupService: BackupService = koinInject(),
 ) {
     // Live-mutable theme mode: read once from the persisted setting, then
     // hold in state so the AppSettingsScreen picker can re-theme the whole
@@ -95,6 +98,31 @@ fun App(
             if (!settings.getGenresCanonicalized()) {
                 runCatching { libraryRepo.canonicalizeGenreTags() }
                 settings.setGenresCanonicalized(true)
+            }
+        }
+
+        // Auto-backup safety net. Opt-in; when enabled, fires a
+        // BackupService.export() at most once per 7 days. Failures
+        // are silent — the user already has a manual export path in
+        // Settings → Backup, this is just a safety net for people
+        // who forget. Successful runs persist their timestamp via
+        // the same setting so the next launch checks the elapsed
+        // window correctly.
+        LaunchedEffect(Unit) {
+            if (
+                settings.isOnboardingComplete() &&
+                settings.getAutoBackupEnabled()
+            ) {
+                val intervalMs = 7L * 24L * 60L * 60L * 1_000L
+                val elapsed = nowMillis() - settings.getLastAutoBackupAt()
+                if (elapsed >= intervalMs) {
+                    runCatching {
+                        val r = backupService.export()
+                        if (r is BackupService.ExportResult.Saved) {
+                            settings.setLastAutoBackupAt(nowMillis())
+                        }
+                    }
+                }
             }
         }
 

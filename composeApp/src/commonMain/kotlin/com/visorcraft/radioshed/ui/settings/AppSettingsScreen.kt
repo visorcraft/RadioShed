@@ -90,6 +90,7 @@ fun AppSettingsScreen(
     var preampDb by remember(settings) { mutableStateOf(settings.getReplayGainPreampDb()) }
     var autoResume by remember(settings) { mutableStateOf(settings.getAutoResumeLastStation()) }
     var driveMode by remember(settings) { mutableStateOf(settings.getDriveMode()) }
+    var autoBackup by remember(settings) { mutableStateOf(settings.getAutoBackupEnabled()) }
     var artworkState by remember { mutableStateOf<ArtworkSyncState>(ArtworkSyncState.Idle) }
     var artworkJob by remember { mutableStateOf<Job?>(null) }
     val scope = rememberCoroutineScope()
@@ -203,6 +204,18 @@ fun AppSettingsScreen(
                 title = "Backup & restore",
                 subtitle = "Export stations, playlists, and ratings to a JSON file",
                 onClick = onOpenBackup,
+            )
+            Spacer(Modifier.height(8.dp))
+            ToggleRow(
+                title = "Auto-backup weekly",
+                subtitle = "Silently writes a fresh backup once per week so you " +
+                    "don't have to remember. Files live alongside manual backups " +
+                    "and obey the same 10-file retention cap.",
+                checked = autoBackup,
+                onCheckedChange = { v ->
+                    autoBackup = v
+                    settings.setAutoBackupEnabled(v)
+                },
             )
             Spacer(Modifier.height(8.dp))
             NavRow(

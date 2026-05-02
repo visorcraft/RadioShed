@@ -123,8 +123,16 @@ fun StationsHomeScreen(
     // changes (so a tap immediately refreshes the row's order) — the
     // underlying query is cheap (LIMIT 6, indexed by last_played_at).
     var recent by remember { mutableStateOf<List<Station>>(emptyList()) }
+    // (plays, skips) per station id. Used to show skip rate on the
+    // station tile subtitle when there's enough history to be
+    // statistically meaningful (≥5 plays). Refreshes on the same
+    // signal as the recent-played row.
+    var completionRates by remember {
+        mutableStateOf<Map<Long, Pair<Long, Long>>>(emptyMap())
+    }
     LaunchedEffect(currentStation?.id, playerState) {
         recent = stationRepo.listRecentlyPlayed(limit = 6L)
+        completionRates = stationRepo.stationCompletionRates()
     }
 
     // Recently-added tracks — pulled from the library by file ctime
@@ -306,12 +314,24 @@ fun StationsHomeScreen(
                 }
 
                 items(stations, key = { it.id }) { station ->
+                    val rate = completionRates[station.id]
+                    val skipRateLine = rate?.let { (plays, skips) ->
+                        // Display only when we've got enough plays for
+                        // the percentage to mean something — a single
+                        // skip on a 1-play station rendering "100%
+                        // skip" is just noise.
+                        if (plays >= 5L) {
+                            val pct = (skips * 100L / plays).toInt()
+                            "$plays plays · $pct% skip"
+                        } else null
+                    }
                     if (isCompact) {
                         StationListRow(
                             station = station,
                             isCurrent = station.id == currentStation?.id,
                             isPlaying = station.id == currentStation?.id &&
                                 playerState == PlayerState.Playing,
+                            statsLine = skipRateLine,
                             onPlay = {
                                 scope.launch { stationPlayback.playStation(station.id) }
                             },
@@ -323,6 +343,7 @@ fun StationsHomeScreen(
                             isCurrent = station.id == currentStation?.id,
                             isPlaying = station.id == currentStation?.id &&
                                 playerState == PlayerState.Playing,
+                            statsLine = skipRateLine,
                             onPlay = {
                                 scope.launch { stationPlayback.playStation(station.id) }
                             },
@@ -902,6 +923,7 @@ private fun StationListRow(
     station: Station,
     isCurrent: Boolean,
     isPlaying: Boolean,
+    statsLine: String?,
     onPlay: () -> Unit,
     onLongPress: () -> Unit,
 ) {
@@ -950,9 +972,17 @@ private fun StationListRow(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
-                if (station.stats.playCount > 0) {
+                // Prefer the history-derived stats line ("12 plays ·
+                // 25% skip") over the bare play count when it's
+                // available, since it captures more useful info in
+                // the same vertical space.
+                val infoLine = statsLine
+                    ?: if (station.stats.playCount > 0) {
+                        "Played ${station.stats.playCount}× · ${station.playback.order.label()}"
+                    } else null
+                if (infoLine != null) {
                     Text(
-                        "Played ${station.stats.playCount}× · ${station.playback.order.label()}",
+                        infoLine,
                         style = MaterialTheme.typography.bodySmall,
                         color = if (isCurrent) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.55f)
                                 else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
@@ -993,6 +1023,7 @@ private fun StationGridTile(
     station: Station,
     isCurrent: Boolean,
     isPlaying: Boolean,
+    statsLine: String?,
     onPlay: () -> Unit,
     onEdit: () -> Unit,
 ) {
@@ -1091,10 +1122,15 @@ private fun StationGridTile(
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
-                if (station.stats.playCount > 0) {
+                // Same precedence as the list-row variant: prefer the
+                // history-derived stats line when available.
+                val tileInfo = statsLine ?: if (station.stats.playCount > 0) {
+                    "Played ${station.stats.playCount}×"
+                } else null
+                if (tileInfo != null) {
                     Spacer(Modifier.size(4.dp))
                     Text(
-                        "Played ${station.stats.playCount}×",
+                        tileInfo,
                         style = MaterialTheme.typography.labelSmall,
                         color = if (isCurrent) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.55f)
                                 else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),

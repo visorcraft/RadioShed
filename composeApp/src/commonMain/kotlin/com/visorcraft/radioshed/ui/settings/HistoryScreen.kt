@@ -1,7 +1,9 @@
 package com.visorcraft.radioshed.ui.settings
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -52,6 +54,7 @@ import com.visorcraft.radioshed.data.StationRepository
 import com.visorcraft.radioshed.data.nowMillis
 import com.visorcraft.radioshed.domain.Track
 import com.visorcraft.radioshed.stations.StationPlayback
+import com.visorcraft.radioshed.ui.playlists.TrackContextSheet
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
@@ -61,7 +64,7 @@ import org.koin.compose.koinInject
  * time. Tap to play that track again as a one-off (seeds an ad-hoc
  * queue from the visible history list).
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun HistoryScreen(
     onBack: () -> Unit,
@@ -73,6 +76,7 @@ fun HistoryScreen(
     var trackById by remember { mutableStateOf<Map<Long, Track>>(emptyMap()) }
     var menuOpen by remember { mutableStateOf(false) }
     var clearConfirmOpen by remember { mutableStateOf(false) }
+    var contextTrackId by remember { mutableStateOf<Long?>(null) }
     val scope = rememberCoroutineScope()
 
     suspend fun reload() {
@@ -158,10 +162,25 @@ fun HistoryScreen(
                                 startIndex = idx,
                             )
                         },
+                        onLongPress = {
+                            // Skip rows whose track has been deleted
+                            // — the context sheet would just show
+                            // an empty title with no actionable info.
+                            trackById[entry.trackId]?.let {
+                                contextTrackId = entry.trackId
+                            }
+                        },
                     )
                 }
             }
         }
+    }
+
+    contextTrackId?.let { id ->
+        TrackContextSheet(
+            trackId = id,
+            onDismiss = { contextTrackId = null },
+        )
     }
 
     if (clearConfirmOpen) {
@@ -194,14 +213,18 @@ fun HistoryScreen(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun HistoryRow(
     entry: HistoryEntryWithStation,
     track: Track?,
     onTap: () -> Unit,
+    onLongPress: () -> Unit = {},
 ) {
     Surface(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onTap),
+        modifier = Modifier
+            .fillMaxWidth()
+            .combinedClickable(onClick = onTap, onLongClick = onLongPress),
         color = Color.Transparent,
     ) {
         Row(

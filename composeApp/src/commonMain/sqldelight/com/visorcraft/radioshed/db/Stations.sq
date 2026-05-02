@@ -100,6 +100,18 @@ FROM station_history
 WHERE track_id IN ?
 GROUP BY track_id;
 
+-- Per-station completion stats. Returns (station_id, plays, skips)
+-- so the Home tile can render "X plays · Y% skip" without per-row
+-- queries. plays = total history rows; skips = rows with
+-- completed = 0 (listened < 80% of duration). Stations with no
+-- history are absent from the result and treated as zero by callers.
+selectStationCompletionRates:
+SELECT station_id,
+       COUNT(*) AS plays,
+       SUM(CASE WHEN completed = 0 THEN 1 ELSE 0 END) AS skips
+FROM station_history
+GROUP BY station_id;
+
 -- Track-level play/skip stats for the Track Info dialog. Unlike the
 -- batched version above, this is a single-track aggregate including
 -- skip count (incomplete plays) and total listened time so the
