@@ -159,6 +159,29 @@ class StationRepository(private val db: RadioShedDatabase) {
                 .associate { it.track_id to it.plays }
         }
 
+    /**
+     * Aggregate play stats for a single track. Returns zero counts
+     * when the track has no history rows yet (every field except
+     * trackId is non-null thanks to the SUM/IFNULL coalesces).
+     */
+    suspend fun historyStatsForTrack(trackId: Long): TrackHistoryStats =
+        withContext(IODispatcher) {
+            val row = db.stationsQueries.selectTrackHistoryStats(trackId).executeAsOne()
+            // SUM(...) over zero rows returns NULL in SQLite; the
+            // CASE WHEN inside our SUM means the inner expression is
+            // never NULL but the outer sum still is. SQLDelight types
+            // these as Long? so we coerce below. (The lints flag
+            // `row.completes ?: 0L` as always-non-null when the
+            // generator produces a non-null Long; suppressing.)
+            @Suppress("USELESS_ELVIS")
+            TrackHistoryStats(
+                plays = row.plays,
+                completes = (row.completes ?: 0L),
+                skips = (row.skips ?: 0L),
+                listenedMs = (row.listened_ms ?: 0L),
+            )
+        }
+
     suspend fun reorder(id: Long, sortPosition: Int) = withContext(IODispatcher) {
         db.stationsQueries.reorderStation(sortPosition.toLong(), nowMillis(), id)
     }
@@ -358,5 +381,13 @@ data class HistoryEntryWithStation(
     val stationName: String,
     val playedAt: Long,
     val completed: Boolean,
+    val listenedMs: Long,
+)
+
+/** Per-track aggregate from `station_history`, used by Track Info. */
+data class TrackHistoryStats(
+    val plays: Long,
+    val completes: Long,
+    val skips: Long,
     val listenedMs: Long,
 )

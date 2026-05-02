@@ -100,6 +100,20 @@ FROM station_history
 WHERE track_id IN ?
 GROUP BY track_id;
 
+-- Track-level play/skip stats for the Track Info dialog. Unlike the
+-- batched version above, this is a single-track aggregate including
+-- skip count (incomplete plays) and total listened time so the
+-- Track Info dialog can show real listening numbers, not just the
+-- total play count.
+selectTrackHistoryStats:
+SELECT
+    COUNT(*) AS plays,
+    SUM(CASE WHEN completed = 1 THEN 1 ELSE 0 END) AS completes,
+    SUM(CASE WHEN completed = 0 THEN 1 ELSE 0 END) AS skips,
+    IFNULL(SUM(listened_ms), 0) AS listened_ms
+FROM station_history
+WHERE track_id = ?;
+
 reorderStation:
 UPDATE station SET sort_position = ?, updated_at = ? WHERE id = ?;
 

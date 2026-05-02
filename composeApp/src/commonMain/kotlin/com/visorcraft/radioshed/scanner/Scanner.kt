@@ -2,6 +2,7 @@ package com.visorcraft.radioshed.scanner
 
 import com.visorcraft.radioshed.data.FolderRepository
 import com.visorcraft.radioshed.data.LibraryRepository
+import com.visorcraft.radioshed.data.LyricsCacheRepository
 import com.visorcraft.radioshed.data.nowMillis
 import com.visorcraft.radioshed.domain.Folder
 import com.visorcraft.radioshed.source.ArtworkPersister
@@ -32,6 +33,7 @@ class Scanner(
     private val fileEnumerator: FileEnumerator,
     private val tagReader: TagReader,
     private val artworkPersister: ArtworkPersister,
+    private val lyricsCache: LyricsCacheRepository,
 ) {
 
     fun scanFolder(folderId: Long): Flow<ScanProgress> = flow {
@@ -154,7 +156,7 @@ class Scanner(
             if (tag.key == "GENRE") tag.copy(value = tag.value.canonicalizeGenre()) else tag
         }
 
-        libraryRepo.upsertTrack(
+        val trackId = libraryRepo.upsertTrack(
             folderId = folder.id,
             path = discovered.uri,
             fileName = discovered.fileName,
@@ -179,6 +181,32 @@ class Scanner(
             customTags = normalizedTags.takeIf { it.isNotEmpty() },
             personnel = tags.personnel.takeIf { it.isNotEmpty() },
         )
+
+        // Pre-populate the lyrics cache from the file's embedded
+        // LYRICS tag (USLT for ID3v2, Vorbis comment for FLAC/Opus,
+        // `©lyr` atom for M4A). LyricsService picks these up on the
+        // next resolve via the existing cache hit path — saves an
+        // LRClib round-trip for the (very common) case where the
+        // user already tagged their files.
+        //
+        // Source flag = "embedded" so a future feature could
+        // distinguish "from the file" (always trustworthy) vs "from
+        // LRClib" (might be wrong for non-mainstream tracks). We
+        // skip caching when there's an existing entry from a more
+        // user-curated source — local sidecar wins, LRClib doesn't.
+        tags.embeddedLyrics?.takeIf { it.isNotBlank() }?.let { embedded ->
+            val existing = lyricsCache.get(trackId)
+            val shouldOverwrite = existing == null ||
+                existing.source != "local"  // never clobber a sidecar
+            if (shouldOverwrite) {
+                lyricsCache.put(
+                    trackId = trackId,
+                    syncedLrc = null,
+                    plainText = embedded,
+                    source = "embedded",
+                )
+            }
+        }
     }
 
     companion object {

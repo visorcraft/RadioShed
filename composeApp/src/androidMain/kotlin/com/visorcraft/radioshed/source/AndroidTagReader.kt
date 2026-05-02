@@ -85,6 +85,7 @@ class AndroidTagReader : TagReader {
             customTags = customTags,
             personnel = personnel,
             artworkBytes = tag?.let(::extractArtwork),
+            embeddedLyrics = tag?.firstOrNull(FieldKey.LYRICS),
         )
     }
 

@@ -192,6 +192,12 @@ class StationPlayback(
     }
 
     fun skipNext() {
+        // Record the in-flight track BEFORE advancing — otherwise a
+        // user mash on skip-next could pop several queue items
+        // without ever recording the listening sessions for the
+        // popped tracks (advanceToNext → playTrack → recordPrevious
+        // works for the immediately previous track, but if next
+        // returns null we'd skip recording entirely).
         scope.launch {
             advanceMutex.withLock { advanceToNext() }
         }

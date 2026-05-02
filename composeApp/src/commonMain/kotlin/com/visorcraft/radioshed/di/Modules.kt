@@ -55,7 +55,7 @@ val sharedModule: Module = module {
     single { BackupRepository(get()) }
 
     // Phase 3: scanner. FileEnumerator + TagReader come from platformModule.
-    single { Scanner(get(), get(), get(), get(), get()) }
+    single { Scanner(get(), get(), get(), get(), get(), get()) }
 
     // Cover Art Archive sweep. CoverArtFetcher is platform-specific
     // (Android uses HttpURLConnection; iOS is a Null stub for now).

@@ -886,9 +886,14 @@ private fun TrackInfoDialog(
     libraryRepo: LibraryRepository,
     onDismiss: () -> Unit,
 ) {
+    val stationRepo: com.visorcraft.radioshed.data.StationRepository = koinInject()
     var track by remember { mutableStateOf<Track?>(null) }
+    var stats by remember {
+        mutableStateOf<com.visorcraft.radioshed.data.TrackHistoryStats?>(null)
+    }
     LaunchedEffect(playable.trackId) {
         track = libraryRepo.getTrackById(playable.trackId)
+        stats = stationRepo.historyStatsForTrack(playable.trackId)
     }
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
@@ -911,11 +916,36 @@ private fun TrackInfoDialog(
                     t.bpm?.let { InfoLine("BPM", "%.1f".format(it)) }
                     t.replayGainTrack?.let { InfoLine("ReplayGain (track)", "%.2f dB".format(it)) }
                     t.replayGainAlbum?.let { InfoLine("ReplayGain (album)", "%.2f dB".format(it)) }
+                    // Listening stats from station_history. Hidden
+                    // until the track has at least one play recorded
+                    // — a 0-stat block is just noise on first listen.
+                    stats?.takeIf { it.plays > 0L }?.let { s ->
+                        Spacer(Modifier.height(4.dp))
+                        InfoLine(
+                            "Plays",
+                            "${s.completes} completed · ${s.skips} skipped (${s.plays} total)",
+                        )
+                        InfoLine("Listened", formatStatDuration(s.listenedMs))
+                    }
                     InfoLine("Path", t.path, monospace = true)
                 }
             }
         },
     )
+}
+
+/** "Xh Ym" / "Ym Zs" / "Zs" — same vocabulary as Stats. */
+private fun formatStatDuration(ms: Long): String {
+    if (ms <= 0L) return "0s"
+    val totalSeconds = ms / 1_000L
+    val hours = totalSeconds / 3_600L
+    val minutes = (totalSeconds % 3_600L) / 60L
+    val seconds = totalSeconds % 60L
+    return when {
+        hours > 0L -> "${hours}h ${minutes}m"
+        minutes > 0L -> "${minutes}m ${seconds}s"
+        else -> "${seconds}s"
+    }
 }
 
 @Composable
