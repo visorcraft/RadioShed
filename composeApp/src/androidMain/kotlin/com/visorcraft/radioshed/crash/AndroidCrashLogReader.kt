@@ -32,8 +32,8 @@ class AndroidCrashLogReader(private val context: Context) : CrashLogReader {
     private fun ApplicationExitInfo.toEntry(): CrashLogEntry = CrashLogEntry(
         timestamp = timestamp,
         reason = reasonLabel(reason),
-        description = description ?: "",
-        processName = processName ?: "",
+        description = description.orEmpty(),
+        processName = processName.orEmpty(),
         importance = importanceLabel(importance),
         trace = readTrace(),
     )
