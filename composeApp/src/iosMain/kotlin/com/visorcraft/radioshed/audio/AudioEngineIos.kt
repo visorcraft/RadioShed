@@ -25,6 +25,9 @@ class AudioEngineIos : AudioEngine {
     private val _position = MutableStateFlow(Position(0L, 0L))
     override val position: StateFlow<Position> = _position.asStateFlow()
 
+    private val _volume = MutableStateFlow(1f)
+    override val volume: StateFlow<Float> = _volume.asStateFlow()
+
     override fun play(playable: Playable) {
         // TODO: Phase 4 part 2 — AVAudioEngine.attach(playerNode).schedule(...)
         _state.value = PlayerState.Idle

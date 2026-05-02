@@ -75,11 +75,13 @@ fun AppSettingsScreen(
     onThemeModeChange: (ThemeMode) -> Unit,
     onOpenEqualizer: () -> Unit = {},
     onOpenPlaylists: () -> Unit = {},
+    onOpenBackup: () -> Unit = {},
     settings: SettingsStore = koinInject(),
     artworkSync: MissingArtworkSync = koinInject(),
 ) {
     var reduceMotion by remember { mutableStateOf(settings.getReduceMotion()) }
     var replayGain by remember { mutableStateOf(settings.getReplayGainEnabled()) }
+    var preampDb by remember { mutableStateOf(settings.getReplayGainPreampDb()) }
     var artworkState by remember { mutableStateOf<ArtworkSyncState>(ArtworkSyncState.Idle) }
     var artworkJob by remember { mutableStateOf<Job?>(null) }
     val scope = rememberCoroutineScope()
@@ -143,6 +145,16 @@ fun AppSettingsScreen(
                     settings.setReplayGainEnabled(v)
                 },
             )
+            if (replayGain) {
+                Spacer(Modifier.height(8.dp))
+                PreampSlider(
+                    valueDb = preampDb,
+                    onChange = { v ->
+                        preampDb = v
+                        settings.setReplayGainPreampDb(v)
+                    },
+                )
+            }
             Spacer(Modifier.height(8.dp))
             NavRow(
                 title = "Equalizer",
@@ -154,6 +166,12 @@ fun AppSettingsScreen(
                 title = "Playlists",
                 subtitle = "Create, edit, and play your custom collections",
                 onClick = onOpenPlaylists,
+            )
+            Spacer(Modifier.height(8.dp))
+            NavRow(
+                title = "Backup &amp; restore",
+                subtitle = "Export stations, playlists, and ratings to a JSON file",
+                onClick = onOpenBackup,
             )
 
             Spacer(Modifier.height(24.dp))
@@ -282,6 +300,48 @@ private fun ThemeChoiceRow(
                             else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun PreampSlider(valueDb: Float, onChange: (Float) -> Unit) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+        shape = RoundedCornerShape(12.dp),
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "ReplayGain pre-amp",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        "Pre-amp boost added to per-track gain (clamped to ≤0 dB " +
+                            "output, so loud tracks still attenuate). Untagged tracks " +
+                            "ignore this.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    )
+                }
+                Spacer(Modifier.size(12.dp))
+                Text(
+                    "${if (valueDb >= 0f) "+" else ""}${"%.1f".format(valueDb)} dB",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+            }
+            androidx.compose.material3.Slider(
+                value = valueDb,
+                onValueChange = onChange,
+                valueRange = -6f..12f,
+                steps = 0,
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
     }
 }

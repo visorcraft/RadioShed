@@ -27,6 +27,7 @@ import com.visorcraft.radioshed.ui.playlists.PlaylistDetailScreen
 import com.visorcraft.radioshed.ui.playlists.PlaylistsScreen
 import com.visorcraft.radioshed.ui.search.SearchScreen
 import com.visorcraft.radioshed.ui.settings.AppSettingsScreen
+import com.visorcraft.radioshed.ui.settings.BackupRestoreScreen
 import com.visorcraft.radioshed.ui.settings.EqualizerScreen
 import com.visorcraft.radioshed.ui.stations.StationEditorScreen
 import com.visorcraft.radioshed.ui.stations.StationsHomeScreen
@@ -162,12 +163,18 @@ fun App(settings: SettingsStore = koinInject()) {
                             onThemeModeChange = { themeMode = it },
                             onOpenEqualizer = { current = AppScreen.Equalizer },
                             onOpenPlaylists = { current = AppScreen.Playlists },
+                            onOpenBackup = { current = AppScreen.BackupRestore },
                         )
                     }
 
                     AppScreen.Equalizer -> {
                         PlatformBackHandler { current = AppScreen.AppSettings }
                         EqualizerScreen(onBack = { current = AppScreen.AppSettings })
+                    }
+
+                    AppScreen.BackupRestore -> {
+                        PlatformBackHandler { current = AppScreen.AppSettings }
+                        BackupRestoreScreen(onBack = { current = AppScreen.AppSettings })
                     }
 
                     AppScreen.Playlists -> {

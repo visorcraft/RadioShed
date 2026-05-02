@@ -41,11 +41,25 @@ class SleepTimer(private val audioEngine: AudioEngine) {
     private var ticker: Job? = null
     private var endOfTrackWatcher: Job? = null
 
+    /**
+     * The volume captured at the moment the timer was armed. The fade
+     * ramp starts from this value (so a track already attenuated by
+     * ReplayGain still fades smoothly), and we restore it on cancel or
+     * after the final pause so the next resume / next track plays at
+     * the level the engine wanted before we touched it.
+     */
+    private var capturedVolume: Float? = null
+
     /** Schedule a hard pause after [durationMs] of wall-clock time. */
     fun start(durationMs: Long) {
         cancel()
         if (durationMs <= 0L) return
         val started = TimeSource.Monotonic.markNow()
+        // Capture before starting so the fade ramp has the right ceiling
+        // even if ReplayGain or another consumer mutates the volume mid-
+        // timer. We restore this value on cancel / after final pause.
+        val startVolume = audioEngine.volume.value
+        capturedVolume = startVolume
         _state.value = State.Running(remainingMs = durationMs)
         ticker = scope.launch {
             while (isActive) {
@@ -53,12 +67,23 @@ class SleepTimer(private val audioEngine: AudioEngine) {
                 val remaining = durationMs - elapsed
                 if (remaining <= 0L) break
                 _state.value = State.Running(remainingMs = remaining)
+                // Fade ramp: linear from startVolume → 0 over the final
+                // FADE_DURATION_MS. Outside the fade window, leave volume
+                // alone so ReplayGain / pre-amp control the level.
+                if (remaining < FADE_DURATION_MS) {
+                    val fadeFraction = remaining.toFloat() / FADE_DURATION_MS.toFloat()
+                    audioEngine.setVolume((startVolume * fadeFraction).coerceIn(0f, 1f))
+                }
                 // 1 Hz tick — finer doesn't help readability and just
                 // recomposes the UI more often. The final pause fires
                 // when `remaining <= 0` on the next loop iteration.
                 delay(TICK_INTERVAL_MS.coerceAtMost(remaining))
             }
             audioEngine.pause()
+            // Restore so a future resume isn't silent, and the next
+            // track's RG re-application starts from a normal baseline.
+            audioEngine.setVolume(startVolume)
+            capturedVolume = null
             _state.value = State.Idle
         }
     }
@@ -91,6 +116,11 @@ class SleepTimer(private val audioEngine: AudioEngine) {
         ticker = null
         endOfTrackWatcher?.cancel()
         endOfTrackWatcher = null
+        // If we'd been mid-fade, snap back to where the user was. Without
+        // this, cancelling at remaining=2s would leave them on a
+        // 25%-volume track until the next track loads and RG re-applies.
+        capturedVolume?.let { audioEngine.setVolume(it) }
+        capturedVolume = null
         _state.value = State.Idle
     }
 
@@ -102,5 +132,10 @@ class SleepTimer(private val audioEngine: AudioEngine) {
 
     private companion object {
         const val TICK_INTERVAL_MS = 1_000L
+
+        /** Length of the fade-out window before the final pause. 8s
+         *  matches Spotify's sleep-timer behaviour and is short enough
+         *  not to feel like a glitch but long enough to register. */
+        const val FADE_DURATION_MS = 8_000L
     }
 }

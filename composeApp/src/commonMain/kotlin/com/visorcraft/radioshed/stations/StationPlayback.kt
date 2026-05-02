@@ -240,7 +240,8 @@ class StationPlayback(
             audioEngine.setVolume(1f)
             return
         }
-        val raw = 10.0.pow(gainDb / 20.0).toFloat()
+        val preamp = settings.getReplayGainPreampDb()
+        val raw = 10.0.pow((gainDb + preamp) / 20.0).toFloat()
         audioEngine.setVolume(raw.coerceIn(0f, 1f))
     }
 

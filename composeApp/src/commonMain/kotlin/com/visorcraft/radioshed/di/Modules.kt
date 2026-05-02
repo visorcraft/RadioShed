@@ -19,6 +19,7 @@ import com.visorcraft.radioshed.data.WidgetConfigRepository
 import com.visorcraft.radioshed.db.RadioShedDatabase
 import com.visorcraft.radioshed.audio.SleepTimer
 import com.visorcraft.radioshed.scanner.Scanner
+import com.visorcraft.radioshed.source.BackupService
 import com.visorcraft.radioshed.source.LyricsService
 import com.visorcraft.radioshed.source.MissingArtworkSync
 import com.visorcraft.radioshed.stations.PresetSeeder
@@ -65,6 +66,9 @@ val sharedModule: Module = module {
 
     // Lyrics: cache + fetcher, orchestrated by LyricsService.
     single { LyricsService(get(), get(), get()) }
+
+    // Backup &amp; restore: JSON dumps of stations + playlists + ratings.
+    single { BackupService(get(), get(), get(), get(), get()) }
 
     // Phase 5: stations engine. AudioEngine comes from platformModule.
     single { SourceRuleEvaluator(get(), get(), get()) }

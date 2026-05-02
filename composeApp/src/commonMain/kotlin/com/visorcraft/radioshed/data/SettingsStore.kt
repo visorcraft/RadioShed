@@ -69,6 +69,15 @@ class SettingsStore(private val settings: Settings) {
     fun getReplayGainEnabled(): Boolean = settings.getBoolean(KEY_REPLAY_GAIN, true)
     fun setReplayGainEnabled(enabled: Boolean) = settings.putBoolean(KEY_REPLAY_GAIN, enabled)
 
+    /**
+     * Pre-amp gain applied to ReplayGain-tagged tracks, in dB. Common
+     * range: -6..+12. Combined with the track's RG value before
+     * conversion to a 0..1 volume fraction (clamped to ≤1.0 to avoid
+     * clipping). Untagged tracks ignore this value.
+     */
+    fun getReplayGainPreampDb(): Float = settings.getFloat(KEY_REPLAY_GAIN_PREAMP, 0f)
+    fun setReplayGainPreampDb(dB: Float) = settings.putFloat(KEY_REPLAY_GAIN_PREAMP, dB)
+
     // ---- Equalizer ----
 
     fun getEqEnabled(): Boolean = settings.getBoolean(KEY_EQ_ENABLED, false)
@@ -104,5 +113,6 @@ class SettingsStore(private val settings: Settings) {
         const val KEY_EQ_ENABLED = "audio.eq.enabled"
         const val KEY_EQ_BAND_PREFIX = "audio.eq.band."
         const val KEY_REPLAY_GAIN = "audio.replayGain.enabled"
+        const val KEY_REPLAY_GAIN_PREAMP = "audio.replayGain.preampDb"
     }
 }

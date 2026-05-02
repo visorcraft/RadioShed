@@ -1,6 +1,8 @@
 package com.visorcraft.radioshed.ui.search
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -33,6 +35,7 @@ import com.visorcraft.radioshed.domain.Album
 import com.visorcraft.radioshed.domain.Artist
 import com.visorcraft.radioshed.domain.Track
 import com.visorcraft.radioshed.stations.StationPlayback
+import com.visorcraft.radioshed.ui.playlists.AddToPlaylistSheet
 import kotlinx.coroutines.delay
 import org.koin.compose.koinInject
 
@@ -41,7 +44,7 @@ import org.koin.compose.koinInject
  * year:>1968` is deferred. The query input debounces by 200 ms so we
  * don't hammer the database on every keystroke.
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun SearchScreen(
     onBack: () -> Unit,
@@ -51,6 +54,7 @@ fun SearchScreen(
     var query by remember { mutableStateOf("") }
     var results by remember { mutableStateOf(SearchResults(emptyList(), emptyList(), emptyList())) }
     var isSearching by remember { mutableStateOf(false) }
+    var addToPlaylistTrackId by remember { mutableStateOf<Long?>(null) }
 
     LaunchedEffect(query) {
         if (query.isBlank()) {
@@ -140,12 +144,20 @@ fun SearchScreen(
                                     val idx = results.tracks.indexOf(track).coerceAtLeast(0)
                                     stationPlayback.playTracks(results.tracks, startIndex = idx)
                                 },
+                                onLongPress = { addToPlaylistTrackId = track.id },
                             )
                         }
                     }
                 }
             }
         }
+    }
+
+    addToPlaylistTrackId?.let { id ->
+        AddToPlaylistSheet(
+            trackId = id,
+            onDismiss = { addToPlaylistTrackId = null },
+        )
     }
 }
 
@@ -182,12 +194,13 @@ private fun AlbumRow(album: Album) {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun TrackRow(track: Track, onClick: () -> Unit) {
+private fun TrackRow(track: Track, onClick: () -> Unit, onLongPress: () -> Unit = {}) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .combinedClickable(onClick = onClick, onLongClick = onLongPress)
             .padding(vertical = 8.dp, horizontal = 4.dp),
     ) {
         Text(track.title, style = MaterialTheme.typography.bodyLarge)

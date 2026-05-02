@@ -25,6 +25,14 @@ interface AudioEngine {
     /** Playback position; both fields update at ~2 Hz while playing. */
     val position: StateFlow<Position>
 
+    /**
+     * Current player volume as a 0..1 fraction. Used by features that
+     * need to read the level (sleep-timer fade) before they apply their
+     * own attenuation, so they can restore it when their work is done.
+     * Defaults to 1.0 until the first [setVolume] call.
+     */
+    val volume: StateFlow<Float>
+
     fun play(playable: Playable)
 
     /** Replace the queue with [items] and start at [startIndex]. */

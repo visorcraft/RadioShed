@@ -10,12 +10,14 @@ import com.visorcraft.radioshed.audio.EqualizerController
 import com.visorcraft.radioshed.data.DatabaseDriverFactory
 import com.visorcraft.radioshed.permissions.StoragePermissions
 import com.visorcraft.radioshed.source.AndroidArtworkPersister
+import com.visorcraft.radioshed.source.AndroidBackupStorage
 import com.visorcraft.radioshed.source.AndroidCoverArtFetcher
 import com.visorcraft.radioshed.source.AndroidFileBrowser
 import com.visorcraft.radioshed.source.AndroidFileEnumerator
 import com.visorcraft.radioshed.source.AndroidLyricsFetcher
 import com.visorcraft.radioshed.source.AndroidTagReader
 import com.visorcraft.radioshed.source.ArtworkPersister
+import com.visorcraft.radioshed.source.BackupStorage
 import com.visorcraft.radioshed.source.CoverArtFetcher
 import com.visorcraft.radioshed.source.FileBrowser
 import com.visorcraft.radioshed.source.FileEnumerator
@@ -40,6 +42,7 @@ actual val platformModule: Module = module {
     single<ArtworkPersister> { AndroidArtworkPersister(androidContext()) }
     single<CoverArtFetcher> { AndroidCoverArtFetcher() }
     single<LyricsFetcher> { AndroidLyricsFetcher() }
+    single<BackupStorage> { AndroidBackupStorage(androidContext()) }
     single<FileBrowser> { AndroidFileBrowser() }
     single { StoragePermissions(androidContext()) }
     single { StorageVolumes(androidContext()) }

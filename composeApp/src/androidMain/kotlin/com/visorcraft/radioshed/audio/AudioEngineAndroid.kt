@@ -48,6 +48,9 @@ class AudioEngineAndroid(private val appContext: Context) : AudioEngine {
     private val _position = MutableStateFlow(Position(0L, 0L))
     override val position: StateFlow<Position> = _position.asStateFlow()
 
+    private val _volume = MutableStateFlow(1f)
+    override val volume: StateFlow<Float> = _volume.asStateFlow()
+
     init {
         connect()
     }
@@ -212,7 +215,9 @@ class AudioEngineAndroid(private val appContext: Context) : AudioEngine {
         // per-track ReplayGain attenuation. Clamping prevents boosting
         // (which would just clip) and keeps us out of negative-fraction
         // territory.
-        controller?.volume = fraction.coerceIn(0f, 1f)
+        val clamped = fraction.coerceIn(0f, 1f)
+        controller?.volume = clamped
+        _volume.value = clamped
     }
 
     /** Call from process/app shutdown if you want the controller to release cleanly. */
