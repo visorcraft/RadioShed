@@ -243,14 +243,33 @@ private fun TwoPaneLayout(
     onRate: (Double) -> Unit,
     onDislikeOnStation: () -> Unit,
 ) {
-    Row(modifier = Modifier.fillMaxSize().padding(24.dp)) {
-        AlbumArtPlaceholder(
-            accent = accent,
-            artworkUri = playable.artworkUri,
+    Row(
+        modifier = Modifier.fillMaxSize().padding(24.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        // Art is sized by share-of-width, not by share-of-height. Without
+        // this, on tall-wide screens like the Galaxy Fold 7's unfolded
+        // inner display the square `fillMaxHeight + aspectRatio(1f)` art
+        // would consume the full width and crush the right column to a
+        // few dp wide, where the track title and scrubber would render
+        // character-by-character vertically. `weight(1f)` shares width
+        // 50/50 with the right column; `widthIn(max=)` caps art on
+        // ultra-wide displays so it doesn't dominate.
+        Box(
             modifier = Modifier
-                .fillMaxHeight()
-                .aspectRatio(1f),
-        )
+                .weight(1f)
+                .fillMaxHeight(),
+            contentAlignment = Alignment.Center,
+        ) {
+            AlbumArtPlaceholder(
+                accent = accent,
+                artworkUri = playable.artworkUri,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .widthIn(max = 560.dp)
+                    .aspectRatio(1f),
+            )
+        }
         Spacer(Modifier.width(32.dp))
         Column(
             modifier = Modifier.weight(1f).fillMaxHeight(),

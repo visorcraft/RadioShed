@@ -6,7 +6,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -15,9 +14,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -32,10 +28,9 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -56,6 +51,7 @@ import com.visorcraft.radioshed.data.FolderRepository
 import com.visorcraft.radioshed.data.StationRepository
 import com.visorcraft.radioshed.domain.PlayOrder
 import com.visorcraft.radioshed.domain.PlaybackRule
+import com.visorcraft.radioshed.domain.SmartQueryKind
 import com.visorcraft.radioshed.domain.SourceRule
 import com.visorcraft.radioshed.domain.Station
 import com.visorcraft.radioshed.domain.Weighting
@@ -63,29 +59,33 @@ import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
 /**
- * Station Editor — create a new station or edit an existing one.
+ * Station Editor — create or edit a station. Now supports four source-rule
+ * types via an in-form type picker:
  *
- * MVP scope (Phase 5 part 2 — first cut):
- *  - Identity: name (required), optional subtitle, color picked from a small
- *    swatch row
- *  - Source: multi-select of registered folders → builds a
- *    [SourceRule.FolderSelector]. Other rule kinds (TagFilter, SmartQuery,
- *    Union/Intersection/Difference/TopN) deferred — they need their own
- *    editor surfaces and aren't part of the "I want to make a station from
- *    a folder" 80% case.
- *  - Playback: [PlayOrder] + [Weighting] selectors (everything else on
- *    [PlaybackRule] keeps the default — crossfade=Smart, gapless=true,
- *    skipOnDislike=Off, etc.)
+ *  - Folders: multi-select of registered library folders →
+ *    [SourceRule.FolderSelector]. Most common case for users with file-
+ *    system-organized libraries.
+ *  - Smart Query: [SourceRule.SmartQuery] with a [SmartQueryKind] and
+ *    a row limit. Newest, Most Played, Top Rated, Never Played, etc. —
+ *    these power the seeded built-in presets.
+ *  - Tag Filter: [SourceRule.TagFilter] with a tag key (e.g. GENRE,
+ *    MOOD), one or more values, and an "all of" vs "any of" mode. The
+ *    canonical "all my Rock tracks" station regardless of folder layout.
+ *  - Path Pattern: [SourceRule.PathPattern] with include / exclude
+ *    glob lists. Useful when files are organized but not at folder
+ *    boundaries — e.g. matching FLAC files anywhere under a "Live"
+ *    subdirectory regardless of which library folder it lives in.
  *
- * Built-in stations open a constrained variant: cosmetic fields (name,
- * subtitle, color) are editable; the source and playback fields are
- * read-only and the Delete button is hidden. This keeps the seeded preset
- * library intact while letting users personalize them.
+ * One source type per station for now. Compound rules
+ * ([SourceRule.Union] / [SourceRule.Intersection] / [SourceRule.Difference]
+ * / [SourceRule.TopN]) round-trip unchanged when editing — the editor
+ * shows them as read-only with a hint that compound editing isn't yet
+ * exposed.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StationEditorScreen(
-    stationId: Long?,    // null = creating a new station
+    stationId: Long?,    // null = creating
     onClose: () -> Unit,
     folderRepo: FolderRepository = koinInject(),
     stationRepo: StationRepository = koinInject(),
@@ -97,13 +97,34 @@ fun StationEditorScreen(
     var name by remember { mutableStateOf("") }
     var subtitle by remember { mutableStateOf("") }
     var color by remember { mutableStateOf(BRAND_AMBER) }
-    val selectedFolderIds = remember { mutableStateListOf<Long>() }
     var playOrder by remember { mutableStateOf(PlayOrder.SmartShuffle) }
     var weighting by remember { mutableStateOf(Weighting.Uniform) }
+
+    // Source-rule state. We hold per-type fields ALL the time; switching
+    // types just changes which set is read on save. The other slots
+    // preserve their values so toggling back doesn't lose them.
+    var sourceType by remember { mutableStateOf(SourceType.Folders) }
+
+    // Folders
+    val selectedFolderIds = remember { mutableStateListOf<Long>() }
+    // Smart Query
+    var smartKind by remember { mutableStateOf(SmartQueryKind.NewestN) }
+    var smartLimitText by remember { mutableStateOf("100") }
+    // Tag Filter
+    var tagKey by remember { mutableStateOf("GENRE") }
+    var tagValuesText by remember { mutableStateOf("") }
+    var tagMatchAll by remember { mutableStateOf(false) }
+    // Path Pattern
+    var pathIncludesText by remember { mutableStateOf("") }
+    var pathExcludesText by remember { mutableStateOf("") }
+
     var saveError by remember { mutableStateOf<String?>(null) }
     var saving by remember { mutableStateOf(false) }
+    // True when the existing station's source rule isn't representable
+    // in the editor (compound rules, unsupported selectors). We freeze
+    // the source section in that case to avoid clobbering it.
+    var sourceLockedAsCompound by remember { mutableStateOf(false) }
 
-    // Load existing station (one-shot when stationId resolves).
     LaunchedEffect(stationId) {
         if (stationId == null) return@LaunchedEffect
         val station = stationRepo.getById(stationId) ?: run {
@@ -117,36 +138,52 @@ fun StationEditorScreen(
         playOrder = station.playback.order
         weighting = station.playback.weighting
         when (val src = station.source) {
-            is SourceRule.FolderSelector -> selectedFolderIds.addAll(src.folderIds)
+            is SourceRule.FolderSelector -> {
+                sourceType = SourceType.Folders
+                selectedFolderIds.addAll(src.folderIds)
+            }
+            is SourceRule.SmartQuery -> {
+                sourceType = SourceType.SmartQuery
+                smartKind = src.kind
+                smartLimitText = src.limit.toString()
+            }
+            is SourceRule.TagFilter -> {
+                sourceType = SourceType.TagFilter
+                tagKey = src.key
+                tagValuesText = src.values.joinToString(", ")
+                tagMatchAll = src.matchAll
+            }
+            is SourceRule.PathPattern -> {
+                sourceType = SourceType.PathPattern
+                pathIncludesText = src.include.joinToString(", ")
+                pathExcludesText = src.exclude.joinToString(", ")
+            }
             else -> {
-                /* MVP can't represent non-FolderSelector sources in this
-                   editor; we leave selectedFolderIds empty and the user
-                   can still edit cosmetic fields. The source rule round-
-                   trips unchanged on save (see saveStation) so we don't
-                   accidentally clobber a Union/Intersection/etc. */
+                // Compound rules + selectors we don't expose (Playlist,
+                // Artist, Album, Duration, FileFormat) round-trip unchanged.
+                sourceLockedAsCompound = true
             }
         }
     }
 
     val isBuiltIn = existing?.isBuiltIn == true
     val isEditing = stationId != null
-    val sourceEditable = !isBuiltIn
-    val canSave = name.isNotBlank() && (
-        // Creating: must pick at least one folder. Editing built-ins: cosmetic
-        // fields only, source is locked. Editing custom: must keep at least
-        // one folder selected if originally a FolderSelector.
-        isBuiltIn || existing?.source !is SourceRule.FolderSelector ||
-            selectedFolderIds.isNotEmpty()
-    )
+    val sourceEditable = !isBuiltIn && !sourceLockedAsCompound
+    val canSave = name.isNotBlank() && !saving && when {
+        !sourceEditable -> true   // cosmetic edit; source preserved as-is
+        sourceType == SourceType.Folders -> selectedFolderIds.isNotEmpty()
+        sourceType == SourceType.SmartQuery -> smartLimitText.toIntOrNull()?.let { it > 0 } == true
+        sourceType == SourceType.TagFilter -> tagKey.isNotBlank() && tagValuesText.isNotBlank()
+        sourceType == SourceType.PathPattern -> pathIncludesText.isNotBlank()
+        else -> true
+    }
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Text(if (isEditing) "Edit station" else "New station")
-                },
+            androidx.compose.material3.TopAppBar(
+                title = { Text(if (isEditing) "Edit station" else "New station") },
                 navigationIcon = { TextButton(onClick = onClose) { Text("Cancel") } },
-                colors = TopAppBarDefaults.topAppBarColors(
+                colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface,
                 ),
             )
@@ -160,6 +197,7 @@ fun StationEditorScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 8.dp),
         ) {
+            // ---- Identity ----
             SectionHeader("Identity")
             OutlinedTextField(
                 value = name,
@@ -177,32 +215,66 @@ fun StationEditorScreen(
                 modifier = Modifier.fillMaxWidth(),
             )
 
+            // ---- Color ----
             Spacer(Modifier.height(16.dp))
             SectionHeader("Color")
             ColorSwatchRow(selected = color, onPick = { color = it })
 
+            // ---- Source ----
             Spacer(Modifier.height(16.dp))
-            SectionHeader(if (sourceEditable) "Folders" else "Folders (built-in: read-only)")
-            if (folders.isEmpty()) {
-                EmptyHint("No folders registered yet. Add one in Library Settings first.")
+            SectionHeader(
+                when {
+                    sourceLockedAsCompound -> "Source (compound rule — read-only)"
+                    isBuiltIn -> "Source (built-in: read-only)"
+                    else -> "Source"
+                },
+            )
+            if (sourceLockedAsCompound) {
+                EmptyHint(
+                    "This station uses a compound rule (Union / Intersection / etc) that " +
+                        "the basic editor can't represent yet. Cosmetic edits above will " +
+                        "save without changing the rule.",
+                )
             } else {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    folders.forEach { folder ->
-                        FolderRow(
-                            folderName = folder.displayName,
-                            folderPath = folder.uri,
-                            checked = folder.id in selectedFolderIds,
-                            enabled = sourceEditable,
-                            onToggle = {
-                                if (!sourceEditable) return@FolderRow
-                                if (folder.id in selectedFolderIds) selectedFolderIds.remove(folder.id)
-                                else selectedFolderIds += folder.id
-                            },
-                        )
-                    }
+                SourceTypeTabs(
+                    selected = sourceType,
+                    onSelect = { sourceType = it },
+                    enabled = sourceEditable,
+                )
+                Spacer(Modifier.height(8.dp))
+                when (sourceType) {
+                    SourceType.Folders -> FoldersConfig(
+                        folders = folders,
+                        selectedFolderIds = selectedFolderIds,
+                        enabled = sourceEditable,
+                    )
+                    SourceType.SmartQuery -> SmartQueryConfig(
+                        kind = smartKind,
+                        onKind = { smartKind = it },
+                        limitText = smartLimitText,
+                        onLimitText = { smartLimitText = it },
+                        enabled = sourceEditable,
+                    )
+                    SourceType.TagFilter -> TagFilterConfig(
+                        key = tagKey,
+                        onKey = { tagKey = it },
+                        valuesText = tagValuesText,
+                        onValuesText = { tagValuesText = it },
+                        matchAll = tagMatchAll,
+                        onMatchAll = { tagMatchAll = it },
+                        enabled = sourceEditable,
+                    )
+                    SourceType.PathPattern -> PathPatternConfig(
+                        includesText = pathIncludesText,
+                        onIncludesText = { pathIncludesText = it },
+                        excludesText = pathExcludesText,
+                        onExcludesText = { pathExcludesText = it },
+                        enabled = sourceEditable,
+                    )
                 }
             }
 
+            // ---- Playback ----
             Spacer(Modifier.height(16.dp))
             SectionHeader("Playback")
             EnumPicker(
@@ -211,7 +283,7 @@ fun StationEditorScreen(
                 selected = playOrder,
                 onPick = { playOrder = it },
                 labelOf = { it.uiLabel() },
-                enabled = sourceEditable,
+                enabled = !isBuiltIn,
             )
             Spacer(Modifier.height(8.dp))
             EnumPicker(
@@ -220,16 +292,13 @@ fun StationEditorScreen(
                 selected = weighting,
                 onPick = { weighting = it },
                 labelOf = { it.uiLabel() },
-                enabled = sourceEditable,
+                enabled = !isBuiltIn,
             )
 
+            // ---- Save row ----
             Spacer(Modifier.height(20.dp))
             saveError?.let {
-                Text(
-                    it,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                )
+                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                 Spacer(Modifier.height(8.dp))
             }
 
@@ -254,7 +323,7 @@ fun StationEditorScreen(
                 }
                 Button(
                     onClick = {
-                        if (saving) return@Button
+                        if (!canSave) return@Button
                         saving = true
                         saveError = null
                         scope.launch {
@@ -265,7 +334,16 @@ fun StationEditorScreen(
                                     name = name.trim(),
                                     subtitle = subtitle.trim().ifBlank { null },
                                     color = color,
+                                    sourceLocked = !sourceEditable,
+                                    sourceType = sourceType,
                                     selectedFolderIds = selectedFolderIds.toList(),
+                                    smartKind = smartKind,
+                                    smartLimit = smartLimitText.toIntOrNull() ?: 100,
+                                    tagKey = tagKey.trim(),
+                                    tagValues = tagValuesText.toCsvList(),
+                                    tagMatchAll = tagMatchAll,
+                                    pathIncludes = pathIncludesText.toCsvList(),
+                                    pathExcludes = pathExcludesText.toCsvList(),
                                     playOrder = playOrder,
                                     weighting = weighting,
                                 )
@@ -274,7 +352,7 @@ fun StationEditorScreen(
                             saving = false
                         }
                     },
-                    enabled = canSave && !saving,
+                    enabled = canSave,
                 ) { Text(if (isEditing) "Save" else "Create") }
             }
             Spacer(Modifier.height(16.dp))
@@ -282,35 +360,40 @@ fun StationEditorScreen(
     }
 }
 
-/**
- * Persist a new or edited station. Built-in stations preserve their original
- * source rule (we don't expose source-editing for them in MVP); user-edited
- * stations whose original source wasn't a FolderSelector also preserve the
- * original source unchanged, so the editor doesn't accidentally rewrite a
- * Union/Intersection/etc. that the editor can't represent yet.
- */
+private enum class SourceType(val label: String) {
+    Folders("Folders"),
+    SmartQuery("Smart Query"),
+    TagFilter("Tag Filter"),
+    PathPattern("Path Pattern"),
+}
+
 private suspend fun saveStation(
     repo: StationRepository,
     existing: Station?,
     name: String,
     subtitle: String?,
     color: Int,
+    sourceLocked: Boolean,
+    sourceType: SourceType,
     selectedFolderIds: List<Long>,
+    smartKind: SmartQueryKind,
+    smartLimit: Int,
+    tagKey: String,
+    tagValues: List<String>,
+    tagMatchAll: Boolean,
+    pathIncludes: List<String>,
+    pathExcludes: List<String>,
     playOrder: PlayOrder,
     weighting: Weighting,
 ) {
     val source: SourceRule = when {
-        existing == null ->
-            // New station: always FolderSelector for MVP.
-            SourceRule.FolderSelector(selectedFolderIds)
-        existing.source is SourceRule.FolderSelector ->
-            // Editing a folder-based station: update the folder list.
-            SourceRule.FolderSelector(selectedFolderIds)
-        else ->
-            // Editing something else (built-in compound rule) — preserve
-            // whatever the original was. The editor's folder selection is
-            // ignored in this branch.
-            existing.source
+        sourceLocked && existing != null -> existing.source
+        else -> when (sourceType) {
+            SourceType.Folders -> SourceRule.FolderSelector(selectedFolderIds)
+            SourceType.SmartQuery -> SourceRule.SmartQuery(smartKind, smartLimit.coerceAtLeast(1))
+            SourceType.TagFilter -> SourceRule.TagFilter(tagKey, tagValues, tagMatchAll)
+            SourceType.PathPattern -> SourceRule.PathPattern(pathIncludes, pathExcludes)
+        }
     }
     val playback = (existing?.playback ?: PlaybackRule()).copy(
         order = playOrder,
@@ -340,6 +423,183 @@ private suspend fun saveStation(
 }
 
 @Composable
+private fun SourceTypeTabs(
+    selected: SourceType,
+    onSelect: (SourceType) -> Unit,
+    enabled: Boolean,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        SourceType.entries.forEach { type ->
+            val isSelected = type == selected
+            Surface(
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable(enabled = enabled) { onSelect(type) },
+                color = if (isSelected) MaterialTheme.colorScheme.primaryContainer
+                        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (enabled) 0.3f else 0.15f),
+                shape = RoundedCornerShape(8.dp),
+            ) {
+                Text(
+                    text = type.label,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                    color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer
+                            else MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun FoldersConfig(
+    folders: List<com.visorcraft.radioshed.domain.Folder>,
+    selectedFolderIds: androidx.compose.runtime.snapshots.SnapshotStateList<Long>,
+    enabled: Boolean,
+) {
+    if (folders.isEmpty()) {
+        EmptyHint("No folders registered yet. Add one in Library Settings first.")
+        return
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        folders.forEach { folder ->
+            FolderRow(
+                folderName = folder.displayName,
+                folderPath = folder.uri,
+                checked = folder.id in selectedFolderIds,
+                enabled = enabled,
+                onToggle = {
+                    if (!enabled) return@FolderRow
+                    if (folder.id in selectedFolderIds) selectedFolderIds.remove(folder.id)
+                    else selectedFolderIds += folder.id
+                },
+            )
+        }
+    }
+}
+
+@Composable
+private fun SmartQueryConfig(
+    kind: SmartQueryKind,
+    onKind: (SmartQueryKind) -> Unit,
+    limitText: String,
+    onLimitText: (String) -> Unit,
+    enabled: Boolean,
+) {
+    EnumPicker(
+        label = "What to play",
+        values = SmartQueryKind.entries.toList(),
+        selected = kind,
+        onPick = onKind,
+        labelOf = { it.uiLabel() },
+        enabled = enabled,
+    )
+    Spacer(Modifier.height(8.dp))
+    OutlinedTextField(
+        value = limitText,
+        onValueChange = { txt -> if (txt.all { it.isDigit() } && txt.length <= 6) onLimitText(txt) },
+        label = { Text("Track limit") },
+        singleLine = true,
+        enabled = enabled,
+        modifier = Modifier.fillMaxWidth(),
+    )
+}
+
+@Composable
+private fun TagFilterConfig(
+    key: String,
+    onKey: (String) -> Unit,
+    valuesText: String,
+    onValuesText: (String) -> Unit,
+    matchAll: Boolean,
+    onMatchAll: (Boolean) -> Unit,
+    enabled: Boolean,
+) {
+    Text(
+        "Common keys: GENRE, ALBUM_ARTIST, MOOD, LANGUAGE, LABEL, GROUPING. Type any tag your files use.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+    )
+    Spacer(Modifier.height(6.dp))
+    OutlinedTextField(
+        value = key,
+        onValueChange = onKey,
+        label = { Text("Tag key") },
+        singleLine = true,
+        enabled = enabled,
+        modifier = Modifier.fillMaxWidth(),
+    )
+    Spacer(Modifier.height(8.dp))
+    OutlinedTextField(
+        value = valuesText,
+        onValueChange = onValuesText,
+        label = { Text("Values (comma-separated)") },
+        singleLine = false,
+        enabled = enabled,
+        modifier = Modifier.fillMaxWidth(),
+    )
+    Spacer(Modifier.height(8.dp))
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Switch(
+            checked = matchAll,
+            onCheckedChange = onMatchAll,
+            enabled = enabled,
+        )
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                if (matchAll) "Match ALL listed values" else "Match ANY listed value",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Text(
+                if (matchAll) "Track must have every listed value for this tag"
+                else "Track needs at least one of the listed values",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+            )
+        }
+    }
+}
+
+@Composable
+private fun PathPatternConfig(
+    includesText: String,
+    onIncludesText: (String) -> Unit,
+    excludesText: String,
+    onExcludesText: (String) -> Unit,
+    enabled: Boolean,
+) {
+    Text(
+        "Glob-style patterns. * matches any chars within a name; ** matches any directory depth. " +
+            "Comma-separate multiple patterns.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+    )
+    Spacer(Modifier.height(6.dp))
+    OutlinedTextField(
+        value = includesText,
+        onValueChange = onIncludesText,
+        label = { Text("Include patterns (e.g. /Music/Rock/**, *.flac)") },
+        singleLine = false,
+        enabled = enabled,
+        modifier = Modifier.fillMaxWidth(),
+    )
+    Spacer(Modifier.height(8.dp))
+    OutlinedTextField(
+        value = excludesText,
+        onValueChange = onExcludesText,
+        label = { Text("Exclude patterns (optional)") },
+        singleLine = false,
+        enabled = enabled,
+        modifier = Modifier.fillMaxWidth(),
+    )
+}
+
+@Composable
 private fun SectionHeader(text: String) {
     Text(
         text = text,
@@ -361,10 +621,7 @@ private fun EmptyHint(text: String) {
 
 @Composable
 private fun ColorSwatchRow(selected: Int, onPick: (Int) -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         SWATCHES.forEach { swatch ->
             val isSelected = swatch == selected
             Box(
@@ -403,11 +660,7 @@ private fun FolderRow(
             Checkbox(checked = checked, onCheckedChange = { onToggle() }, enabled = enabled)
             Spacer(Modifier.width(8.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    folderName,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium,
-                )
+                Text(folderName, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
                 Text(
                     folderPath,
                     style = MaterialTheme.typography.bodySmall,
@@ -471,15 +724,30 @@ private fun Weighting.uiLabel(): String = when (this) {
     Weighting.FavorHigherRated -> "Favor higher-rated"
 }
 
-// 8 swatches in muted, in-car-readable hues. Brand amber leads.
+private fun SmartQueryKind.uiLabel(): String = when (this) {
+    SmartQueryKind.NewestN -> "Newest tracks"
+    SmartQueryKind.OldestN -> "Oldest tracks"
+    SmartQueryKind.LeastPlayed -> "Least played"
+    SmartQueryKind.MostPlayed -> "Most played"
+    SmartQueryKind.HighestRated -> "Highest rated"
+    SmartQueryKind.LongestUnheard -> "Longest unheard"
+    SmartQueryKind.RecentlyAdded -> "Recently added"
+    SmartQueryKind.RecentlyRated -> "Recently rated"
+    SmartQueryKind.NeverPlayed -> "Never played"
+    SmartQueryKind.AdaptiveMix -> "Adaptive mix (under-played + favorites)"
+}
+
+private fun String.toCsvList(): List<String> =
+    split(',').map { it.trim() }.filter { it.isNotBlank() }
+
 private const val BRAND_AMBER = 0xFFFF7F1A.toInt()
 private val SWATCHES = listOf(
     BRAND_AMBER,
-    0xFFE53935.toInt(), // red
-    0xFFFB8C00.toInt(), // orange
-    0xFFFDD835.toInt(), // yellow
-    0xFF43A047.toInt(), // green
-    0xFF00ACC1.toInt(), // teal
-    0xFF1E88E5.toInt(), // blue
-    0xFF8E24AA.toInt(), // purple
+    0xFFE53935.toInt(),
+    0xFFFB8C00.toInt(),
+    0xFFFDD835.toInt(),
+    0xFF43A047.toInt(),
+    0xFF00ACC1.toInt(),
+    0xFF1E88E5.toInt(),
+    0xFF8E24AA.toInt(),
 )
