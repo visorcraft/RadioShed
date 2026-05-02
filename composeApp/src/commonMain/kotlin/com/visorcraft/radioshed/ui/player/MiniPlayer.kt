@@ -156,10 +156,17 @@ private fun TransportButton(
     // / VoiceOver pronounce inconsistently across versions. We override
     // the semantic content description on the modifier so screen readers
     // announce "Previous" / "Play" / "Pause" / "Next" deterministically.
+    //
+    // 48dp height (Material's recommended touch-target minimum) — and
+    // critically, room for U+23F8 PAUSE which has *different* vertical
+    // metrics than the other media-control glyphs in Roboto/Noto. At
+    // 40dp it was clipped at the bottom; at 48dp the glyph fits and
+    // we still hit the M3 touch-target guideline in the same change.
     TextButton(
         onClick = onClick,
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
         modifier = Modifier
-            .size(width = 40.dp, height = 40.dp)
+            .size(width = 48.dp, height = 48.dp)
             .semantics { contentDescription = contentDesc },
     ) {
         Text(
