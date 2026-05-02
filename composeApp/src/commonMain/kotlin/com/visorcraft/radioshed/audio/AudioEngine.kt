@@ -37,6 +37,16 @@ interface AudioEngine {
     fun skipNext()
     fun skipPrevious()
     fun stop()
+
+    /**
+     * Set the player volume as a 0.0..1.0 fraction. Used by the
+     * ReplayGain pipeline to attenuate loud tracks down toward a
+     * common reference level so loudness matches across the queue.
+     *
+     * Out-of-range values are clamped. Calling with 1.0 returns to
+     * unattenuated output.
+     */
+    fun setVolume(fraction: Float)
 }
 
 /**

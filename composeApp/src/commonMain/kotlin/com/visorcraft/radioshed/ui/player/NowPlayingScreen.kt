@@ -31,8 +31,12 @@ import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.Album
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.QueueMusic
@@ -84,9 +88,11 @@ import androidx.compose.ui.unit.dp
 import com.visorcraft.radioshed.audio.AudioEngine
 import com.visorcraft.radioshed.audio.PlayerState
 import com.visorcraft.radioshed.audio.SleepTimer
+import com.visorcraft.radioshed.data.LibraryRepository
 import com.visorcraft.radioshed.data.RatingRepository
 import com.visorcraft.radioshed.domain.Track
 import com.visorcraft.radioshed.stations.StationPlayback
+import com.visorcraft.radioshed.ui.playlists.AddToPlaylistSheet
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
@@ -104,10 +110,13 @@ import org.koin.compose.koinInject
 fun NowPlayingScreen(
     onClose: () -> Unit,
     onOpenLyrics: () -> Unit = {},
+    onOpenAlbum: (Long) -> Unit = {},
+    onOpenArtist: (Long) -> Unit = {},
     audioEngine: AudioEngine = koinInject(),
     stationPlayback: StationPlayback = koinInject(),
     ratingRepo: RatingRepository = koinInject(),
     sleepTimer: SleepTimer = koinInject(),
+    libraryRepo: LibraryRepository = koinInject(),
 ) {
     val nowPlaying by audioEngine.nowPlaying.collectAsState()
     val state by audioEngine.state.collectAsState()
@@ -117,6 +126,9 @@ fun NowPlayingScreen(
     val scope = rememberCoroutineScope()
     var sleepMenuOpen by remember { mutableStateOf(false) }
     var queueSheetOpen by remember { mutableStateOf(false) }
+    var overflowMenuOpen by remember { mutableStateOf(false) }
+    var addToPlaylistTrackId by remember { mutableStateOf<Long?>(null) }
+    var trackInfoOpen by remember { mutableStateOf(false) }
     // Snapshot taken when the sheet opens; refresh each time the sheet is
     // re-opened so the user sees the current upcoming/recent at that
     // moment without having to subscribe to a live flow we don't have.
@@ -198,6 +210,64 @@ fun NowPlayingScreen(
                             },
                         )
                     }
+                    Box {
+                        IconButton(onClick = { overflowMenuOpen = true }) {
+                            Icon(
+                                imageVector = Icons.Filled.MoreVert,
+                                contentDescription = "More",
+                                tint = MaterialTheme.colorScheme.onSurface,
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = overflowMenuOpen,
+                            onDismissRequest = { overflowMenuOpen = false },
+                        ) {
+                            val track = nowPlaying
+                            DropdownMenuItem(
+                                text = { Text("Add to playlist") },
+                                leadingIcon = { Icon(Icons.Filled.PlaylistAdd, null) },
+                                enabled = track != null,
+                                onClick = {
+                                    overflowMenuOpen = false
+                                    track?.trackId?.let { addToPlaylistTrackId = it }
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Go to album") },
+                                leadingIcon = { Icon(Icons.Filled.Album, null) },
+                                enabled = track != null,
+                                onClick = {
+                                    overflowMenuOpen = false
+                                    val tid = track?.trackId ?: return@DropdownMenuItem
+                                    scope.launch {
+                                        libraryRepo.getTrackById(tid)?.albumId?.let { onOpenAlbum(it) }
+                                    }
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Go to artist") },
+                                leadingIcon = { Icon(Icons.Filled.Person, null) },
+                                enabled = track != null,
+                                onClick = {
+                                    overflowMenuOpen = false
+                                    val tid = track?.trackId ?: return@DropdownMenuItem
+                                    scope.launch {
+                                        libraryRepo.artistsForTrack(tid)
+                                            .firstOrNull()?.id?.let { onOpenArtist(it) }
+                                    }
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Track info") },
+                                leadingIcon = { Icon(Icons.Filled.Info, null) },
+                                enabled = track != null,
+                                onClick = {
+                                    overflowMenuOpen = false
+                                    trackInfoOpen = true
+                                },
+                            )
+                        }
+                    }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface,
@@ -235,6 +305,24 @@ fun NowPlayingScreen(
                     }
                 },
             )
+        }
+        addToPlaylistTrackId?.let { id ->
+            AddToPlaylistSheet(
+                trackId = id,
+                onDismiss = { addToPlaylistTrackId = null },
+            )
+        }
+        if (trackInfoOpen) {
+            val track = nowPlaying
+            if (track != null) {
+                TrackInfoDialog(
+                    playable = track,
+                    libraryRepo = libraryRepo,
+                    onDismiss = { trackInfoOpen = false },
+                )
+            } else {
+                trackInfoOpen = false
+            }
         }
         BoxWithConstraints(modifier = Modifier.fillMaxSize().padding(padding)) {
             val isCompact = maxWidth < 600.dp
@@ -724,6 +812,61 @@ private fun formatMs(ms: Long): String {
     val mins = totalSeconds / 60L
     val secs = totalSeconds % 60L
     return "$mins:${secs.toString().padStart(2, '0')}"
+}
+
+@Composable
+private fun TrackInfoDialog(
+    playable: com.visorcraft.radioshed.audio.Playable,
+    libraryRepo: LibraryRepository,
+    onDismiss: () -> Unit,
+) {
+    var track by remember { mutableStateOf<Track?>(null) }
+    LaunchedEffect(playable.trackId) {
+        track = libraryRepo.getTrackById(playable.trackId)
+    }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+        title = { Text("Track info") },
+        text = {
+            val t = track
+            if (t == null) {
+                Text("Loading…", style = MaterialTheme.typography.bodyMedium)
+            } else {
+                Column(verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(4.dp)) {
+                    InfoLine("Title", t.title)
+                    playable.artist?.let { InfoLine("Artist", it) }
+                    playable.album?.let { InfoLine("Album", it) }
+                    InfoLine("Format", t.format.uppercase())
+                    InfoLine("Duration", formatMs(t.durationMs))
+                    t.bitrateKbps?.let { InfoLine("Bitrate", "$it kbps") }
+                    t.sampleRateHz?.let { InfoLine("Sample rate", "${it / 1000.0} kHz") }
+                    t.channels?.let { InfoLine("Channels", "$it") }
+                    t.bpm?.let { InfoLine("BPM", "%.1f".format(it)) }
+                    t.replayGainTrack?.let { InfoLine("ReplayGain (track)", "%.2f dB".format(it)) }
+                    t.replayGainAlbum?.let { InfoLine("ReplayGain (album)", "%.2f dB".format(it)) }
+                    InfoLine("Path", t.path, monospace = true)
+                }
+            }
+        },
+    )
+}
+
+@Composable
+private fun InfoLine(label: String, value: String, monospace: Boolean = false) {
+    Column {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodySmall,
+            fontFamily = if (monospace) FontFamily.Monospace else FontFamily.Default,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

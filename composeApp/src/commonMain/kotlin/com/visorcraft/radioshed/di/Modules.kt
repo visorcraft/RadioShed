@@ -68,7 +68,7 @@ val sharedModule: Module = module {
 
     // Phase 5: stations engine. AudioEngine comes from platformModule.
     single { SourceRuleEvaluator(get(), get(), get()) }
-    single { StationPlayback(get(), get(), get(), get(), get()) }
+    single { StationPlayback(get(), get(), get(), get(), get(), get()) }
     single { PresetSeeder(get(), get()) }
 }
 

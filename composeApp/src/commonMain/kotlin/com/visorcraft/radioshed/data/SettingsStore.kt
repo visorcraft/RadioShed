@@ -64,6 +64,11 @@ class SettingsStore(private val settings: Settings) {
     fun setFileModeBrowserEnabled(enabled: Boolean) =
         settings.putBoolean(KEY_FILE_MODE_BROWSER, enabled)
 
+    // ---- ReplayGain ----
+
+    fun getReplayGainEnabled(): Boolean = settings.getBoolean(KEY_REPLAY_GAIN, true)
+    fun setReplayGainEnabled(enabled: Boolean) = settings.putBoolean(KEY_REPLAY_GAIN, enabled)
+
     // ---- Equalizer ----
 
     fun getEqEnabled(): Boolean = settings.getBoolean(KEY_EQ_ENABLED, false)
@@ -98,5 +103,6 @@ class SettingsStore(private val settings: Settings) {
         const val KEY_LIB_SONG_SORT = "library.browser.songSort"
         const val KEY_EQ_ENABLED = "audio.eq.enabled"
         const val KEY_EQ_BAND_PREFIX = "audio.eq.band."
+        const val KEY_REPLAY_GAIN = "audio.replayGain.enabled"
     }
 }

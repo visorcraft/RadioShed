@@ -26,15 +26,22 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items as lazyItems
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.NewReleases
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Whatshot
+import androidx.compose.material.icons.outlined.PushPin
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -43,12 +50,14 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -114,6 +123,11 @@ fun StationsHomeScreen(
     LaunchedEffect(currentStation?.id, playerState) {
         recent = stationRepo.listRecentlyPlayed(limit = 6L)
     }
+
+    // Long-press → action sheet state. Holds the station id whose sheet
+    // is currently visible; null when no sheet is open.
+    var actionsForStationId by remember { mutableStateOf<Long?>(null) }
+    var deleteConfirmStationId by remember { mutableStateOf<Long?>(null) }
 
     Scaffold(
         topBar = {
@@ -207,7 +221,7 @@ fun StationsHomeScreen(
                             onPlay = {
                                 scope.launch { stationPlayback.playStation(station.id) }
                             },
-                            onLongPress = { onEditStation(station.id) },
+                            onLongPress = { actionsForStationId = station.id },
                         )
                     } else {
                         StationGridTile(
@@ -218,12 +232,179 @@ fun StationsHomeScreen(
                             onPlay = {
                                 scope.launch { stationPlayback.playStation(station.id) }
                             },
-                            onEdit = { onEditStation(station.id) },
+                            onEdit = { actionsForStationId = station.id },
                         )
                     }
                 }
             }
         }
+    }
+
+    actionsForStationId?.let { id ->
+        val station = stations.firstOrNull { it.id == id }
+        if (station == null) {
+            actionsForStationId = null
+        } else {
+            StationActionSheet(
+                station = station,
+                onDismiss = { actionsForStationId = null },
+                onEdit = {
+                    actionsForStationId = null
+                    onEditStation(id)
+                },
+                onTogglePin = {
+                    actionsForStationId = null
+                    scope.launch { stationRepo.setPinned(id, !station.isPinned) }
+                },
+                onMoveUp = {
+                    actionsForStationId = null
+                    scope.launch { swapStationPosition(stationRepo, stations, id, direction = -1) }
+                },
+                onMoveDown = {
+                    actionsForStationId = null
+                    scope.launch { swapStationPosition(stationRepo, stations, id, direction = +1) }
+                },
+                canMoveUp = stations.indexOfFirst { it.id == id } > 0,
+                canMoveDown = stations.indexOfFirst { it.id == id } in 0 until (stations.size - 1),
+                onDelete = {
+                    actionsForStationId = null
+                    deleteConfirmStationId = id
+                },
+            )
+        }
+    }
+
+    deleteConfirmStationId?.let { id ->
+        val station = stations.firstOrNull { it.id == id }
+        AlertDialog(
+            onDismissRequest = { deleteConfirmStationId = null },
+            title = { Text("Delete station?") },
+            text = {
+                Text(
+                    "\"${station?.name ?: ""}\" will be removed. The tracks themselves stay in your library.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    deleteConfirmStationId = null
+                    scope.launch { stationRepo.delete(id) }
+                }) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { deleteConfirmStationId = null }) { Text("Cancel") }
+            },
+        )
+    }
+}
+
+/**
+ * Swap [stationId]'s sort_position with the neighbor in [direction]
+ * (-1 = up, +1 = down). Position is rewritten on both rows so the
+ * change persists across observed re-emissions.
+ */
+private suspend fun swapStationPosition(
+    repo: com.visorcraft.radioshed.data.StationRepository,
+    stations: List<Station>,
+    stationId: Long,
+    direction: Int,
+) {
+    val idx = stations.indexOfFirst { it.id == stationId }.takeIf { it >= 0 } ?: return
+    val targetIdx = idx + direction
+    if (targetIdx !in stations.indices) return
+    val a = stations[idx]
+    val b = stations[targetIdx]
+    repo.reorder(a.id, sortPosition = b.sortPosition)
+    repo.reorder(b.id, sortPosition = a.sortPosition)
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun StationActionSheet(
+    station: Station,
+    onDismiss: () -> Unit,
+    onEdit: () -> Unit,
+    onTogglePin: () -> Unit,
+    onMoveUp: () -> Unit,
+    onMoveDown: () -> Unit,
+    canMoveUp: Boolean,
+    canMoveDown: Boolean,
+    onDelete: () -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp)) {
+            Text(
+                station.name,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            )
+            ActionRow(
+                icon = Icons.Filled.Edit,
+                label = if (station.isBuiltIn) "Edit (cosmetic only)" else "Edit",
+                onClick = onEdit,
+            )
+            ActionRow(
+                icon = if (station.isPinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
+                label = if (station.isPinned) "Unpin" else "Pin to top",
+                onClick = onTogglePin,
+            )
+            ActionRow(
+                icon = Icons.Filled.ArrowUpward,
+                label = "Move up",
+                onClick = onMoveUp,
+                enabled = canMoveUp,
+            )
+            ActionRow(
+                icon = Icons.Filled.ArrowDownward,
+                label = "Move down",
+                onClick = onMoveDown,
+                enabled = canMoveDown,
+            )
+            // Built-ins are deletable too — the seeder will re-create them
+            // on next launch, so deletion just resets that one. Surfaced
+            // without a guard so the user has a one-tap "remove this preset
+            // I don't use" workflow without rummaging in settings.
+            ActionRow(
+                icon = Icons.Filled.Delete,
+                label = "Delete",
+                onClick = onDelete,
+                danger = true,
+            )
+            Spacer(Modifier.size(8.dp))
+        }
+    }
+}
+
+@Composable
+private fun ActionRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+    danger: Boolean = false,
+) {
+    val tint = when {
+        !enabled -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+        danger -> MaterialTheme.colorScheme.error
+        else -> MaterialTheme.colorScheme.onSurface
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(22.dp))
+        Spacer(Modifier.size(16.dp))
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyLarge,
+            color = tint,
+        )
     }
 }
 

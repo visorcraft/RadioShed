@@ -66,6 +66,8 @@ fun App(settings: SettingsStore = koinInject()) {
             NowPlayingScreen(
                 onClose = { current = AppScreen.Stations },
                 onOpenLyrics = { current = AppScreen.Lyrics },
+                onOpenAlbum = { id -> current = AppScreen.AlbumDetail(id) },
+                onOpenArtist = { id -> current = AppScreen.ArtistDetail(id) },
             )
             return@RadioShedTheme
         }

@@ -79,6 +79,7 @@ fun AppSettingsScreen(
     artworkSync: MissingArtworkSync = koinInject(),
 ) {
     var reduceMotion by remember { mutableStateOf(settings.getReduceMotion()) }
+    var replayGain by remember { mutableStateOf(settings.getReplayGainEnabled()) }
     var artworkState by remember { mutableStateOf<ArtworkSyncState>(ArtworkSyncState.Idle) }
     var artworkJob by remember { mutableStateOf<Job?>(null) }
     val scope = rememberCoroutineScope()
@@ -131,6 +132,18 @@ fun AppSettingsScreen(
 
             // ---- Audio ----
             SectionHeader("Audio")
+            ToggleRow(
+                title = "ReplayGain",
+                subtitle = "Normalize per-track loudness using embedded ReplayGain " +
+                    "tags. Loud tracks are attenuated toward a common reference; " +
+                    "tracks without tags play unchanged.",
+                checked = replayGain,
+                onCheckedChange = { v ->
+                    replayGain = v
+                    settings.setReplayGainEnabled(v)
+                },
+            )
+            Spacer(Modifier.height(8.dp))
             NavRow(
                 title = "Equalizer",
                 subtitle = "5-band EQ with Bass / Vocal / Treble presets",

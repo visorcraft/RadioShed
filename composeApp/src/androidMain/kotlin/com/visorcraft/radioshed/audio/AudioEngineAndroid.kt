@@ -205,6 +205,16 @@ class AudioEngineAndroid(private val appContext: Context) : AudioEngine {
         _position.value = Position(0L, 0L)
     }
 
+    override fun setVolume(fraction: Float) {
+        // MediaController.volume is the "session volume" Media3 multiplier
+        // (0.0..1.0); below the underlying audio stream volume but above
+        // the ExoPlayer's internal audio-track gain. Suitable for our
+        // per-track ReplayGain attenuation. Clamping prevents boosting
+        // (which would just clip) and keeps us out of negative-fraction
+        // territory.
+        controller?.volume = fraction.coerceIn(0f, 1f)
+    }
+
     /** Call from process/app shutdown if you want the controller to release cleanly. */
     fun release() {
         positionJob?.cancel()

@@ -5,6 +5,7 @@ import com.visorcraft.radioshed.audio.PlayerState
 import com.visorcraft.radioshed.audio.toPlayable
 import com.visorcraft.radioshed.data.LibraryRepository
 import com.visorcraft.radioshed.data.RatingRepository
+import com.visorcraft.radioshed.data.SettingsStore
 import com.visorcraft.radioshed.data.StationRepository
 import com.visorcraft.radioshed.data.nowMillis
 import com.visorcraft.radioshed.domain.PlayOrder
@@ -18,6 +19,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlin.math.pow
 
 /**
  * Orchestrates playback for a station: evaluates the source rule into a
@@ -38,6 +40,7 @@ class StationPlayback(
     private val sourceEvaluator: SourceRuleEvaluator,
     private val audioEngine: AudioEngine,
     private val libraryRepo: LibraryRepository,
+    private val settings: SettingsStore,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -201,6 +204,13 @@ class StationPlayback(
             }
         }
         currentTrack = track
+        // Apply ReplayGain to the player volume BEFORE issuing play(),
+        // so the new track starts at the corrected level instead of
+        // glitching at full and then snapping down. The track value is
+        // preferred over the album value (matches what most players do
+        // for shuffle-heavy listening — album values bias toward the
+        // album's loudest cut rather than this specific track).
+        applyReplayGain(track)
         // Resolve the track's album artwork URI before handing the Playable
         // to the player. The lookup is one indexed primary-key SELECT and
         // takes <1ms; doing it inline (as a launch) keeps advance order
@@ -210,6 +220,28 @@ class StationPlayback(
             val artworkUri = track.albumId?.let { libraryRepo.getAlbumById(it)?.artworkUri }
             audioEngine.play(track.toPlayable(artworkUri = artworkUri))
         }
+    }
+
+    /**
+     * Convert the track's ReplayGain dB value into a 0..1 volume
+     * fraction and push it to the engine. v1 only attenuates (clamped to
+     * ≤1.0) — boosting quiet tracks would require a session-wide pre-amp
+     * to avoid clipping and is deferred. When ReplayGain is disabled in
+     * settings (or the track has no gain value), volume is reset to 1.0
+     * so a previous quiet track doesn't bleed into the next one.
+     */
+    private fun applyReplayGain(track: Track) {
+        if (!settings.getReplayGainEnabled()) {
+            audioEngine.setVolume(1f)
+            return
+        }
+        val gainDb = track.replayGainTrack ?: track.replayGainAlbum
+        if (gainDb == null) {
+            audioEngine.setVolume(1f)
+            return
+        }
+        val raw = 10.0.pow(gainDb / 20.0).toFloat()
+        audioEngine.setVolume(raw.coerceIn(0f, 1f))
     }
 
     private companion object {
