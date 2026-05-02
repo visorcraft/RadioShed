@@ -76,9 +76,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.visorcraft.radioshed.audio.AudioEngine
 import com.visorcraft.radioshed.audio.PlayerState
+import com.visorcraft.radioshed.data.LibraryRepository
 import com.visorcraft.radioshed.data.StationRepository
 import com.visorcraft.radioshed.domain.PlayOrder
 import com.visorcraft.radioshed.domain.Station
+import com.visorcraft.radioshed.domain.Track
 import com.visorcraft.radioshed.stations.StationPlayback
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
@@ -109,6 +111,7 @@ fun StationsHomeScreen(
     stationRepo: StationRepository = koinInject(),
     stationPlayback: StationPlayback = koinInject(),
     audioEngine: AudioEngine = koinInject(),
+    libraryRepo: LibraryRepository = koinInject(),
 ) {
     val stations by stationRepo.observeAll().collectAsState(initial = emptyList())
     val currentStation by stationPlayback.currentStation.collectAsState()
@@ -122,6 +125,14 @@ fun StationsHomeScreen(
     var recent by remember { mutableStateOf<List<Station>>(emptyList()) }
     LaunchedEffect(currentStation?.id, playerState) {
         recent = stationRepo.listRecentlyPlayed(limit = 6L)
+    }
+
+    // Recently-added tracks — pulled from the library by file ctime
+    // (when the file was first scanned). Refreshes when the active
+    // track changes so a fresh scan/index shows up promptly.
+    var recentlyAdded by remember { mutableStateOf<List<Track>>(emptyList()) }
+    LaunchedEffect(nowPlaying?.trackId) {
+        recentlyAdded = libraryRepo.newestTracks(limit = 12L)
     }
 
     // Long-press → action sheet state. Holds the station id whose sheet
@@ -227,6 +238,17 @@ fun StationsHomeScreen(
                         MostPlayedRow(
                             stations = mostPlayed,
                             onPlay = { id -> scope.launch { stationPlayback.playStation(id) } },
+                        )
+                    }
+                }
+
+                if (recentlyAdded.isNotEmpty()) {
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        RecentlyAddedRow(
+                            tracks = recentlyAdded,
+                            onPlay = { idx ->
+                                stationPlayback.playTracks(recentlyAdded, startIndex = idx)
+                            },
                         )
                     }
                 }
@@ -581,6 +603,70 @@ private fun RecentlyPlayedRow(
                 RecentChip(station = station, onTap = { onPlay(station.id) })
             }
         }
+    }
+}
+
+/**
+ * Horizontal "Recently Added" row. Shows newest-by-ctime tracks with
+ * cover art when available; tap a tile to play it as the head of the
+ * recently-added queue (skip-next walks the rest of the row).
+ */
+@Composable
+private fun RecentlyAddedRow(
+    tracks: List<Track>,
+    onPlay: (Int) -> Unit,
+) {
+    Column(modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 4.dp)) {
+        Text(
+            text = "Recently added",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f),
+        )
+        Spacer(Modifier.size(10.dp))
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            lazyItems(tracks.withIndex().toList(), key = { (_, t) -> t.id }) { (idx, track) ->
+                RecentlyAddedTile(track = track, onTap = { onPlay(idx) })
+            }
+        }
+    }
+}
+
+@Composable
+private fun RecentlyAddedTile(track: Track, onTap: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .width(120.dp)
+            .clickable(onClick = onTap),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(1f)
+                .clip(RoundedCornerShape(8.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant),
+            contentAlignment = Alignment.Center,
+        ) {
+            // We don't have direct access to the album's artwork URI from
+            // the Track domain object here without a DB hit, so we fall
+            // back to the music-note placeholder. A future pass could
+            // join album.artwork_uri into the newestTracks query.
+            Icon(
+                imageVector = Icons.Filled.MusicNote,
+                contentDescription = null,
+                modifier = Modifier.size(36.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Spacer(Modifier.size(6.dp))
+        Text(
+            text = track.title.ifBlank { track.fileName },
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onBackground,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 

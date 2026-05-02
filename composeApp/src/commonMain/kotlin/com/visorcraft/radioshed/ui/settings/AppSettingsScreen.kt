@@ -76,6 +76,7 @@ fun AppSettingsScreen(
     onOpenEqualizer: () -> Unit = {},
     onOpenPlaylists: () -> Unit = {},
     onOpenBackup: () -> Unit = {},
+    onOpenStats: () -> Unit = {},
     settings: SettingsStore = koinInject(),
     artworkSync: MissingArtworkSync = koinInject(),
 ) {
@@ -185,6 +186,12 @@ fun AppSettingsScreen(
                 title = "Backup &amp; restore",
                 subtitle = "Export stations, playlists, and ratings to a JSON file",
                 onClick = onOpenBackup,
+            )
+            Spacer(Modifier.height(8.dp))
+            NavRow(
+                title = "Listening stats",
+                subtitle = "Total time, play count, top tracks",
+                onClick = onOpenStats,
             )
 
             Spacer(Modifier.height(24.dp))

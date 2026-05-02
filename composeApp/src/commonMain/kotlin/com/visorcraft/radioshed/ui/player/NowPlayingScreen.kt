@@ -39,12 +39,13 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material.icons.filled.Lyrics
+import androidx.compose.material.icons.automirrored.filled.QueueMusic
+import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
+import androidx.compose.material.icons.automirrored.filled.StarHalf
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.StarHalf
 import androidx.compose.material.icons.outlined.Bedtime
 import androidx.compose.material.icons.outlined.StarOutline
 import androidx.compose.material3.DropdownMenu
@@ -176,7 +177,7 @@ fun NowPlayingScreen(
                     }
                     IconButton(onClick = { queueSheetOpen = true }) {
                         Icon(
-                            imageVector = Icons.Filled.QueueMusic,
+                            imageVector = Icons.AutoMirrored.Filled.QueueMusic,
                             contentDescription = "Queue",
                             tint = MaterialTheme.colorScheme.onSurface,
                         )
@@ -225,7 +226,7 @@ fun NowPlayingScreen(
                             val track = nowPlaying
                             DropdownMenuItem(
                                 text = { Text("Add to playlist") },
-                                leadingIcon = { Icon(Icons.Filled.PlaylistAdd, null) },
+                                leadingIcon = { Icon(Icons.AutoMirrored.Filled.PlaylistAdd, null) },
                                 enabled = track != null,
                                 onClick = {
                                     overflowMenuOpen = false
@@ -764,7 +765,7 @@ private fun RatingRow(current: Double, onRate: (Double) -> Unit) {
                 Icon(
                     imageVector = when (starState) {
                         StarState.Full -> Icons.Filled.Star
-                        StarState.Half -> Icons.Filled.StarHalf
+                        StarState.Half -> Icons.AutoMirrored.Filled.StarHalf
                         StarState.Empty -> Icons.Outlined.StarOutline
                     },
                     contentDescription = null,

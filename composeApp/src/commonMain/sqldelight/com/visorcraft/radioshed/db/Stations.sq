@@ -92,3 +92,22 @@ DELETE FROM station_history WHERE station_id = ?;
 
 trimHistoryOlderThan:
 DELETE FROM station_history WHERE played_at < ?;
+
+-- Aggregated listening stats. Used by the Listening Stats screen.
+-- Top tracks across all stations (most plays first); ties broken by
+-- most-recent play so the user always sees something fresh.
+selectTopPlayedTrackIds:
+SELECT track_id, COUNT(*) AS play_count, MAX(played_at) AS last_played_at
+FROM station_history
+GROUP BY track_id
+ORDER BY play_count DESC, last_played_at DESC
+LIMIT ?;
+
+-- Total cumulative listened time across all stations / tracks. Used
+-- as a header stat on the Listening Stats screen. IFNULL handles the
+-- cold-start case where there are no rows yet.
+totalListenedMs:
+SELECT IFNULL(SUM(listened_ms), 0) FROM station_history;
+
+countAllPlays:
+SELECT COUNT(*) FROM station_history;

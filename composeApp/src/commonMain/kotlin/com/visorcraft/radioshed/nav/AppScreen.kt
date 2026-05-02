@@ -69,6 +69,9 @@ sealed interface AppScreen {
     /** Backup &amp; restore — list saved JSON bundles, create/restore/delete. */
     data object BackupRestore : AppScreen
 
+    /** Listening stats — total time, top tracks. */
+    data object Stats : AppScreen
+
     /** Playlist library — list of all playlists with create button. */
     data object Playlists : AppScreen
 

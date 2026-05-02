@@ -14,7 +14,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.QueueMusic
+import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -86,7 +86,7 @@ fun AddToPlaylistSheet(
                 }
                 items(playlists, key = { it.id }) { playlist ->
                     PlaylistPickRow(
-                        leadingIcon = Icons.Filled.QueueMusic,
+                        leadingIcon = Icons.AutoMirrored.Filled.QueueMusic,
                         title = playlist.name,
                         onClick = {
                             scope.launch {

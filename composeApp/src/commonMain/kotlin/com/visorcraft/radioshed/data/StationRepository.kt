@@ -178,6 +178,24 @@ class StationRepository(private val db: RadioShedDatabase) {
         db.stationsQueries.trimHistoryOlderThan(threshold)
     }
 
+    /** Top played tracks across all stations. Returned as (trackId, playCount). */
+    suspend fun topPlayedTracks(limit: Long): List<Pair<Long, Long>> =
+        withContext(IODispatcher) {
+            db.stationsQueries.selectTopPlayedTrackIds(limit).executeAsList().map { row ->
+                row.track_id to row.play_count
+            }
+        }
+
+    suspend fun totalListenedMs(): Long = withContext(IODispatcher) {
+        // The IFNULL wrapping in the SQL ensures a non-null Long even
+        // when the table is empty (cold start), so executeAsOne is safe.
+        db.stationsQueries.totalListenedMs().executeAsOne()
+    }
+
+    suspend fun countAllPlays(): Long = withContext(IODispatcher) {
+        db.stationsQueries.countAllPlays().executeAsOne()
+    }
+
     // ---- Mappers ----
 
     private fun toStation(row: StationRow): Station = Station(

@@ -56,6 +56,11 @@ class StationPlayback(
      *  history when the user advances forward. */
     private var currentTrack: Track? = null
 
+    /** Wall-clock millis when [currentTrack] started playing. Used to
+     *  compute `listened_ms` for the persistent station_history row
+     *  written on the next transition. */
+    private var trackStartedAtMs: Long? = null
+
     /** Played-track history for skip-previous. Most recent at the END.
      *  Capped at HISTORY_CAP to avoid unbounded growth on long sessions. */
     private val history: ArrayDeque<Track> = ArrayDeque()
@@ -164,12 +169,44 @@ class StationPlayback(
     }
 
     fun stop() {
+        // Record the in-flight track first so its listening time isn't
+        // lost; THEN clear state. Order matters — once currentStation
+        // and currentTrack are nulled, recordPreviousIfAny is a no-op.
+        recordPreviousIfAny()
         audioEngine.stop()
         _currentStation.value = null
         _candidateCount.value = 0
         queue = null
         history.clear()
         currentTrack = null
+        trackStartedAtMs = null
+    }
+
+    /**
+     * Persist a row in `station_history` describing the just-ended (or
+     * about-to-be-replaced) track session. No-op when there's no track,
+     * no station, or no recorded start time. The "completed" flag uses
+     * the Last.fm convention of 80% playthrough — anything less is
+     * counted as a skip.
+     */
+    private fun recordPreviousIfAny() {
+        val prev = currentTrack ?: return
+        val stationId = _currentStation.value?.id ?: return
+        val startedAt = trackStartedAtMs ?: return
+        val listenedMs = (nowMillis() - startedAt).coerceAtLeast(0L)
+        val completed = prev.durationMs > 0L &&
+            listenedMs >= (prev.durationMs * COMPLETION_FRACTION).toLong()
+        scope.launch {
+            runCatching {
+                stationRepo.recordPlay(
+                    stationId = stationId,
+                    trackId = prev.id,
+                    playedAt = startedAt,
+                    completed = completed,
+                    listenedMs = listenedMs,
+                )
+            }
+        }
     }
 
     /**
@@ -209,7 +246,14 @@ class StationPlayback(
                 while (history.size > HISTORY_CAP) history.removeFirst()
             }
         }
+        // Persist the previous track's listening session before swapping
+        // it out. We record a row even on skip-previous (recordHistory =
+        // false) — the user did listen to those seconds. Only ad-hoc
+        // playTracks(...) without a station context skips this since
+        // there's no station to attribute the play to.
+        recordPreviousIfAny()
         currentTrack = track
+        trackStartedAtMs = nowMillis()
         // Apply ReplayGain to the player volume BEFORE issuing play(),
         // so the new track starts at the corrected level instead of
         // glitching at full and then snapping down. The track value is
@@ -259,5 +303,10 @@ class StationPlayback(
 
         /** Bounded history; long sessions don't need infinite back-stack. */
         const val HISTORY_CAP = 50
+
+        /** Last.fm's "completed" threshold: a track played for at least
+         *  this fraction of its duration counts as a real listen rather
+         *  than a skip. 0.8 (80%) is the canonical value. */
+        const val COMPLETION_FRACTION = 0.8
     }
 }
