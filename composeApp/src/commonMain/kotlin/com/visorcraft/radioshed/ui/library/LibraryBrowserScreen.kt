@@ -85,6 +85,8 @@ import org.koin.compose.koinInject
 fun LibraryBrowserScreen(
     onBack: () -> Unit,
     onManage: () -> Unit,
+    onArtistTap: (Long) -> Unit = {},
+    onAlbumTap: (Long) -> Unit = {},
     libraryRepo: LibraryRepository = koinInject(),
     audioEngine: AudioEngine = koinInject(),
     stationPlayback: StationPlayback = koinInject(),
@@ -265,23 +267,20 @@ fun LibraryBrowserScreen(
                     }
                 }
                 LibraryTab.Artists -> {
+                    // Tapping an artist now navigates to ArtistDetail rather
+                    // than applying an in-place filter — the dedicated screen
+                    // shows their albums + tracks with play / shuffle, which
+                    // is what the user actually wants when they pick an
+                    // artist's name from a list.
                     ArtistList(
                         artists = artists,
-                        onPick = { a ->
-                            artistFilter = a
-                            albumFilter = null
-                            selectedTab = LibraryTab.Songs
-                        },
+                        onPick = { a -> onArtistTap(a.id) },
                     )
                 }
                 LibraryTab.Albums -> {
                     AlbumList(
                         albums = albums,
-                        onPick = { al ->
-                            albumFilter = al
-                            artistFilter = null
-                            selectedTab = LibraryTab.Songs
-                        },
+                        onPick = { al -> onAlbumTap(al.id) },
                     )
                 }
             }

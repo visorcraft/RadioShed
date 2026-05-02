@@ -27,13 +27,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.visorcraft.radioshed.audio.AudioEngine
-import com.visorcraft.radioshed.audio.toPlayable
 import com.visorcraft.radioshed.data.SearchRepository
 import com.visorcraft.radioshed.data.SearchResults
 import com.visorcraft.radioshed.domain.Album
 import com.visorcraft.radioshed.domain.Artist
 import com.visorcraft.radioshed.domain.Track
+import com.visorcraft.radioshed.stations.StationPlayback
 import kotlinx.coroutines.delay
 import org.koin.compose.koinInject
 
@@ -47,7 +46,7 @@ import org.koin.compose.koinInject
 fun SearchScreen(
     onBack: () -> Unit,
     searchRepo: SearchRepository = koinInject(),
-    audioEngine: AudioEngine = koinInject(),
+    stationPlayback: StationPlayback = koinInject(),
 ) {
     var query by remember { mutableStateOf("") }
     var results by remember { mutableStateOf(SearchResults(emptyList(), emptyList(), emptyList())) }
@@ -130,9 +129,17 @@ fun SearchScreen(
                     if (results.tracks.isNotEmpty()) {
                         item { SectionHeader("Tracks (${results.tracks.size})") }
                         items(results.tracks, key = { "track:${it.id}" }) { track ->
+                            // Mirror the Library Browser: tap seeds an
+                            // ad-hoc queue from the visible search hits so
+                            // skip-next walks through the rest of the
+                            // results instead of dead-ending after one
+                            // track.
                             TrackRow(
                                 track = track,
-                                onClick = { audioEngine.play(track.toPlayable()) },
+                                onClick = {
+                                    val idx = results.tracks.indexOf(track).coerceAtLeast(0)
+                                    stationPlayback.playTracks(results.tracks, startIndex = idx)
+                                },
                             )
                         }
                     }

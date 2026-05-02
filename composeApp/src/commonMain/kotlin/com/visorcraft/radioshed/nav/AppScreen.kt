@@ -50,4 +50,10 @@ sealed interface AppScreen {
      * name, subtitle, color); user-created stations get the full surface.
      */
     data class EditStation(val stationId: Long) : AppScreen
+
+    /** Album detail — cover art, track list, play / shuffle all. */
+    data class AlbumDetail(val albumId: Long) : AppScreen
+
+    /** Artist detail — albums + tracks for an artist, drill-in to album. */
+    data class ArtistDetail(val artistId: Long) : AppScreen
 }

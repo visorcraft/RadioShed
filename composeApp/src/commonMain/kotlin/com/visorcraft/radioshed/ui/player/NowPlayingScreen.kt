@@ -24,9 +24,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -34,6 +36,7 @@ import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarHalf
+import androidx.compose.material.icons.outlined.Bedtime
 import androidx.compose.material.icons.outlined.StarOutline
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -72,6 +75,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.visorcraft.radioshed.audio.AudioEngine
 import com.visorcraft.radioshed.audio.PlayerState
+import com.visorcraft.radioshed.audio.SleepTimer
 import com.visorcraft.radioshed.data.RatingRepository
 import com.visorcraft.radioshed.stations.StationPlayback
 import kotlinx.coroutines.launch
@@ -93,12 +97,15 @@ fun NowPlayingScreen(
     audioEngine: AudioEngine = koinInject(),
     stationPlayback: StationPlayback = koinInject(),
     ratingRepo: RatingRepository = koinInject(),
+    sleepTimer: SleepTimer = koinInject(),
 ) {
     val nowPlaying by audioEngine.nowPlaying.collectAsState()
     val state by audioEngine.state.collectAsState()
     val position by audioEngine.position.collectAsState()
     val currentStation by stationPlayback.currentStation.collectAsState()
+    val sleepState by sleepTimer.state.collectAsState()
     val scope = rememberCoroutineScope()
+    var sleepMenuOpen by remember { mutableStateOf(false) }
 
     var rating by remember { mutableStateOf(0.0) }
     LaunchedEffect(nowPlaying?.trackId) {
@@ -108,7 +115,12 @@ fun NowPlayingScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Now Playing", style = MaterialTheme.typography.titleSmall) },
+                title = {
+                    Column {
+                        Text("Now Playing", style = MaterialTheme.typography.titleSmall)
+                        SleepTimerLabel(sleepState)
+                    }
+                },
                 navigationIcon = {
                     TextButton(onClick = onClose) {
                         Icon(
@@ -118,6 +130,37 @@ fun NowPlayingScreen(
                         )
                         Spacer(Modifier.width(4.dp))
                         Text("Close")
+                    }
+                },
+                actions = {
+                    Box {
+                        IconButton(onClick = { sleepMenuOpen = true }) {
+                            Icon(
+                                imageVector = if (sleepState is SleepTimer.State.Idle)
+                                    Icons.Outlined.Bedtime else Icons.Filled.Bedtime,
+                                contentDescription = "Sleep timer",
+                                tint = if (sleepState is SleepTimer.State.Idle)
+                                    MaterialTheme.colorScheme.onSurface
+                                else MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                        SleepTimerMenu(
+                            expanded = sleepMenuOpen,
+                            currentState = sleepState,
+                            onDismiss = { sleepMenuOpen = false },
+                            onPickMinutes = { mins ->
+                                sleepMenuOpen = false
+                                sleepTimer.start(mins * 60_000L)
+                            },
+                            onEndOfTrack = {
+                                sleepMenuOpen = false
+                                sleepTimer.startEndOfTrack()
+                            },
+                            onCancel = {
+                                sleepMenuOpen = false
+                                sleepTimer.cancel()
+                            },
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -630,4 +673,59 @@ private fun formatMs(ms: Long): String {
     val mins = totalSeconds / 60L
     val secs = totalSeconds % 60L
     return "$mins:${secs.toString().padStart(2, '0')}"
+}
+
+/**
+ * Compact subtitle in the TopAppBar that shows what the sleep timer
+ * will do next. Hidden when idle so the title doesn't reflow on toggle.
+ */
+@Composable
+private fun SleepTimerLabel(state: SleepTimer.State) {
+    val text = when (state) {
+        SleepTimer.State.Idle -> null
+        is SleepTimer.State.Running -> "Sleep in ${formatMs(state.remainingMs)}"
+        SleepTimer.State.EndOfTrack -> "Sleep at end of track"
+    } ?: return
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.primary,
+    )
+}
+
+@Composable
+private fun SleepTimerMenu(
+    expanded: Boolean,
+    currentState: SleepTimer.State,
+    onDismiss: () -> Unit,
+    onPickMinutes: (Long) -> Unit,
+    onEndOfTrack: () -> Unit,
+    onCancel: () -> Unit,
+) {
+    DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
+        // Discrete durations covering common use cases (commute,
+        // before-bed). Skipping anything > 60 min — for longer "playlists"
+        // the queue itself naturally bounds runtime.
+        listOf(5L, 15L, 30L, 45L, 60L).forEach { mins ->
+            DropdownMenuItem(
+                text = { Text("$mins minutes") },
+                onClick = { onPickMinutes(mins) },
+            )
+        }
+        DropdownMenuItem(
+            text = { Text("End of track") },
+            onClick = onEndOfTrack,
+        )
+        if (currentState !is SleepTimer.State.Idle) {
+            DropdownMenuItem(
+                text = {
+                    Text(
+                        "Cancel timer",
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                },
+                onClick = onCancel,
+            )
+        }
+    }
 }

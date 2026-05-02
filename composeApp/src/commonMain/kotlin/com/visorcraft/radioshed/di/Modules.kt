@@ -17,6 +17,7 @@ import com.visorcraft.radioshed.data.SettingsStore
 import com.visorcraft.radioshed.data.StationRepository
 import com.visorcraft.radioshed.data.WidgetConfigRepository
 import com.visorcraft.radioshed.db.RadioShedDatabase
+import com.visorcraft.radioshed.audio.SleepTimer
 import com.visorcraft.radioshed.scanner.Scanner
 import com.visorcraft.radioshed.source.MissingArtworkSync
 import com.visorcraft.radioshed.stations.PresetSeeder
@@ -57,6 +58,9 @@ val sharedModule: Module = module {
     // Cover Art Archive sweep. CoverArtFetcher is platform-specific
     // (Android uses HttpURLConnection; iOS is a Null stub for now).
     single { MissingArtworkSync(get(), get(), get()) }
+
+    // Sleep timer — singleton so multiple UI surfaces observe the same state.
+    single { SleepTimer(get()) }
 
     // Phase 5: stations engine. AudioEngine comes from platformModule.
     single { SourceRuleEvaluator(get(), get(), get()) }

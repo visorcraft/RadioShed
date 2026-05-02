@@ -311,6 +311,14 @@ class LibraryRepository(private val db: RadioShedDatabase) {
         db.libraryQueries.selectTracksByArtist(artistId).executeAsList().map { it.toDomain() }
     }
 
+    suspend fun tracksForAlbum(albumId: Long): List<Track> = withContext(IODispatcher) {
+        db.libraryQueries.selectTracksByAlbum(albumId).executeAsList().map { it.toDomain() }
+    }
+
+    suspend fun albumsForArtist(artistId: Long): List<Album> = withContext(IODispatcher) {
+        db.libraryQueries.selectAlbumsByArtist(artistId).executeAsList().map { it.toDomain() }
+    }
+
     suspend fun unlinkAllArtistsFromTrack(trackId: Long) = withContext(IODispatcher) {
         db.libraryQueries.unlinkAllArtistsFromTrack(trackId)
     }

@@ -14,6 +14,8 @@ import com.visorcraft.radioshed.data.SettingsStore
 import com.visorcraft.radioshed.nav.AppScreen
 import com.visorcraft.radioshed.nav.PlatformBackHandler
 import com.visorcraft.radioshed.ui.home.HomeScreen
+import com.visorcraft.radioshed.ui.library.AlbumDetailScreen
+import com.visorcraft.radioshed.ui.library.ArtistDetailScreen
 import com.visorcraft.radioshed.ui.library.LibraryBrowserScreen
 import com.visorcraft.radioshed.ui.library.LibrarySettingsScreen
 import com.visorcraft.radioshed.ui.onboarding.OnboardingScreen
@@ -95,6 +97,28 @@ fun App(settings: SettingsStore = koinInject()) {
                         LibraryBrowserScreen(
                             onBack = { current = AppScreen.Home },
                             onManage = { current = AppScreen.LibrarySettings },
+                            onArtistTap = { id -> current = AppScreen.ArtistDetail(id) },
+                            onAlbumTap = { id -> current = AppScreen.AlbumDetail(id) },
+                        )
+                    }
+
+                    is AppScreen.AlbumDetail -> {
+                        val albumId = (current as AppScreen.AlbumDetail).albumId
+                        PlatformBackHandler { current = AppScreen.Library }
+                        AlbumDetailScreen(
+                            albumId = albumId,
+                            onBack = { current = AppScreen.Library },
+                            onArtistTap = { id -> current = AppScreen.ArtistDetail(id) },
+                        )
+                    }
+
+                    is AppScreen.ArtistDetail -> {
+                        val artistId = (current as AppScreen.ArtistDetail).artistId
+                        PlatformBackHandler { current = AppScreen.Library }
+                        ArtistDetailScreen(
+                            artistId = artistId,
+                            onBack = { current = AppScreen.Library },
+                            onAlbumTap = { id -> current = AppScreen.AlbumDetail(id) },
                         )
                     }
 
@@ -132,6 +156,11 @@ fun App(settings: SettingsStore = koinInject()) {
                     AppScreen.NewStation,
                     is AppScreen.EditStation,
                     -> Unit  // handled above (NowPlaying / editor / onboarding)
+
+                    // already handled above
+                    is AppScreen.AlbumDetail,
+                    is AppScreen.ArtistDetail,
+                    -> Unit
                 }
             }
             MiniPlayer(onExpand = { current = AppScreen.NowPlaying })
