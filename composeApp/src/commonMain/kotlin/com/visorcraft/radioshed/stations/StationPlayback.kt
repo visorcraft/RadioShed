@@ -91,6 +91,12 @@ class StationPlayback(
         history.clear()
         currentTrack = null
 
+        // Persist as the last-played station so the auto-resume-on-launch
+        // path in App.kt can find it next time. We do this every time the
+        // station starts (not just on app exit) so a kill / crash mid-
+        // session still has a valid "last station" pointer.
+        settings.setLastStationId(stationId)
+
         // Bump station stats. Don't await — fire-and-forget keeps UI snappy.
         scope.launch {
             stationRepo.updateStats(

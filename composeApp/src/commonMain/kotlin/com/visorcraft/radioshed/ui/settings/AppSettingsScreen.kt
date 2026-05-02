@@ -82,6 +82,7 @@ fun AppSettingsScreen(
     var reduceMotion by remember { mutableStateOf(settings.getReduceMotion()) }
     var replayGain by remember { mutableStateOf(settings.getReplayGainEnabled()) }
     var preampDb by remember { mutableStateOf(settings.getReplayGainPreampDb()) }
+    var autoResume by remember { mutableStateOf(settings.getAutoResumeLastStation()) }
     var artworkState by remember { mutableStateOf<ArtworkSyncState>(ArtworkSyncState.Idle) }
     var artworkJob by remember { mutableStateOf<Job?>(null) }
     val scope = rememberCoroutineScope()
@@ -134,6 +135,18 @@ fun AppSettingsScreen(
 
             // ---- Audio ----
             SectionHeader("Audio")
+            ToggleRow(
+                title = "Resume last station on launch",
+                subtitle = "Start playing whatever station was last active when the " +
+                    "app reopens. Off by default — silent launches are usually what " +
+                    "you want.",
+                checked = autoResume,
+                onCheckedChange = { v ->
+                    autoResume = v
+                    settings.setAutoResumeLastStation(v)
+                },
+            )
+            Spacer(Modifier.height(8.dp))
             ToggleRow(
                 title = "ReplayGain",
                 subtitle = "Normalize per-track loudness using embedded ReplayGain " +

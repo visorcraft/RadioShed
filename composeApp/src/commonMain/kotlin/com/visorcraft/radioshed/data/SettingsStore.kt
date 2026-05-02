@@ -56,6 +56,13 @@ class SettingsStore(private val settings: Settings) {
         else settings.putLong(KEY_LAST_STATION_ID, id)
     }
 
+    /** Auto-resume the last station on app launch. Off by default. */
+    fun getAutoResumeLastStation(): Boolean =
+        settings.getBoolean(KEY_AUTO_RESUME_STATION, false)
+
+    fun setAutoResumeLastStation(enabled: Boolean) =
+        settings.putBoolean(KEY_AUTO_RESUME_STATION, enabled)
+
     // ---- File-mode browser opt-in ----
 
     fun getFileModeBrowserEnabled(): Boolean =
@@ -114,5 +121,6 @@ class SettingsStore(private val settings: Settings) {
         const val KEY_EQ_BAND_PREFIX = "audio.eq.band."
         const val KEY_REPLAY_GAIN = "audio.replayGain.enabled"
         const val KEY_REPLAY_GAIN_PREAMP = "audio.replayGain.preampDb"
+        const val KEY_AUTO_RESUME_STATION = "playback.autoResumeLastStation"
     }
 }

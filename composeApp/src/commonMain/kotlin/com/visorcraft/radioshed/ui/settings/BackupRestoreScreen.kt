@@ -45,6 +45,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.visorcraft.radioshed.data.nowMillis
 import com.visorcraft.radioshed.source.BackupFile
 import com.visorcraft.radioshed.source.BackupService
 import kotlinx.coroutines.launch
@@ -288,26 +289,33 @@ private fun BackupRow(
     }
 }
 
+/**
+ * Relative-time formatter — sidesteps needing a calendar lib (we don't
+ * pull in kotlinx-datetime). Buckets at minute / hour / day / week /
+ * month boundaries; anything older than ~year falls back to "Long ago"
+ * which is fine for backup files that should not realistically live
+ * that long.
+ */
 private fun formatTimestamp(ms: Long): String {
-    // Without bringing in a date-time formatter dep, render a compact
-    // ISO-ish "YYYY-MM-DD HH:MM" string so the user can identify backups
-    // chronologically. Uses kotlinx-datetime which is already on the
-    // dependency tree via multiplatform-settings — actually no, fall
-    // back to a simple ms→date arithmetic in UTC for v1; users mostly
-    // care about ordering, not local-clock precision.
-    val totalSeconds = ms / 1000L
-    val days = totalSeconds / 86_400L
-    val secOfDay = totalSeconds % 86_400L
-    val hour = secOfDay / 3600L
-    val minute = (secOfDay % 3600L) / 60L
-    // Convert days since epoch to a Y-M-D approximation. This is gnarly
-    // without a real calendar API; fall back to showing only relative
-    // info ("2 hours ago" / "3 days ago") would be nicer here. Punt to
-    // a kotlinx-datetime swap later.
-    val approxYear = 1970 + (days / 365L).toInt()
-    val approxDayOfYear = (days % 365L).toInt() + 1
-    return "$approxYear day$approxDayOfYear ${hour.toString().padStart(2, '0')}:" +
-        minute.toString().padStart(2, '0')
+    val deltaMs = (nowMillis() - ms).coerceAtLeast(0L)
+    val sec = deltaMs / 1_000L
+    val min = sec / 60L
+    val hr = min / 60L
+    val day = hr / 24L
+    val wk = day / 7L
+    val mo = day / 30L
+    return when {
+        sec < 45L -> "Just now"
+        sec < 90L -> "1 minute ago"
+        min < 45L -> "$min minutes ago"
+        min < 90L -> "1 hour ago"
+        hr < 24L -> "$hr hours ago"
+        hr < 36L -> "Yesterday"
+        day < 7L -> "$day days ago"
+        wk < 5L -> "$wk week${if (wk == 1L) "" else "s"} ago"
+        mo < 12L -> "$mo month${if (mo == 1L) "" else "s"} ago"
+        else -> "Long ago"
+    }
 }
 
 private fun formatBytes(bytes: Long): String = when {

@@ -211,6 +211,26 @@ fun StationsHomeScreen(
                     }
                 }
 
+                // Most Played row — top stations by play_count, computed
+                // client-side from the live stations list. Skip if the
+                // user hasn't played anything yet, and skip if the only
+                // candidate is whatever's currently playing (Continue
+                // Listening already has it).
+                val mostPlayed = stations
+                    .asSequence()
+                    .filter { it.stats.playCount > 0 && it.id != currentStation?.id }
+                    .sortedByDescending { it.stats.playCount }
+                    .take(6)
+                    .toList()
+                if (mostPlayed.isNotEmpty()) {
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        MostPlayedRow(
+                            stations = mostPlayed,
+                            onPlay = { id -> scope.launch { stationPlayback.playStation(id) } },
+                        )
+                    }
+                }
+
                 items(stations, key = { it.id }) { station ->
                     if (isCompact) {
                         StationListRow(
@@ -561,6 +581,78 @@ private fun RecentlyPlayedRow(
                 RecentChip(station = station, onTap = { onPlay(station.id) })
             }
         }
+    }
+}
+
+@Composable
+private fun MostPlayedRow(
+    stations: List<Station>,
+    onPlay: (Long) -> Unit,
+) {
+    Column(modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 4.dp)) {
+        Text(
+            text = "Most played",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f),
+        )
+        Spacer(Modifier.size(10.dp))
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            lazyItems(stations, key = { it.id }) { station ->
+                MostPlayedChip(station = station, onTap = { onPlay(station.id) })
+            }
+        }
+    }
+}
+
+@Composable
+private fun MostPlayedChip(station: Station, onTap: () -> Unit) {
+    val accent = stationColor(station)
+    Column(
+        modifier = Modifier
+            .width(120.dp)
+            .clickable(onClick = onTap),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(1.4f)
+                .clip(RoundedCornerShape(12.dp))
+                .background(stationGradient(accent)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = presetIconFor(station),
+                contentDescription = null,
+                modifier = Modifier.size(40.dp),
+                tint = Color.White.copy(alpha = 0.92f),
+            )
+            // Top-left chip showing play count — visual hierarchy hint
+            // that this row is *ranked* by listening, not just recent.
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(6.dp),
+                color = Color.Black.copy(alpha = 0.45f),
+                shape = RoundedCornerShape(8.dp),
+            ) {
+                Text(
+                    "${station.stats.playCount}×",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White,
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                )
+            }
+        }
+        Spacer(Modifier.size(6.dp))
+        Text(
+            text = station.name,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onBackground,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 

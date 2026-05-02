@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -12,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import com.visorcraft.radioshed.data.SettingsStore
 import com.visorcraft.radioshed.nav.AppScreen
+import com.visorcraft.radioshed.stations.StationPlayback
 import com.visorcraft.radioshed.nav.PlatformBackHandler
 import com.visorcraft.radioshed.ui.home.HomeScreen
 import com.visorcraft.radioshed.ui.library.AlbumDetailScreen
@@ -37,7 +39,10 @@ import org.koin.compose.koinInject
 
 @Composable
 @Preview
-fun App(settings: SettingsStore = koinInject()) {
+fun App(
+    settings: SettingsStore = koinInject(),
+    stationPlayback: StationPlayback = koinInject(),
+) {
     // Live-mutable theme mode: read once from the persisted setting, then
     // hold in state so the AppSettingsScreen picker can re-theme the whole
     // app instantly when the user changes it (no app restart needed).
@@ -48,6 +53,19 @@ fun App(settings: SettingsStore = koinInject()) {
             if (settings.isOnboardingComplete()) AppScreen.Home else AppScreen.Onboarding
         }
         var current by remember { mutableStateOf<AppScreen>(startScreen) }
+
+        // Auto-resume the last station once per process lifetime — gated
+        // by an opt-in setting (off by default). LaunchedEffect(Unit)
+        // means this fires on first composition only; it doesn't re-trigger
+        // when the user navigates back to Home.
+        LaunchedEffect(Unit) {
+            if (
+                settings.isOnboardingComplete() &&
+                settings.getAutoResumeLastStation()
+            ) {
+                settings.getLastStationId()?.let { stationPlayback.playStation(it) }
+            }
+        }
 
         // Onboarding owns the full screen — no MiniPlayer overlay until the
         // user has actually finished setup.
