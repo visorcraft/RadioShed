@@ -212,6 +212,24 @@ class StationRepository(private val db: RadioShedDatabase) {
         db.stationsQueries.deleteStationById(id)
     }
 
+    /**
+     * Up to [limit] album artwork URIs for the station's most recent
+     * history, distinct by album. Powers the auto-collage thumbnail
+     * shown on station tiles that have no custom artwork uploaded.
+     * Returns empty when the station has no playable history yet.
+     */
+    suspend fun recentAlbumArtwork(stationId: Long, limit: Long = 4L): List<String> =
+        withContext(IODispatcher) {
+            // SQLDelight infers artwork_uri as non-null from the WHERE
+            // `album.artwork_uri IS NOT NULL`. The blank-trim is the
+            // last line of defence against stale empty strings that
+            // pre-date the matching guard in `updateAlbumArtworkIfMissing`.
+            db.stationsQueries.selectRecentAlbumArtworkForStation(stationId, limit)
+                .executeAsList()
+                .map { it.artwork_uri }
+                .filter { it.isNotBlank() }
+        }
+
     // ---- Pinned tracks (per-station) ----
 
     suspend fun pinTrackToStation(stationId: Long, trackId: Long) = withContext(IODispatcher) {

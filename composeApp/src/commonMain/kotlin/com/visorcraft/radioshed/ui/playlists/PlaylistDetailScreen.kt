@@ -15,10 +15,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PlayArrow
@@ -57,6 +59,8 @@ import com.visorcraft.radioshed.data.PlaylistRepository
 import com.visorcraft.radioshed.domain.Playlist
 import com.visorcraft.radioshed.domain.Track
 import com.visorcraft.radioshed.stations.StationPlayback
+import com.visorcraft.radioshed.ui.util.dragReorderItem
+import com.visorcraft.radioshed.ui.util.rememberDragReorderState
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
@@ -173,14 +177,41 @@ fun PlaylistDetailScreen(
                     )
                 }
             } else {
+                val listState = rememberLazyListState()
+                val dragState = rememberDragReorderState(
+                    lazyListState = listState,
+                    onMove = { from, to ->
+                        // In-memory swap so the row visually follows the
+                        // finger; persistence is deferred to onDrop so a
+                        // 5-row drag is a single SQL transaction rather
+                        // than five.
+                        tracks = tracks.toMutableList().also {
+                            val item = it.removeAt(from)
+                            it.add(to, item)
+                        }
+                    },
+                    onDrop = { _ ->
+                        val finalOrder = tracks.map { it.id }
+                        scope.launch {
+                            repo.setTrackOrder(playlistId, finalOrder)
+                        }
+                    },
+                )
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
+                    state = listState,
                     contentPadding = PaddingValues(vertical = 4.dp),
                 ) {
-                    items(tracks, key = { it.id }) { track ->
+                    itemsIndexed(tracks, key = { _, t -> t.id }) { index, track ->
                         PlaylistTrackRow(
                             track = track,
+                            isDragging = dragState.draggedIndex == index,
+                            modifier = Modifier.dragReorderItem(dragState, index),
                             onTap = {
+                                // indexOf-by-equality is safe here because
+                                // Track is a data class; if the dragged
+                                // state is mid-flight we ignore tap.
+                                if (dragState.draggedIndex != null) return@PlaylistTrackRow
                                 val idx = tracks.indexOf(track).coerceAtLeast(0)
                                 stationPlayback.playTracks(tracks, startIndex = idx)
                             },
@@ -225,12 +256,17 @@ fun PlaylistDetailScreen(
 @Composable
 private fun PlaylistTrackRow(
     track: Track,
+    isDragging: Boolean = false,
+    modifier: Modifier = Modifier,
     onTap: () -> Unit,
     onRemove: () -> Unit,
 ) {
     Surface(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onTap),
-        color = Color.Transparent,
+        modifier = modifier.fillMaxWidth().clickable(onClick = onTap),
+        // Subtle background when actively dragging so the row visually
+        // separates from its neighbours during the gesture.
+        color = if (isDragging) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                else Color.Transparent,
     ) {
         Row(
             modifier = Modifier.padding(vertical = 10.dp, horizontal = 4.dp),
@@ -267,6 +303,16 @@ private fun PlaylistTrackRow(
                     tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
                 )
             }
+            // Drag-handle hint sits at the trailing edge so the user
+            // discovers the long-press-and-drag affordance. Hit-testing
+            // happens against the entire row (the modifier is on the
+            // outer Surface), so this is purely a visual cue.
+            Icon(
+                imageVector = Icons.Filled.DragHandle,
+                contentDescription = null,
+                modifier = Modifier.size(20.dp).padding(end = 4.dp),
+                tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.35f),
+            )
         }
     }
 }

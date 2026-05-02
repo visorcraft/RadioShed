@@ -39,6 +39,8 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Repeat
+import androidx.compose.material.icons.filled.RepeatOne
 import androidx.compose.material.icons.filled.Lyrics
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
@@ -128,10 +130,12 @@ fun NowPlayingScreen(
     // mirror StateFlow in SettingsStore propagates writes from any
     // setDriveMode() call.
     val driveMode by settings.driveModeFlow.collectAsState()
+    val reduceMotion = remember(settings) { settings.getReduceMotion() }
     val nowPlaying by audioEngine.nowPlaying.collectAsState()
     val state by audioEngine.state.collectAsState()
     val position by audioEngine.position.collectAsState()
     val currentStation by stationPlayback.currentStation.collectAsState()
+    val repeatMode by stationPlayback.repeatMode.collectAsState()
     val sleepState by sleepTimer.state.collectAsState()
     val scope = rememberCoroutineScope()
     var sleepMenuOpen by remember { mutableStateOf(false) }
@@ -191,6 +195,24 @@ fun NowPlayingScreen(
                             imageVector = Icons.Filled.Lyrics,
                             contentDescription = "Lyrics",
                             tint = MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
+                    // Repeat-mode cycler. Off → All → One → Off. Visual
+                    // state matches the sleep icon's pattern: dim when
+                    // off, primary tint when on, with the "One" badge
+                    // riding on the icon glyph itself.
+                    IconButton(onClick = { stationPlayback.cycleRepeatMode() }) {
+                        Icon(
+                            imageVector = if (repeatMode == com.visorcraft.radioshed.stations.StationPlayback.RepeatMode.One)
+                                Icons.Filled.RepeatOne else Icons.Filled.Repeat,
+                            contentDescription = when (repeatMode) {
+                                com.visorcraft.radioshed.stations.StationPlayback.RepeatMode.Off -> "Repeat off"
+                                com.visorcraft.radioshed.stations.StationPlayback.RepeatMode.All -> "Repeat all"
+                                com.visorcraft.radioshed.stations.StationPlayback.RepeatMode.One -> "Repeat one"
+                            },
+                            tint = if (repeatMode == com.visorcraft.radioshed.stations.StationPlayback.RepeatMode.Off)
+                                MaterialTheme.colorScheme.onSurface
+                            else MaterialTheme.colorScheme.primary,
                         )
                     }
                     IconButton(onClick = { queueSheetOpen = true }) {
@@ -389,7 +411,10 @@ fun NowPlayingScreen(
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
             val accent = stationAccent(currentStation?.color)
 
-            BlurredBackdrop(artworkUri = playable.artworkUri)
+            BlurredBackdrop(
+                artworkUri = playable.artworkUri,
+                reduceMotion = reduceMotion,
+            )
 
             if (isCompact) {
                 CompactLayout(
@@ -650,21 +675,28 @@ private fun TwoPaneLayout(
  * Modifier.blur is GPU-accelerated on Android 12+; older versions
  * silently no-op the blur, leaving the dimmed image + scrim still
  * reading as a tinted backdrop.
+ *
+ * When [reduceMotion] is on we skip the blurred image layer entirely
+ * — leaving just a flat scrim. The blur isn't a moving animation,
+ * but it can still feel busy on motion-sensitive displays, and it's
+ * the single most expensive paint on Now Playing.
  */
 @Composable
-private fun BlurredBackdrop(artworkUri: String?) {
+private fun BlurredBackdrop(artworkUri: String?, reduceMotion: Boolean) {
     if (artworkUri == null) return
     val scrimColor = MaterialTheme.colorScheme.background.copy(alpha = 0.55f)
     Box(modifier = Modifier.fillMaxSize()) {
-        coil3.compose.AsyncImage(
-            model = artworkUri,
-            contentDescription = null,
-            modifier = Modifier
-                .fillMaxSize()
-                .blur(radius = 80.dp),
-            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-            alpha = 0.6f,
-        )
+        if (!reduceMotion) {
+            coil3.compose.AsyncImage(
+                model = artworkUri,
+                contentDescription = null,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .blur(radius = 80.dp),
+                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                alpha = 0.6f,
+            )
+        }
         Box(modifier = Modifier.fillMaxSize().background(scrimColor))
     }
 }

@@ -73,6 +73,26 @@ class PlaylistRepository(private val db: RadioShedDatabase) {
             db.playlistsQueries.reorderPlaylistTrack(position.toLong(), playlistId, trackId)
         }
 
+    /**
+     * Replace the entire track ordering for a playlist in one
+     * transaction. [orderedTrackIds] must be the desired order from
+     * top to bottom; positions are renumbered 0..N-1. Tracks not in
+     * the list are left at their current position (callers should
+     * pass the full track list to avoid partial-update surprises).
+     */
+    suspend fun setTrackOrder(playlistId: Long, orderedTrackIds: List<Long>) =
+        withContext(IODispatcher) {
+            db.transaction {
+                orderedTrackIds.forEachIndexed { idx, trackId ->
+                    db.playlistsQueries.reorderPlaylistTrack(
+                        position = idx.toLong(),
+                        playlist_id = playlistId,
+                        track_id = trackId,
+                    )
+                }
+            }
+        }
+
     suspend fun tracksIn(playlistId: Long): List<Track> = withContext(IODispatcher) {
         db.playlistsQueries.selectTracksInPlaylist(playlistId).executeAsList().map { it.toDomain() }
     }

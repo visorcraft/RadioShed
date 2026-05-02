@@ -54,7 +54,8 @@ fun App(
     // hold in state so the AppSettingsScreen picker can re-theme the whole
     // app instantly when the user changes it (no app restart needed).
     var themeMode by remember { mutableStateOf(settings.getThemeMode()) }
-    RadioShedTheme(mode = themeMode) {
+    var materialYou by remember { mutableStateOf(settings.getMaterialYouEnabled()) }
+    RadioShedTheme(mode = themeMode, useMaterialYou = materialYou) {
         // Determine the initial screen exactly once per app launch.
         val startScreen = remember {
             if (settings.isOnboardingComplete()) AppScreen.Home else AppScreen.Onboarding
@@ -248,6 +249,8 @@ fun App(
                             onBack = { current = AppScreen.Home },
                             currentThemeMode = themeMode,
                             onThemeModeChange = { themeMode = it },
+                            currentMaterialYou = materialYou,
+                            onMaterialYouChange = { materialYou = it },
                             onOpenEqualizer = { current = AppScreen.Equalizer },
                             onOpenPlaylists = { current = AppScreen.Playlists },
                             onOpenBackup = { current = AppScreen.BackupRestore },

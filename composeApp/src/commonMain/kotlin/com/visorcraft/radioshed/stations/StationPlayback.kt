@@ -70,6 +70,31 @@ class StationPlayback(
     private val _candidateCount = MutableStateFlow(0)
     val candidateCount: StateFlow<Int> = _candidateCount.asStateFlow()
 
+    /**
+     * Repeat mode applied at track-transition time:
+     *  - [RepeatMode.Off] / [RepeatMode.All]: natural advance via
+     *    [advanceToNext]. The underlying [PlaybackQueue] already
+     *    cycles in shuffle / sequential, so "all" matches the
+     *    default behaviour.
+     *  - [RepeatMode.One]: replay the same track on natural end.
+     *    User skip-next still advances normally; only the
+     *    auto-advance Ended path replays.
+     */
+    private val _repeatMode = MutableStateFlow(RepeatMode.Off)
+    val repeatMode: StateFlow<RepeatMode> = _repeatMode.asStateFlow()
+
+    fun setRepeatMode(mode: RepeatMode) {
+        _repeatMode.value = mode
+    }
+
+    fun cycleRepeatMode() {
+        _repeatMode.value = when (_repeatMode.value) {
+            RepeatMode.Off -> RepeatMode.All
+            RepeatMode.All -> RepeatMode.One
+            RepeatMode.One -> RepeatMode.Off
+        }
+    }
+
     private var queue: PlaybackQueue? = null
 
     /** The track currently loaded into the AudioEngine. Used to push to
@@ -81,6 +106,14 @@ class StationPlayback(
      *  written on the next transition. */
     private var trackStartedAtMs: Long? = null
 
+    /**
+     * True when the next [recordPreviousIfAny] should additionally
+     * insert a skip_log row (because the user hit skip-next /
+     * dislike / skip-previous, rather than the track ending
+     * naturally). Cleared after each recording call.
+     */
+    @Volatile private var userSkipPending: Boolean = false
+
     /** Played-track history for skip-previous. Most recent at the END.
      *  Capped at HISTORY_CAP to avoid unbounded growth on long sessions. */
     private val history: ArrayDeque<Track> = ArrayDeque()
@@ -91,12 +124,40 @@ class StationPlayback(
         // collect is enough — we'll only see Ended once per real transition.
         // Calls go through advanceMutex so they can't race with explicit
         // skipNext / playStation / playTracks invocations.
+        //
+        // RepeatMode.One short-circuits to a re-play of the current
+        // track instead of advancing. Off/All both fall through to the
+        // standard advance — the queue already cycles, so "all" matches
+        // default behaviour.
         scope.launch {
             audioEngine.state.collect { state ->
                 if (state == PlayerState.Ended && !suppressAutoAdvance) {
-                    advanceMutex.withLock { advanceToNext() }
+                    advanceMutex.withLock {
+                        if (_repeatMode.value == RepeatMode.One) {
+                            replayCurrentTrack()
+                        } else {
+                            advanceToNext()
+                        }
+                    }
                 }
             }
+        }
+    }
+
+    /**
+     * Replay [currentTrack] from the start. Skips the recordPrevious
+     * logic since the user effectively just listened to the whole
+     * track — re-recording would inflate listened_ms erroneously.
+     * Falls back to advanceToNext when there's no current track.
+     */
+    private fun replayCurrentTrack() {
+        val track = currentTrack ?: return advanceToNext()
+        // Reset the start-time so the re-play counts as a fresh
+        // listening session rather than appending to the previous one.
+        trackStartedAtMs = nowMillis()
+        scope.launch {
+            val artworkUri = track.albumId?.let { libraryRepo.getAlbumById(it)?.artworkUri }
+            audioEngine.play(track.toPlayable(artworkUri = artworkUri))
         }
     }
 
@@ -207,7 +268,13 @@ class StationPlayback(
         // without ever recording the listening sessions for the
         // popped tracks (advanceToNext → playTrack → recordPrevious
         // works for the immediately previous track, but if next
-        // returns null we'd skip recording entirely).
+        // returns null we'd skip recording entirely). The userSkip
+        // flag tells recordPreviousIfAny to insert a skip_log row in
+        // addition to the station_history row when the listening
+        // session counts as a skip (didn't reach the completion
+        // threshold). Auto-advance via PlayerState.Ended doesn't set
+        // the flag — that's a natural end, not a user skip.
+        userSkipPending = true
         scope.launch {
             advanceMutex.withLock { advanceToNext() }
         }
@@ -297,6 +364,9 @@ class StationPlayback(
             audioEngine.seekTo(0L)
             return
         }
+        // Skipping back IS a skip of whatever's currently playing
+        // (the user gave up on it before it ended naturally).
+        userSkipPending = true
         scope.launch {
             advanceMutex.withLock {
                 recordPreviousIfAny()
@@ -344,6 +414,10 @@ class StationPlayback(
         // Capture and immediately null so any concurrent caller short-
         // circuits at the trackStartedAtMs == null guard above.
         trackStartedAtMs = null
+        // Capture-and-clear the skip flag so concurrent recorders
+        // can't double-fire on the same transition.
+        val wasUserSkip = userSkipPending
+        userSkipPending = false
         val listenedMs = (nowMillis() - startedAt).coerceAtLeast(0L)
         val completed = prev.durationMs > 0L &&
             listenedMs >= (prev.durationMs * COMPLETION_FRACTION).toLong()
@@ -360,6 +434,17 @@ class StationPlayback(
                 // Stats screen's "Top stations" subtitle reflects real
                 // accumulated time without re-querying station_history.
                 stationRepo.bumpStationListenedMs(stationId, listenedMs)
+                // Skip-log: only insert when the user explicitly
+                // skipped AND the track wasn't otherwise completed.
+                // A user mashing skip at 99% should not count as a
+                // skip; the completion threshold guards against that.
+                if (wasUserSkip && !completed) {
+                    ratingRepo.recordSkip(
+                        trackId = prev.id,
+                        stationId = stationId,
+                        positionMs = listenedMs,
+                    )
+                }
             }
         }
     }
@@ -449,6 +534,12 @@ class StationPlayback(
         val raw = 10.0.pow((gainDb + preamp) / 20.0).toFloat()
         audioEngine.setVolume(raw.coerceIn(0f, 1f))
     }
+
+    /**
+     * Now-Playing repeat behaviour. Order is the cycle order:
+     * Off → All → One → Off.
+     */
+    enum class RepeatMode { Off, All, One }
 
     private companion object {
         /** Spotify / Apple Music industry-standard threshold: within the

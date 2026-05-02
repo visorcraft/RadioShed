@@ -174,6 +174,25 @@ LIMIT ?;
 selectRecentTrackIdsForStation:
 SELECT track_id FROM station_history WHERE station_id = ? ORDER BY played_at DESC LIMIT ?;
 
+-- Up to N distinct album artwork URIs for the station's recent
+-- history. Used to build the per-station collage thumbnail when
+-- the station has no custom artwork uploaded. ROW_NUMBER OVER
+-- partitions by album so we keep one row per album (the most
+-- recent play) and ORDER BY recency. NULL artwork rows are
+-- filtered out at the application layer.
+selectRecentAlbumArtworkForStation:
+SELECT album.artwork_uri AS artwork_uri, MAX(sh.played_at) AS last_played_at
+FROM station_history sh
+JOIN track ON track.id = sh.track_id
+JOIN album ON album.id = track.album_id
+WHERE sh.station_id = ?
+  AND track.album_id IS NOT NULL
+  AND album.artwork_uri IS NOT NULL
+  AND TRIM(album.artwork_uri) != ''
+GROUP BY album.id
+ORDER BY last_played_at DESC
+LIMIT ?;
+
 countHistoryForStation:
 SELECT COUNT(*) FROM station_history WHERE station_id = ?;
 

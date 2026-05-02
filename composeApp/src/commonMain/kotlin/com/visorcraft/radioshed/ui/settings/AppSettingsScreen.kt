@@ -51,6 +51,7 @@ import com.visorcraft.radioshed.BuildInfo
 import com.visorcraft.radioshed.data.SettingsStore
 import com.visorcraft.radioshed.source.MissingArtworkSync
 import com.visorcraft.radioshed.ui.theme.ThemeMode
+import com.visorcraft.radioshed.ui.theme.supportsMaterialYou
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
@@ -73,6 +74,8 @@ fun AppSettingsScreen(
     onBack: () -> Unit,
     currentThemeMode: ThemeMode,
     onThemeModeChange: (ThemeMode) -> Unit,
+    currentMaterialYou: Boolean = false,
+    onMaterialYouChange: (Boolean) -> Unit = {},
     onOpenEqualizer: () -> Unit = {},
     onOpenPlaylists: () -> Unit = {},
     onOpenBackup: () -> Unit = {},
@@ -124,6 +127,20 @@ fun AppSettingsScreen(
                     settings.setThemeMode(mode)
                 },
             )
+            if (supportsMaterialYou()) {
+                Spacer(Modifier.height(8.dp))
+                ToggleRow(
+                    title = "Material You",
+                    subtitle = "Tint the app with colours derived from your wallpaper " +
+                        "(Android 12+). Off uses the brand amber palette. AMOLED " +
+                        "still wins for surface/background when paired.",
+                    checked = currentMaterialYou,
+                    onCheckedChange = { v ->
+                        onMaterialYouChange(v)
+                        settings.setMaterialYouEnabled(v)
+                    },
+                )
+            }
 
             Spacer(Modifier.height(16.dp))
 

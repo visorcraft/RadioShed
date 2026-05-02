@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -132,9 +133,23 @@ fun StationsHomeScreen(
     var completionRates by remember {
         mutableStateOf<Map<Long, Pair<Long, Long>>>(emptyMap())
     }
+    // Per-station up-to-4 album artwork URIs for the auto-collage that
+    // replaces the gradient hero on tiles with no custom artwork. Pulled
+    // in batch (one query per station, but only for stations with at
+    // least one play). Refreshes on the same signal as the recent row
+    // so a fresh play immediately propagates.
+    var stationCollages by remember { mutableStateOf<Map<Long, List<String>>>(emptyMap()) }
     LaunchedEffect(currentStation?.id, playerState) {
         recent = stationRepo.listRecentlyPlayed(limit = 6L)
         completionRates = stationRepo.stationCompletionRates()
+    }
+    LaunchedEffect(stations.map { it.id }, currentStation?.id) {
+        stationCollages = stations.associate { s ->
+            s.id to (
+                if (s.stats.playCount > 0L) stationRepo.recentAlbumArtwork(s.id, 4L)
+                else emptyList()
+            )
+        }
     }
 
     // Recently-added tracks — pulled from the library by file ctime
@@ -334,6 +349,7 @@ fun StationsHomeScreen(
                             isPlaying = station.id == currentStation?.id &&
                                 playerState == PlayerState.Playing,
                             statsLine = skipRateLine,
+                            collageArtwork = stationCollages[station.id].orEmpty(),
                             onPlay = {
                                 scope.launch { stationPlayback.playStation(station.id) }
                             },
@@ -346,6 +362,7 @@ fun StationsHomeScreen(
                             isPlaying = station.id == currentStation?.id &&
                                 playerState == PlayerState.Playing,
                             statsLine = skipRateLine,
+                            collageArtwork = stationCollages[station.id].orEmpty(),
                             onPlay = {
                                 scope.launch { stationPlayback.playStation(station.id) }
                             },
@@ -936,6 +953,7 @@ private fun StationListRow(
     isCurrent: Boolean,
     isPlaying: Boolean,
     statsLine: String?,
+    collageArtwork: List<String>,
     onPlay: () -> Unit,
     onLongPress: () -> Unit,
 ) {
@@ -953,10 +971,27 @@ private fun StationListRow(
             modifier = Modifier.fillMaxWidth().padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            ColorTile(
-                color = stationColor(station),
-                modifier = Modifier.size(48.dp),
-            )
+            // Custom artwork wins, then auto-collage, then color tile.
+            if (station.artworkUri != null) {
+                coil3.compose.AsyncImage(
+                    model = station.artworkUri,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(RoundedCornerShape(8.dp)),
+                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                )
+            } else if (collageArtwork.size >= 4) {
+                AlbumCollage(
+                    uris = collageArtwork.take(4),
+                    modifier = Modifier.size(48.dp),
+                )
+            } else {
+                ColorTile(
+                    color = stationColor(station),
+                    modifier = Modifier.size(48.dp),
+                )
+            }
             Spacer(Modifier.size(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1036,6 +1071,7 @@ private fun StationGridTile(
     isCurrent: Boolean,
     isPlaying: Boolean,
     statsLine: String?,
+    collageArtwork: List<String>,
     onPlay: () -> Unit,
     onEdit: () -> Unit,
 ) {
@@ -1054,11 +1090,14 @@ private fun StationGridTile(
         ),
     ) {
         Column {
-            // Tile header — multi-stop diagonal gradient with a thematic
-            // icon centered, and a subtle "now playing" pill in the corner
-            // when this station is the active one. Built-in presets get a
-            // preset-specific icon (Whatshot for "Latest Hits" etc.); user-
-            // created stations fall back to a generic music note.
+            // Tile header. Precedence:
+            //  1. Custom uploaded artwork wins outright.
+            //  2. Otherwise, an auto-collage of up-to-4 recent album covers
+            //     drives a 2x2 grid (only when we have 4+ distinct albums
+            //     in the station's history).
+            //  3. Otherwise, a tinted gradient with a preset-specific
+            //     hero icon (Whatshot for Latest Hits, MusicNote for
+            //     user-created, etc.).
             val presetIcon = presetIconFor(station)
             Box(
                 modifier = Modifier
@@ -1066,17 +1105,34 @@ private fun StationGridTile(
                     .aspectRatio(1.5f)
                     .background(stationGradient(accent)),
             ) {
-                // Centered hero icon
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        imageVector = presetIcon,
-                        contentDescription = null,
-                        modifier = Modifier.size(80.dp),
-                        tint = Color.White.copy(alpha = 0.92f),
-                    )
+                when {
+                    station.artworkUri != null -> {
+                        coil3.compose.AsyncImage(
+                            model = station.artworkUri,
+                            contentDescription = null,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                        )
+                    }
+                    collageArtwork.size >= 4 -> {
+                        AlbumCollage(
+                            uris = collageArtwork.take(4),
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
+                    else -> {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = presetIcon,
+                                contentDescription = null,
+                                modifier = Modifier.size(80.dp),
+                                tint = Color.White.copy(alpha = 0.92f),
+                            )
+                        }
+                    }
                 }
                 // Now-playing chip in the corner
                 if (isPlaying) {
@@ -1160,6 +1216,55 @@ private fun ColorTile(color: Color, modifier: Modifier = Modifier) {
             .clip(RoundedCornerShape(8.dp))
             .background(if (color == Color.Black) MaterialTheme.colorScheme.primary else color),
     )
+}
+
+/**
+ * 2x2 album-cover collage for stations without custom artwork. Caller
+ * must pass exactly 4 URIs (typically `take(4)` of the available
+ * artwork list — fewer than 4 isn't currently rendered, since the
+ * tile call site checks size >= 4 before invoking).
+ *
+ * The collage's pieces use ContentScale.Crop so non-square covers
+ * fill their quadrants without letterboxing. Each quadrant has a 1px
+ * gap between it and its neighbours, drawn via a tiny background
+ * separator color, which gives the collage a subtle "tile" feel
+ * without paying for borders on every render.
+ */
+@Composable
+private fun AlbumCollage(uris: List<String>, modifier: Modifier = Modifier) {
+    val gap = 1.dp
+    val separator = MaterialTheme.colorScheme.surface
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(separator),
+    ) {
+        Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            CollageCell(uris.getOrNull(0), Modifier.weight(1f).fillMaxHeight())
+            Spacer(Modifier.width(gap))
+            CollageCell(uris.getOrNull(1), Modifier.weight(1f).fillMaxHeight())
+        }
+        Spacer(Modifier.height(gap))
+        Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            CollageCell(uris.getOrNull(2), Modifier.weight(1f).fillMaxHeight())
+            Spacer(Modifier.width(gap))
+            CollageCell(uris.getOrNull(3), Modifier.weight(1f).fillMaxHeight())
+        }
+    }
+}
+
+@Composable
+private fun CollageCell(uri: String?, modifier: Modifier) {
+    if (uri == null) {
+        Box(modifier = modifier.background(MaterialTheme.colorScheme.surfaceVariant))
+    } else {
+        coil3.compose.AsyncImage(
+            model = uri,
+            contentDescription = null,
+            modifier = modifier,
+            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+        )
+    }
 }
 
 @Composable
