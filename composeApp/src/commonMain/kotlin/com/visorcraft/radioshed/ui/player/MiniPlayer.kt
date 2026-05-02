@@ -41,6 +41,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.visorcraft.radioshed.audio.AudioEngine
 import com.visorcraft.radioshed.audio.PlayerState
+import com.visorcraft.radioshed.stations.StationPlayback
 import org.koin.compose.koinInject
 
 /**
@@ -58,6 +59,7 @@ import org.koin.compose.koinInject
 fun MiniPlayer(
     onExpand: () -> Unit = {},
     audioEngine: AudioEngine = koinInject(),
+    stationPlayback: StationPlayback = koinInject(),
 ) {
     val nowPlaying by audioEngine.nowPlaying.collectAsState()
     val state by audioEngine.state.collectAsState()
@@ -110,10 +112,16 @@ fun MiniPlayer(
                         maxLines = 1,
                     )
                 }
+                // Skip prev/next bypass the MediaController and call
+                // StationPlayback / AudioEngine.seekTo directly. The
+                // MediaController-based path filters these commands
+                // somewhere we can't reach (PlayerWrapper inside
+                // MediaSession re-derives them from queue state). Pause
+                // stays on the controller path since it isn't filtered.
                 TransportIconButton(
                     icon = Icons.Filled.SkipPrevious,
                     contentDesc = "Previous",
-                    onClick = { audioEngine.skipPrevious() },
+                    onClick = { stationPlayback.skipPrevious() },
                 )
                 TransportIconButton(
                     icon = if (state == PlayerState.Playing) Icons.Filled.Pause
@@ -124,7 +132,7 @@ fun MiniPlayer(
                 TransportIconButton(
                     icon = Icons.Filled.SkipNext,
                     contentDesc = "Next",
-                    onClick = { audioEngine.skipNext() },
+                    onClick = { stationPlayback.skipNext() },
                 )
             }
         }

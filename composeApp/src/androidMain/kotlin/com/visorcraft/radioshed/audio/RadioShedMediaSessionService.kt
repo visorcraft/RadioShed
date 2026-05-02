@@ -4,6 +4,7 @@ import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.LibraryResult
 import androidx.media3.session.MediaLibraryService
@@ -78,10 +79,34 @@ class RadioShedMediaSessionService : MediaLibraryService() {
             .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
             .build()
 
-        val player = ExoPlayer.Builder(this)
+        val exoPlayer = ExoPlayer.Builder(this)
             .setAudioAttributes(attributes, /* handleAudioFocus = */ true)
             .setHandleAudioBecomingNoisy(true)
             .build()
+
+        // Wrap ExoPlayer in StationAwarePlayer so external surfaces
+        // (Android Auto, lock-screen, Bluetooth AVRCP) see skip-next /
+        // skip-previous as always available, and pressing those buttons
+        // routes through StationPlayback's queue logic instead of
+        // ExoPlayer's default seek-within-current-queue behavior. See
+        // [StationAwarePlayer] kdoc for the full rationale.
+        val player = StationAwarePlayer(
+            underlying = exoPlayer,
+            onSkipNext = {
+                runCatching {
+                    GlobalContext.get().get<StationPlayback>().skipNext()
+                }
+            },
+            onSkipPrevious = {
+                // For now skip-previous restarts the current track (Spotify-
+                // style: tap once = restart). True history-aware previous
+                // requires tracking played history in StationPlayback —
+                // future work. seekTo(0) on the underlying ExoPlayer is the
+                // right escape hatch since ForwardingPlayer.seekToPrevious
+                // is overridden above.
+                exoPlayer.seekTo(0)
+            },
+        )
 
         librarySession = MediaLibrarySession.Builder(this, player, RadioShedLibraryCallback())
             .build()
@@ -120,6 +145,40 @@ class RadioShedMediaSessionService : MediaLibraryService() {
      * call into this to populate their UI and to request playback.
      */
     private inner class RadioShedLibraryCallback : MediaLibrarySession.Callback {
+
+        /**
+         * Explicitly grant SEEK_TO_NEXT/PREVIOUS to every connecting
+         * controller. Why this is needed despite [StationAwarePlayer]
+         * already overriding `getAvailableCommands`:
+         *
+         * `MediaSession` doesn't directly forward our player's commands
+         * to controllers. Internally it routes through a `PlayerWrapper`
+         * that re-derives commands from the player's actual queue state.
+         * With single-item queues (our station model), it strips
+         * SEEK_TO_NEXT_MEDIA_ITEM regardless of what our `Player.Commands`
+         * override returns. Setting `availablePlayerCommands` here on the
+         * `ConnectionResult` overrides PlayerWrapper's filtering and
+         * exposes the commands to MediaController + Auto + Bluetooth +
+         * lock-screen — wherever a controller is looking.
+         *
+         * The actual command execution still goes through
+         * [StationAwarePlayer]'s overrides → [StationPlayback.skipNext].
+         */
+        override fun onConnect(
+            session: MediaSession,
+            controller: MediaSession.ControllerInfo,
+        ): MediaSession.ConnectionResult {
+            val playerCommands = MediaSession.ConnectionResult.DEFAULT_PLAYER_COMMANDS
+                .buildUpon()
+                .add(Player.COMMAND_SEEK_TO_NEXT)
+                .add(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)
+                .add(Player.COMMAND_SEEK_TO_PREVIOUS)
+                .add(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)
+                .build()
+            return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
+                .setAvailablePlayerCommands(playerCommands)
+                .build()
+        }
 
         override fun onGetLibraryRoot(
             session: MediaLibrarySession,

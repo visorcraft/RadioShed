@@ -23,9 +23,15 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Explore
+import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.NewReleases
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Whatshot
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -35,6 +41,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -468,34 +475,56 @@ private fun StationGridTile(
         ),
     ) {
         Column {
+            // Tile header — multi-stop diagonal gradient with a thematic
+            // icon centered, and a subtle "now playing" pill in the corner
+            // when this station is the active one. Built-in presets get a
+            // preset-specific icon (Whatshot for "Latest Hits" etc.); user-
+            // created stations fall back to a generic music note.
+            val presetIcon = presetIconFor(station)
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .aspectRatio(1.5f)
-                    .background(
-                        Brush.linearGradient(
-                            colors = listOf(accent, accent.copy(alpha = 0.55f)),
-                        ),
-                    ),
-                contentAlignment = Alignment.BottomEnd,
+                    .background(stationGradient(accent)),
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(12.dp),
+                // Centered hero icon
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
                 ) {
                     Icon(
-                        imageVector = if (isPlaying) Icons.Filled.PlayArrow else Icons.Filled.MusicNote,
+                        imageVector = presetIcon,
                         contentDescription = null,
-                        modifier = Modifier.size(20.dp),
-                        tint = Color.White.copy(alpha = 0.9f),
+                        modifier = Modifier.size(80.dp),
+                        tint = Color.White.copy(alpha = 0.92f),
                     )
-                    if (isPlaying) {
-                        Spacer(Modifier.size(4.dp))
-                        Text(
-                            "Playing",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = Color.White.copy(alpha = 0.9f),
-                        )
+                }
+                // Now-playing chip in the corner
+                if (isPlaying) {
+                    Surface(
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(10.dp),
+                        color = Color.Black.copy(alpha = 0.45f),
+                        shape = RoundedCornerShape(12.dp),
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.PlayArrow,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                                tint = Color.White,
+                            )
+                            Spacer(Modifier.size(4.dp))
+                            Text(
+                                "Playing",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = Color.White,
+                            )
+                        }
                     }
                 }
             }
@@ -567,6 +596,56 @@ private fun BuiltInBadge() {
 private fun stationColor(station: Station): Color {
     if (station.color == 0) return Color(0xFFFF7F1A) // brand amber default
     return Color(station.color.toLong() and 0xFFFFFFFFL)
+}
+
+/**
+ * Three-stop diagonal gradient: full-saturation accent at top-left, a
+ * darkened version at center, lighter-blended at bottom-right. Reads as
+ * "designed" rather than "placeholder" without needing actual artwork
+ * for each station.
+ */
+private fun stationGradient(accent: Color): Brush {
+    // Slightly darken/lighten via alpha + black/white mix at the stops.
+    val darker = Color(
+        red = accent.red * 0.55f,
+        green = accent.green * 0.55f,
+        blue = accent.blue * 0.65f,
+        alpha = 1f,
+    )
+    val lighter = Color(
+        red = (accent.red + 0.1f).coerceAtMost(1f),
+        green = (accent.green + 0.1f).coerceAtMost(1f),
+        blue = (accent.blue + 0.1f).coerceAtMost(1f),
+        alpha = 0.85f,
+    )
+    return Brush.linearGradient(
+        colorStops = arrayOf(
+            0f to accent,
+            0.55f to darker,
+            1f to lighter,
+        ),
+    )
+}
+
+/**
+ * Maps a station to a thematic Material icon. Built-in presets are
+ * matched by name (the seeded names are stable, see `StationPresets.kt`);
+ * user-created stations and unmatched names fall back to a generic
+ * music-library icon. Deliberately name-based not id-based so users who
+ * rename a built-in keep its icon, and users who create their own
+ * "Top Rated" get the matching star icon for free.
+ */
+private fun presetIconFor(station: Station): androidx.compose.ui.graphics.vector.ImageVector {
+    val n = station.name.lowercase()
+    return when {
+        "latest" in n || "hits" in n -> Icons.Filled.Whatshot
+        "discover" in n -> Icons.Filled.Explore
+        "top" in n && "rated" in n -> Icons.Filled.Star
+        "recent" in n || "new" in n -> Icons.Filled.NewReleases
+        "all music" in n || "everything" in n -> Icons.Filled.LibraryMusic
+        "favorite" in n || "loved" in n -> Icons.Filled.AutoAwesome
+        else -> Icons.Filled.MusicNote
+    }
 }
 
 private fun PlayOrder.label(): String = when (this) {

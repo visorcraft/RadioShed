@@ -8,6 +8,7 @@ import com.visorcraft.radioshed.data.RatingRepository
 import com.visorcraft.radioshed.data.StationRepository
 import com.visorcraft.radioshed.data.nowMillis
 import com.visorcraft.radioshed.domain.Station
+import com.visorcraft.radioshed.domain.Track
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -46,6 +47,14 @@ class StationPlayback(
 
     private var queue: PlaybackQueue? = null
 
+    /** The track currently loaded into the AudioEngine. Used to push to
+     *  history when the user advances forward. */
+    private var currentTrack: Track? = null
+
+    /** Played-track history for skip-previous. Most recent at the END.
+     *  Capped at HISTORY_CAP to avoid unbounded growth on long sessions. */
+    private val history: ArrayDeque<Track> = ArrayDeque()
+
     init {
         // Auto-advance: when the engine reports Ended, ask the queue for the
         // next track. StateFlow already deduplicates emissions, so a plain
@@ -72,6 +81,11 @@ class StationPlayback(
         queue = newQueue
         _candidateCount.value = newQueue.candidateCount
 
+        // Switching stations clears history — the previous station's tracks
+        // aren't a logical "back" target from the new station's playback.
+        history.clear()
+        currentTrack = null
+
         // Bump station stats. Don't await — fire-and-forget keeps UI snappy.
         scope.launch {
             stationRepo.updateStats(
@@ -90,11 +104,38 @@ class StationPlayback(
         advanceToNext()
     }
 
+    /**
+     * Spotify-style skip-previous:
+     *  - If we're more than [PREVIOUS_RESTART_THRESHOLD_MS] into the
+     *    current track, restart it (rewind semantic).
+     *  - Otherwise, pop the most recent track from history and play it.
+     *  - If history is empty, restart the current track.
+     *
+     * Skipping previous does NOT push the current track back onto history
+     * — going back-and-forth-and-back-and-forth would otherwise loop. The
+     * track popped from history simply replaces the current one.
+     */
+    fun skipPrevious() {
+        val positionMs = audioEngine.position.value.currentMs
+        if (positionMs > PREVIOUS_RESTART_THRESHOLD_MS) {
+            audioEngine.seekTo(0L)
+            return
+        }
+        val prev = history.removeLastOrNull()
+        if (prev == null) {
+            audioEngine.seekTo(0L)
+            return
+        }
+        playTrack(prev, recordHistory = false)
+    }
+
     fun stop() {
         audioEngine.stop()
         _currentStation.value = null
         _candidateCount.value = 0
         queue = null
+        history.clear()
+        currentTrack = null
     }
 
     private fun advanceToNext() {
@@ -104,14 +145,41 @@ class StationPlayback(
             audioEngine.stop()
             return
         }
+        playTrack(next, recordHistory = true)
+    }
+
+    /**
+     * Hand a [Track] to the AudioEngine as a Playable, resolving the
+     * album's artwork inline. When [recordHistory] is true, the
+     * previously-current track is pushed onto [history] (capped) so
+     * skip-previous can navigate back through it.
+     */
+    private fun playTrack(track: Track, recordHistory: Boolean) {
+        if (recordHistory) {
+            currentTrack?.let { prev ->
+                history.addLast(prev)
+                while (history.size > HISTORY_CAP) history.removeFirst()
+            }
+        }
+        currentTrack = track
         // Resolve the track's album artwork URI before handing the Playable
         // to the player. The lookup is one indexed primary-key SELECT and
         // takes <1ms; doing it inline (as a launch) keeps advance order
         // stable and avoids a flicker where the player loads then the UI
         // belatedly populates artwork.
         scope.launch {
-            val artworkUri = next.albumId?.let { libraryRepo.getAlbumById(it)?.artworkUri }
-            audioEngine.play(next.toPlayable(artworkUri = artworkUri))
+            val artworkUri = track.albumId?.let { libraryRepo.getAlbumById(it)?.artworkUri }
+            audioEngine.play(track.toPlayable(artworkUri = artworkUri))
         }
+    }
+
+    private companion object {
+        /** Spotify / Apple Music industry-standard threshold: within the
+         *  first 3 seconds of a track, skip-previous goes to the actual
+         *  previous track. Past that, it restarts the current one. */
+        const val PREVIOUS_RESTART_THRESHOLD_MS = 3_000L
+
+        /** Bounded history; long sessions don't need infinite back-stack. */
+        const val HISTORY_CAP = 50
     }
 }

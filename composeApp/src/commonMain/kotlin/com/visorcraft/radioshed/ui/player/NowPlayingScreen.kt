@@ -154,7 +154,7 @@ fun NowPlayingScreen(
                     stationName = currentStation?.name,
                     onSeek = { audioEngine.seekTo(it) },
                     onTogglePlayPause = { audioEngine.togglePlayPause() },
-                    onPrev = { audioEngine.skipPrevious() },
+                    onPrev = { stationPlayback.skipPrevious() },
                     onNext = { stationPlayback.skipNext() },
                     onRate = { stars ->
                         scope.launch {
@@ -181,7 +181,7 @@ fun NowPlayingScreen(
                     stationName = currentStation?.name,
                     onSeek = { audioEngine.seekTo(it) },
                     onTogglePlayPause = { audioEngine.togglePlayPause() },
-                    onPrev = { audioEngine.skipPrevious() },
+                    onPrev = { stationPlayback.skipPrevious() },
                     onNext = { stationPlayback.skipNext() },
                     onRate = { stars ->
                         scope.launch {
