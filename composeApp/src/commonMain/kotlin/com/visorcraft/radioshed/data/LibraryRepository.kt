@@ -311,6 +311,18 @@ class LibraryRepository(private val db: RadioShedDatabase) {
         db.libraryQueries.selectTracksByArtist(artistId).executeAsList().map { it.toDomain() }
     }
 
+    /**
+     * Batched (trackId → primaryArtistId) lookup. Returns only tracks
+     * whose primary artist link exists; tracks without one (untagged
+     * compilations, etc.) are absent from the map.
+     */
+    suspend fun primaryArtistMap(trackIds: Collection<Long>): Map<Long, Long> =
+        withContext(IODispatcher) {
+            if (trackIds.isEmpty()) return@withContext emptyMap()
+            db.libraryQueries.selectPrimaryArtistForTracks(trackIds).executeAsList()
+                .associate { it.track_id to it.artist_id }
+        }
+
     suspend fun tracksForAlbum(albumId: Long): List<Track> = withContext(IODispatcher) {
         db.libraryQueries.selectTracksByAlbum(albumId).executeAsList().map { it.toDomain() }
     }

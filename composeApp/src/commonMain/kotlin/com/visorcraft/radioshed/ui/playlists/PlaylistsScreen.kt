@@ -32,6 +32,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -65,6 +66,16 @@ fun PlaylistsScreen(
     val playlists by repo.observeAll().collectAsState(initial = emptyList())
     var createOpen by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+
+    // Resolve cover art per playlist whenever the list changes. The
+    // queries are LIMIT 1 + indexed, so this is cheap even with dozens
+    // of playlists.
+    var coverByPlaylistId by remember { mutableStateOf<Map<Long, String?>>(emptyMap()) }
+    var trackCountByPlaylistId by remember { mutableStateOf<Map<Long, Long>>(emptyMap()) }
+    LaunchedEffect(playlists.map { it.id }) {
+        coverByPlaylistId = playlists.associate { it.id to repo.firstTrackArtwork(it.id) }
+        trackCountByPlaylistId = playlists.associate { it.id to repo.trackCount(it.id) }
+    }
 
     Scaffold(
         topBar = {
@@ -102,6 +113,8 @@ fun PlaylistsScreen(
                 items(playlists, key = { it.id }) { playlist ->
                     PlaylistRow(
                         playlist = playlist,
+                        coverUri = coverByPlaylistId[playlist.id],
+                        trackCount = trackCountByPlaylistId[playlist.id] ?: 0L,
                         onTap = { onOpenPlaylist(playlist.id) },
                     )
                 }
@@ -123,7 +136,12 @@ fun PlaylistsScreen(
 }
 
 @Composable
-private fun PlaylistRow(playlist: Playlist, onTap: () -> Unit) {
+private fun PlaylistRow(
+    playlist: Playlist,
+    coverUri: String?,
+    trackCount: Long,
+    onTap: () -> Unit,
+) {
     Surface(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onTap),
         color = Color.Transparent,
@@ -136,14 +154,26 @@ private fun PlaylistRow(playlist: Playlist, onTap: () -> Unit) {
                 modifier = Modifier
                     .size(48.dp)
                     .clip(RoundedCornerShape(8.dp))
-                    .background(MaterialTheme.colorScheme.primaryContainer),
+                    .background(
+                        if (coverUri != null) MaterialTheme.colorScheme.surfaceVariant
+                        else MaterialTheme.colorScheme.primaryContainer,
+                    ),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.QueueMusic,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                )
+                if (coverUri != null) {
+                    coil3.compose.AsyncImage(
+                        model = coverUri,
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.QueueMusic,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                    )
+                }
             }
             Spacer(Modifier.size(12.dp))
             Column(modifier = Modifier.weight(1f)) {
@@ -154,15 +184,19 @@ private fun PlaylistRow(playlist: Playlist, onTap: () -> Unit) {
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                playlist.description?.takeIf { it.isNotBlank() }?.let { d ->
-                    Text(
-                        text = d,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                val subtitle = buildString {
+                    append(trackCount).append(if (trackCount == 1L) " track" else " tracks")
+                    playlist.description?.takeIf { it.isNotBlank() }?.let {
+                        append(" · ").append(it)
+                    }
                 }
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
         }
     }

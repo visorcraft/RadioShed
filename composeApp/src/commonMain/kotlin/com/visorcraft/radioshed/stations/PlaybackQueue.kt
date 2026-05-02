@@ -33,6 +33,13 @@ class PlaybackQueue(
     private val dislikedIds: Set<Long> = emptySet(),
     private val random: Random = Random.Default,
     initialSequentialCursor: Int = 0,
+    /**
+     * (trackId → primaryArtistId) lookup. Optional: when empty (e.g.,
+     * ad-hoc playTracks queues seeded outside the StationPlayback path)
+     * artist spacing degrades gracefully to a no-op while album spacing
+     * still applies.
+     */
+    private val artistByTrackId: Map<Long, Long> = emptyMap(),
 ) {
 
     /** Recently-played track ids, oldest first. Bounded at `2 × noRepeatDepth`. */
@@ -47,6 +54,15 @@ class PlaybackQueue(
      * starve out a small library.
      */
     private val recentAlbums: ArrayDeque<Long> = ArrayDeque()
+
+    /**
+     * Recently-picked primary-artist ids. Sized smaller than album
+     * spacing because users notice "same artist twice in a row" more
+     * than "same album twice in a row" — we want to be tighter here.
+     * Falls back to no-op when [artistByTrackId] is empty (which is
+     * the case for ad-hoc playTracks queues).
+     */
+    private val recentArtists: ArrayDeque<Long> = ArrayDeque()
 
     /** Index for sequential mode. */
     private var sequentialCursor: Int = initialSequentialCursor.coerceAtLeast(0)
@@ -72,34 +88,46 @@ class PlaybackQueue(
     private fun nextSequential(pool: List<Track>): Track {
         val track = pool[sequentialCursor.coerceIn(0, pool.size - 1)]
         sequentialCursor = (sequentialCursor + 1) % pool.size
-        recordPlayed(track.id, track.albumId)
+        recordPlayed(track.id, track.albumId, primaryArtistOf(track))
         return track
     }
 
     private fun nextSmartShuffle(pool: List<Track>): Track {
-        // Two avoid filters in priority order:
-        //   1. Recent track ids (no-repeat memory, configurable depth).
-        //   2. Recent album ids (album-spacing, fixed small window).
-        // Apply both, then age them out — track-id recents first, then
-        // album recents — until we have at least one candidate. Never
-        // block: a one-track library still plays that track every time.
+        // Three avoid filters, applied jointly. Aged out in priority
+        // order on starvation (track > album > artist) so we relax the
+        // most specific constraint first — letting a track repeat is
+        // worse than letting the same artist's other album recur.
+        //   1. Recent track ids   (no-repeat memory, configurable)
+        //   2. Recent album ids   (album-spacing, fixed window)
+        //   3. Recent artist ids  (artist-spacing, smaller window)
         var avoid = effectiveAvoidSet(pool.size)
         var avoidAlbums = effectiveAlbumAvoidSet()
-        var available = pool.filter { it.id !in avoid && it.albumId !in avoidAlbums }
+        var avoidArtists = effectiveArtistAvoidSet()
+        var available = pool.filter {
+            it.id !in avoid &&
+                it.albumId !in avoidAlbums &&
+                primaryArtistOf(it) !in avoidArtists
+        }
         while (available.isEmpty()) {
             when {
                 recent.isNotEmpty() -> recent.removeFirst()
                 recentAlbums.isNotEmpty() -> recentAlbums.removeFirst()
+                recentArtists.isNotEmpty() -> recentArtists.removeFirst()
                 else -> { available = pool; break }  // last-ditch fallback
             }
             avoid = effectiveAvoidSet(pool.size)
             avoidAlbums = effectiveAlbumAvoidSet()
-            available = pool.filter { it.id !in avoid && it.albumId !in avoidAlbums }
+            avoidArtists = effectiveArtistAvoidSet()
+            available = pool.filter {
+                it.id !in avoid &&
+                    it.albumId !in avoidAlbums &&
+                    primaryArtistOf(it) !in avoidArtists
+            }
         }
         if (available.isEmpty()) available = pool
 
         val picked = pickWeighted(available)
-        recordPlayed(picked.id, picked.albumId)
+        recordPlayed(picked.id, picked.albumId, primaryArtistOf(picked))
         return picked
     }
 
@@ -110,6 +138,16 @@ class PlaybackQueue(
         val start = (end - ALBUM_SPACING).coerceAtLeast(0)
         return recentAlbums.toList().subList(start, end).toSet()
     }
+
+    private fun effectiveArtistAvoidSet(): Set<Long> {
+        if (recentArtists.isEmpty()) return emptySet()
+        val end = recentArtists.size
+        val start = (end - ARTIST_SPACING).coerceAtLeast(0)
+        return recentArtists.toList().subList(start, end).toSet()
+    }
+
+    private fun primaryArtistOf(track: Track): Long? =
+        artistByTrackId[track.id]
 
     /**
      * Returns the set of recent ids to avoid. Capped at `pool.size - 1` so
@@ -151,7 +189,7 @@ class PlaybackQueue(
         return items.last()
     }
 
-    private fun recordPlayed(id: Long, albumId: Long?) {
+    private fun recordPlayed(id: Long, albumId: Long?, artistId: Long?) {
         recent.addLast(id)
         val cap = (rule.noRepeatDepth.coerceAtLeast(0) * 2)
             .coerceAtLeast(MIN_RECENT_CAP)
@@ -162,6 +200,10 @@ class PlaybackQueue(
             // 2× gives some slack so we don't fall back to immediate
             // re-eligibility on the next pick.
             while (recentAlbums.size > ALBUM_SPACING * 2) recentAlbums.removeFirst()
+        }
+        if (artistId != null) {
+            recentArtists.addLast(artistId)
+            while (recentArtists.size > ARTIST_SPACING * 2) recentArtists.removeFirst()
         }
     }
 
@@ -209,5 +251,11 @@ class PlaybackQueue(
          *  album in a row" from happening without preventing the same
          *  album from ever recurring on a small set. */
         const val ALBUM_SPACING = 3
+
+        /** Same idea as [ALBUM_SPACING] but for artists. 2 is tighter on
+         *  purpose — listeners recognize "same artist twice" more
+         *  quickly than "same album twice" since a single artist
+         *  typically spans multiple albums in the candidate set. */
+        const val ARTIST_SPACING = 2
     }
 }

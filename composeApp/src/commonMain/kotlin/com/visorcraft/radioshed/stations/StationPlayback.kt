@@ -83,10 +83,16 @@ class StationPlayback(
 
         val candidates = sourceEvaluator.evaluate(station.source)
         val disliked = ratingRepo.dislikedTrackIdsForStation(stationId).toSet()
+        // Pre-resolve trackId → primaryArtistId so PlaybackQueue can
+        // apply artist-spacing without per-pick DB hits. One indexed
+        // batch query for the whole candidate set; cheap on typical
+        // 100-track stations.
+        val artistMap = libraryRepo.primaryArtistMap(candidates.map { it.id })
         val newQueue = PlaybackQueue(
             candidates = candidates,
             rule = station.playback,
             dislikedIds = disliked,
+            artistByTrackId = artistMap,
         )
         queue = newQueue
         _candidateCount.value = newQueue.candidateCount

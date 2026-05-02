@@ -48,8 +48,11 @@ import com.visorcraft.radioshed.data.LibraryRepository
 import com.visorcraft.radioshed.data.StationRepository
 import com.visorcraft.radioshed.data.TopAlbumEntry
 import com.visorcraft.radioshed.data.TopArtistEntry
+import com.visorcraft.radioshed.domain.Station
 import com.visorcraft.radioshed.domain.Track
 import com.visorcraft.radioshed.stations.StationPlayback
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
 import org.koin.compose.koinInject
 
 /**
@@ -80,6 +83,8 @@ fun StatsScreen(
     }
     var topArtists by remember { mutableStateOf<List<TopArtistEntry>>(emptyList()) }
     var topAlbums by remember { mutableStateOf<List<TopAlbumEntry>>(emptyList()) }
+    var topStations by remember { mutableStateOf<List<Station>>(emptyList()) }
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
         totalMs = stationRepo.totalListenedMs()
@@ -92,6 +97,14 @@ fun StatsScreen(
             }
         topArtists = stationRepo.topPlayedArtists(limit = 10L)
         topAlbums = stationRepo.topPlayedAlbums(limit = 10L)
+        // Top stations come from the existing play_count column on the
+        // stations table — distinct from the station_history-based
+        // lists above, since "play count" here is "times the user
+        // started this station" (cheaper signal than per-track plays).
+        topStations = stationRepo.list()
+            .filter { it.stats.playCount > 0 }
+            .sortedByDescending { it.stats.playCount }
+            .take(5)
     }
 
     Scaffold(
@@ -130,7 +143,12 @@ fun StatsScreen(
                 Spacer(Modifier.height(20.dp))
             }
 
-            if (topTracks.isEmpty() && topArtists.isEmpty() && topAlbums.isEmpty()) {
+            if (
+                topTracks.isEmpty() &&
+                topArtists.isEmpty() &&
+                topAlbums.isEmpty() &&
+                topStations.isEmpty()
+            ) {
                 item {
                     Text(
                         "No listening data yet — play some music to populate.",
@@ -139,6 +157,20 @@ fun StatsScreen(
                     )
                 }
                 return@LazyColumn
+            }
+
+            if (topStations.isNotEmpty()) {
+                item { SectionHeader("Top stations") }
+                items(topStations, key = { "st:${it.id}" }) { station ->
+                    TopStationRow(
+                        station = station,
+                        rank = topStations.indexOfFirst { it.id == station.id } + 1,
+                        onTap = {
+                            scope.launch { stationPlayback.playStation(station.id) }
+                        },
+                    )
+                }
+                item { Spacer(Modifier.height(16.dp)) }
             }
 
             if (topArtists.isNotEmpty()) {
@@ -196,6 +228,55 @@ private fun SectionHeader(label: String) {
         color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f),
     )
     Spacer(Modifier.height(4.dp))
+}
+
+@Composable
+private fun TopStationRow(station: Station, rank: Int, onTap: () -> Unit) {
+    Surface(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onTap),
+        color = Color.Transparent,
+    ) {
+        Row(
+            modifier = Modifier.padding(vertical = 8.dp, horizontal = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "$rank",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(28.dp),
+            )
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(
+                        // Station accent fallback to brand amber when
+                        // color is unset (built-ins always set color).
+                        if (station.color == 0) MaterialTheme.colorScheme.primary
+                        else androidx.compose.ui.graphics.Color(
+                            station.color.toLong() and 0xFFFFFFFFL,
+                        ),
+                    ),
+            )
+            Spacer(Modifier.size(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = station.name,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Text(
+                text = "${station.stats.playCount} play${if (station.stats.playCount == 1L) "" else "s"}",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+            )
+        }
+    }
 }
 
 @Composable

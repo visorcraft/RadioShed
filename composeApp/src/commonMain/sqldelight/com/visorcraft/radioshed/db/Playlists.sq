@@ -53,6 +53,20 @@ JOIN playlist_track pt ON pt.track_id = track.id
 WHERE pt.playlist_id = ?
 ORDER BY pt.position;
 
+-- Cover-art preview for a playlist row in the playlists list. Returns
+-- the album.artwork_uri of the first track in the playlist (by
+-- position), or NULL if the playlist is empty / the first track has
+-- no album. LEFT JOIN on album so we still return a row when album
+-- linkage is missing.
+firstPlaylistTrackArtwork:
+SELECT album.artwork_uri
+FROM playlist_track pt
+JOIN track ON track.id = pt.track_id
+LEFT JOIN album ON album.id = track.album_id
+WHERE pt.playlist_id = ?
+ORDER BY pt.position
+LIMIT 1;
+
 countTracksInPlaylist:
 SELECT COUNT(*) FROM playlist_track WHERE playlist_id = ?;
 

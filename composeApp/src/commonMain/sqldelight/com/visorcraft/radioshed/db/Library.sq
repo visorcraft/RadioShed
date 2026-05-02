@@ -351,6 +351,15 @@ JOIN track_artist ta ON ta.artist_id = artist.id
 WHERE ta.track_id = ?
 ORDER BY ta.role, ta.position;
 
+-- Batch lookup of primary artist id per track. Used by Smart Shuffle's
+-- artist-spacing filter — we need (trackId → artistId) for every track
+-- in the candidate set without paying N round-trips. Returns one row
+-- per track that has a 'primary' artist link; tracks without a primary
+-- link don't appear in the result.
+selectPrimaryArtistForTracks:
+SELECT track_id, artist_id FROM track_artist
+WHERE role = 'primary' AND track_id IN ?;
+
 selectTracksByArtist:
 SELECT track.* FROM track
 JOIN track_artist ta ON ta.track_id = track.id

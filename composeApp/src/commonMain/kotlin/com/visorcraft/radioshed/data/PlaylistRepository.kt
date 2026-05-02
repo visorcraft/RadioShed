@@ -80,4 +80,17 @@ class PlaylistRepository(private val db: RadioShedDatabase) {
     suspend fun trackCount(playlistId: Long): Long = withContext(IODispatcher) {
         db.playlistsQueries.countTracksInPlaylist(playlistId).executeAsOne()
     }
+
+    /**
+     * Cover-art URI for a playlist's first track. Used to render a
+     * preview thumbnail on the playlist list. Returns null when the
+     * playlist is empty, the first track lacks an album, or that
+     * album has no artwork persisted.
+     */
+    suspend fun firstTrackArtwork(playlistId: Long): String? = withContext(IODispatcher) {
+        // SQLDelight wraps single-column nullable result in NullableString
+        // wrapper class; flatten via executeAsOneOrNull + the column.
+        db.playlistsQueries.firstPlaylistTrackArtwork(playlistId)
+            .executeAsOneOrNull()?.artwork_uri
+    }
 }
