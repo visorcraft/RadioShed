@@ -58,6 +58,9 @@ sealed interface AppScreen {
      */
     data class StationDetail(val stationId: Long) : AppScreen
 
+    /** Drag-to-reorder station list — focused screen, no carousels. */
+    data object ReorderStations : AppScreen
+
     /** Album detail — cover art, track list, play / shuffle all. */
     data class AlbumDetail(val albumId: Long) : AppScreen
 

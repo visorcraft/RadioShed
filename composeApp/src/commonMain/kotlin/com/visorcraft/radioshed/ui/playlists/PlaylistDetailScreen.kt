@@ -43,6 +43,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -55,10 +56,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.visorcraft.radioshed.audio.AudioEngine
 import com.visorcraft.radioshed.data.PlaylistRepository
 import com.visorcraft.radioshed.domain.Playlist
 import com.visorcraft.radioshed.domain.Track
 import com.visorcraft.radioshed.stations.StationPlayback
+import com.visorcraft.radioshed.ui.util.NowPlayingIndicator
 import com.visorcraft.radioshed.ui.util.dragReorderItem
 import com.visorcraft.radioshed.ui.util.rememberDragReorderState
 import kotlinx.coroutines.launch
@@ -71,12 +74,15 @@ fun PlaylistDetailScreen(
     onBack: () -> Unit,
     repo: PlaylistRepository = koinInject(),
     stationPlayback: StationPlayback = koinInject(),
+    audioEngine: AudioEngine = koinInject(),
 ) {
     var playlist by remember { mutableStateOf<Playlist?>(null) }
     var tracks by remember { mutableStateOf<List<Track>>(emptyList()) }
     var menuOpen by remember { mutableStateOf(false) }
     var deleteConfirmOpen by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val nowPlaying by audioEngine.nowPlaying.collectAsState()
+    val currentTrackId = nowPlaying?.trackId
 
     suspend fun reload() {
         playlist = repo.getById(playlistId)
@@ -206,6 +212,7 @@ fun PlaylistDetailScreen(
                         PlaylistTrackRow(
                             track = track,
                             isDragging = dragState.draggedIndex == index,
+                            isCurrent = track.id == currentTrackId,
                             modifier = Modifier.dragReorderItem(dragState, index),
                             onTap = {
                                 // indexOf-by-equality is safe here because
@@ -257,6 +264,7 @@ fun PlaylistDetailScreen(
 private fun PlaylistTrackRow(
     track: Track,
     isDragging: Boolean = false,
+    isCurrent: Boolean = false,
     modifier: Modifier = Modifier,
     onTap: () -> Unit,
     onRemove: () -> Unit,
@@ -287,14 +295,18 @@ private fun PlaylistTrackRow(
                 )
             }
             Spacer(Modifier.size(10.dp))
-            Column(modifier = Modifier.weight(1f)) {
+            Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = track.title.ifBlank { track.fileName },
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.Medium,
+                    color = if (isCurrent) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.onBackground,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
                 )
+                NowPlayingIndicator(isCurrent)
             }
             IconButton(onClick = onRemove) {
                 Icon(

@@ -55,6 +55,9 @@ import com.visorcraft.radioshed.domain.SmartQueryKind
 import com.visorcraft.radioshed.domain.SourceRule
 import com.visorcraft.radioshed.domain.Station
 import com.visorcraft.radioshed.domain.Weighting
+import com.visorcraft.radioshed.source.ArtworkPersister
+import com.visorcraft.radioshed.ui.util.rememberImagePicker
+import com.visorcraft.radioshed.ui.util.supportsImagePicker
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
@@ -89,6 +92,7 @@ fun StationEditorScreen(
     onClose: () -> Unit,
     folderRepo: FolderRepository = koinInject(),
     stationRepo: StationRepository = koinInject(),
+    artworkPersister: ArtworkPersister = koinInject(),
 ) {
     val scope = rememberCoroutineScope()
     val folders by folderRepo.observeAll().collectAsState(initial = emptyList())
@@ -97,6 +101,7 @@ fun StationEditorScreen(
     var name by remember { mutableStateOf("") }
     var subtitle by remember { mutableStateOf("") }
     var color by remember { mutableStateOf(BRAND_AMBER) }
+    var artworkUri by remember { mutableStateOf<String?>(null) }
     var playOrder by remember { mutableStateOf(PlayOrder.SmartShuffle) }
     var weighting by remember { mutableStateOf(Weighting.Uniform) }
 
@@ -135,6 +140,7 @@ fun StationEditorScreen(
         name = station.name
         subtitle = station.customSubtitle.orEmpty()
         color = if (station.color == 0) BRAND_AMBER else station.color
+        artworkUri = station.artworkUri
         playOrder = station.playback.order
         weighting = station.playback.weighting
         when (val src = station.source) {
@@ -219,6 +225,33 @@ fun StationEditorScreen(
             Spacer(Modifier.height(16.dp))
             SectionHeader("Color")
             ColorSwatchRow(selected = color, onPick = { color = it })
+
+            // ---- Artwork (edit-only; new stations skip this section
+            //               since there's no station id to attach the
+            //               persisted artwork to until first save).
+            if (isEditing && supportsImagePicker()) {
+                Spacer(Modifier.height(16.dp))
+                SectionHeader("Artwork")
+                val pickImage = rememberImagePicker { bytes ->
+                    scope.launch {
+                        val uri = artworkPersister.persist(bytes)
+                        if (uri != null) {
+                            artworkUri = uri
+                            existing?.id?.let { stationRepo.setArtwork(it, uri) }
+                        }
+                    }
+                }
+                ArtworkRow(
+                    artworkUri = artworkUri,
+                    onUpload = pickImage,
+                    onClear = {
+                        artworkUri = null
+                        scope.launch {
+                            existing?.id?.let { stationRepo.setArtwork(it, null) }
+                        }
+                    },
+                )
+            }
 
             // ---- Source ----
             Spacer(Modifier.height(16.dp))
@@ -340,6 +373,7 @@ fun StationEditorScreen(
                                     name = name.trim(),
                                     subtitle = subtitle.trim().ifBlank { null },
                                     color = color,
+                                    artworkUri = artworkUri,
                                     sourceLocked = !sourceEditable,
                                     sourceType = sourceType,
                                     selectedFolderIds = selectedFolderIds.toList(),
@@ -408,6 +442,7 @@ private suspend fun saveStation(
     name: String,
     subtitle: String?,
     color: Int,
+    artworkUri: String?,
     sourceLocked: Boolean,
     sourceType: SourceType,
     selectedFolderIds: List<Long>,
@@ -435,6 +470,10 @@ private suspend fun saveStation(
         weighting = weighting,
     )
     if (existing == null) {
+        // Insert path doesn't currently expose artworkUri; the upload
+        // button is hidden for new stations (see UI). If we ever want
+        // to support upload-during-create we'd thread artworkUri here
+        // and into the underlying insert query.
         repo.insert(
             name = name,
             source = source,
@@ -451,7 +490,7 @@ private suspend fun saveStation(
             playback = playback,
             color = color,
             icon = existing.icon,
-            artworkUri = existing.artworkUri,
+            artworkUri = artworkUri,
             customSubtitle = subtitle,
         )
     }
@@ -652,6 +691,71 @@ private fun EmptyHint(text: String) {
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
     )
+}
+
+/**
+ * Custom-artwork management row. Shows the currently-selected
+ * artwork (or a "no artwork" placeholder) alongside Upload and
+ * (when set) Clear actions. Persists to disk + the station row
+ * synchronously on pick so the change shows up on Stations Home
+ * even if the user backs out before tapping Save.
+ */
+@Composable
+private fun ArtworkRow(
+    artworkUri: String?,
+    onUpload: () -> Unit,
+    onClear: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(72.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (artworkUri != null) {
+                coil3.compose.AsyncImage(
+                    model = artworkUri,
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                )
+            } else {
+                Text(
+                    "♫",
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                )
+            }
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            OutlinedButton(onClick = onUpload, modifier = Modifier.fillMaxWidth()) {
+                Text(if (artworkUri == null) "Upload artwork" else "Change artwork")
+            }
+            if (artworkUri != null) {
+                Spacer(Modifier.height(6.dp))
+                TextButton(onClick = onClear, modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        "Remove artwork",
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            } else {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "Falls back to a 4-cover collage of your most-played albums " +
+                        "in this station, or the preset gradient if there's no history yet.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                )
+            }
+        }
+    }
 }
 
 @Composable

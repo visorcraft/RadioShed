@@ -75,6 +75,11 @@ updateStation:
 UPDATE station SET name = ?, color = ?, icon = ?, artwork_uri = ?, custom_subtitle = ?,
     source_json = ?, playback_json = ?, updated_at = ? WHERE id = ?;
 
+-- Focused update for the user-uploaded station artwork. Set to NULL
+-- to revert back to the auto-collage / preset gradient.
+updateStationArtwork:
+UPDATE station SET artwork_uri = ?, updated_at = ? WHERE id = ?;
+
 updateStationStats:
 UPDATE station SET play_count = ?, last_played_at = ?, total_listen_ms = ?, skip_rate = ?, updated_at = ? WHERE id = ?;
 

@@ -45,6 +45,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -86,11 +87,14 @@ fun AlbumDetailScreen(
     libraryRepo: LibraryRepository = koinInject(),
     stationPlayback: StationPlayback = koinInject(),
     ratingRepo: RatingRepository = koinInject(),
+    audioEngine: com.visorcraft.radioshed.audio.AudioEngine = koinInject(),
 ) {
     var album by remember { mutableStateOf<Album?>(null) }
     var artist by remember { mutableStateOf<Artist?>(null) }
     var tracks by remember { mutableStateOf<List<Track>>(emptyList()) }
     var contextTrackId by remember { mutableStateOf<Long?>(null) }
+    val nowPlaying by audioEngine.nowPlaying.collectAsState()
+    val currentTrackId = nowPlaying?.trackId
     var overflowOpen by remember { mutableStateOf(false) }
     var massRateConfirm by remember { mutableStateOf<MassRateAction?>(null) }
     val scope = rememberCoroutineScope()
@@ -217,6 +221,7 @@ fun AlbumDetailScreen(
                     items(tracks, key = { it.id }) { track ->
                         AlbumTrackRow(
                             track = track,
+                            isCurrent = track.id == currentTrackId,
                             onTap = {
                                 val idx = tracks.indexOf(track).coerceAtLeast(0)
                                 stationPlayback.playTracks(tracks, startIndex = idx)
@@ -395,7 +400,12 @@ private fun AlbumCover(artworkUri: String?, modifier: Modifier = Modifier) {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun AlbumTrackRow(track: Track, onTap: () -> Unit, onLongPress: () -> Unit = {}) {
+private fun AlbumTrackRow(
+    track: Track,
+    isCurrent: Boolean = false,
+    onTap: () -> Unit,
+    onLongPress: () -> Unit = {},
+) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -418,14 +428,18 @@ private fun AlbumTrackRow(track: Track, onTap: () -> Unit, onLongPress: () -> Un
                 )
             }
             Spacer(Modifier.size(8.dp))
-            Column(modifier = Modifier.weight(1f)) {
+            Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = track.title.ifBlank { track.fileName },
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.Medium,
+                    color = if (isCurrent) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.onBackground,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
                 )
+                com.visorcraft.radioshed.ui.util.NowPlayingIndicator(isCurrent)
             }
             Text(
                 text = formatDurationShort(track.durationMs),

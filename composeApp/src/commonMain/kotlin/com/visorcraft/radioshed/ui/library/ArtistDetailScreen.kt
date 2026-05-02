@@ -40,6 +40,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -74,11 +75,14 @@ fun ArtistDetailScreen(
     onAlbumTap: (Long) -> Unit,
     libraryRepo: LibraryRepository = koinInject(),
     stationPlayback: StationPlayback = koinInject(),
+    audioEngine: com.visorcraft.radioshed.audio.AudioEngine = koinInject(),
 ) {
     var artist by remember { mutableStateOf<Artist?>(null) }
     var albums by remember { mutableStateOf<List<Album>>(emptyList()) }
     var tracks by remember { mutableStateOf<List<Track>>(emptyList()) }
     var contextTrackId by remember { mutableStateOf<Long?>(null) }
+    val nowPlaying by audioEngine.nowPlaying.collectAsState()
+    val currentTrackId = nowPlaying?.trackId
 
     LaunchedEffect(artistId) {
         artist = libraryRepo.getArtistById(artistId)
@@ -186,6 +190,7 @@ fun ArtistDetailScreen(
                 items(tracks, key = { it.id }) { track ->
                     ArtistTrackRow(
                         track = track,
+                        isCurrent = track.id == currentTrackId,
                         onTap = {
                             val idx = tracks.indexOf(track).coerceAtLeast(0)
                             stationPlayback.playTracks(tracks, startIndex = idx)
@@ -255,7 +260,12 @@ private fun AlbumCard(album: Album, onTap: () -> Unit) {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ArtistTrackRow(track: Track, onTap: () -> Unit, onLongPress: () -> Unit = {}) {
+private fun ArtistTrackRow(
+    track: Track,
+    isCurrent: Boolean = false,
+    onTap: () -> Unit,
+    onLongPress: () -> Unit = {},
+) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -281,14 +291,18 @@ private fun ArtistTrackRow(track: Track, onTap: () -> Unit, onLongPress: () -> U
                 )
             }
             Spacer(Modifier.size(10.dp))
-            Column(modifier = Modifier.weight(1f)) {
+            Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = track.title.ifBlank { track.fileName },
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.Medium,
+                    color = if (isCurrent) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.onBackground,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
                 )
+                com.visorcraft.radioshed.ui.util.NowPlayingIndicator(isCurrent)
             }
         }
     }

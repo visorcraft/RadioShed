@@ -41,6 +41,7 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material.icons.filled.Whatshot
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material3.AlertDialog
@@ -111,6 +112,7 @@ fun StationsHomeScreen(
     onAddStation: () -> Unit = {},
     onEditStation: (Long) -> Unit = {},
     onOpenStationDetail: (Long) -> Unit = {},
+    onReorderStations: () -> Unit = {},
     stationRepo: StationRepository = koinInject(),
     stationPlayback: StationPlayback = koinInject(),
     audioEngine: AudioEngine = koinInject(),
@@ -253,6 +255,7 @@ fun StationsHomeScreen(
                         builtInCount = stations.count { it.isBuiltIn },
                         isCompact = isCompact,
                         onAddStation = onAddStation,
+                        onReorder = onReorderStations,
                     )
                 }
 
@@ -558,6 +561,7 @@ private fun StationsPageHeader(
     builtInCount: Int,
     isCompact: Boolean,
     onAddStation: () -> Unit,
+    onReorder: () -> Unit = {},
 ) {
     val customCount = stationCount - builtInCount
     val subtitleParts = buildList {
@@ -584,6 +588,20 @@ private fun StationsPageHeader(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
             )
+        }
+        // Reorder is only useful when there's more than one station;
+        // hide the affordance entirely on tiny libraries.
+        if (stationCount > 1) {
+            androidx.compose.material3.OutlinedButton(onClick = onReorder) {
+                Icon(
+                    imageVector = Icons.Filled.SwapVert,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(Modifier.size(4.dp))
+                Text("Reorder")
+            }
+            Spacer(Modifier.size(8.dp))
         }
         Button(onClick = onAddStation) { Text("+ Add station") }
     }

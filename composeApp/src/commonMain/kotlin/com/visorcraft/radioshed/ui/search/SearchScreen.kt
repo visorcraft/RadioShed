@@ -29,6 +29,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -59,11 +60,14 @@ fun SearchScreen(
     searchRepo: SearchRepository = koinInject(),
     stationPlayback: StationPlayback = koinInject(),
     settings: SettingsStore = koinInject(),
+    audioEngine: com.visorcraft.radioshed.audio.AudioEngine = koinInject(),
 ) {
     var query by remember { mutableStateOf("") }
     var results by remember { mutableStateOf(SearchResults(emptyList(), emptyList(), emptyList())) }
     var isSearching by remember { mutableStateOf(false) }
     var contextTrackId by remember { mutableStateOf<Long?>(null) }
+    val nowPlaying by audioEngine.nowPlaying.collectAsState()
+    val currentTrackId = nowPlaying?.trackId
     var scope by remember { mutableStateOf(SearchScope.All) }
     // Read once on entry; we maintain it in-state and only flush back
     // to settings when a query produces results (so abandoned typing
@@ -192,6 +196,7 @@ fun SearchScreen(
                             // track.
                             TrackRow(
                                 track = track,
+                                isCurrent = track.id == currentTrackId,
                                 onClick = {
                                     val idx = results.tracks.indexOf(track).coerceAtLeast(0)
                                     stationPlayback.playTracks(results.tracks, startIndex = idx)
@@ -318,14 +323,30 @@ private fun AlbumRow(album: Album) {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun TrackRow(track: Track, onClick: () -> Unit, onLongPress: () -> Unit = {}) {
+private fun TrackRow(
+    track: Track,
+    isCurrent: Boolean = false,
+    onClick: () -> Unit,
+    onLongPress: () -> Unit = {},
+) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .combinedClickable(onClick = onClick, onLongClick = onLongPress)
             .padding(vertical = 8.dp, horizontal = 4.dp),
     ) {
-        Text(track.title, style = MaterialTheme.typography.bodyLarge)
+        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            Text(
+                text = track.title,
+                style = MaterialTheme.typography.bodyLarge,
+                color = if (isCurrent) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier.weight(1f, fill = false),
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            )
+            com.visorcraft.radioshed.ui.util.NowPlayingIndicator(isCurrent)
+        }
         Text(
             "${track.format.uppercase()} · ${track.fileName}",
             style = MaterialTheme.typography.bodySmall,

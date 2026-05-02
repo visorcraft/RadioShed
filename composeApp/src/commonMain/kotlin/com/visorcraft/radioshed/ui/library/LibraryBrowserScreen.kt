@@ -61,6 +61,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.visorcraft.radioshed.audio.AudioEngine
 import com.visorcraft.radioshed.audio.toPlayable
+import com.visorcraft.radioshed.ui.util.NowPlayingIndicator
 import com.visorcraft.radioshed.data.LibraryRepository
 import com.visorcraft.radioshed.data.SettingsStore
 import com.visorcraft.radioshed.domain.Album
@@ -102,6 +103,10 @@ fun LibraryBrowserScreen(
 ) {
     val scope = rememberCoroutineScope()
     var contextTrackId by remember { mutableStateOf<Long?>(null) }
+    // Now-playing indicator on Songs rows: collect the engine's
+    // current track id so each row can self-tag.
+    val nowPlaying by audioEngine.nowPlaying.collectAsState()
+    val currentTrackId = nowPlaying?.trackId
     val artists by libraryRepo.observeArtists().collectAsState(initial = emptyList())
     val albums by libraryRepo.observeAlbums().collectAsState(initial = emptyList())
     // Re-load the eager track list and genre list whenever the total
@@ -274,6 +279,7 @@ fun LibraryBrowserScreen(
                         }
                         SongList(
                             tracks = artistTracks,
+                            currentTrackId = currentTrackId,
                             onPlay = { track ->
                                 val idx = artistTracks.indexOf(track).coerceAtLeast(0)
                                 stationPlayback.playTracks(artistTracks, startIndex = idx)
@@ -283,6 +289,7 @@ fun LibraryBrowserScreen(
                     } else {
                         SongList(
                             tracks = sorted,
+                            currentTrackId = currentTrackId,
                             onPlay = { track ->
                                 val idx = sorted.indexOf(track).coerceAtLeast(0)
                                 stationPlayback.playTracks(sorted, startIndex = idx)
@@ -343,6 +350,7 @@ private enum class SongSort(val label: String) {
 @Composable
 private fun SongList(
     tracks: List<Track>,
+    currentTrackId: Long? = null,
     onPlay: (Track) -> Unit,
     onLongPress: (Track) -> Unit = {},
 ) {
@@ -357,6 +365,7 @@ private fun SongList(
         items(tracks, key = { it.id }) { track ->
             SongRow(
                 track = track,
+                isCurrent = track.id == currentTrackId,
                 onTap = { onPlay(track) },
                 onLongPress = { onLongPress(track) },
             )
@@ -366,7 +375,12 @@ private fun SongList(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun SongRow(track: Track, onTap: () -> Unit, onLongPress: () -> Unit = {}) {
+private fun SongRow(
+    track: Track,
+    isCurrent: Boolean = false,
+    onTap: () -> Unit,
+    onLongPress: () -> Unit = {},
+) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -393,13 +407,19 @@ private fun SongRow(track: Track, onTap: () -> Unit, onLongPress: () -> Unit = {
             }
             Spacer(Modifier.size(12.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = track.title.ifBlank { track.fileName },
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = track.title.ifBlank { track.fileName },
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Medium,
+                        color = if (isCurrent) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onBackground,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                    NowPlayingIndicator(isCurrent)
+                }
                 Text(
                     text = formatDuration(track.durationMs),
                     style = MaterialTheme.typography.bodySmall,

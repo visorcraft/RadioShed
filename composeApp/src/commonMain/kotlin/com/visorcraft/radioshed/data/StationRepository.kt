@@ -204,6 +204,14 @@ class StationRepository(private val db: RadioShedDatabase) {
         db.stationsQueries.reorderStation(sortPosition.toLong(), nowMillis(), id)
     }
 
+    /**
+     * Set or clear the user-uploaded station artwork URI. Pass null
+     * to revert to the auto-collage / preset gradient defaults.
+     */
+    suspend fun setArtwork(id: Long, artworkUri: String?) = withContext(IODispatcher) {
+        db.stationsQueries.updateStationArtwork(artworkUri, nowMillis(), id)
+    }
+
     suspend fun setPinned(id: Long, pinned: Boolean) = withContext(IODispatcher) {
         db.stationsQueries.setStationPinned(if (pinned) 1L else 0L, nowMillis(), id)
     }

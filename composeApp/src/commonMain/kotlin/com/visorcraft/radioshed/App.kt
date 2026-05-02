@@ -321,6 +321,7 @@ fun App(
                             onAddStation = { current = AppScreen.NewStation },
                             onEditStation = { id -> current = AppScreen.EditStation(id) },
                             onOpenStationDetail = { id -> current = AppScreen.StationDetail(id) },
+                            onReorderStations = { current = AppScreen.ReorderStations },
                         )
                     }
 
@@ -331,6 +332,13 @@ fun App(
                             stationId = sid,
                             onBack = { current = AppScreen.Stations },
                             onPlay = { navTo(AppScreen.NowPlaying) },
+                        )
+                    }
+
+                    AppScreen.ReorderStations -> {
+                        PlatformBackHandler { current = AppScreen.Stations }
+                        com.visorcraft.radioshed.ui.stations.ReorderStationsScreen(
+                            onDone = { current = AppScreen.Stations },
                         )
                     }
 
