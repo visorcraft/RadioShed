@@ -2,6 +2,9 @@ package com.visorcraft.radioshed.ui.player
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -32,6 +35,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -67,6 +73,13 @@ fun MiniPlayer(
 
     val playable = nowPlaying ?: return
 
+    // Vertical-drag accumulator. Each drag-up tick subtracts (negative
+    // delta means upward); when the user crosses the SWIPE_THRESHOLD_PX
+    // we route to the same expand handler as a tap. Reset on stop so
+    // partial drags don't leak into the next gesture.
+    var dragAccumulator by remember { mutableStateOf(0f) }
+    val draggableState = rememberDraggableState { delta -> dragAccumulator += delta }
+
     Surface(
         // The MiniPlayer sits at the bottom of App.kt's outer Column, OUTSIDE
         // any Scaffold. We use enableEdgeToEdge() in MainActivity, so the
@@ -76,6 +89,19 @@ fun MiniPlayer(
         modifier = Modifier
             .fillMaxWidth()
             .windowInsetsPadding(WindowInsets.navigationBars)
+            .draggable(
+                state = draggableState,
+                orientation = Orientation.Vertical,
+                onDragStopped = {
+                    // Negative delta = upward swipe. The threshold is
+                    // intentionally small (60 px ≈ 20 dp) so a flick
+                    // counts even though most user gestures travel
+                    // farther — matches the feel of Spotify / Apple
+                    // Music's swipe-up.
+                    if (dragAccumulator < -SWIPE_THRESHOLD_PX) onExpand()
+                    dragAccumulator = 0f
+                },
+            )
             .clickable(onClick = onExpand),
         color = MaterialTheme.colorScheme.surface,
         tonalElevation = 6.dp,
@@ -190,6 +216,8 @@ private fun TransportIconButton(
         )
     }
 }
+
+private const val SWIPE_THRESHOLD_PX: Float = 60f
 
 private fun stateLabel(state: PlayerState): String = when (state) {
     PlayerState.Buffering -> "Buffering…"

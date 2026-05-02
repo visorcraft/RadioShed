@@ -57,6 +57,9 @@ sealed interface AppScreen {
     /** Artist detail — albums + tracks for an artist, drill-in to album. */
     data class ArtistDetail(val artistId: Long) : AppScreen
 
+    /** Genre detail — track list for a single genre tag. */
+    data class GenreDetail(val genre: String) : AppScreen
+
     /** Full-screen synced lyrics, opened from Now Playing. */
     data object Lyrics : AppScreen
 

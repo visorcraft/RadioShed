@@ -94,6 +94,7 @@ fun LibraryBrowserScreen(
     onManage: () -> Unit,
     onArtistTap: (Long) -> Unit = {},
     onAlbumTap: (Long) -> Unit = {},
+    onGenreTap: (String) -> Unit = {},
     libraryRepo: LibraryRepository = koinInject(),
     audioEngine: AudioEngine = koinInject(),
     stationPlayback: StationPlayback = koinInject(),
@@ -104,6 +105,7 @@ fun LibraryBrowserScreen(
     val artists by libraryRepo.observeArtists().collectAsState(initial = emptyList())
     val albums by libraryRepo.observeAlbums().collectAsState(initial = emptyList())
     var allTracks by remember { mutableStateOf<List<Track>>(emptyList()) }
+    var genres by remember { mutableStateOf<List<String>>(emptyList()) }
 
     // Eagerly load all tracks once. For huge libraries (>50k) this could
     // become a memory issue; we'd page or virtualize then. For typical
@@ -111,6 +113,10 @@ fun LibraryBrowserScreen(
     // without re-querying the DB.
     LaunchedEffect(Unit) {
         allTracks = libraryRepo.listAvailableTracks(limit = 100_000L, offset = 0L)
+        // Distinct genre tag values. Index already exists on track_tag(key,
+        // value) so this is a fast index scan even on large libraries.
+        genres = libraryRepo.distinctTagValues("GENRE")
+            .filter { it.isNotBlank() }
     }
 
     // Persist + restore tab + sort selection across navigations. Filters
@@ -293,6 +299,12 @@ fun LibraryBrowserScreen(
                         onPick = { al -> onAlbumTap(al.id) },
                     )
                 }
+                LibraryTab.Genres -> {
+                    GenreList(
+                        genres = genres,
+                        onPick = { g -> onGenreTap(g) },
+                    )
+                }
             }
         }
     }
@@ -309,6 +321,7 @@ private enum class LibraryTab(val label: String) {
     Songs("Songs"),
     Artists("Artists"),
     Albums("Albums"),
+    Genres("Genres"),
 }
 
 private enum class SongSort(val label: String) {
@@ -472,6 +485,57 @@ private fun AlbumTile(album: Album, onTap: () -> Unit) {
                 text = "$y",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+            )
+        }
+    }
+}
+
+@Composable
+private fun GenreList(genres: List<String>, onPick: (String) -> Unit) {
+    if (genres.isEmpty()) {
+        EmptyHint("No genre tags found — files need a GENRE / TCON ID3 frame.")
+        return
+    }
+    LazyVerticalGrid(
+        columns = GridCells.Adaptive(minSize = 140.dp),
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        gridItems(genres, key = { it }) { genre ->
+            GenreTile(genre = genre, onTap = { onPick(genre) })
+        }
+    }
+}
+
+@Composable
+private fun GenreTile(genre: String, onTap: () -> Unit) {
+    // Stable colored chip per genre. Same hash-to-hue trick as ArtistTile,
+    // but the tile is a wide rounded rectangle (no avatar) so the genre
+    // name reads horizontally.
+    val hue = (genre.hashCode().rem(360) + 360).rem(360).toFloat()
+    val tint = Color.hsv(hue, 0.5f, 0.85f)
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onTap),
+        shape = RoundedCornerShape(12.dp),
+        color = tint,
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 24.dp),
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            Text(
+                text = genre,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = Color.White.copy(alpha = 0.95f),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
             )
         }
     }

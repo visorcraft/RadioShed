@@ -38,6 +38,16 @@ class PlaybackQueue(
     /** Recently-played track ids, oldest first. Bounded at `2 × noRepeatDepth`. */
     private val recent: ArrayDeque<Long> = ArrayDeque()
 
+    /**
+     * Recently-picked album ids (most recent at the END). Used to space
+     * out same-album hits in shuffle modes — without this, an album-
+     * heavy candidate set tends to pick three in a row from the same
+     * album, especially with small libraries. Sized at [ALBUM_SPACING],
+     * which is intentionally small (default 3) so we don't completely
+     * starve out a small library.
+     */
+    private val recentAlbums: ArrayDeque<Long> = ArrayDeque()
+
     /** Index for sequential mode. */
     private var sequentialCursor: Int = initialSequentialCursor.coerceAtLeast(0)
 
@@ -62,26 +72,43 @@ class PlaybackQueue(
     private fun nextSequential(pool: List<Track>): Track {
         val track = pool[sequentialCursor.coerceIn(0, pool.size - 1)]
         sequentialCursor = (sequentialCursor + 1) % pool.size
-        recordPlayed(track.id)
+        recordPlayed(track.id, track.albumId)
         return track
     }
 
     private fun nextSmartShuffle(pool: List<Track>): Track {
-        // Apply no-repeat memory: prefer tracks not in `recent`. If everything
-        // in `pool` is recent (small pool), age out the oldest until something
-        // is available — never block.
+        // Two avoid filters in priority order:
+        //   1. Recent track ids (no-repeat memory, configurable depth).
+        //   2. Recent album ids (album-spacing, fixed small window).
+        // Apply both, then age them out — track-id recents first, then
+        // album recents — until we have at least one candidate. Never
+        // block: a one-track library still plays that track every time.
         var avoid = effectiveAvoidSet(pool.size)
-        var available = pool.filter { it.id !in avoid }
-        while (available.isEmpty() && recent.isNotEmpty()) {
-            recent.removeFirst()
+        var avoidAlbums = effectiveAlbumAvoidSet()
+        var available = pool.filter { it.id !in avoid && it.albumId !in avoidAlbums }
+        while (available.isEmpty()) {
+            when {
+                recent.isNotEmpty() -> recent.removeFirst()
+                recentAlbums.isNotEmpty() -> recentAlbums.removeFirst()
+                else -> { available = pool; break }  // last-ditch fallback
+            }
             avoid = effectiveAvoidSet(pool.size)
-            available = pool.filter { it.id !in avoid }
+            avoidAlbums = effectiveAlbumAvoidSet()
+            available = pool.filter { it.id !in avoid && it.albumId !in avoidAlbums }
         }
-        if (available.isEmpty()) available = pool   // last-ditch
+        if (available.isEmpty()) available = pool
 
         val picked = pickWeighted(available)
-        recordPlayed(picked.id)
+        recordPlayed(picked.id, picked.albumId)
         return picked
+    }
+
+    /** Last [ALBUM_SPACING] picked album ids — used to space repeats. */
+    private fun effectiveAlbumAvoidSet(): Set<Long> {
+        if (recentAlbums.isEmpty()) return emptySet()
+        val end = recentAlbums.size
+        val start = (end - ALBUM_SPACING).coerceAtLeast(0)
+        return recentAlbums.toList().subList(start, end).toSet()
     }
 
     /**
@@ -124,11 +151,18 @@ class PlaybackQueue(
         return items.last()
     }
 
-    private fun recordPlayed(id: Long) {
+    private fun recordPlayed(id: Long, albumId: Long?) {
         recent.addLast(id)
         val cap = (rule.noRepeatDepth.coerceAtLeast(0) * 2)
             .coerceAtLeast(MIN_RECENT_CAP)
         while (recent.size > cap) recent.removeFirst()
+        if (albumId != null) {
+            recentAlbums.addLast(albumId)
+            // Album buffer just needs to be at least ALBUM_SPACING long;
+            // 2× gives some slack so we don't fall back to immediate
+            // re-eligibility on the next pick.
+            while (recentAlbums.size > ALBUM_SPACING * 2) recentAlbums.removeFirst()
+        }
     }
 
     /** Snapshot of recently-played ids, oldest first. Useful for tests. */
@@ -168,5 +202,12 @@ class PlaybackQueue(
 
     private companion object {
         const val MIN_RECENT_CAP = 16
+
+        /** How many of the most recent picks' album ids to avoid. Larger
+         *  values feel more diverse but starve small libraries. 3 is a
+         *  reasonable default that keeps "three songs from the same
+         *  album in a row" from happening without preventing the same
+         *  album from ever recurring on a small set. */
+        const val ALBUM_SPACING = 3
     }
 }

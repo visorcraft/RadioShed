@@ -16,6 +16,7 @@ import com.visorcraft.radioshed.nav.PlatformBackHandler
 import com.visorcraft.radioshed.ui.home.HomeScreen
 import com.visorcraft.radioshed.ui.library.AlbumDetailScreen
 import com.visorcraft.radioshed.ui.library.ArtistDetailScreen
+import com.visorcraft.radioshed.ui.library.GenreDetailScreen
 import com.visorcraft.radioshed.ui.library.LibraryBrowserScreen
 import com.visorcraft.radioshed.ui.library.LibrarySettingsScreen
 import com.visorcraft.radioshed.ui.onboarding.OnboardingScreen
@@ -115,6 +116,7 @@ fun App(settings: SettingsStore = koinInject()) {
                             onManage = { current = AppScreen.LibrarySettings },
                             onArtistTap = { id -> current = AppScreen.ArtistDetail(id) },
                             onAlbumTap = { id -> current = AppScreen.AlbumDetail(id) },
+                            onGenreTap = { g -> current = AppScreen.GenreDetail(g) },
                         )
                     }
 
@@ -135,6 +137,15 @@ fun App(settings: SettingsStore = koinInject()) {
                             artistId = artistId,
                             onBack = { current = AppScreen.Library },
                             onAlbumTap = { id -> current = AppScreen.AlbumDetail(id) },
+                        )
+                    }
+
+                    is AppScreen.GenreDetail -> {
+                        val g = (current as AppScreen.GenreDetail).genre
+                        PlatformBackHandler { current = AppScreen.Library }
+                        GenreDetailScreen(
+                            genre = g,
+                            onBack = { current = AppScreen.Library },
                         )
                     }
 
@@ -201,6 +212,7 @@ fun App(settings: SettingsStore = koinInject()) {
                     // already handled above
                     is AppScreen.AlbumDetail,
                     is AppScreen.ArtistDetail,
+                    is AppScreen.GenreDetail,
                     -> Unit
                 }
             }
