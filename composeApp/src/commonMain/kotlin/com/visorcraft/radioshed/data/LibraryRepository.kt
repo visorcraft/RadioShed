@@ -110,6 +110,18 @@ class LibraryRepository(private val db: RadioShedDatabase) {
     }
 
     /**
+     * First-seen-wins variant of [setAlbumArtwork]: only writes when the
+     * album currently has no artwork. Used by the scanner so the
+     * visible album art is locked at first discovery rather than
+     * flicker-changing as enumeration order surfaces different
+     * embedded covers across rescans.
+     */
+    suspend fun setAlbumArtworkIfMissing(id: Long, artworkUri: String) =
+        withContext(IODispatcher) {
+            db.libraryQueries.updateAlbumArtworkIfMissing(artworkUri, nowMillis(), id)
+        }
+
+    /**
      * Albums that have a MusicBrainz Release ID embedded in their tags
      * but no artwork on disk yet. Used by Cover Art Archive sync.
      * Returns (albumId, mbid) pairs.

@@ -69,6 +69,19 @@ HAVING IFNULL(MAX(sh.played_at), 0) < ?
 ORDER BY IFNULL(MAX(sh.played_at), 0) ASC, r.stars DESC
 LIMIT ?;
 
+-- Same set as selectForgottenGemTracks but sorted by rating DESC,
+-- ties broken by oldest-played-first. Powers the "highest-rated
+-- forgotten" sort variant of the Forgotten Gems preset.
+selectForgottenGemTracksByRating:
+SELECT track.* FROM track
+JOIN rating r ON r.track_id = track.id
+LEFT JOIN station_history sh ON sh.track_id = track.id
+WHERE r.stars >= ? AND track.is_available = 1
+GROUP BY track.id
+HAVING IFNULL(MAX(sh.played_at), 0) < ?
+ORDER BY r.stars DESC, IFNULL(MAX(sh.played_at), 0) ASC
+LIMIT ?;
+
 clearRating:
 DELETE FROM rating WHERE track_id = ?;
 

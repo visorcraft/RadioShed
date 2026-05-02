@@ -78,6 +78,7 @@ fun AppSettingsScreen(
     onOpenBackup: () -> Unit = {},
     onOpenStats: () -> Unit = {},
     onOpenHistory: () -> Unit = {},
+    onOpenCrashLog: () -> Unit = {},
     settings: SettingsStore = koinInject(),
     artworkSync: MissingArtworkSync = koinInject(),
 ) {
@@ -228,6 +229,13 @@ fun AppSettingsScreen(
                 title = "Listening history",
                 subtitle = "Chronological log of every track you've played",
                 onClick = onOpenHistory,
+            )
+            Spacer(Modifier.height(8.dp))
+            NavRow(
+                title = "Crash log",
+                subtitle = "Recent crashes / ANRs reported by Android. Local-only — " +
+                    "share via the system share sheet if you want to send a report.",
+                onClick = onOpenCrashLog,
             )
 
             Spacer(Modifier.height(24.dp))

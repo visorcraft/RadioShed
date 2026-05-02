@@ -7,6 +7,10 @@ import com.visorcraft.radioshed.audio.AndroidEqualizerController
 import com.visorcraft.radioshed.audio.AudioEngine
 import com.visorcraft.radioshed.audio.AudioEngineAndroid
 import com.visorcraft.radioshed.audio.EqualizerController
+import com.visorcraft.radioshed.crash.AndroidCrashLogReader
+import com.visorcraft.radioshed.crash.AndroidCrashLogSharer
+import com.visorcraft.radioshed.crash.CrashLogReader
+import com.visorcraft.radioshed.crash.CrashLogSharer
 import com.visorcraft.radioshed.data.DatabaseDriverFactory
 import com.visorcraft.radioshed.permissions.StoragePermissions
 import com.visorcraft.radioshed.source.AndroidArtworkPersister
@@ -58,6 +62,10 @@ actual val platformModule: Module = module {
     // Equalizer — attaches to ExoPlayer's audio session lazily when
     // RadioShedMediaSessionService reports onAudioSessionIdChanged.
     single<EqualizerController> { AndroidEqualizerController(get()) }
+
+    // Crash log reader — backed by ApplicationExitInfo (API 30+).
+    single<CrashLogReader> { AndroidCrashLogReader(androidContext()) }
+    single<CrashLogSharer> { AndroidCrashLogSharer(androidContext()) }
 }
 
 private const val PREFS_NAME = "radioshed.prefs"

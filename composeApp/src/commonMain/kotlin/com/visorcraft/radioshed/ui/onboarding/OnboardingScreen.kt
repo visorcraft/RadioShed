@@ -692,54 +692,135 @@ private fun DoneStep(isWide: Boolean, scanStatus: ScanProgress?) {
     val body = when (scanStatus) {
         is ScanProgress.Failed -> scanStatus.message
         is ScanProgress.Completed ->
-            "Indexed ${scanStatus.totalTracks} tracks. You can add more folders, build stations, and start listening."
+            "Indexed ${scanStatus.totalTracks} tracks. Six built-in stations are seeded and ready to play; you can edit any of them or build your own."
         else -> "Setup complete."
     }
 
-    if (isWide) {
-        TwoPaneStep(
-            title = title,
-            subtitle = null,
-            body = body,
-            titleStyle = MaterialTheme.typography.displayMedium,
-            titleColor = titleColor,
-            rightContent = {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Icon(
-                        imageVector = if (isFailed) Icons.Filled.Close else Icons.Filled.Check,
-                        contentDescription = null,
-                        modifier = Modifier.size(72.dp),
-                        tint = titleColor,
-                    )
-                    Text(
-                        text = if (isFailed) "Tap Back to retry, or finish anyway and reconfigure later in Library."
-                               else "Tap Open RadioShed to head to the Stations home — built-in presets are seeded and ready to play.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                        textAlign = TextAlign.Center,
-                    )
-                }
-            },
-        )
+    if (isFailed) {
+        // Failed setups skip the tour — keep the screen focused on the
+        // recovery action.
+        if (isWide) {
+            TwoPaneStep(
+                title = title,
+                subtitle = null,
+                body = body,
+                titleStyle = MaterialTheme.typography.displayMedium,
+                titleColor = titleColor,
+                rightContent = {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Close,
+                            contentDescription = null,
+                            modifier = Modifier.size(72.dp),
+                            tint = titleColor,
+                        )
+                        Text(
+                            text = "Tap Back to retry, or finish anyway and reconfigure later in Library.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                            textAlign = TextAlign.Center,
+                        )
+                    }
+                },
+            )
+            return
+        }
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(title, style = MaterialTheme.typography.headlineSmall, color = titleColor)
+            Spacer(Modifier.height(16.dp))
+            Text(
+                text = body,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.widthIn(max = 480.dp),
+            )
+        }
         return
     }
+
+    // Successful setup: render a 3-card mini-tour so the user knows what
+    // to expect when they land on Stations Home. Replaces the previous
+    // single-line "tap Open RadioShed" message with feature-discovery
+    // copy that surfaces the three things newcomers ask about most:
+    // built-in stations, Drive Mode, and the AI DJ teaser.
+    val tourTitle = if (isWide) MaterialTheme.typography.displayMedium
+                    else MaterialTheme.typography.headlineSmall
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(
-            title,
-            style = MaterialTheme.typography.headlineSmall,
-            color = titleColor,
-        )
-        Spacer(Modifier.height(16.dp))
+        Text(title, style = tourTitle, color = titleColor)
+        Spacer(Modifier.height(12.dp))
         Text(
             text = body,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f),
             textAlign = TextAlign.Center,
-            modifier = Modifier.widthIn(max = 480.dp),
+            modifier = Modifier.widthIn(max = 560.dp),
         )
+        Spacer(Modifier.height(20.dp))
+        TourCard(
+            icon = Icons.Filled.LibraryMusic,
+            title = "Stations, not playlists",
+            body = "Each tile on the Home grid is a generative station — Latest Hits, " +
+                "Top Rated, Forgotten Gems, or one you build yourself. Tap to play, " +
+                "long-press to edit.",
+        )
+        Spacer(Modifier.height(10.dp))
+        TourCard(
+            icon = Icons.Filled.DirectionsCar,
+            title = "Drive Mode",
+            body = "Settings → Accessibility → Drive Mode bumps every transport button " +
+                "by 25% so they're glance-safe in the car. Try it before your next drive.",
+        )
+        Spacer(Modifier.height(10.dp))
+        TourCard(
+            icon = Icons.Filled.CloudOff,
+            title = "AI DJ — coming later",
+            body = "Optional radio-style voice between tracks. Not in this build; once " +
+                "it ships you'll find it in Settings under each station's voice config.",
+        )
+    }
+}
+
+@Composable
+private fun TourCard(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    body: String,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth().widthIn(max = 560.dp),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+        ),
+    ) {
+        Row(
+            modifier = Modifier.padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                modifier = Modifier.size(28.dp),
+                tint = MaterialTheme.colorScheme.primary,
+            )
+            Spacer(Modifier.width(14.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    text = body,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
+                )
+            }
+        }
     }
 }
 

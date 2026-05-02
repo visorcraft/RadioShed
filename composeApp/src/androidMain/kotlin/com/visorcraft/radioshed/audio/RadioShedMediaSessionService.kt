@@ -1,6 +1,8 @@
 package com.visorcraft.radioshed.audio
 
+import android.content.Intent
 import android.os.Bundle
+import android.view.KeyEvent
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -207,6 +209,79 @@ class RadioShedMediaSessionService : MediaLibraryService() {
      * call into this to populate their UI and to request playback.
      */
     private inner class RadioShedLibraryCallback : MediaLibrarySession.Callback {
+
+        // Multi-click state for Bluetooth headset button. Standard Media3
+        // ships single-click (play/pause) and double-click (next), but
+        // triple-click (previous) is non-standard and must be implemented
+        // here. The window starts on the first KEY_DOWN; subsequent
+        // KEY_DOWN events within the window increment the count and
+        // reschedule the resolution. When the window elapses with no new
+        // press, the accumulated count maps to an action.
+        private var clickCount = 0
+        private var clickRunnable: Runnable? = null
+        private val clickHandler = android.os.Handler(android.os.Looper.getMainLooper())
+        private val clickWindowMs = 350L
+
+        /**
+         * Bluetooth headset multi-click. Routes the standard headset hook
+         * codes (HEADSETHOOK / MEDIA_PLAY_PAUSE) through a click-count
+         * debouncer so:
+         *  - 1 press → play/pause toggle
+         *  - 2 press → next
+         *  - 3 press → previous
+         *
+         * Other media keys (NEXT / PREVIOUS / STOP / FAST_FORWARD / REWIND)
+         * fall through to Media3's default handler so dedicated buttons on
+         * multi-button remotes behave as the user expects.
+         *
+         * Returning true here tells Media3 we handled the event; returning
+         * false lets the default path run.
+         */
+        override fun onMediaButtonEvent(
+            session: MediaSession,
+            controllerInfo: MediaSession.ControllerInfo,
+            intent: Intent,
+        ): Boolean {
+            val key = intent.getParcelableExtra<KeyEvent>(Intent.EXTRA_KEY_EVENT)
+                ?: return false
+            if (key.action != KeyEvent.ACTION_DOWN || key.repeatCount != 0) return false
+            return when (key.keyCode) {
+                KeyEvent.KEYCODE_HEADSETHOOK,
+                KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
+                    handleMultiClick()
+                    true
+                }
+                else -> false
+            }
+        }
+
+        private fun handleMultiClick() {
+            clickCount += 1
+            clickRunnable?.let { clickHandler.removeCallbacks(it) }
+            val nextRunnable = Runnable {
+                val resolved = clickCount
+                clickCount = 0
+                clickRunnable = null
+                when (resolved) {
+                    1 -> {
+                        val player = librarySession?.player ?: return@Runnable
+                        if (player.isPlaying) player.pause() else player.play()
+                    }
+                    2 -> runCatching {
+                        GlobalContext.get().get<StationPlayback>().skipNext()
+                    }
+                    else -> runCatching {
+                        // 3+ clicks: treat as previous. Power-users sometimes
+                        // tap fast enough to trigger >3, but mapping them all
+                        // to "previous" is more useful than dropping the
+                        // event silently.
+                        GlobalContext.get().get<StationPlayback>().skipPrevious()
+                    }
+                }
+            }
+            clickRunnable = nextRunnable
+            clickHandler.postDelayed(nextRunnable, clickWindowMs)
+        }
 
         /**
          * Explicitly grant SEEK_TO_NEXT/PREVIOUS to every connecting

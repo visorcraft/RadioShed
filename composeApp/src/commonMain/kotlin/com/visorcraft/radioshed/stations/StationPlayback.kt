@@ -108,7 +108,17 @@ class StationPlayback(
         // taking the mutex and mutating shared state. If the coroutine is
         // cancelled mid-build, queue/currentStation stay coherent (still
         // pointing at the previous station, not partial new state).
-        val candidates = sourceEvaluator.evaluate(station.source)
+        // Pinned tracks are unioned in regardless of whether the source
+        // rule would otherwise surface them — that's the whole point of
+        // pinning ("always include in this station's pool").
+        val ruleCandidates = sourceEvaluator.evaluate(station.source)
+        val pinned = stationRepo.pinnedTracks(stationId)
+        val candidates = if (pinned.isEmpty()) {
+            ruleCandidates
+        } else {
+            val ids = ruleCandidates.mapTo(mutableSetOf()) { it.id }
+            ruleCandidates + pinned.filter { it.id !in ids }
+        }
         val disliked = ratingRepo.dislikedTrackIdsForStation(stationId).toSet()
         // Pre-resolve trackId → primaryArtistId so PlaybackQueue can
         // apply artist-spacing without per-pick DB hits. One indexed

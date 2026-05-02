@@ -253,6 +253,7 @@ fun App(
                             onOpenBackup = { current = AppScreen.BackupRestore },
                             onOpenStats = { current = AppScreen.Stats },
                             onOpenHistory = { current = AppScreen.History },
+                            onOpenCrashLog = { current = AppScreen.CrashLog },
                         )
                     }
 
@@ -268,6 +269,13 @@ fun App(
                     AppScreen.History -> {
                         PlatformBackHandler { current = AppScreen.AppSettings }
                         HistoryScreen(onBack = { current = AppScreen.AppSettings })
+                    }
+
+                    AppScreen.CrashLog -> {
+                        PlatformBackHandler { current = AppScreen.AppSettings }
+                        com.visorcraft.radioshed.ui.settings.CrashLogScreen(
+                            onBack = { current = AppScreen.AppSettings },
+                        )
                     }
 
                     AppScreen.Equalizer -> {
@@ -309,6 +317,17 @@ fun App(
                             onOpenNowPlaying = { navTo(AppScreen.NowPlaying) },
                             onAddStation = { current = AppScreen.NewStation },
                             onEditStation = { id -> current = AppScreen.EditStation(id) },
+                            onOpenStationDetail = { id -> current = AppScreen.StationDetail(id) },
+                        )
+                    }
+
+                    is AppScreen.StationDetail -> {
+                        val sid = (current as AppScreen.StationDetail).stationId
+                        PlatformBackHandler { current = AppScreen.Stations }
+                        com.visorcraft.radioshed.ui.stations.StationDetailScreen(
+                            stationId = sid,
+                            onBack = { current = AppScreen.Stations },
+                            onPlay = { navTo(AppScreen.NowPlaying) },
                         )
                     }
 
@@ -323,6 +342,8 @@ fun App(
                     AppScreen.NewStation,
                     is AppScreen.EditStation,
                     -> Unit
+                    // StationDetail handled above explicitly; no else
+                    // branch needed because the sealed list is exhaustive.
                 }
             }
             MiniPlayer(onExpand = { navTo(AppScreen.NowPlaying) })

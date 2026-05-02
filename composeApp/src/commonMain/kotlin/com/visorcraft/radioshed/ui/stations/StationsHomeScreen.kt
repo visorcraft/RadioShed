@@ -26,6 +26,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items as lazyItems
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.AutoAwesome
@@ -108,6 +109,7 @@ fun StationsHomeScreen(
     onOpenNowPlaying: () -> Unit = {},
     onAddStation: () -> Unit = {},
     onEditStation: (Long) -> Unit = {},
+    onOpenStationDetail: (Long) -> Unit = {},
     stationRepo: StationRepository = koinInject(),
     stationPlayback: StationPlayback = koinInject(),
     audioEngine: AudioEngine = koinInject(),
@@ -363,6 +365,10 @@ fun StationsHomeScreen(
             StationActionSheet(
                 station = station,
                 onDismiss = { actionsForStationId = null },
+                onOpenDetail = {
+                    actionsForStationId = null
+                    onOpenStationDetail(id)
+                },
                 onEdit = {
                     actionsForStationId = null
                     onEditStation(id)
@@ -439,6 +445,7 @@ private suspend fun swapStationPosition(
 private fun StationActionSheet(
     station: Station,
     onDismiss: () -> Unit,
+    onOpenDetail: () -> Unit,
     onEdit: () -> Unit,
     onTogglePin: () -> Unit,
     onMoveUp: () -> Unit,
@@ -455,6 +462,11 @@ private fun StationActionSheet(
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            )
+            ActionRow(
+                icon = Icons.AutoMirrored.Filled.OpenInNew,
+                label = "Open station",
+                onClick = onOpenDetail,
             )
             ActionRow(
                 icon = Icons.Filled.Edit,

@@ -172,6 +172,17 @@ SELECT COUNT(*) FROM album;
 updateAlbumArtwork:
 UPDATE album SET artwork_uri = ?, updated_at = ? WHERE id = ?;
 
+-- First-seen-wins variant for the scanner: only write artwork if the
+-- album row has none yet. Avoids the "scrolling library flickers as
+-- different tracks of the same album report different embedded art"
+-- bug — the scanner used to overwrite album art on every track scan
+-- regardless of order, making the visible art depend on enumeration
+-- order rather than first-discovered.
+updateAlbumArtworkIfMissing:
+UPDATE album SET artwork_uri = ?, updated_at = ?
+WHERE id = ?
+  AND (artwork_uri IS NULL OR TRIM(artwork_uri) = '');
+
 -- Albums whose embedded scan didn't find art but which DO carry a
 -- MusicBrainz Release ID (extracted from the file's tags). These are
 -- the candidates for Cover Art Archive auto-fetch — we already know the

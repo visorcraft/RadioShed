@@ -143,6 +143,12 @@ sqldelight {
         create("RadioShedDatabase") {
             packageName.set("com.visorcraft.radioshed.db")
             dialect(libs.sqldelight.dialectSqlite338)
+            // verifyMigrations stays off: the existing 1.sqm / 2.sqm
+            // files use ALTER TABLE against tables defined in the .sq
+            // baseline, which the verifier doesn't see in an isolated
+            // parse. Turning this on requires re-stating the prior
+            // schema at the top of each .sqm — a meaningful refactor
+            // tracked in SPEC Phase 18.
         }
     }
 }

@@ -120,11 +120,13 @@ class Scanner(
         // Persist embedded album art the first time we see it for each album
         // in this scan. ArtworkPersister is content-addressed (SHA-256), so
         // duplicate bytes across tracks share a single on-disk file even
-        // across scans.
+        // across scans. The DB-side write uses the IfMissing variant so a
+        // second rescan whose enumeration surfaces a different track first
+        // doesn't replace the originally-discovered cover.
         if (albumId != null && albumId !in albumsWithArtwork) {
             tags.artworkBytes?.let { bytes ->
                 artworkPersister.persist(bytes)?.let { uri ->
-                    libraryRepo.setAlbumArtwork(albumId, uri)
+                    libraryRepo.setAlbumArtworkIfMissing(albumId, uri)
                 }
             }
             albumsWithArtwork += albumId

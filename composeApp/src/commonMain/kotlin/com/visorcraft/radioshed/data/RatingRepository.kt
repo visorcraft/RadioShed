@@ -51,14 +51,24 @@ class RatingRepository(private val db: RadioShedDatabase) {
      * "Forgotten Gems": tracks rated ≥ [minStars] whose most-recent
      * play in `station_history` is older than [olderThanMs]. A track
      * never played at all matches via the LEFT JOIN coalesce → 0 < t.
+     *
+     * [byRating] flips the sort: false (default) = longest-unheard
+     * first; true = highest-rated first within the gem set.
      */
     suspend fun forgottenGemTracks(
         minStars: Double = 4.0,
         olderThanMs: Long,
         limit: Long = 100,
+        byRating: Boolean = false,
     ): List<Track> = withContext(IODispatcher) {
-        db.ratingsQueries.selectForgottenGemTracks(minStars, olderThanMs, limit)
-            .executeAsList().map { it.toDomain() }
+        val rows = if (byRating) {
+            db.ratingsQueries.selectForgottenGemTracksByRating(minStars, olderThanMs, limit)
+                .executeAsList()
+        } else {
+            db.ratingsQueries.selectForgottenGemTracks(minStars, olderThanMs, limit)
+                .executeAsList()
+        }
+        rows.map { it.toDomain() }
     }
 
     // ---- Skip log ----

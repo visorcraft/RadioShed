@@ -51,6 +51,13 @@ sealed interface AppScreen {
      */
     data class EditStation(val stationId: Long) : AppScreen
 
+    /**
+     * Station detail — read-only-ish view of source rule, candidate
+     * count, pinned tracks, top played, recently played for a single
+     * station. Opened from the long-press action sheet.
+     */
+    data class StationDetail(val stationId: Long) : AppScreen
+
     /** Album detail — cover art, track list, play / shuffle all. */
     data class AlbumDetail(val albumId: Long) : AppScreen
 
@@ -74,6 +81,9 @@ sealed interface AppScreen {
 
     /** Listening history — chronological play log. */
     data object History : AppScreen
+
+    /** Crash log — local-only triage of recent ANRs / crashes. */
+    data object CrashLog : AppScreen
 
     /** Playlist library — list of all playlists with create button. */
     data object Playlists : AppScreen

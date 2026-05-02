@@ -90,9 +90,17 @@ enum class SmartQueryKind {
     /**
      * Highly-rated tracks (≥4★) that haven't been played in 90+ days.
      * Distinct from [LongestUnheard] which is "least played by count" —
-     * Forgotten Gems is "loved but recently neglected".
+     * Forgotten Gems is "loved but recently neglected". Sorted by
+     * longest-unheard first.
      */
     ForgottenGems,
+    /**
+     * Same gem set as [ForgottenGems] but sorted by rating descending —
+     * surfaces the top-rated tracks among the never-played-in-a-while
+     * set. Pick this when "absolute best forgotten" matters more than
+     * "most overdue for a replay".
+     */
+    ForgottenGemsByRating,
 }
 
 @Serializable

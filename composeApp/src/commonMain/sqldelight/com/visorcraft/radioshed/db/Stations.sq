@@ -33,6 +33,22 @@ CREATE TABLE station_history (
 CREATE INDEX station_history_station_idx ON station_history(station_id, played_at);
 CREATE INDEX station_history_track_idx ON station_history(track_id);
 
+-- Per-station "always include" pins. Tracks listed here are unioned
+-- with the station's source-rule result during playback queue
+-- evaluation, regardless of whether they'd otherwise match. Use case:
+-- "the Forgotten Gems preset normally only surfaces ≥4★ tracks, but I
+-- want this one specific 3★ I keep forgetting to also reliably show
+-- up." Per-station so the same track can be pinned to multiple
+-- stations independently.
+CREATE TABLE station_pinned_track (
+    station_id INTEGER NOT NULL REFERENCES station(id) ON DELETE CASCADE,
+    track_id INTEGER NOT NULL REFERENCES track(id) ON DELETE CASCADE,
+    pinned_at INTEGER NOT NULL,
+    PRIMARY KEY (station_id, track_id)
+);
+
+CREATE INDEX station_pinned_station_idx ON station_pinned_track(station_id);
+
 -- ==== Station queries ====
 
 insertStation:
@@ -216,6 +232,31 @@ GROUP BY track_id
 HAVING last_played_at < ? AND plays >= 1
 ORDER BY last_played_at ASC
 LIMIT ?;
+
+-- ==== Station pinned-track queries ====
+
+pinTrackToStation:
+INSERT OR REPLACE INTO station_pinned_track (station_id, track_id, pinned_at)
+VALUES (?, ?, ?);
+
+unpinTrackFromStation:
+DELETE FROM station_pinned_track WHERE station_id = ? AND track_id = ?;
+
+isTrackPinnedToStation:
+SELECT COUNT(*) FROM station_pinned_track
+WHERE station_id = ? AND track_id = ?;
+
+selectPinnedTracksForStation:
+SELECT track.* FROM track
+JOIN station_pinned_track p ON p.track_id = track.id
+WHERE p.station_id = ? AND track.is_available = 1
+ORDER BY p.pinned_at DESC;
+
+selectPinnedTrackIdsForStation:
+SELECT track_id FROM station_pinned_track WHERE station_id = ?;
+
+countPinnedTracksForStation:
+SELECT COUNT(*) FROM station_pinned_track WHERE station_id = ?;
 
 -- Top albums by play count. Tracks without album_id are excluded from
 -- the count. Album artwork URI included so the UI doesn't need a

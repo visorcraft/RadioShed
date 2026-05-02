@@ -1417,6 +1417,83 @@ Each is a self-contained module, tackled as user demand surfaces.
 - [ ] Android TV app
 - [ ] tvOS app
 
+### Phase 18 — Remaining v1 work (catalogued post-audit)
+
+Items surfaced by the post-build punch-list audit. None are user-blocking
+for the current Android build, but each is tracked here so nothing slips
+between phases. Some duplicate placeholders that already exist earlier in
+the plan — kept here as a single discoverable list with cross-references.
+
+#### Big features deferred (multi-day each)
+
+- [ ] **Crossfade + gapless verification (#112)** — needs dual-ExoPlayer
+  pipeline or a custom `AudioProcessor`. Cross-references Phase 4
+  ("Verify contiguous decoding") and Phase 7 ("Crossfade impl on both
+  engines", "Gapless playback verified sample-accurate").
+- [ ] **iOS implementation pass** — every `AudioEngineIos`,
+  `FileEnumeratorIos`, `TagReaderIos`, `AVAudioSession`,
+  `MPNowPlayingInfoCenter`, document-picker, and security-scoped-bookmark
+  stub from Phases 3–4. Needs Mac access; requires a dedicated build-out
+  cycle. See lines 1123–1125, 1128, 1150, 1152–1153 for the existing
+  per-feature stubs.
+- [ ] **Cast / multi-room output** — entire Phase 11 (Chromecast, AirPlay,
+  UPnP/DLNA, Sonos, Plex/Kodi, transcoding, multi-room sync, auto-cast
+  rules). No code yet beyond the `CastTarget` schema row.
+- [ ] **Home-screen widget** — Android `AppWidgetProvider` + Glance UI,
+  iOS `WidgetKit`. Schema row (`widget_configs`) exists; renderer does
+  not.
+- [ ] **Search DSL parser** — `artist:Hendrix year:>1968 genre:rock` style
+  query language. Plain full-text search ships today; DSL deferred.
+  Duplicates line 1135.
+- [ ] **Drag-to-reorder** — stations list, playlist tracks, queue
+  reordering. Duplicates line 1181 (stations) and is implicit for
+  playlists/queue.
+
+#### Quality / polish deferred from the audit
+
+- [ ] **Background-blur perf on Now Playing** — current impl re-blurs on
+  every recomposition; needs caching keyed by artwork URI + size, or a
+  pre-rendered blurred bitmap held in memory while the track is current.
+  Affects scroll/animation smoothness on lower-tier Android devices.
+- [ ] **SQLDelight `verifyMigrations` enabled** — currently disabled
+  because we have no real migrations yet (baseline schema only). Turn on
+  the moment we add migration #1 so the harness catches schema drift in
+  CI. Cross-references line 1108.
+- [ ] **Media3 1.7+ bump** — clears the `CommandButton.Builder()`
+  deprecation warnings. Holds until 1.7 is stable and the Media3 release
+  notes are reviewed for breaking changes on `MediaSession`.
+- [ ] **Scanner: first-seen-wins artwork** — when multiple tracks in an
+  album have differing embedded art, lock to the first one indexed
+  rather than the last-write-wins behaviour today. Avoids album-art
+  flicker as the scan progresses.
+
+#### Stuff never built that some users might miss
+
+- [ ] **Pinned tracks per station** — user marks N tracks as "always
+  include in this station's pool", regardless of source rules.
+- [ ] **Per-station detail screen** — tile tap currently plays; a long-
+  press → "Open station" route would land on a screen showing source
+  rules, candidate count, recently played, top tracks for the station.
+  Partial overlap with line 1203 (long-press tile quick actions).
+- [ ] **Crash log surface** — in-app viewer of recent crashes/ANRs with
+  share-as-text. No telemetry uploaded — purely local triage aid.
+- [ ] **Onboarding polish** — steps 5–9 from Phase 5/6 (taste setup,
+  first custom station, in-car preview, AI DJ intro, done). The bones
+  exist (steps 1–5 ship); the post-scan flow needs design + copy.
+  Cross-references lines 1185, 1212.
+- [ ] **Bluetooth multi-click handling** — double-click → next, triple-
+  click → previous on BT headset buttons. Single-click play/pause works
+  via Media3's default; multi-click needs a custom
+  `MediaSession.Callback.onMediaButtonEvent` debounce.
+- [ ] **Now Playing overflow on narrow screens** — at <360dp width the
+  overflow menu's submenu items (Add to playlist, Go to album, Go to
+  artist, Track info) can clip. Needs a sheet-based fallback below a
+  width breakpoint.
+- [ ] **Forgotten Gems sort tweak** — current sort is "lowest play
+  count, ties broken by oldest last-played"; users have asked for
+  "highest-rated among never-played" as an alternative ordering. Add
+  as a sort-mode toggle on the Forgotten Gems preset.
+
 ---
 
 ## Appendix A — Compose Multiplatform vs native UI: when to fall back

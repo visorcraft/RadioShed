@@ -770,7 +770,8 @@ private fun SmartQueryKind.uiLabel(): String = when (this) {
     SmartQueryKind.RecentlyRated -> "Recently rated"
     SmartQueryKind.NeverPlayed -> "Never played"
     SmartQueryKind.AdaptiveMix -> "Adaptive mix (under-played + favorites)"
-    SmartQueryKind.ForgottenGems -> "Forgotten gems (4★+ unheard 90 days)"
+    SmartQueryKind.ForgottenGems -> "Forgotten gems — longest unheard"
+    SmartQueryKind.ForgottenGemsByRating -> "Forgotten gems — highest rated"
 }
 
 private fun String.toCsvList(): List<String> =

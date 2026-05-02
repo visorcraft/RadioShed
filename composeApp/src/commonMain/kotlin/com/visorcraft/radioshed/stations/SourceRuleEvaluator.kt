@@ -71,7 +71,8 @@ class SourceRuleEvaluator(
                 ratingRepo.topRatedTracks(minStars = 4.0, limit = limit)
             SmartQueryKind.NeverPlayed ->
                 ratingRepo.neverPlayedTracks(limit)
-            SmartQueryKind.ForgottenGems -> {
+            SmartQueryKind.ForgottenGems,
+            SmartQueryKind.ForgottenGemsByRating -> {
                 // 90 days ago. We could expose this as a parameter on
                 // the SmartQuery rule itself in a later schema bump,
                 // but a fixed cutoff matches Spotify / Apple Music's
@@ -81,6 +82,7 @@ class SourceRuleEvaluator(
                     minStars = 4.0,
                     olderThanMs = cutoff,
                     limit = limit,
+                    byRating = rule.kind == SmartQueryKind.ForgottenGemsByRating,
                 )
             }
         }

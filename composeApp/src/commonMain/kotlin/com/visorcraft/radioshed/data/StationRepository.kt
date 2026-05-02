@@ -7,6 +7,7 @@ import com.visorcraft.radioshed.domain.PlaybackRule
 import com.visorcraft.radioshed.domain.SourceRule
 import com.visorcraft.radioshed.domain.Station
 import com.visorcraft.radioshed.domain.StationStats
+import com.visorcraft.radioshed.domain.Track
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
@@ -209,6 +210,34 @@ class StationRepository(private val db: RadioShedDatabase) {
 
     suspend fun delete(id: Long) = withContext(IODispatcher) {
         db.stationsQueries.deleteStationById(id)
+    }
+
+    // ---- Pinned tracks (per-station) ----
+
+    suspend fun pinTrackToStation(stationId: Long, trackId: Long) = withContext(IODispatcher) {
+        db.stationsQueries.pinTrackToStation(stationId, trackId, nowMillis())
+    }
+
+    suspend fun unpinTrackFromStation(stationId: Long, trackId: Long) = withContext(IODispatcher) {
+        db.stationsQueries.unpinTrackFromStation(stationId, trackId)
+    }
+
+    suspend fun isTrackPinned(stationId: Long, trackId: Long): Boolean =
+        withContext(IODispatcher) {
+            db.stationsQueries.isTrackPinnedToStation(stationId, trackId).executeAsOne() > 0L
+        }
+
+    suspend fun pinnedTracks(stationId: Long): List<Track> = withContext(IODispatcher) {
+        db.stationsQueries.selectPinnedTracksForStation(stationId).executeAsList()
+            .map { it.toDomain() }
+    }
+
+    suspend fun pinnedTrackIds(stationId: Long): List<Long> = withContext(IODispatcher) {
+        db.stationsQueries.selectPinnedTrackIdsForStation(stationId).executeAsList()
+    }
+
+    suspend fun pinnedTrackCount(stationId: Long): Long = withContext(IODispatcher) {
+        db.stationsQueries.countPinnedTracksForStation(stationId).executeAsOne()
     }
 
     // ---- Station history ----

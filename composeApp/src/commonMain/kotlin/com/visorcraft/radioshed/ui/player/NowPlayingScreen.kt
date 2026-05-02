@@ -156,6 +156,15 @@ fun NowPlayingScreen(
         rating = nowPlaying?.let { ratingRepo.getRating(it.trackId) } ?: 0.0
     }
 
+    // Read window width once at the screen root so both the topBar and
+    // the body share a single source of truth for breakpoints. Below
+    // 360dp the overflow DropdownMenu submenu items used to clip ("Go
+    // to album"/"Go to artist" wrapped or got cut off); we route to a
+    // ModalBottomSheet on narrow widths instead.
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val isNarrow = maxWidth < 360.dp
+        val isCompact = maxWidth < 600.dp
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -232,59 +241,66 @@ fun NowPlayingScreen(
                                 tint = MaterialTheme.colorScheme.onSurface,
                             )
                         }
-                        DropdownMenu(
-                            expanded = overflowMenuOpen,
-                            onDismissRequest = { overflowMenuOpen = false },
-                        ) {
-                            val track = nowPlaying
-                            DropdownMenuItem(
-                                text = { Text("Add to playlist") },
-                                leadingIcon = { Icon(Icons.AutoMirrored.Filled.PlaylistAdd, null) },
-                                enabled = track != null,
-                                onClick = {
-                                    overflowMenuOpen = false
-                                    track?.trackId?.let { addToPlaylistTrackId = it }
-                                },
-                            )
-                            // For Go-to-album / Go-to-artist we use the
-                            // metadata stamped on the Playable rather
-                            // than DB lookups for the enabled state, so
-                            // tracks with no album/artist tags don't
-                            // appear actionable when they aren't.
-                            DropdownMenuItem(
-                                text = { Text("Go to album") },
-                                leadingIcon = { Icon(Icons.Filled.Album, null) },
-                                enabled = track != null && !track.album.isNullOrBlank(),
-                                onClick = {
-                                    overflowMenuOpen = false
-                                    val tid = track?.trackId ?: return@DropdownMenuItem
-                                    scope.launch {
-                                        libraryRepo.getTrackById(tid)?.albumId?.let { onOpenAlbum(it) }
-                                    }
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Go to artist") },
-                                leadingIcon = { Icon(Icons.Filled.Person, null) },
-                                enabled = track != null && !track.artist.isNullOrBlank(),
-                                onClick = {
-                                    overflowMenuOpen = false
-                                    val tid = track?.trackId ?: return@DropdownMenuItem
-                                    scope.launch {
-                                        libraryRepo.artistsForTrack(tid)
-                                            .firstOrNull()?.id?.let { onOpenArtist(it) }
-                                    }
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Track info") },
-                                leadingIcon = { Icon(Icons.Filled.Info, null) },
-                                enabled = track != null,
-                                onClick = {
-                                    overflowMenuOpen = false
-                                    trackInfoOpen = true
-                                },
-                            )
+                        // Wide screens: classic anchored DropdownMenu.
+                        // Narrow screens get a ModalBottomSheet rendered
+                        // outside the topBar slot (below) — DropdownMenus
+                        // anchored to a tight icon position clip their
+                        // submenu items at <360dp.
+                        if (!isNarrow) {
+                            DropdownMenu(
+                                expanded = overflowMenuOpen,
+                                onDismissRequest = { overflowMenuOpen = false },
+                            ) {
+                                val track = nowPlaying
+                                DropdownMenuItem(
+                                    text = { Text("Add to playlist") },
+                                    leadingIcon = { Icon(Icons.AutoMirrored.Filled.PlaylistAdd, null) },
+                                    enabled = track != null,
+                                    onClick = {
+                                        overflowMenuOpen = false
+                                        track?.trackId?.let { addToPlaylistTrackId = it }
+                                    },
+                                )
+                                // For Go-to-album / Go-to-artist we use the
+                                // metadata stamped on the Playable rather
+                                // than DB lookups for the enabled state, so
+                                // tracks with no album/artist tags don't
+                                // appear actionable when they aren't.
+                                DropdownMenuItem(
+                                    text = { Text("Go to album") },
+                                    leadingIcon = { Icon(Icons.Filled.Album, null) },
+                                    enabled = track != null && !track.album.isNullOrBlank(),
+                                    onClick = {
+                                        overflowMenuOpen = false
+                                        val tid = track?.trackId ?: return@DropdownMenuItem
+                                        scope.launch {
+                                            libraryRepo.getTrackById(tid)?.albumId?.let { onOpenAlbum(it) }
+                                        }
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Go to artist") },
+                                    leadingIcon = { Icon(Icons.Filled.Person, null) },
+                                    enabled = track != null && !track.artist.isNullOrBlank(),
+                                    onClick = {
+                                        overflowMenuOpen = false
+                                        val tid = track?.trackId ?: return@DropdownMenuItem
+                                        scope.launch {
+                                            libraryRepo.artistsForTrack(tid)
+                                                .firstOrNull()?.id?.let { onOpenArtist(it) }
+                                        }
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Track info") },
+                                    leadingIcon = { Icon(Icons.Filled.Info, null) },
+                                    enabled = track != null,
+                                    onClick = {
+                                        overflowMenuOpen = false
+                                        trackInfoOpen = true
+                                    },
+                                )
+                            }
                         }
                     }
                 },
@@ -343,37 +359,37 @@ fun NowPlayingScreen(
                 trackInfoOpen = false
             }
         }
-        BoxWithConstraints(modifier = Modifier.fillMaxSize().padding(padding)) {
-            val isCompact = maxWidth < 600.dp
+        if (isNarrow && overflowMenuOpen) {
+            OverflowSheet(
+                track = nowPlaying,
+                onDismiss = { overflowMenuOpen = false },
+                onAddToPlaylist = { tid ->
+                    overflowMenuOpen = false
+                    addToPlaylistTrackId = tid
+                },
+                onGoToAlbum = { tid ->
+                    overflowMenuOpen = false
+                    scope.launch {
+                        libraryRepo.getTrackById(tid)?.albumId?.let { onOpenAlbum(it) }
+                    }
+                },
+                onGoToArtist = { tid ->
+                    overflowMenuOpen = false
+                    scope.launch {
+                        libraryRepo.artistsForTrack(tid)
+                            .firstOrNull()?.id?.let { onOpenArtist(it) }
+                    }
+                },
+                onTrackInfo = {
+                    overflowMenuOpen = false
+                    trackInfoOpen = true
+                },
+            )
+        }
+        Box(modifier = Modifier.fillMaxSize().padding(padding)) {
             val accent = stationAccent(currentStation?.color)
 
-            // Ambient cover-art backdrop. Renders the current artwork
-            // fullscreen + heavily blurred so the foreground album art
-            // floats over a tinted impression of itself. Modifier.blur
-            // is GPU-accelerated on Android 12+; on older versions
-            // Compose silently falls back to no-blur, which is fine —
-            // the scrim alone still reads as a tinted backdrop.
-            playable.artworkUri?.let { uri ->
-                coil3.compose.AsyncImage(
-                    model = uri,
-                    contentDescription = null,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .blur(radius = 80.dp),
-                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-                    alpha = 0.6f,
-                )
-                // Scrim on top of the blurred image so the bright
-                // blurred saturation doesn't fight with the foreground
-                // album art and controls.
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(
-                            MaterialTheme.colorScheme.background.copy(alpha = 0.55f),
-                        ),
-                )
-            }
+            BlurredBackdrop(artworkUri = playable.artworkUri)
 
             if (isCompact) {
                 CompactLayout(
@@ -433,6 +449,78 @@ fun NowPlayingScreen(
                 )
             }
         }
+    }
+    }  // BoxWithConstraints
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun OverflowSheet(
+    track: com.visorcraft.radioshed.audio.Playable?,
+    onDismiss: () -> Unit,
+    onAddToPlaylist: (Long) -> Unit,
+    onGoToAlbum: (Long) -> Unit,
+    onGoToArtist: (Long) -> Unit,
+    onTrackInfo: () -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+        Column(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+            OverflowSheetItem(
+                icon = Icons.AutoMirrored.Filled.PlaylistAdd,
+                label = "Add to playlist",
+                enabled = track != null,
+                onClick = { track?.trackId?.let(onAddToPlaylist) },
+            )
+            OverflowSheetItem(
+                icon = Icons.Filled.Album,
+                label = "Go to album",
+                enabled = track != null && !track.album.isNullOrBlank(),
+                onClick = { track?.trackId?.let(onGoToAlbum) },
+            )
+            OverflowSheetItem(
+                icon = Icons.Filled.Person,
+                label = "Go to artist",
+                enabled = track != null && !track.artist.isNullOrBlank(),
+                onClick = { track?.trackId?.let(onGoToArtist) },
+            )
+            OverflowSheetItem(
+                icon = Icons.Filled.Info,
+                label = "Track info",
+                enabled = track != null,
+                onClick = onTrackInfo,
+            )
+        }
+    }
+}
+
+@Composable
+private fun OverflowSheetItem(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    val alpha = if (enabled) 1f else 0.4f
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 20.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            modifier = Modifier.size(20.dp),
+            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = alpha),
+        )
+        Spacer(Modifier.width(16.dp))
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = alpha),
+        )
     }
 }
 
@@ -547,6 +635,37 @@ private fun TwoPaneLayout(
             Spacer(Modifier.height(28.dp))
             RatingRow(current = rating, onRate = onRate)
         }
+    }
+}
+
+/**
+ * Ambient cover-art backdrop. Pulled out into its own composable so the
+ * (expensive) blurred AsyncImage layer only recomposes when the
+ * `artworkUri` actually changes — not on every position-tick / slider-
+ * drag / rating-update happening upstream. Coil's memory cache holds
+ * the decoded bitmap, so the same URI reuses the same bytes; this
+ * composable just stops Compose from re-walking the modifier chain
+ * 10× per second.
+ *
+ * Modifier.blur is GPU-accelerated on Android 12+; older versions
+ * silently no-op the blur, leaving the dimmed image + scrim still
+ * reading as a tinted backdrop.
+ */
+@Composable
+private fun BlurredBackdrop(artworkUri: String?) {
+    if (artworkUri == null) return
+    val scrimColor = MaterialTheme.colorScheme.background.copy(alpha = 0.55f)
+    Box(modifier = Modifier.fillMaxSize()) {
+        coil3.compose.AsyncImage(
+            model = artworkUri,
+            contentDescription = null,
+            modifier = Modifier
+                .fillMaxSize()
+                .blur(radius = 80.dp),
+            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+            alpha = 0.6f,
+        )
+        Box(modifier = Modifier.fillMaxSize().background(scrimColor))
     }
 }
 
