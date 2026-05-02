@@ -226,7 +226,28 @@ private fun Playable.toMediaItem(): MediaItem {
                 .setArtist(artist)
                 .setAlbumTitle(album)
                 .also { mb ->
-                    artworkUri?.let { mb.setArtworkUri(android.net.Uri.parse(it)) }
+                    // Two artwork channels:
+                    //   - setArtworkUri: for in-app surfaces (Coil, Now
+                    //     Playing, MiniPlayer). They run in our own
+                    //     process and can read file:// from our filesDir.
+                    //   - setArtworkData: for OUT-OF-PROCESS consumers
+                    //     (Android Auto, Bluetooth AVRCP cover art, the
+                    //     system lock-screen on some OEMs). Auto's
+                    //     process can't read our private filesDir, so a
+                    //     file:// URI alone leaves it with a blank cover.
+                    //     Embedding the bytes in the metadata blob fixes
+                    //     this — the bytes round-trip through Media3's
+                    //     IPC parcels and Auto renders them directly.
+                    val uriString = artworkUri
+                    if (uriString != null) {
+                        mb.setArtworkUri(android.net.Uri.parse(uriString))
+                        readArtworkBytes(uriString)?.let { bytes ->
+                            mb.setArtworkData(
+                                bytes,
+                                MediaMetadata.PICTURE_TYPE_FRONT_COVER,
+                            )
+                        }
+                    }
                 }
                 .build(),
         )
@@ -242,6 +263,28 @@ private fun Playable.toMediaItem(): MediaItem {
     }
     return builder.build()
 }
+
+/**
+ * Read the artwork bytes referenced by [uriString] for inline embedding
+ * in a MediaMetadata. We only handle `file://` URIs — that's everything
+ * AndroidArtworkPersister produces. Returns null on any failure (file
+ * missing, IO error, oversize), and the caller falls back to URI-only.
+ *
+ * Size cap: Android Auto's IPC parcel has practical limits (~1 MB) for
+ * MediaMetadata. Our CAA + embedded artworks are typically 50-150 KB
+ * which is well under, but we cap defensively at 512 KB to avoid a
+ * theoretical TransactionTooLargeException with very large embedded art.
+ */
+private fun readArtworkBytes(uriString: String): ByteArray? = runCatching {
+    if (!uriString.startsWith("file://")) return@runCatching null
+    val path = android.net.Uri.parse(uriString).path ?: return@runCatching null
+    val file = java.io.File(path)
+    if (!file.exists() || !file.canRead()) return@runCatching null
+    if (file.length() > MAX_ARTWORK_BYTES) return@runCatching null
+    file.readBytes()
+}.getOrNull()
+
+private const val MAX_ARTWORK_BYTES = 512L * 1024L
 
 private fun MediaItem.toPlayable(fallbackDurationMs: Long = 0L): Playable {
     val md = mediaMetadata

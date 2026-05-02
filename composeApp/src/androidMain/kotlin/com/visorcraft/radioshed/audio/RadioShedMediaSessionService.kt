@@ -1,18 +1,24 @@
 package com.visorcraft.radioshed.audio
 
+import android.os.Bundle
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.session.CommandButton
 import androidx.media3.session.LibraryResult
 import androidx.media3.session.MediaLibraryService
 import androidx.media3.session.MediaSession
+import androidx.media3.session.SessionCommand
+import androidx.media3.session.SessionResult
 import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.SettableFuture
+import com.visorcraft.radioshed.R
+import com.visorcraft.radioshed.data.RatingRepository
 import com.visorcraft.radioshed.data.StationRepository
 import com.visorcraft.radioshed.stations.StationPlayback
 import kotlinx.coroutines.CoroutineScope
@@ -193,9 +199,88 @@ class RadioShedMediaSessionService : MediaLibraryService() {
                 .add(Player.COMMAND_SEEK_TO_PREVIOUS)
                 .add(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)
                 .build()
+
+            // Custom session commands: rating + dislike, surfaced in
+            // Android Auto's Now Playing template via setCustomLayout.
+            // Auto's media layout reserves a couple of slots beside the
+            // transport controls for app-defined CommandButtons; we
+            // populate them with a star toggle and a thumb-down so the
+            // user can rate / dislike without taking eyes off the road.
+            val starCommand = SessionCommand(ACTION_TOGGLE_STAR, Bundle.EMPTY)
+            val dislikeCommand = SessionCommand(ACTION_DISLIKE_ON_STATION, Bundle.EMPTY)
+
+            val sessionCommands = MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS
+                .buildUpon()
+                .add(starCommand)
+                .add(dislikeCommand)
+                .build()
+
+            val starButton = CommandButton.Builder()
+                .setSessionCommand(starCommand)
+                .setDisplayName("Star")
+                .setIconResId(R.drawable.ic_radioshed_star)
+                .build()
+            val dislikeButton = CommandButton.Builder()
+                .setSessionCommand(dislikeCommand)
+                .setDisplayName("Dislike")
+                .setIconResId(R.drawable.ic_radioshed_thumb_down)
+                .build()
+
             return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
                 .setAvailablePlayerCommands(playerCommands)
+                .setAvailableSessionCommands(sessionCommands)
+                .setCustomLayout(ImmutableList.of(starButton, dislikeButton))
                 .build()
+        }
+
+        /**
+         * Handle taps on our custom Auto buttons. The star button toggles
+         * the current track between 5★ and 0★ — fast, one-finger
+         * interaction suitable for driving. The thumb-down hits the
+         * per-station dislike list (so the next time the queue picks for
+         * this station, it skips this track) and immediately advances.
+         */
+        override fun onCustomCommand(
+            session: MediaSession,
+            controller: MediaSession.ControllerInfo,
+            customCommand: SessionCommand,
+            args: Bundle,
+        ): ListenableFuture<SessionResult> {
+            val player = session.player
+            val trackId = player.currentMediaItem?.mediaId?.toLongOrNull()
+                ?: return Futures.immediateFuture(
+                    SessionResult(SessionResult.RESULT_ERROR_INVALID_STATE),
+                )
+            return when (customCommand.customAction) {
+                ACTION_TOGGLE_STAR -> {
+                    scope.launch {
+                        runCatching {
+                            val ratingRepo = GlobalContext.get().get<RatingRepository>()
+                            val current = ratingRepo.getRating(trackId) ?: 0.0
+                            val next = if (current >= 4.5) 0.0 else 5.0
+                            ratingRepo.setRating(trackId, next)
+                        }
+                    }
+                    Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+                }
+                ACTION_DISLIKE_ON_STATION -> {
+                    scope.launch {
+                        runCatching {
+                            val ratingRepo = GlobalContext.get().get<RatingRepository>()
+                            val playback = GlobalContext.get().get<StationPlayback>()
+                            val stationId = playback.currentStation.first()?.id
+                            if (stationId != null) {
+                                ratingRepo.dislikeForStation(trackId, stationId)
+                            }
+                            playback.skipNext()
+                        }
+                    }
+                    Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+                }
+                else -> Futures.immediateFuture(
+                    SessionResult(SessionResult.RESULT_ERROR_NOT_SUPPORTED),
+                )
+            }
         }
 
         override fun onGetLibraryRoot(
@@ -350,5 +435,10 @@ class RadioShedMediaSessionService : MediaLibraryService() {
         const val MEDIA_ID_ROOT = "root"
         const val MEDIA_ID_STATIONS = "stations"
         const val MEDIA_ID_STATION_PREFIX = "station_"
+
+        // Custom action ids used by the Android Auto layout. Values are
+        // arbitrary but must round-trip exactly through SessionCommand.
+        const val ACTION_TOGGLE_STAR = "com.visorcraft.radioshed.RATE_STAR"
+        const val ACTION_DISLIKE_ON_STATION = "com.visorcraft.radioshed.DISLIKE"
     }
 }
