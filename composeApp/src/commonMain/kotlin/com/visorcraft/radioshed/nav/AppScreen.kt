@@ -22,6 +22,9 @@ sealed interface AppScreen {
     /** Library settings — folder management, scan triggers. */
     data object LibrarySettings : AppScreen
 
+    /** Global app settings — theme, accessibility, about. */
+    data object AppSettings : AppScreen
+
     /** Full-text search across the library. */
     data object Search : AppScreen
 

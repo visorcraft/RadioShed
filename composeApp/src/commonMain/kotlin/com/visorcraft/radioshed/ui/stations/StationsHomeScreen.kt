@@ -22,12 +22,17 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -269,10 +274,11 @@ private fun ContinueListeningCard(
                         contentScale = androidx.compose.ui.layout.ContentScale.Crop,
                     )
                 } else {
-                    Text(
-                        text = if (isPlaying) "▶" else "‖",
-                        style = MaterialTheme.typography.titleLarge,
-                        color = Color.White,
+                    Icon(
+                        imageVector = if (isPlaying) Icons.Filled.PlayArrow else Icons.Filled.Pause,
+                        contentDescription = null,
+                        modifier = Modifier.size(32.dp),
+                        tint = Color.White,
                     )
                 }
             }
@@ -411,12 +417,24 @@ private fun StationListRow(
                 }
             }
             Spacer(Modifier.size(8.dp))
-            Text(
-                if (isPlaying) "▶ Playing" else "▶",
-                style = MaterialTheme.typography.titleMedium,
-                color = if (isCurrent) MaterialTheme.colorScheme.onPrimaryContainer
-                        else MaterialTheme.colorScheme.primary,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Filled.PlayArrow,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                    tint = if (isCurrent) MaterialTheme.colorScheme.onPrimaryContainer
+                           else MaterialTheme.colorScheme.primary,
+                )
+                if (isPlaying) {
+                    Spacer(Modifier.size(4.dp))
+                    Text(
+                        "Playing",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = if (isCurrent) MaterialTheme.colorScheme.onPrimaryContainer
+                                else MaterialTheme.colorScheme.primary,
+                    )
+                }
+            }
         }
     }
 }
@@ -461,12 +479,25 @@ private fun StationGridTile(
                     ),
                 contentAlignment = Alignment.BottomEnd,
             ) {
-                Text(
-                    text = if (isPlaying) "▶ Playing" else "♫",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = Color.White.copy(alpha = 0.9f),
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.padding(12.dp),
-                )
+                ) {
+                    Icon(
+                        imageVector = if (isPlaying) Icons.Filled.PlayArrow else Icons.Filled.MusicNote,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                        tint = Color.White.copy(alpha = 0.9f),
+                    )
+                    if (isPlaying) {
+                        Spacer(Modifier.size(4.dp))
+                        Text(
+                            "Playing",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = Color.White.copy(alpha = 0.9f),
+                        )
+                    }
+                }
             }
             Column(modifier = Modifier.padding(16.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {

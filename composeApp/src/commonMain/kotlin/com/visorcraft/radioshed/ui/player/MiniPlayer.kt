@@ -17,11 +17,18 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -103,17 +110,22 @@ fun MiniPlayer(
                         maxLines = 1,
                     )
                 }
-                TransportButton(label = "⏮", contentDesc = "Previous") {
-                    audioEngine.skipPrevious()
-                }
-                TransportButton(
-                    label = if (state == PlayerState.Playing) "⏸" else "▶",
+                TransportIconButton(
+                    icon = Icons.Filled.SkipPrevious,
+                    contentDesc = "Previous",
+                    onClick = { audioEngine.skipPrevious() },
+                )
+                TransportIconButton(
+                    icon = if (state == PlayerState.Playing) Icons.Filled.Pause
+                           else Icons.Filled.PlayArrow,
                     contentDesc = if (state == PlayerState.Playing) "Pause" else "Play",
-                    emphasized = true,
-                ) { audioEngine.togglePlayPause() }
-                TransportButton(label = "⏭", contentDesc = "Next") {
-                    audioEngine.skipNext()
-                }
+                    onClick = { audioEngine.togglePlayPause() },
+                )
+                TransportIconButton(
+                    icon = Icons.Filled.SkipNext,
+                    contentDesc = "Next",
+                    onClick = { audioEngine.skipNext() },
+                )
             }
         }
     }
@@ -136,44 +148,37 @@ private fun ArtworkPlaceholder(artworkUri: String?) {
                 contentScale = androidx.compose.ui.layout.ContentScale.Crop,
             )
         } else {
-            Text(
-                text = "♫",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onPrimaryContainer,
+            Icon(
+                imageVector = Icons.Filled.MusicNote,
+                contentDescription = null,
+                modifier = Modifier.size(20.dp),
+                tint = MaterialTheme.colorScheme.onPrimaryContainer,
             )
         }
     }
 }
 
 @Composable
-private fun TransportButton(
-    label: String,
+private fun TransportIconButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
     contentDesc: String,
-    emphasized: Boolean = false,
     onClick: () -> Unit,
 ) {
-    // The visible label is a Unicode glyph (⏮ ▶ ⏸ ⏭) which TalkBack
-    // / VoiceOver pronounce inconsistently across versions. We override
-    // the semantic content description on the modifier so screen readers
-    // announce "Previous" / "Play" / "Pause" / "Next" deterministically.
-    //
-    // 48dp height (Material's recommended touch-target minimum) — and
-    // critically, room for U+23F8 PAUSE which has *different* vertical
-    // metrics than the other media-control glyphs in Roboto/Noto. At
-    // 40dp it was clipped at the bottom; at 48dp the glyph fits and
-    // we still hit the M3 touch-target guideline in the same change.
-    TextButton(
+    // Vector icons render identically across system fonts (Roboto on
+    // Pixel, Noto on Samsung, SF Pro on iOS) — the original Unicode-glyph
+    // approach broke on Samsung Noto where U+23F8 PAUSE has different
+    // vertical metrics from ⏮/⏭ and got clipped at the bottom. The
+    // contentDescription drives accessibility; the icon drives visuals.
+    IconButton(
         onClick = onClick,
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
         modifier = Modifier
-            .size(width = 48.dp, height = 48.dp)
+            .size(48.dp)
             .semantics { contentDescription = contentDesc },
     ) {
-        Text(
-            text = label,
-            style = if (emphasized) MaterialTheme.typography.titleLarge
-                    else MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurface,
+        Icon(
+            imageVector = icon,
+            contentDescription = null,  // outer modifier already labels it
+            tint = MaterialTheme.colorScheme.onSurface,
         )
     }
 }

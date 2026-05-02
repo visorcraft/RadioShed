@@ -12,13 +12,21 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CloudOff
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DirectionsCar
+import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -321,12 +329,21 @@ private fun WelcomeStep(isCompact: Boolean, isWide: Boolean) {
                     horizontalAlignment = Alignment.Start,
                     verticalArrangement = Arrangement.spacedBy(20.dp),
                 ) {
-                    FeatureRow(glyph = "♫", title = "Stations from your library",
-                        body = "Smart shuffle, weighted picks, custom rules — your music, programmed how you like it.")
-                    FeatureRow(glyph = "✈", title = "Works fully offline",
-                        body = "No accounts, no telemetry. Internet is optional, never required.")
-                    FeatureRow(glyph = "▣", title = "Built for the car",
-                        body = "Big-glyph transport, fluid layout, station-centric UI tuned for head-units.")
+                    FeatureRow(
+                        icon = Icons.Filled.LibraryMusic,
+                        title = "Stations from your library",
+                        body = "Smart shuffle, weighted picks, custom rules — your music, programmed how you like it.",
+                    )
+                    FeatureRow(
+                        icon = Icons.Filled.CloudOff,
+                        title = "Works fully offline",
+                        body = "No accounts, no telemetry. Internet is optional, never required.",
+                    )
+                    FeatureRow(
+                        icon = Icons.Filled.DirectionsCar,
+                        title = "Built for the car",
+                        body = "Big-glyph transport, fluid layout, station-centric UI tuned for head-units.",
+                    )
                 }
             },
         )
@@ -359,13 +376,17 @@ private fun WelcomeStep(isCompact: Boolean, isWide: Boolean) {
 }
 
 @Composable
-private fun FeatureRow(glyph: String, title: String, body: String) {
+private fun FeatureRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    body: String,
+) {
     Row(verticalAlignment = Alignment.Top) {
-        Text(
-            text = glyph,
-            style = MaterialTheme.typography.headlineMedium,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.width(48.dp),
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            modifier = Modifier.size(36.dp).padding(end = 8.dp),
+            tint = MaterialTheme.colorScheme.primary,
         )
         Column(modifier = Modifier.weight(1f)) {
             Text(
@@ -400,11 +421,20 @@ private fun PermissionsStep(
             titleColor = MaterialTheme.colorScheme.onBackground,
             rightContent = {
                 if (granted) {
-                    Text(
-                        "Granted ✓",
-                        style = MaterialTheme.typography.headlineSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Filled.Check,
+                            contentDescription = null,
+                            modifier = Modifier.size(28.dp),
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            "Granted",
+                            style = MaterialTheme.typography.headlineSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
                 } else {
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
@@ -444,11 +474,20 @@ private fun PermissionsStep(
         )
         Spacer(Modifier.height(24.dp))
         if (granted) {
-            Text(
-                "Granted ✓",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.primary,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Filled.Check,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    "Granted",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
         } else {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Button(onClick = onRequest) { Text("Open Settings") }
@@ -669,10 +708,11 @@ private fun DoneStep(isWide: Boolean, scanStatus: ScanProgress?) {
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    Text(
-                        text = if (isFailed) "✕" else "✓",
-                        style = MaterialTheme.typography.displayLarge,
-                        color = titleColor,
+                    Icon(
+                        imageVector = if (isFailed) Icons.Filled.Close else Icons.Filled.Check,
+                        contentDescription = null,
+                        modifier = Modifier.size(72.dp),
+                        tint = titleColor,
                     )
                     Text(
                         text = if (isFailed) "Tap Back to retry, or finish anyway and reconfigure later in Library."

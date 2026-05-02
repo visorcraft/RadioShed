@@ -43,6 +43,13 @@ kotlin {
             implementation(libs.compose.runtime)
             implementation(libs.compose.foundation)
             implementation(libs.compose.material3)
+            // Vector icons (PlayArrow, Pause, SkipNext, SkipPrevious, …).
+            // We swapped from Unicode media glyphs (⏮ ⏸ ⏭) because their
+            // vertical metrics differ across system fonts — Samsung's Noto
+            // renders U+23F8 with extra descenders that get clipped at
+            // typical button heights, while Roboto on Pixels renders it
+            // fine. Vector icons render identically everywhere.
+            implementation(compose.materialIconsExtended)
             implementation(libs.compose.ui)
             implementation(libs.compose.components.resources)
             implementation(libs.compose.uiToolingPreview)

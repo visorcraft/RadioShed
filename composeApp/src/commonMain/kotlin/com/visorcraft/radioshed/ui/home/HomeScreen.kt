@@ -40,6 +40,7 @@ fun HomeScreen(
     onLibrary: () -> Unit,
     onSearch: () -> Unit,
     onStations: () -> Unit,
+    onSettings: () -> Unit,
     folderRepo: FolderRepository = koinInject(),
 ) {
     val folders by folderRepo.observeAll().collectAsState(initial = emptyList())
@@ -104,6 +105,11 @@ fun HomeScreen(
                         title = "Search",
                         subtitle = "Find tracks, artists, and albums",
                         onClick = onSearch,
+                    )
+                    NavCard(
+                        title = "Settings",
+                        subtitle = "Theme, accessibility, about",
+                        onClick = onSettings,
                     )
                 }
 

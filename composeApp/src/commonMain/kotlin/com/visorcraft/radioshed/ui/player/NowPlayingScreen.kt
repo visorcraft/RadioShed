@@ -21,9 +21,21 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.StarOutline
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -95,7 +107,15 @@ fun NowPlayingScreen(
             TopAppBar(
                 title = { Text("Now Playing", style = MaterialTheme.typography.titleSmall) },
                 navigationIcon = {
-                    TextButton(onClick = onClose) { Text("▼ Close") }
+                    TextButton(onClick = onClose) {
+                        Icon(
+                            imageVector = Icons.Filled.KeyboardArrowDown,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp),
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text("Close")
+                    }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface,
@@ -435,14 +455,14 @@ private fun TransportRow(
         horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        BigGlyphButton(
-            label = "⏮",
+        BigIconButton(
+            icon = Icons.Filled.SkipPrevious,
             description = "Previous",
             onClick = onPrev,
         )
 
-        BigGlyphButton(
-            label = if (playing) "⏸" else "▶",
+        BigIconButton(
+            icon = if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
             description = if (playing) "Pause" else "Play",
             emphasized = true,
             onClick = onTogglePlayPause,
@@ -467,10 +487,11 @@ private fun TransportRow(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text(
-                        text = "⏭",
-                        style = MaterialTheme.typography.headlineMedium,
-                        color = MaterialTheme.colorScheme.onBackground,
+                    Icon(
+                        imageVector = Icons.Filled.SkipNext,
+                        contentDescription = null,
+                        modifier = Modifier.size(36.dp),
+                        tint = MaterialTheme.colorScheme.onBackground,
                     )
                 }
             }
@@ -498,23 +519,26 @@ private fun TransportRow(
 }
 
 @Composable
-private fun BigGlyphButton(
-    label: String,
+private fun BigIconButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
     description: String,
     emphasized: Boolean = false,
     onClick: () -> Unit,
 ) {
+    // Vector icons everywhere — see MiniPlayer.TransportIconButton for why
+    // we don't use Unicode media glyphs (Samsung Noto vs Roboto vs SF Pro
+    // render U+23F8 with different metrics; vector icons are font-free).
     IconButton(
         onClick = onClick,
         modifier = Modifier
             .size(if (emphasized) 80.dp else 64.dp)
             .semantics { contentDescription = description },
     ) {
-        Text(
-            text = label,
-            style = if (emphasized) MaterialTheme.typography.displaySmall
-                    else MaterialTheme.typography.headlineMedium,
-            color = MaterialTheme.colorScheme.onBackground,
+        Icon(
+            imageVector = icon,
+            contentDescription = null,  // outer modifier already labels it
+            modifier = Modifier.size(if (emphasized) 48.dp else 36.dp),
+            tint = MaterialTheme.colorScheme.onBackground,
         )
     }
 }
@@ -538,11 +562,12 @@ private fun RatingRow(current: Double, onRate: (Double) -> Unit) {
                     .size(48.dp)
                     .semantics { contentDescription = "$star star${if (star == 1) "" else "s"}" },
             ) {
-                Text(
-                    text = if (filled) "★" else "☆",
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = if (filled) MaterialTheme.colorScheme.primary
-                            else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f),
+                Icon(
+                    imageVector = if (filled) Icons.Filled.Star else Icons.Outlined.StarOutline,
+                    contentDescription = null,
+                    modifier = Modifier.size(28.dp),
+                    tint = if (filled) MaterialTheme.colorScheme.primary
+                           else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f),
                 )
             }
         }

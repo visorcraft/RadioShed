@@ -19,15 +19,21 @@ import com.visorcraft.radioshed.ui.onboarding.OnboardingScreen
 import com.visorcraft.radioshed.ui.player.MiniPlayer
 import com.visorcraft.radioshed.ui.player.NowPlayingScreen
 import com.visorcraft.radioshed.ui.search.SearchScreen
+import com.visorcraft.radioshed.ui.settings.AppSettingsScreen
 import com.visorcraft.radioshed.ui.stations.StationEditorScreen
 import com.visorcraft.radioshed.ui.stations.StationsHomeScreen
 import com.visorcraft.radioshed.ui.theme.RadioShedTheme
+import com.visorcraft.radioshed.ui.theme.ThemeMode
 import org.koin.compose.koinInject
 
 @Composable
 @Preview
 fun App(settings: SettingsStore = koinInject()) {
-    RadioShedTheme {
+    // Live-mutable theme mode: read once from the persisted setting, then
+    // hold in state so the AppSettingsScreen picker can re-theme the whole
+    // app instantly when the user changes it (no app restart needed).
+    var themeMode by remember { mutableStateOf(settings.getThemeMode()) }
+    RadioShedTheme(mode = themeMode) {
         // Determine the initial screen exactly once per app launch.
         val startScreen = remember {
             if (settings.isOnboardingComplete()) AppScreen.Home else AppScreen.Onboarding
@@ -80,11 +86,21 @@ fun App(settings: SettingsStore = koinInject()) {
                         onLibrary = { current = AppScreen.LibrarySettings },
                         onSearch = { current = AppScreen.Search },
                         onStations = { current = AppScreen.Stations },
+                        onSettings = { current = AppScreen.AppSettings },
                     )
 
                     AppScreen.LibrarySettings -> {
                         PlatformBackHandler { current = AppScreen.Home }
                         LibrarySettingsScreen(onBack = { current = AppScreen.Home })
+                    }
+
+                    AppScreen.AppSettings -> {
+                        PlatformBackHandler { current = AppScreen.Home }
+                        AppSettingsScreen(
+                            onBack = { current = AppScreen.Home },
+                            currentThemeMode = themeMode,
+                            onThemeModeChange = { themeMode = it },
+                        )
                     }
 
                     AppScreen.Search -> {
@@ -105,7 +121,8 @@ fun App(settings: SettingsStore = koinInject()) {
                     AppScreen.Onboarding,
                     AppScreen.NowPlaying,
                     AppScreen.NewStation,
-                    is AppScreen.EditStation -> Unit  // handled above
+                    is AppScreen.EditStation,
+                    -> Unit  // handled above
                 }
             }
             MiniPlayer(onExpand = { current = AppScreen.NowPlaying })
