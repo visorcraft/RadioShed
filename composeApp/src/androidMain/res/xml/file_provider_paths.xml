@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Paths that FileProvider is allowed to expose as content:// URIs.
+    Currently we only share backup files from filesDir/backups/. The
+    `name` attribute is the URI segment that will appear after the
+    authority — receiving apps see e.g.
+    content://com.visorcraft.radioshed.fileprovider/backups/foo.json
+-->
+<paths>
+    <files-path
+        name="backups"
+        path="backups/" />
+</paths>

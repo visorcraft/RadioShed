@@ -8,6 +8,7 @@ import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.CommandButton
+import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.LibraryResult
 import androidx.media3.session.MediaLibraryService
 import androidx.media3.session.MediaSession
@@ -136,6 +137,21 @@ class RadioShedMediaSessionService : MediaLibraryService() {
 
         librarySession = MediaLibrarySession.Builder(this, player, RadioShedLibraryCallback())
             .build()
+
+        // Override the default media notification provider so the
+        // status-bar small icon is the RadioShed antenna silhouette
+        // rather than the system-default media-playback icon (which
+        // is generic across all media apps and looks unprofessional).
+        // Default channel id / name / button order are preserved.
+        val notificationProvider = DefaultMediaNotificationProvider.Builder(this)
+            .setNotificationId(NOTIFICATION_ID)
+            .setChannelId(NOTIFICATION_CHANNEL_ID)
+            .setChannelName(R.string.notification_channel_playback)
+            .build()
+            .apply {
+                setSmallIcon(R.drawable.ic_radioshed_notification)
+            }
+        setMediaNotificationProvider(notificationProvider)
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? =
@@ -462,5 +478,12 @@ class RadioShedMediaSessionService : MediaLibraryService() {
         // arbitrary but must round-trip exactly through SessionCommand.
         const val ACTION_TOGGLE_STAR = "com.visorcraft.radioshed.RATE_STAR"
         const val ACTION_DISLIKE_ON_STATION = "com.visorcraft.radioshed.DISLIKE"
+
+        // Notification config for the foreground media-playback service.
+        // Channel id is referenced from the manifest's auto-created
+        // foreground-service channel; OS uses it for "Now playing"
+        // notifications. Notification id is unique within our app.
+        const val NOTIFICATION_ID = 0xCAFE  // 51966
+        const val NOTIFICATION_CHANNEL_ID = "radioshed.playback"
     }
 }

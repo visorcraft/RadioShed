@@ -1,3 +1,8 @@
 <resources>
     <string name="app_name">RadioShed</string>
+    <!-- Channel name shown in system Settings → Apps → RadioShed → Notifications.
+         The channel itself is created internally by Media3's
+         DefaultMediaNotificationProvider. -->
+    <string name="notification_channel_playback">Playback</string>
+    <string name="backup_share_subject">RadioShed backup</string>
 </resources>

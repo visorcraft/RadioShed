@@ -38,6 +38,15 @@ class BackupService(
 
     suspend fun listBackups(): List<BackupFile> = storage.list()
 
+    /**
+     * Cap on how many backup files we keep on disk. When [export]
+     * succeeds we prune anything older than the most-recent N. This
+     * keeps `filesDir/backups/` bounded — without it, a user who
+     * makes a backup before each car drive would accumulate hundreds
+     * of files. Surface as a setting later if this becomes a complaint.
+     */
+    private val maxBackupsToRetain: Int = 10
+
     suspend fun export(): ExportResult {
         val stations = stationRepo.list().filter { !it.isBuiltIn }.map { s ->
             BackupStation(
@@ -79,6 +88,19 @@ class BackupService(
         val filename = "radioshed-backup-${nowMillis()}.json"
         val file = storage.write(filename, json.encodeToByteArray())
             ?: return ExportResult.Failed("Couldn't write backup file.")
+
+        // Prune older backups to a small cap so the directory doesn't
+        // accumulate unboundedly. Errors during prune are swallowed —
+        // a failed delete is not a reason to fail the export the user
+        // just successfully completed.
+        runCatching {
+            val all = storage.list()
+            if (all.size > maxBackupsToRetain) {
+                all.drop(maxBackupsToRetain).forEach { stale ->
+                    runCatching { storage.delete(stale.uri) }
+                }
+            }
+        }
 
         return ExportResult.Saved(
             file = file,

@@ -20,6 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Restore
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -48,6 +49,7 @@ import androidx.compose.ui.unit.dp
 import com.visorcraft.radioshed.data.nowMillis
 import com.visorcraft.radioshed.source.BackupFile
 import com.visorcraft.radioshed.source.BackupService
+import com.visorcraft.radioshed.source.BackupSharer
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
@@ -62,6 +64,7 @@ import org.koin.compose.koinInject
 fun BackupRestoreScreen(
     onBack: () -> Unit,
     backupService: BackupService = koinInject(),
+    backupSharer: BackupSharer = koinInject(),
 ) {
     val scope = rememberCoroutineScope()
     var files by remember { mutableStateOf<List<BackupFile>>(emptyList()) }
@@ -159,6 +162,12 @@ fun BackupRestoreScreen(
                         BackupRow(
                             file = file,
                             onRestore = { restoreConfirm = file },
+                            onShare = {
+                                scope.launch {
+                                    val ok = backupSharer.share(file)
+                                    if (!ok) status = "Couldn't share backup."
+                                }
+                            },
                             onDelete = { deleteConfirm = file },
                             enabled = !working,
                         )
@@ -235,6 +244,7 @@ fun BackupRestoreScreen(
 private fun BackupRow(
     file: BackupFile,
     onRestore: () -> Unit,
+    onShare: () -> Unit,
     onDelete: () -> Unit,
     enabled: Boolean,
 ) {
@@ -274,6 +284,9 @@ private fun BackupRow(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
                 )
+            }
+            IconButton(onClick = onShare, enabled = enabled) {
+                Icon(Icons.Filled.Share, contentDescription = "Share")
             }
             IconButton(onClick = onRestore, enabled = enabled) {
                 Icon(Icons.Filled.Restore, contentDescription = "Restore")

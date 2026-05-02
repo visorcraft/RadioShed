@@ -102,6 +102,22 @@
                 <action android:name="android.media.browse.MediaBrowserService" />
             </intent-filter>
         </service>
+
+        <!-- FileProvider for the Backup &amp; Restore screen's "Share"
+             action. Backups live under filesDir/backups/ which other
+             apps can't read directly; FileProvider hands out content://
+             URIs scoped to the receiving app via FLAG_GRANT_READ_URI_PERMISSION.
+             The authority must match the one we build into the URI in
+             BackupRestoreScreen. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_provider_paths" />
+        </provider>
     </application>
 
 </manifest>

@@ -16,9 +16,11 @@ import com.visorcraft.radioshed.source.IosArtworkPersister
 import com.visorcraft.radioshed.source.IosFileBrowser
 import com.visorcraft.radioshed.source.IosFileEnumerator
 import com.visorcraft.radioshed.source.IosTagReader
+import com.visorcraft.radioshed.source.BackupSharer
 import com.visorcraft.radioshed.source.BackupStorage
 import com.visorcraft.radioshed.source.LocalLyricsLoader
 import com.visorcraft.radioshed.source.LyricsFetcher
+import com.visorcraft.radioshed.source.NullBackupSharer
 import com.visorcraft.radioshed.source.NullBackupStorage
 import com.visorcraft.radioshed.source.NullCoverArtFetcher
 import com.visorcraft.radioshed.source.NullLocalLyricsLoader
@@ -41,6 +43,7 @@ actual val platformModule: Module = module {
     single<LyricsFetcher> { NullLyricsFetcher() }
     single<LocalLyricsLoader> { NullLocalLyricsLoader() }
     single<BackupStorage> { NullBackupStorage() }
+    single<BackupSharer> { NullBackupSharer() }
     single<FileBrowser> { IosFileBrowser() }
     single { StoragePermissions() }
     single { StorageVolumes() }
