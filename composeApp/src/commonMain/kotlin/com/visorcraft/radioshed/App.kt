@@ -196,6 +196,10 @@ fun App(
                 onOpenLyrics = { current = AppScreen.Lyrics },
                 onOpenAlbum = { id -> current = AppScreen.AlbumDetail(id) },
                 onOpenArtist = { id -> current = AppScreen.ArtistDetail(id) },
+                onOpenStation = { id ->
+                    current = AppScreen.StationDetail(id)
+                    nowPlayingReturnTo = null
+                },
             )
             return@CompositionLocalProvider
         }

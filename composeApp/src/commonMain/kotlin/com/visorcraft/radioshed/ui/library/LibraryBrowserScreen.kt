@@ -25,6 +25,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Album
+import androidx.compose.material.icons.filled.Casino
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Settings
@@ -101,9 +102,16 @@ fun LibraryBrowserScreen(
     audioEngine: AudioEngine = koinInject(),
     stationPlayback: StationPlayback = koinInject(),
     settings: SettingsStore = koinInject(),
+    stationRepo: com.visorcraft.radioshed.data.StationRepository = koinInject(),
+    ratingRepo: com.visorcraft.radioshed.data.RatingRepository = koinInject(),
 ) {
     val scope = rememberCoroutineScope()
     var contextTrackId by remember { mutableStateOf<Long?>(null) }
+    // Long-press on an album / artist tile opens the corresponding
+    // context sheet — Play / Shuffle / Play next / Add to queue.
+    // Sister surface to TrackContextSheet, but at album/artist scope.
+    var contextAlbum by remember { mutableStateOf<Album?>(null) }
+    var contextArtist by remember { mutableStateOf<Artist?>(null) }
     // Now-playing indicator on Songs rows: collect the engine's
     // current track id so each row can self-tag.
     val nowPlaying by audioEngine.nowPlaying.collectAsState()
@@ -118,6 +126,14 @@ fun LibraryBrowserScreen(
     val trackCount by libraryRepo.observeTrackCount().collectAsState(initial = -1L)
     var allTracks by remember { mutableStateOf<List<Track>>(emptyList()) }
     var genres by remember { mutableStateOf<List<String>>(emptyList()) }
+    // Per-track play counts + ratings, lazy-fetched once allTracks
+    // resolves. We hold these as Map<TrackId, *> so the sort path
+    // can do O(n log n) lookups without hitting the DB per row.
+    // Empty default keeps the initial render snappy — sort by play
+    // count or rating just shows whatever order we have until the
+    // map fills.
+    var playCounts by remember { mutableStateOf<Map<Long, Long>>(emptyMap()) }
+    var ratings by remember { mutableStateOf<Map<Long, Double>>(emptyMap()) }
 
     // Eagerly load all tracks once. For huge libraries (>50k) this could
     // become a memory issue; we'd page or virtualize then. For typical
@@ -132,6 +148,9 @@ fun LibraryBrowserScreen(
         // value) so this is a fast index scan even on large libraries.
         genres = libraryRepo.distinctTagValues("GENRE")
             .filter { it.isNotBlank() }
+        val ids = allTracks.map { it.id }
+        playCounts = stationRepo.playCountForTracks(ids)
+        ratings = ratingRepo.ratingsForTracks(ids)
     }
 
     // Persist + restore tab + sort selection across navigations. Filters
@@ -175,6 +194,29 @@ fun LibraryBrowserScreen(
                 },
                 navigationIcon = { TextButton(onClick = onBack) { Text("Back") } },
                 actions = {
+                    if (selectedTab == LibraryTab.Albums && albums.isNotEmpty()) {
+                        // Random-album entry point on the Albums view: picks
+                        // one album from the visible grid at random and
+                        // queues all of its tracks in album order. Sister
+                        // action to the Songs tab's Shuffle-all — same idea
+                        // ("surprise me, no station setup needed") but at
+                        // album granularity, which is how plenty of users
+                        // think about their music.
+                        IconButton(onClick = {
+                            val pick = albums.random()
+                            scope.launch {
+                                val tracks = libraryRepo.tracksForAlbum(pick.id)
+                                if (tracks.isNotEmpty()) {
+                                    stationPlayback.playTracks(tracks, startIndex = 0)
+                                }
+                            }
+                        }) {
+                            Icon(
+                                imageVector = Icons.Filled.Casino,
+                                contentDescription = "Random album",
+                            )
+                        }
+                    }
                     if (selectedTab == LibraryTab.Songs && allTracks.isNotEmpty()) {
                         // Shuffle-all on the visible Songs view: kicks
                         // off an ad-hoc queue from the entire current
@@ -300,6 +342,12 @@ fun LibraryBrowserScreen(
                         SongSort.TitleDesc -> filtered.sortedByDescending { it.title.lowercase() }
                         SongSort.RecentlyAdded -> filtered.sortedByDescending { it.fileCtime }
                         SongSort.Duration -> filtered.sortedBy { it.durationMs }
+                        SongSort.MostPlayed -> filtered.sortedByDescending {
+                            playCounts[it.id] ?: 0L
+                        }
+                        SongSort.TopRated -> filtered.sortedByDescending {
+                            ratings[it.id] ?: -1.0
+                        }
                     }
 
                     // Tap-to-play seeds an ad-hoc queue from the visible list,
@@ -342,12 +390,14 @@ fun LibraryBrowserScreen(
                     ArtistList(
                         artists = artists,
                         onPick = { a -> onArtistTap(a.id) },
+                        onLongPress = { a -> contextArtist = a },
                     )
                 }
                 LibraryTab.Albums -> {
                     AlbumList(
                         albums = albums,
                         onPick = { al -> onAlbumTap(al.id) },
+                        onLongPress = { al -> contextAlbum = al },
                     )
                 }
                 LibraryTab.Genres -> {
@@ -366,6 +416,26 @@ fun LibraryBrowserScreen(
             onDismiss = { contextTrackId = null },
         )
     }
+    contextAlbum?.let { album ->
+        AlbumContextSheet(
+            album = album,
+            onDismiss = { contextAlbum = null },
+            onGoToAlbum = {
+                contextAlbum = null
+                onAlbumTap(album.id)
+            },
+        )
+    }
+    contextArtist?.let { artist ->
+        ArtistContextSheet(
+            artist = artist,
+            onDismiss = { contextArtist = null },
+            onGoToArtist = {
+                contextArtist = null
+                onArtistTap(artist.id)
+            },
+        )
+    }
 }
 
 private enum class LibraryTab(val label: String) {
@@ -380,6 +450,8 @@ private enum class SongSort(val label: String) {
     TitleDesc("Title — Z to A"),
     RecentlyAdded("Recently added"),
     Duration("Duration"),
+    MostPlayed("Most played"),
+    TopRated("Top rated"),
 }
 
 @Composable
@@ -466,7 +538,11 @@ private fun SongRow(
 }
 
 @Composable
-private fun ArtistList(artists: List<Artist>, onPick: (Artist) -> Unit) {
+private fun ArtistList(
+    artists: List<Artist>,
+    onPick: (Artist) -> Unit,
+    onLongPress: (Artist) -> Unit = {},
+) {
     if (artists.isEmpty()) {
         EmptyHint("No artists yet — scan a folder with tagged music to populate.")
         return
@@ -484,13 +560,21 @@ private fun ArtistList(artists: List<Artist>, onPick: (Artist) -> Unit) {
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         gridItems(artists, key = { it.id }) { artist ->
-            ArtistTile(artist = artist, onTap = { onPick(artist) })
+            ArtistTile(
+                artist = artist,
+                onTap = { onPick(artist) },
+                onLongPress = { onLongPress(artist) },
+            )
         }
     }
 }
 
 @Composable
-private fun AlbumList(albums: List<Album>, onPick: (Album) -> Unit) {
+private fun AlbumList(
+    albums: List<Album>,
+    onPick: (Album) -> Unit,
+    onLongPress: (Album) -> Unit = {},
+) {
     if (albums.isEmpty()) {
         EmptyHint("No albums yet — scan a folder with tagged music to populate.")
         return
@@ -503,14 +587,28 @@ private fun AlbumList(albums: List<Album>, onPick: (Album) -> Unit) {
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         gridItems(albums, key = { it.id }) { album ->
-            AlbumTile(album = album, onTap = { onPick(album) })
+            AlbumTile(
+                album = album,
+                onTap = { onPick(album) },
+                onLongPress = { onLongPress(album) },
+            )
         }
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun AlbumTile(album: Album, onTap: () -> Unit) {
-    Column(modifier = Modifier.clickable(onClick = onTap)) {
+private fun AlbumTile(
+    album: Album,
+    onTap: () -> Unit,
+    onLongPress: () -> Unit = {},
+) {
+    Column(
+        modifier = Modifier.combinedClickable(
+            onClick = onTap,
+            onLongClick = onLongPress,
+        ),
+    ) {
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
@@ -605,12 +703,20 @@ private fun GenreTile(genre: String, onTap: () -> Unit) {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ArtistTile(artist: Artist, onTap: () -> Unit) {
+private fun ArtistTile(
+    artist: Artist,
+    onTap: () -> Unit,
+    onLongPress: () -> Unit = {},
+) {
     val hue = (artist.sortName.hashCode().rem(360) + 360).rem(360).toFloat()
     val tint = androidx.compose.ui.graphics.Color.hsv(hue, 0.55f, 0.85f)
     Column(
-        modifier = Modifier.clickable(onClick = onTap),
+        modifier = Modifier.combinedClickable(
+            onClick = onTap,
+            onLongClick = onLongPress,
+        ),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Box(

@@ -75,6 +75,8 @@ fun PlaylistDetailScreen(
     repo: PlaylistRepository = koinInject(),
     stationPlayback: StationPlayback = koinInject(),
     audioEngine: AudioEngine = koinInject(),
+    libraryRepo: com.visorcraft.radioshed.data.LibraryRepository = koinInject(),
+    playlistExporter: com.visorcraft.radioshed.source.PlaylistExporter = koinInject(),
 ) {
     var playlist by remember { mutableStateOf<Playlist?>(null) }
     var tracks by remember { mutableStateOf<List<Track>>(emptyList()) }
@@ -111,6 +113,35 @@ fun PlaylistDetailScreen(
                             expanded = menuOpen,
                             onDismissRequest = { menuOpen = false },
                         ) {
+                            DropdownMenuItem(
+                                text = { Text("Export as .m3u…") },
+                                enabled = tracks.isNotEmpty(),
+                                onClick = {
+                                    menuOpen = false
+                                    val name = playlist?.name ?: "playlist"
+                                    val snapshot = tracks
+                                    scope.launch {
+                                        // Resolve primary-artist names per track in
+                                        // one pass before building the entry list.
+                                        // This avoids holding a partial list with
+                                        // missing artists in the EXTINF labels.
+                                        val artistByTrack: Map<Long, String?> =
+                                            snapshot.associate { t ->
+                                                t.id to libraryRepo.artistsForTrack(t.id)
+                                                    .firstOrNull()?.name
+                                            }
+                                        val entries = snapshot.map { t ->
+                                            com.visorcraft.radioshed.source.M3uEntry(
+                                                absolutePath = t.path,
+                                                durationSec = (t.durationMs / 1000L).toInt(),
+                                                artist = artistByTrack[t.id],
+                                                title = t.title.ifBlank { t.fileName },
+                                            )
+                                        }
+                                        playlistExporter.exportM3u(name, entries)
+                                    }
+                                },
+                            )
                             DropdownMenuItem(
                                 text = { Text("Delete playlist") },
                                 onClick = {

@@ -42,6 +42,7 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.RepeatOne
+import androidx.compose.material.icons.filled.Whatshot
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.ShuffleOn
 import androidx.compose.material.icons.automirrored.filled.VolumeDown
@@ -52,6 +53,8 @@ import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.automirrored.filled.StarHalf
+import androidx.compose.material.icons.filled.Forward10
+import androidx.compose.material.icons.filled.Replay10
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Star
@@ -124,6 +127,7 @@ fun NowPlayingScreen(
     onOpenLyrics: () -> Unit = {},
     onOpenAlbum: (Long) -> Unit = {},
     onOpenArtist: (Long) -> Unit = {},
+    onOpenStation: (Long) -> Unit = {},
     audioEngine: AudioEngine = koinInject(),
     stationPlayback: StationPlayback = koinInject(),
     ratingRepo: RatingRepository = koinInject(),
@@ -152,6 +156,10 @@ fun NowPlayingScreen(
     var overflowMenuOpen by remember { mutableStateOf(false) }
     var addToPlaylistTrackId by remember { mutableStateOf<Long?>(null) }
     var trackInfoOpen by remember { mutableStateOf(false) }
+    // Tap-to-expand lightbox for the album artwork. Renders a
+    // fullscreen overlay above the rest of NowPlaying so the user
+    // can stare at the cover at full resolution. Tap or back closes.
+    var artworkLightboxOpen by remember { mutableStateOf(false) }
     // Snapshot taken when the sheet opens; refresh each time the sheet is
     // re-opened so the user sees the current upcoming/recent at that
     // moment without having to subscribe to a live flow we don't have.
@@ -340,6 +348,17 @@ fun NowPlayingScreen(
                                     },
                                 )
                                 DropdownMenuItem(
+                                    text = { Text("Go to station") },
+                                    leadingIcon = {
+                                        Icon(Icons.Filled.Whatshot, null)
+                                    },
+                                    enabled = currentStation != null,
+                                    onClick = {
+                                        overflowMenuOpen = false
+                                        currentStation?.id?.let { onOpenStation(it) }
+                                    },
+                                )
+                                DropdownMenuItem(
                                     text = { Text("Track info") },
                                     leadingIcon = { Icon(Icons.Filled.Info, null) },
                                     enabled = track != null,
@@ -410,6 +429,7 @@ fun NowPlayingScreen(
         if (isNarrow && overflowMenuOpen) {
             OverflowSheet(
                 track = nowPlaying,
+                stationId = currentStation?.id,
                 onDismiss = { overflowMenuOpen = false },
                 onAddToPlaylist = { tid ->
                     overflowMenuOpen = false
@@ -427,6 +447,10 @@ fun NowPlayingScreen(
                         libraryRepo.artistsForTrack(tid)
                             .firstOrNull()?.id?.let { onOpenArtist(it) }
                     }
+                },
+                onGoToStation = { sid ->
+                    overflowMenuOpen = false
+                    onOpenStation(sid)
                 },
                 onTrackInfo = {
                     overflowMenuOpen = false
@@ -484,6 +508,19 @@ fun NowPlayingScreen(
                             stationPlayback.skipNext()
                         }
                     },
+                    onTapArtwork = { artworkLightboxOpen = true },
+                    onTapArtist = {
+                        scope.launch {
+                            libraryRepo.artistsForTrack(playable.trackId)
+                                .firstOrNull()?.id?.let { onOpenArtist(it) }
+                        }
+                    },
+                    onTapAlbum = {
+                        scope.launch {
+                            libraryRepo.getTrackById(playable.trackId)
+                                ?.albumId?.let { onOpenAlbum(it) }
+                        }
+                    },
                     driveMode = driveMode,
                 )
             } else {
@@ -516,7 +553,27 @@ fun NowPlayingScreen(
                             stationPlayback.skipNext()
                         }
                     },
+                    onTapArtwork = { artworkLightboxOpen = true },
+                    onTapArtist = {
+                        scope.launch {
+                            libraryRepo.artistsForTrack(playable.trackId)
+                                .firstOrNull()?.id?.let { onOpenArtist(it) }
+                        }
+                    },
+                    onTapAlbum = {
+                        scope.launch {
+                            libraryRepo.getTrackById(playable.trackId)
+                                ?.albumId?.let { onOpenAlbum(it) }
+                        }
+                    },
                     driveMode = driveMode,
+                )
+            }
+            if (artworkLightboxOpen) {
+                ArtworkLightbox(
+                    artworkUri = playable.artworkUri,
+                    accent = accent,
+                    onDismiss = { artworkLightboxOpen = false },
                 )
             }
         }
@@ -528,10 +585,12 @@ fun NowPlayingScreen(
 @Composable
 private fun OverflowSheet(
     track: com.visorcraft.radioshed.audio.Playable?,
+    stationId: Long?,
     onDismiss: () -> Unit,
     onAddToPlaylist: (Long) -> Unit,
     onGoToAlbum: (Long) -> Unit,
     onGoToArtist: (Long) -> Unit,
+    onGoToStation: (Long) -> Unit,
     onTrackInfo: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -554,6 +613,12 @@ private fun OverflowSheet(
                 label = "Go to artist",
                 enabled = track != null && !track.artist.isNullOrBlank(),
                 onClick = { track?.trackId?.let(onGoToArtist) },
+            )
+            OverflowSheetItem(
+                icon = Icons.Filled.Whatshot,
+                label = "Go to station",
+                enabled = stationId != null,
+                onClick = { stationId?.let(onGoToStation) },
             )
             OverflowSheetItem(
                 icon = Icons.Filled.Info,
@@ -614,6 +679,9 @@ private fun CompactLayout(
     onToggleLike: () -> Unit,
     onVolume: (Float) -> Unit,
     onDislikeOnStation: () -> Unit,
+    onTapArtwork: () -> Unit,
+    onTapArtist: () -> Unit,
+    onTapAlbum: () -> Unit,
     driveMode: Boolean,
 ) {
     Column(
@@ -627,9 +695,16 @@ private fun CompactLayout(
                 .widthIn(max = 480.dp)
                 .fillMaxWidth()
                 .aspectRatio(1f),
+            onTap = onTapArtwork,
         )
         Spacer(Modifier.height(24.dp))
-        TrackInfo(playable, stationName, alignment = Alignment.CenterHorizontally)
+        TrackInfo(
+            playable = playable,
+            stationName = stationName,
+            alignment = Alignment.CenterHorizontally,
+            onTapArtist = onTapArtist,
+            onTapAlbum = onTapAlbum,
+        )
         Spacer(Modifier.height(16.dp))
         Scrubber(positionMs, durationMs, onSeek)
         Spacer(Modifier.height(16.dp))
@@ -638,6 +713,11 @@ private fun CompactLayout(
             onTogglePlayPause = onTogglePlayPause,
             onPrev = onPrev,
             onNext = onNext,
+            onReplay10 = { onSeek((positionMs - 10_000).coerceAtLeast(0L)) },
+            onForward10 = {
+                val cap = if (durationMs > 0) durationMs - 250L else Long.MAX_VALUE
+                onSeek((positionMs + 10_000).coerceAtMost(cap))
+            },
             onDislikeOnStation = onDislikeOnStation,
             driveMode = driveMode,
         )
@@ -672,6 +752,9 @@ private fun TwoPaneLayout(
     onToggleLike: () -> Unit,
     onVolume: (Float) -> Unit,
     onDislikeOnStation: () -> Unit,
+    onTapArtwork: () -> Unit,
+    onTapArtist: () -> Unit,
+    onTapAlbum: () -> Unit,
     driveMode: Boolean,
 ) {
     Row(
@@ -699,6 +782,7 @@ private fun TwoPaneLayout(
                     .fillMaxWidth()
                     .widthIn(max = 560.dp)
                     .aspectRatio(1f),
+                onTap = onTapArtwork,
             )
         }
         Spacer(Modifier.width(32.dp))
@@ -706,7 +790,13 @@ private fun TwoPaneLayout(
             modifier = Modifier.weight(1f).fillMaxHeight(),
             verticalArrangement = Arrangement.Center,
         ) {
-            TrackInfo(playable, stationName, alignment = Alignment.Start)
+            TrackInfo(
+                playable = playable,
+                stationName = stationName,
+                alignment = Alignment.Start,
+                onTapArtist = onTapArtist,
+                onTapAlbum = onTapAlbum,
+            )
             Spacer(Modifier.height(24.dp))
             Scrubber(positionMs, durationMs, onSeek)
             Spacer(Modifier.height(24.dp))
@@ -715,6 +805,11 @@ private fun TwoPaneLayout(
                 onTogglePlayPause = onTogglePlayPause,
                 onPrev = onPrev,
                 onNext = onNext,
+                onReplay10 = { onSeek((positionMs - 10_000).coerceAtLeast(0L)) },
+                onForward10 = {
+                    val cap = if (durationMs > 0) durationMs - 250L else Long.MAX_VALUE
+                    onSeek((positionMs + 10_000).coerceAtMost(cap))
+                },
                 onDislikeOnStation = onDislikeOnStation,
                 driveMode = driveMode,
             )
@@ -769,11 +864,70 @@ private fun BlurredBackdrop(artworkUri: String?, reduceMotion: Boolean) {
     }
 }
 
+/**
+ * Fullscreen lightbox for the album artwork. Tap the cover anywhere
+ * on Now Playing → this overlay slides on top of the player. Tap the
+ * dimmed scrim or back-press to dismiss. Renders the art at the
+ * largest square that fits the viewport, on a near-black scrim that
+ * lets the image dominate. Fallback gradient when no artwork URI —
+ * still useful so the lightbox isn't a no-op for files without art.
+ */
+@Composable
+private fun ArtworkLightbox(
+    artworkUri: String?,
+    accent: Color,
+    onDismiss: () -> Unit,
+) {
+    com.visorcraft.radioshed.nav.PlatformBackHandler(onBack = onDismiss)
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.92f))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onDismiss,
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            modifier = Modifier
+                .padding(24.dp)
+                .fillMaxWidth()
+                .widthIn(max = 720.dp)
+                .aspectRatio(1f)
+                .clip(RoundedCornerShape(20.dp))
+                .background(
+                    Brush.linearGradient(
+                        colors = listOf(accent, accent.copy(alpha = 0.55f)),
+                    ),
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (artworkUri != null) {
+                coil3.compose.AsyncImage(
+                    model = artworkUri,
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+                )
+            } else {
+                Text(
+                    text = "♫",
+                    style = MaterialTheme.typography.displayLarge,
+                    color = Color.White.copy(alpha = 0.85f),
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun AlbumArtPlaceholder(
     accent: Color,
     artworkUri: String?,
     modifier: Modifier = Modifier,
+    onTap: () -> Unit = {},
 ) {
     Box(
         modifier = modifier
@@ -782,7 +936,8 @@ private fun AlbumArtPlaceholder(
                 Brush.linearGradient(
                     colors = listOf(accent, accent.copy(alpha = 0.55f)),
                 ),
-            ),
+            )
+            .clickable(onClick = onTap),
         contentAlignment = Alignment.Center,
     ) {
         if (artworkUri != null) {
@@ -810,6 +965,8 @@ private fun TrackInfo(
     playable: com.visorcraft.radioshed.audio.Playable,
     stationName: String?,
     alignment: Alignment.Horizontal,
+    onTapArtist: () -> Unit = {},
+    onTapAlbum: () -> Unit = {},
 ) {
     Column(horizontalAlignment = alignment, modifier = Modifier.fillMaxWidth()) {
         Text(
@@ -821,17 +978,55 @@ private fun TrackInfo(
             overflow = TextOverflow.Ellipsis,
             textAlign = if (alignment == Alignment.CenterHorizontally) TextAlign.Center else TextAlign.Start,
         )
-        val subtitle = listOfNotNull(playable.artist, playable.album).joinToString(" · ")
-        if (subtitle.isNotBlank()) {
+        // Artist · album rendered as separate spans so each is its
+        // own tap target. Saves a trip through the overflow menu when
+        // the user wants to drill into the artist's catalogue or the
+        // current album. Falls back to a non-clickable Text if both
+        // fields are blank — neither span is meaningful then.
+        val artist = playable.artist?.takeIf { it.isNotBlank() }
+        val album = playable.album?.takeIf { it.isNotBlank() }
+        if (artist != null || album != null) {
             Spacer(Modifier.height(4.dp))
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                textAlign = if (alignment == Alignment.CenterHorizontally) TextAlign.Center else TextAlign.Start,
-            )
+            Row(
+                horizontalArrangement = if (alignment == Alignment.CenterHorizontally)
+                    Arrangement.Center else Arrangement.Start,
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                val subStyle = MaterialTheme.typography.bodyLarge
+                val subColor = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f)
+                if (artist != null) {
+                    Text(
+                        text = artist,
+                        style = subStyle,
+                        color = subColor,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier
+                            .clickable(onClick = onTapArtist)
+                            .padding(horizontal = 4.dp, vertical = 2.dp),
+                    )
+                }
+                if (artist != null && album != null) {
+                    Text(
+                        text = " · ",
+                        style = subStyle,
+                        color = subColor,
+                    )
+                }
+                if (album != null) {
+                    Text(
+                        text = album,
+                        style = subStyle,
+                        color = subColor,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier
+                            .clickable(onClick = onTapAlbum)
+                            .padding(horizontal = 4.dp, vertical = 2.dp),
+                    )
+                }
+            }
         }
         if (stationName != null) {
             Spacer(Modifier.height(8.dp))
@@ -902,6 +1097,8 @@ private fun TransportRow(
     onTogglePlayPause: () -> Unit,
     onPrev: () -> Unit,
     onNext: () -> Unit,
+    onReplay10: () -> Unit,
+    onForward10: () -> Unit,
     onDislikeOnStation: () -> Unit,
     driveMode: Boolean,
 ) {
@@ -916,6 +1113,12 @@ private fun TransportRow(
     val iconSize = if (driveMode) 44.dp else 36.dp
     val emphasizedIconSize = if (driveMode) 60.dp else 48.dp
 
+    // Smaller seek-±10s buttons. We hide them in drive mode so the
+    // primary three transport targets stay roomy; outside drive mode
+    // they're useful for podcast-y catch-up and missed-chorus rewind.
+    val seekButtonSize = baseSize * 0.7f
+    val seekIconSize = iconSize * 0.7f
+
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceEvenly,
@@ -929,6 +1132,16 @@ private fun TransportRow(
             onClick = onPrev,
         )
 
+        if (!driveMode) {
+            BigIconButton(
+                icon = Icons.Filled.Replay10,
+                description = "Back 10 seconds",
+                buttonSize = seekButtonSize,
+                iconSize = seekIconSize,
+                onClick = onReplay10,
+            )
+        }
+
         BigIconButton(
             icon = if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
             description = if (playing) "Pause" else "Play",
@@ -936,6 +1149,16 @@ private fun TransportRow(
             iconSize = emphasizedIconSize,
             onClick = onTogglePlayPause,
         )
+
+        if (!driveMode) {
+            BigIconButton(
+                icon = Icons.Filled.Forward10,
+                description = "Forward 10 seconds",
+                buttonSize = seekButtonSize,
+                iconSize = seekIconSize,
+                onClick = onForward10,
+            )
+        }
 
         // Skip-next: tap = skip; long-press opens "don't play on this station" menu.
         Box {
