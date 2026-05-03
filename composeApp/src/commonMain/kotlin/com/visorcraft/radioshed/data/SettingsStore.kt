@@ -276,6 +276,58 @@ class SettingsStore(private val settings: Settings) {
     fun getLibrarySongSort(): String = settings.getStringOrNull(KEY_LIB_SONG_SORT) ?: "TitleAsc"
     fun setLibrarySongSort(sort: String) = settings.putString(KEY_LIB_SONG_SORT, sort)
 
+    /**
+     * Sort preference for the in-app File Manager. Persisted so the
+     * user's chosen ordering carries between sessions; same shape as
+     * [getLibrarySongSort] just under a different key.
+     */
+    fun getFileBrowserSort(): String =
+        settings.getStringOrNull(KEY_FILE_BROWSER_SORT) ?: "NameAsc"
+    fun setFileBrowserSort(sort: String) =
+        settings.putString(KEY_FILE_BROWSER_SORT, sort)
+
+    /**
+     * User-pinned folders for the File Manager bookmark bar. Stored as
+     * one "name\tpath" record per line — same delimiter trick as
+     * [getRecentSearches] since paths never contain `\n` and `\t` is
+     * extraordinarily rare in real-world filenames. Keeps us from
+     * pulling in a JSON hop for what's normally a handful of entries.
+     */
+    fun getFileBrowserPinnedFolders(): List<Pair<String, String>> {
+        val raw = settings.getStringOrNull(KEY_FILE_BROWSER_PINS) ?: return emptyList()
+        return raw.split('\n')
+            .mapNotNull { line ->
+                val tab = line.indexOf('\t')
+                if (tab <= 0 || tab == line.lastIndex) null
+                else line.substring(0, tab) to line.substring(tab + 1)
+            }
+    }
+
+    fun pinFileBrowserFolder(name: String, path: String) {
+        if (path.isBlank()) return
+        // Dedupe by path so re-pinning the same folder doesn't grow
+        // the list. Newest-first so a freshly-pinned folder appears
+        // immediately after the preset chips on the bookmarks row.
+        val current = getFileBrowserPinnedFolders().filterNot { it.second == path }
+        val updated = (listOf(name to path) + current).take(FILE_BROWSER_PIN_CAP)
+        settings.putString(
+            KEY_FILE_BROWSER_PINS,
+            updated.joinToString("\n") { "${it.first}\t${it.second}" },
+        )
+    }
+
+    fun unpinFileBrowserFolder(path: String) {
+        val current = getFileBrowserPinnedFolders().filterNot { it.second == path }
+        if (current.isEmpty()) {
+            settings.remove(KEY_FILE_BROWSER_PINS)
+        } else {
+            settings.putString(
+                KEY_FILE_BROWSER_PINS,
+                current.joinToString("\n") { "${it.first}\t${it.second}" },
+            )
+        }
+    }
+
     // ---- Search history ----
 
     /**
@@ -431,6 +483,8 @@ class SettingsStore(private val settings: Settings) {
         const val KEY_GENRES_CANON = "library.migrations.genresCanonicalized"
         const val KEY_LIB_TAB = "library.browser.tab"
         const val KEY_LIB_SONG_SORT = "library.browser.songSort"
+        const val KEY_FILE_BROWSER_SORT = "library.fileBrowser.sort"
+        const val KEY_FILE_BROWSER_PINS = "library.fileBrowser.pinnedFolders"
         const val KEY_EQ_ENABLED = "audio.eq.enabled"
         const val KEY_EQ_BAND_PREFIX = "audio.eq.band."
         const val KEY_EQ_CUSTOM_PRESETS = "audio.eq.customPresets"
@@ -449,6 +503,11 @@ class SettingsStore(private val settings: Settings) {
         const val AUTO_BACKUP_INTERVAL_MS = 7L * 24L * 60L * 60L * 1_000L
         const val KEY_SEARCH_HISTORY = "search.recentQueries"
         const val SEARCH_HISTORY_CAP = 10
+        /** Bookmarks-bar capacity. 12 keeps the row scannable at a
+         *  glance — beyond that the user is better off using
+         *  "Add as music folder" (which makes the folder a first-class
+         *  library citizen). */
+        const val FILE_BROWSER_PIN_CAP = 12
 
         /** Keys we never accept from a backup bundle, even if a
          *  malformed import tries. Per-device state + one-shot

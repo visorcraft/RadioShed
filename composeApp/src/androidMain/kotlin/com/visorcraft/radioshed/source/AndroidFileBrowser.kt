@@ -42,7 +42,14 @@ class AndroidFileBrowser : FileBrowser {
                 val (dirs, files) = all.partition { it.isDirectory }
                 val dirEntries = dirs
                     .sortedBy { it.name.lowercase() }
-                    .map { DirectoryEntry(it.name, it.absolutePath, isDirectory = true) }
+                    .map {
+                        DirectoryEntry(
+                            name = it.name,
+                            path = it.absolutePath,
+                            isDirectory = true,
+                            lastModifiedMs = runCatching { it.lastModified() }.getOrDefault(0L),
+                        )
+                    }
                 val fileEntries = files
                     .sortedBy { it.name.lowercase() }
                     .map { f ->
@@ -53,11 +60,72 @@ class AndroidFileBrowser : FileBrowser {
                             sizeBytes = runCatching { f.length() }.getOrDefault(0L),
                             isAudio = f.name.substringAfterLast('.', "")
                                 .lowercase() in AUDIO_EXTENSIONS,
+                            lastModifiedMs = runCatching { f.lastModified() }.getOrDefault(0L),
                         )
                     }
                 dirEntries + fileEntries
             }.getOrDefault(emptyList())
         }
+
+    override suspend fun listAudioRecursive(path: String, limit: Int): List<DirectoryEntry> =
+        withContext(IODispatcher) {
+            runCatching {
+                val root = File(path)
+                if (!root.exists() || !root.isDirectory) return@withContext emptyList()
+                val out = mutableListOf<DirectoryEntry>()
+                // BFS keeps the queue order roughly directory-by-
+                // directory. DFS via File.walk would interleave nested
+                // dirs with parent-level files — fine for some uses,
+                // worse for "play this whole album folder" since the
+                // album's own files would be split by subdir traversal.
+                val queue = ArrayDeque<File>()
+                queue.add(root)
+                while (queue.isNotEmpty() && out.size < limit) {
+                    val dir = queue.removeFirst()
+                    val children = runCatching { dir.listFiles() }.getOrNull().orEmpty()
+                    val (subdirs, files) = children
+                        .filter { !it.isHidden }
+                        .partition { it.isDirectory }
+                    for (f in files.sortedBy { it.name.lowercase() }) {
+                        if (out.size >= limit) break
+                        val ext = f.name.substringAfterLast('.', "").lowercase()
+                        if (ext in AUDIO_EXTENSIONS) {
+                            out += DirectoryEntry(
+                                name = f.name,
+                                path = f.absolutePath,
+                                isDirectory = false,
+                                sizeBytes = runCatching { f.length() }.getOrDefault(0L),
+                                isAudio = true,
+                                lastModifiedMs = runCatching { f.lastModified() }.getOrDefault(0L),
+                            )
+                        }
+                    }
+                    for (sub in subdirs.sortedBy { it.name.lowercase() }) {
+                        queue.addLast(sub)
+                    }
+                }
+                out
+            }.getOrDefault(emptyList())
+        }
+
+    override suspend fun commonLocations(): List<DiscoveredFolder> = withContext(IODispatcher) {
+        // Storage root + standard Music / Downloads. We probe each
+        // path's existence so we don't show dead chips on devices
+        // that don't have those directories (some custom Android
+        // forks rename Music to MyFiles/Music, etc.).
+        val externalRoot = android.os.Environment.getExternalStorageDirectory().absolutePath
+        val candidates = listOf(
+            "Storage" to ROOT,
+            "Internal" to externalRoot,
+            "Music" to "$externalRoot/Music",
+            "Downloads" to "$externalRoot/Download",
+        )
+        candidates.mapNotNull { (label, path) ->
+            if (runCatching { File(path).exists() }.getOrDefault(false)) {
+                DiscoveredFolder(name = label, path = path)
+            } else null
+        }
+    }
 
     override fun parentOf(path: String): String? {
         if (path == ROOT || path == "/") return null

@@ -30,6 +30,25 @@ interface FileBrowser {
     suspend fun listEntries(path: String): List<DirectoryEntry> = emptyList()
 
     /**
+     * Recursive walk that returns every audio file under [path]. Used
+     * by the file manager's "Play all music here" / "Shuffle all"
+     * folder-long-press actions. Capped at [limit] so a tap on
+     * `/storage/emulated/0` doesn't try to enumerate 100k files.
+     * Sorted alphabetically by full path so the queue plays in
+     * directory-walk order.
+     */
+    suspend fun listAudioRecursive(path: String, limit: Int = 5_000): List<DirectoryEntry> = emptyList()
+
+    /**
+     * Common known-good navigation jumping points for the file
+     * manager's bookmark bar — primary external storage root, the
+     * default Music folder, Downloads, etc. Each entry has a display
+     * label and an absolute path. Empty list on platforms without
+     * standardized locations (iOS).
+     */
+    suspend fun commonLocations(): List<DiscoveredFolder> = emptyList()
+
+    /**
      * The directory containing [path], or null if [path] is at a navigation
      * root (the system-storage root or filesystem root). The browser uses
      * this to decide whether to show an "up" affordance.
@@ -56,4 +75,6 @@ data class DirectoryEntry(
     val isDirectory: Boolean,
     val sizeBytes: Long = 0L,
     val isAudio: Boolean = false,
+    /** Last-modified epoch ms; 0 when unknown or directory. */
+    val lastModifiedMs: Long = 0L,
 )
