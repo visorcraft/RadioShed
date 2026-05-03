@@ -214,6 +214,9 @@ fun App(
                     current = AppScreen.StationDetail(id)
                     nowPlayingReturnTo = null
                 },
+                onOpenFolder = { path ->
+                    current = AppScreen.FolderBrowser(initialPath = path)
+                },
             )
             return@CompositionLocalProvider
         }
@@ -369,6 +372,20 @@ fun App(
                         PlaylistDetailScreen(
                             playlistId = pid,
                             onBack = { current = AppScreen.Playlists },
+                        )
+                    }
+
+                    is AppScreen.FolderBrowser -> {
+                        // No PlatformBackHandler here — the screen
+                        // installs its own so back-press walks up the
+                        // directory tree before falling through to
+                        // close. Today's only entry point is "Open
+                        // folder" from Track Info, so close returns
+                        // to NowPlaying.
+                        val initial = (current as AppScreen.FolderBrowser).initialPath
+                        com.visorcraft.radioshed.ui.library.FolderBrowserScreen(
+                            initialPath = initial,
+                            onClose = { current = AppScreen.NowPlaying },
                         )
                     }
 

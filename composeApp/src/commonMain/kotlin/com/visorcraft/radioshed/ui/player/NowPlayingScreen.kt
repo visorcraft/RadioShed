@@ -129,6 +129,7 @@ fun NowPlayingScreen(
     onOpenAlbum: (Long) -> Unit = {},
     onOpenArtist: (Long) -> Unit = {},
     onOpenStation: (Long) -> Unit = {},
+    onOpenFolder: (String) -> Unit = {},
     audioEngine: AudioEngine = koinInject(),
     stationPlayback: StationPlayback = koinInject(),
     ratingRepo: RatingRepository = koinInject(),
@@ -512,6 +513,7 @@ fun NowPlayingScreen(
                     onDismiss = { trackInfoOpen = false },
                     onOpenAlbum = onOpenAlbum,
                     onOpenArtist = onOpenArtist,
+                    onOpenFolder = onOpenFolder,
                 )
             } else {
                 trackInfoOpen = false
@@ -1508,9 +1510,9 @@ private fun TrackInfoDialog(
     onDismiss: () -> Unit,
     onOpenAlbum: (Long) -> Unit = {},
     onOpenArtist: (Long) -> Unit = {},
+    onOpenFolder: (String) -> Unit = {},
 ) {
     val stationRepo: com.visorcraft.radioshed.data.StationRepository = koinInject()
-    val folderRevealer: com.visorcraft.radioshed.source.FolderRevealer = koinInject()
     val ringtoneSetter: com.visorcraft.radioshed.source.RingtoneSetter = koinInject()
     val trackSharer: com.visorcraft.radioshed.source.TrackSharer = koinInject()
     val scope = rememberCoroutineScope()
@@ -1543,27 +1545,21 @@ private fun TrackInfoDialog(
             TextButton(
                 onClick = {
                     if (t != null) {
-                        scope.launch {
-                            // Don't dismiss until we know whether the
-                            // open succeeded — otherwise on a device
-                            // with no compatible file manager (some
-                            // Samsung / Xiaomi builds, certain
-                            // restricted enterprise profiles) the
-                            // dialog disappeared and nothing happened,
-                            // leaving the user with no feedback. Now
-                            // we surface a message via the existing
-                            // ringtoneStatus slot when the open fails
-                            // and keep the dialog open so they can
-                            // copy the path or share the file
-                            // instead.
-                            val opened = folderRevealer.revealParent(t.path)
-                            if (opened) {
-                                onDismiss()
-                            } else {
-                                ringtoneStatus = "No file manager could open this folder. " +
-                                    "Use Copy on the path below."
-                            }
-                        }
+                        // Open the in-app folder browser at the
+                        // track's parent directory. We used to fire
+                        // a DocumentsContract intent to the system
+                        // file manager, which silently no-op'd on
+                        // Samsung / Xiaomi / restricted profiles
+                        // because no installed app actually
+                        // registered for vnd.android.document/
+                        // directory. The internal browser ships our
+                        // own UI so behavior is consistent across
+                        // OEMs and we don't depend on a third-party
+                        // app at all.
+                        val parent = t.path.substringBeforeLast('/', "/")
+                            .ifBlank { "/" }
+                        onDismiss()
+                        onOpenFolder(parent)
                     }
                 },
                 enabled = t != null,

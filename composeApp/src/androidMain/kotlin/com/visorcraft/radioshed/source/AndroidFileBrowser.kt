@@ -33,6 +33,32 @@ class AndroidFileBrowser : FileBrowser {
             }.getOrDefault(emptyList())
         }
 
+    override suspend fun listEntries(path: String): List<DirectoryEntry> =
+        withContext(IODispatcher) {
+            runCatching {
+                val dir = File(path)
+                if (!dir.exists() || !dir.isDirectory) return@withContext emptyList()
+                val all = dir.listFiles { f -> !f.isHidden }.orEmpty()
+                val (dirs, files) = all.partition { it.isDirectory }
+                val dirEntries = dirs
+                    .sortedBy { it.name.lowercase() }
+                    .map { DirectoryEntry(it.name, it.absolutePath, isDirectory = true) }
+                val fileEntries = files
+                    .sortedBy { it.name.lowercase() }
+                    .map { f ->
+                        DirectoryEntry(
+                            name = f.name,
+                            path = f.absolutePath,
+                            isDirectory = false,
+                            sizeBytes = runCatching { f.length() }.getOrDefault(0L),
+                            isAudio = f.name.substringAfterLast('.', "")
+                                .lowercase() in AUDIO_EXTENSIONS,
+                        )
+                    }
+                dirEntries + fileEntries
+            }.getOrDefault(emptyList())
+        }
+
     override fun parentOf(path: String): String? {
         if (path == ROOT || path == "/") return null
         val parent = runCatching { File(path).parentFile?.absolutePath }.getOrNull()
@@ -46,5 +72,16 @@ class AndroidFileBrowser : FileBrowser {
     private companion object {
         /** Browser navigation root — the directory containing all volumes. */
         const val ROOT = "/storage"
+
+        /**
+         * Extensions the in-app browser tints as audio (clickable to
+         * play, music-note icon). Mirror of the formats the scanner
+         * accepts. Future-proof: adding a new format to the scanner
+         * should add it here too so the UI stays consistent.
+         */
+        val AUDIO_EXTENSIONS = setOf(
+            "mp3", "m4a", "aac", "flac", "ogg", "opus",
+            "wav", "wma", "aiff", "aif", "ape", "alac",
+        )
     }
 }

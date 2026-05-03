@@ -96,4 +96,14 @@ sealed interface AppScreen {
 
     /** Auto-populated Liked Songs view; not a regular playlist. */
     data object LikedSongs : AppScreen
+
+    /**
+     * In-app folder browser. Opened from Track Info → Open folder so
+     * the user can navigate the parent directory without leaving
+     * RadioShed (and without depending on a third-party file manager,
+     * which is unreliable across OEMs — the AOSP DocumentsContract
+     * intent the prior implementation used resolves to nothing on
+     * Samsung's stock My Files app).
+     */
+    data class FolderBrowser(val initialPath: String) : AppScreen
 }
