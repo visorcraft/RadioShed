@@ -181,39 +181,76 @@ fun HistoryScreen(
                         }
                     }
                 }
+                // Bucket the visible entries by relative-time band so
+                // we can emit a "Today" / "Yesterday" / "Earlier this
+                // week" header before each group. The bands are
+                // computed once per bucket boundary; "now" is captured
+                // at composition time so all rows agree on which side
+                // of midnight they fall on.
+                val nowSnap = remember(visibleEntries) { nowMillis() }
+                val grouped = remember(visibleEntries, nowSnap) {
+                    buildList {
+                        var lastBucket: HistoryBucket? = null
+                        for (e in visibleEntries) {
+                            val b = bucketFor(e.playedAt, nowSnap)
+                            if (b != lastBucket) {
+                                add(HistoryListItem.Header(b))
+                                lastBucket = b
+                            }
+                            add(HistoryListItem.Entry(e))
+                        }
+                    }
+                }
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(vertical = 4.dp),
                 ) {
-                    items(visibleEntries, key = { it.id }) { entry ->
-                        HistoryRow(
-                            entry = entry,
-                            track = trackById[entry.trackId],
-                            isCurrent = entry.trackId == currentTrackId,
-                            onTap = {
-                                // Same indexing logic as before but
-                                // operates on the filtered list so
-                                // skip-next walks through the visible
-                                // results, not hidden ones.
-                                val pairs = visibleEntries.mapNotNull { e ->
-                                    trackById[e.trackId]?.let { e.id to it }
-                                }
-                                val idx = pairs.indexOfFirst { it.first == entry.id }
-                                if (idx < 0) return@HistoryRow
-                                stationPlayback.playTracks(
-                                    pairs.map { it.second },
-                                    startIndex = idx,
+                    items(
+                        grouped,
+                        key = { item ->
+                            when (item) {
+                                is HistoryListItem.Header -> "h:${item.bucket.name}"
+                                is HistoryListItem.Entry -> "e:${item.entry.id}"
+                            }
+                        },
+                    ) { item ->
+                        when (item) {
+                            is HistoryListItem.Header -> HistoryDateHeader(item.bucket)
+                            is HistoryListItem.Entry -> {
+                                val entry = item.entry
+                                HistoryRow(
+                                    entry = entry,
+                                    track = trackById[entry.trackId],
+                                    isCurrent = entry.trackId == currentTrackId,
+                                    onTap = {
+                                        // Same indexing logic as
+                                        // before, operating on the
+                                        // filtered list so skip-next
+                                        // walks the visible results,
+                                        // not hidden ones.
+                                        val pairs = visibleEntries.mapNotNull { e ->
+                                            trackById[e.trackId]?.let { e.id to it }
+                                        }
+                                        val idx = pairs.indexOfFirst { it.first == entry.id }
+                                        if (idx < 0) return@HistoryRow
+                                        stationPlayback.playTracks(
+                                            pairs.map { it.second },
+                                            startIndex = idx,
+                                        )
+                                    },
+                                    onLongPress = {
+                                        // Skip rows whose track has
+                                        // been deleted — the context
+                                        // sheet would just show an
+                                        // empty title with no
+                                        // actionable info.
+                                        trackById[entry.trackId]?.let {
+                                            contextTrackId = entry.trackId
+                                        }
+                                    },
                                 )
-                            },
-                            onLongPress = {
-                                // Skip rows whose track has been deleted
-                                // — the context sheet would just show
-                                // an empty title with no actionable info.
-                                trackById[entry.trackId]?.let {
-                                    contextTrackId = entry.trackId
-                                }
-                            },
-                        )
+                            }
+                        }
                     }
                 }
             }
@@ -330,6 +367,50 @@ private fun HistoryRow(
             )
         }
     }
+}
+
+/**
+ * Date bands used to group history rows. Each entry below the
+ * "Older" threshold falls into one of the named buckets so the
+ * scroll has cadence; older entries collapse into a single
+ * "Older" footer rather than a dozen "X months ago" buckets.
+ */
+private enum class HistoryBucket(val label: String) {
+    Today("Today"),
+    Yesterday("Yesterday"),
+    EarlierThisWeek("Earlier this week"),
+    EarlierThisMonth("Earlier this month"),
+    Older("Older"),
+}
+
+private sealed interface HistoryListItem {
+    data class Header(val bucket: HistoryBucket) : HistoryListItem
+    data class Entry(val entry: HistoryEntryWithStation) : HistoryListItem
+}
+
+private fun bucketFor(playedAtMs: Long, nowMs: Long): HistoryBucket {
+    val deltaMs = (nowMs - playedAtMs).coerceAtLeast(0L)
+    val day = deltaMs / 86_400_000L
+    return when {
+        day < 1L -> HistoryBucket.Today
+        day < 2L -> HistoryBucket.Yesterday
+        day < 7L -> HistoryBucket.EarlierThisWeek
+        day < 30L -> HistoryBucket.EarlierThisMonth
+        else -> HistoryBucket.Older
+    }
+}
+
+@Composable
+private fun HistoryDateHeader(bucket: HistoryBucket) {
+    Text(
+        text = bucket.label,
+        style = MaterialTheme.typography.titleSmall,
+        fontWeight = FontWeight.SemiBold,
+        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+    )
 }
 
 /** Same relative-time vocabulary as backups, just shorter. */

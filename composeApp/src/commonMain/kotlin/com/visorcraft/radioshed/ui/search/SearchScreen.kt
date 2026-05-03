@@ -163,6 +163,7 @@ fun SearchScreen(
             val voicePicker = com.visorcraft.radioshed.ui.util.rememberVoiceInput { spoken ->
                 query = spoken
             }
+            val keyboardController = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
             OutlinedTextField(
                 value = query,
                 onValueChange = { query = it },
@@ -178,6 +179,19 @@ fun SearchScreen(
                         }
                     }
                 },
+                // Show the IME's "Search" key (magnifier) instead of
+                // the default "Done", and dismiss the keyboard when
+                // the user presses it. The 200ms debounce-driven
+                // search has already been kicked off by the time the
+                // user reaches for Search, so we don't need to
+                // re-trigger anything — just get the keyboard out of
+                // the way so results are visible.
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                    imeAction = androidx.compose.ui.text.input.ImeAction.Search,
+                ),
+                keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                    onSearch = { keyboardController?.hide() },
+                ),
                 modifier = Modifier
                     .fillMaxWidth()
                     .focusRequester(focusRequester),

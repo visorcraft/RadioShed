@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -47,6 +48,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.visorcraft.radioshed.audio.AudioEngine
 import com.visorcraft.radioshed.audio.PlayerState
+import com.visorcraft.radioshed.audio.SleepTimer
 import com.visorcraft.radioshed.stations.StationPlayback
 import org.koin.compose.koinInject
 
@@ -66,10 +68,12 @@ fun MiniPlayer(
     onExpand: () -> Unit = {},
     audioEngine: AudioEngine = koinInject(),
     stationPlayback: StationPlayback = koinInject(),
+    sleepTimer: SleepTimer = koinInject(),
 ) {
     val nowPlaying by audioEngine.nowPlaying.collectAsState()
     val state by audioEngine.state.collectAsState()
     val position by audioEngine.position.collectAsState()
+    val sleepState by sleepTimer.state.collectAsState()
 
     val playable = nowPlaying ?: return
     var contextSheetOpen by remember { mutableStateOf(false) }
@@ -181,6 +185,13 @@ fun MiniPlayer(
                         maxLines = 1,
                     )
                 }
+                // Sleep-timer badge: persistent countdown so the
+                // user knows the timer is armed without expanding to
+                // Now Playing. Inserted between the title column and
+                // transport buttons; the column carries weight=1f so
+                // the badge gets a fixed width and the title
+                // truncates cleanly when space is tight.
+                SleepTimerBadge(sleepState)
                 // Skip prev/next bypass the MediaController and call
                 // StationPlayback / AudioEngine.seekTo directly. The
                 // MediaController-based path filters these commands
@@ -239,6 +250,50 @@ private fun ArtworkPlaceholder(artworkUri: String?) {
                 tint = MaterialTheme.colorScheme.onPrimaryContainer,
             )
         }
+    }
+}
+
+@Composable
+private fun SleepTimerBadge(state: SleepTimer.State) {
+    val label: String = when (state) {
+        SleepTimer.State.Idle -> return
+        is SleepTimer.State.Running -> formatSleepCountdown(state.remainingMs)
+        SleepTimer.State.EndOfTrack -> "EOT"
+    }
+    androidx.compose.material3.Surface(
+        color = MaterialTheme.colorScheme.primaryContainer,
+        shape = RoundedCornerShape(8.dp),
+        modifier = Modifier.padding(horizontal = 6.dp),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+        ) {
+            Icon(
+                imageVector = androidx.compose.material.icons.Icons.Filled.Bedtime,
+                contentDescription = null,
+                modifier = Modifier.size(12.dp),
+                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+            )
+            Spacer(Modifier.width(4.dp))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                maxLines = 1,
+            )
+        }
+    }
+}
+
+/** "5m" / "23m" / "1:04" / "12s" — compact enough for the MiniPlayer. */
+private fun formatSleepCountdown(ms: Long): String {
+    if (ms <= 0L) return "0s"
+    val totalSec = ms / 1000L
+    return when {
+        totalSec >= 3600L -> "${totalSec / 3600L}:${((totalSec % 3600L) / 60L).toString().padStart(2, '0')}h"
+        totalSec >= 60L -> "${totalSec / 60L}m"
+        else -> "${totalSec}s"
     }
 }
 

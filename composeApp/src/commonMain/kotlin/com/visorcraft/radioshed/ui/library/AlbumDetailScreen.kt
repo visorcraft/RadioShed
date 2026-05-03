@@ -86,6 +86,7 @@ fun AlbumDetailScreen(
     onBack: () -> Unit,
     onArtistTap: (Long) -> Unit,
     libraryRepo: LibraryRepository = koinInject(),
+    stationRepo: com.visorcraft.radioshed.data.StationRepository = koinInject(),
     stationPlayback: StationPlayback = koinInject(),
     ratingRepo: RatingRepository = koinInject(),
     audioEngine: com.visorcraft.radioshed.audio.AudioEngine = koinInject(),
@@ -93,6 +94,11 @@ fun AlbumDetailScreen(
     var album by remember { mutableStateOf<Album?>(null) }
     var artist by remember { mutableStateOf<Artist?>(null) }
     var tracks by remember { mutableStateOf<List<Track>>(emptyList()) }
+    // Per-track play counts from station_history. Used to render a
+    // subtle "× N" badge on each track row so the user can spot
+    // their over-rotated favourites within the album. Populated in
+    // a follow-up effect so the track list renders immediately.
+    var playCounts by remember { mutableStateOf<Map<Long, Long>>(emptyMap()) }
     var contextTrackId by remember { mutableStateOf<Long?>(null) }
     val nowPlaying by audioEngine.nowPlaying.collectAsState()
     val currentTrackId = nowPlaying?.trackId
@@ -106,6 +112,11 @@ fun AlbumDetailScreen(
         // selectTracksByAlbum already orders by disc_number, track_number —
         // matches what the user expects from a "play album" sequential queue.
         tracks = libraryRepo.tracksForAlbum(albumId)
+    }
+    LaunchedEffect(tracks) {
+        if (tracks.isNotEmpty()) {
+            playCounts = stationRepo.playCountForTracks(tracks.map { it.id })
+        }
     }
 
     Scaffold(
@@ -251,6 +262,7 @@ fun AlbumDetailScreen(
                         AlbumTrackRow(
                             track = track,
                             isCurrent = track.id == currentTrackId,
+                            playCount = playCounts[track.id] ?: 0L,
                             onTap = {
                                 val idx = tracks.indexOf(track).coerceAtLeast(0)
                                 stationPlayback.playTracks(tracks, startIndex = idx)
@@ -469,6 +481,7 @@ private fun AlbumCover(artworkUri: String?, modifier: Modifier = Modifier) {
 private fun AlbumTrackRow(
     track: Track,
     isCurrent: Boolean = false,
+    playCount: Long = 0L,
     onTap: () -> Unit,
     onLongPress: () -> Unit = {},
 ) {
@@ -506,6 +519,19 @@ private fun AlbumTrackRow(
                     modifier = Modifier.weight(1f, fill = false),
                 )
                 com.visorcraft.radioshed.ui.util.NowPlayingIndicator(isCurrent)
+            }
+            // Play count — only shown when > 0 so the lane stays
+            // empty for never-played tracks (visual cue is itself
+            // useful: "what haven't I heard yet on this album?").
+            // Format prefers a leading multiplication sign (× 12)
+            // over a "12 plays" word so the lane stays narrow.
+            if (playCount > 0L) {
+                Text(
+                    text = "× $playCount",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
+                    modifier = Modifier.padding(end = 8.dp),
+                )
             }
             Text(
                 text = formatDurationShort(track.durationMs),
