@@ -313,6 +313,18 @@ class SettingsStore(private val settings: Settings) {
     fun setLibraryArtistSort(sort: String) =
         settings.putString(KEY_LIB_ARTIST_SORT, sort)
 
+    /** Albums tab sort order — string-encoded enum name. */
+    fun getLibraryAlbumSort(): String =
+        settings.getStringOrNull(KEY_LIB_ALBUM_SORT) ?: "TitleAsc"
+    fun setLibraryAlbumSort(sort: String) =
+        settings.putString(KEY_LIB_ALBUM_SORT, sort)
+
+    /** Genres tab sort order — string-encoded enum name. */
+    fun getLibraryGenreSort(): String =
+        settings.getStringOrNull(KEY_LIB_GENRE_SORT) ?: "NameAsc"
+    fun setLibraryGenreSort(sort: String) =
+        settings.putString(KEY_LIB_GENRE_SORT, sort)
+
     /**
      * Sort preference for the in-app File Manager. Persisted so the
      * user's chosen ordering carries between sessions; same shape as
@@ -523,6 +535,8 @@ class SettingsStore(private val settings: Settings) {
         const val KEY_LIB_TAB = "library.browser.tab"
         const val KEY_LIB_SONG_SORT = "library.browser.songSort"
         const val KEY_LIB_ARTIST_SORT = "library.browser.artistSort"
+        const val KEY_LIB_ALBUM_SORT = "library.browser.albumSort"
+        const val KEY_LIB_GENRE_SORT = "library.browser.genreSort"
         const val KEY_FILE_BROWSER_SORT = "library.fileBrowser.sort"
         const val KEY_FILE_BROWSER_PINS = "library.fileBrowser.pinnedFolders"
         const val KEY_EQ_ENABLED = "audio.eq.enabled"

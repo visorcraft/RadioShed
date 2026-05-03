@@ -157,6 +157,50 @@ class BackupService(
     }
 
     /**
+     * Read-only inspection of a backup file. Parses the bundle but
+     * applies nothing — useful for the "Restore?" dialog so the user
+     * can see what they're about to merge before committing. Returns
+     * `null` on parse failure (the UI surfaces a generic
+     * "couldn't read" state in that case rather than offering a
+     * preview of garbage).
+     */
+    suspend fun preview(fileUri: String): BundlePreview? {
+        val bytes = storage.read(fileUri) ?: return null
+        return previewFromBytes(bytes)
+    }
+
+    suspend fun previewFromBytes(bytes: ByteArray): BundlePreview? {
+        val bundle = runCatching {
+            RadioShedJson.decodeFromString<BackupBundle>(bytes.decodeToString())
+        }.getOrNull() ?: return null
+        return BundlePreview(
+            version = bundle.version,
+            exportedAtMs = bundle.exportedAt,
+            stationCount = bundle.stations.size,
+            playlistCount = bundle.playlists.size,
+            ratingCount = bundle.ratings.size,
+            likedCount = bundle.likedTracks.size,
+            settingsCount = bundle.settings.size,
+            eqPresetCount = bundle.customEqPresets.size,
+        )
+    }
+
+    /**
+     * Lightweight read-only summary of a backup bundle's contents.
+     * The Restore? dialog renders this before the user commits.
+     */
+    data class BundlePreview(
+        val version: Int,
+        val exportedAtMs: Long,
+        val stationCount: Int,
+        val playlistCount: Int,
+        val ratingCount: Int,
+        val likedCount: Int,
+        val settingsCount: Int,
+        val eqPresetCount: Int,
+    )
+
+    /**
      * Restore from raw bundle bytes — used by the "Import…" path
      * where the file lives outside our private backups dir (e.g. a
      * `content://` URI from the system file picker, or a downloaded

@@ -308,6 +308,7 @@ fun StationsHomeScreen(
             if (stations.isEmpty()) {
                 EmptyState(
                     isCompact = isCompact,
+                    onOpenLibrary = onBack,
                     modifier = Modifier.fillMaxSize().padding(outerPadding),
                 )
                 return@BoxWithConstraints
@@ -1089,7 +1090,11 @@ private fun RecentChip(station: Station, onTap: () -> Unit) {
 }
 
 @Composable
-private fun EmptyState(isCompact: Boolean, modifier: Modifier = Modifier) {
+private fun EmptyState(
+    isCompact: Boolean,
+    onOpenLibrary: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     Column(
         modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -1115,6 +1120,16 @@ private fun EmptyState(isCompact: Boolean, modifier: Modifier = Modifier) {
             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.55f),
             modifier = Modifier.padding(horizontal = 24.dp),
         )
+        Spacer(Modifier.size(16.dp))
+        // Direct path to Library so the user can register a folder
+        // without having to bounce back through Home → Library by
+        // hand. Reuses the existing onBack callback (which routes
+        // back to Home, where Library is one tap away) — wired
+        // straight to a button so the action's discoverable on the
+        // same screen the empty state is showing.
+        androidx.compose.material3.OutlinedButton(onClick = onOpenLibrary) {
+            Text("Go to Library")
+        }
     }
 }
 

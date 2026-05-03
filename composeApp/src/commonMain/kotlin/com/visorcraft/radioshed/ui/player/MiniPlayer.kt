@@ -77,6 +77,11 @@ fun MiniPlayer(
 
     val playable = nowPlaying ?: return
     var contextSheetOpen by remember { mutableStateOf(false) }
+    // Tactile feedback when a horizontal-swipe-skip threshold is
+    // crossed. Confirms the gesture actually fired without the
+    // user having to look at the screen — the phone gives a tiny
+    // bump as soon as the skip command goes out.
+    val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
 
     Surface(
         // The MiniPlayer sits at the bottom of App.kt's outer Column, OUTSIDE
@@ -141,8 +146,18 @@ fun MiniPlayer(
                     onDragStart = { accum = 0f },
                     onDragEnd = {
                         when {
-                            accum < -SWIPE_THRESHOLD_PX -> stationPlayback.skipNext()
-                            accum > SWIPE_THRESHOLD_PX -> stationPlayback.skipPrevious()
+                            accum < -SWIPE_THRESHOLD_PX -> {
+                                stationPlayback.skipNext()
+                                haptics.performHapticFeedback(
+                                    androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress,
+                                )
+                            }
+                            accum > SWIPE_THRESHOLD_PX -> {
+                                stationPlayback.skipPrevious()
+                                haptics.performHapticFeedback(
+                                    androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress,
+                                )
+                            }
                         }
                         accum = 0f
                     },

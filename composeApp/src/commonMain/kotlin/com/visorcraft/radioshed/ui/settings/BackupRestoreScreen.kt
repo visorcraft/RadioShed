@@ -218,16 +218,70 @@ fun BackupRestoreScreen(
     }
 
     restoreConfirm?.let { file ->
+        // Pre-restore preview: parse the bundle on dialog open and
+        // surface the contained counts so the user knows what
+        // they're about to merge before committing. Falls back to
+        // the original generic warning if the parse fails — the
+        // restore action itself will then report a more specific
+        // error when the user proceeds.
+        var preview by remember(file.uri) {
+            mutableStateOf<BackupService.BundlePreview?>(null)
+        }
+        var previewLoaded by remember(file.uri) { mutableStateOf(false) }
+        LaunchedEffect(file.uri) {
+            preview = backupService.preview(file.uri)
+            previewLoaded = true
+        }
         AlertDialog(
             onDismissRequest = { restoreConfirm = null },
             title = { Text("Restore backup?") },
             text = {
-                Text(
-                    "Stations and playlists from this backup will be added to your " +
-                        "library. Existing data isn't deleted — duplicates may appear " +
-                        "if you've imported this backup before. Ratings will overwrite " +
-                        "existing ratings on matching tracks (matched by file path).",
-                )
+                Column {
+                    val p = preview
+                    if (p != null) {
+                        Text(
+                            "Bundle contains:",
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        val parts = buildList {
+                            add("${p.stationCount} station${if (p.stationCount == 1) "" else "s"}")
+                            add("${p.playlistCount} playlist${if (p.playlistCount == 1) "" else "s"}")
+                            add("${p.ratingCount} rating${if (p.ratingCount == 1) "" else "s"}")
+                            if (p.likedCount > 0) add("${p.likedCount} liked")
+                            if (p.settingsCount > 0) add("${p.settingsCount} settings")
+                            if (p.eqPresetCount > 0) add("${p.eqPresetCount} EQ preset${if (p.eqPresetCount == 1) "" else "s"}")
+                        }
+                        Text(
+                            text = parts.joinToString(" · "),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            "Stations and playlists are added to your library. " +
+                                "Existing data isn't deleted — duplicates may appear if " +
+                                "you've imported this backup before. Ratings overwrite " +
+                                "matching tracks (matched by file path).",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                        )
+                    } else if (previewLoaded) {
+                        Text(
+                            "Couldn't parse the backup file. Restoring may still " +
+                                "work if the format version is supported — proceed " +
+                                "to see a specific error.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    } else {
+                        Text(
+                            "Reading backup contents…",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                        )
+                    }
+                }
             },
             confirmButton = {
                 TextButton(onClick = {

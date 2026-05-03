@@ -1133,7 +1133,7 @@ Goal: user can pick folders, app scans and indexes them, search works.
 - [ ] **(iOS)** AVAsset metadata + custom ID3/FLAC/Vorbis parsers *(stub; needs Mac access)*
 - [x] Cue-file parser in `commonMain` (+ 9 unit tests covering quoted/unquoted strings, multi-FILE cues, INDEX 00 pregap, malformed lines, frame-to-ms conversion)
 - [x] Scanner coordinator: queue, batching, progress reporting via `ScanProgress` flow (Started/Progress/Warning/Completed/Failed)
-- [x] Folder management UI (add/rename/recursive-toggle/delete) — `ui/library/LibrarySettingsScreen.kt`. Excludes/include globs UI deferred to a later pass.
+- [x] Folder management UI (add/rename/recursive-toggle/delete) — `ui/library/LibrarySettingsScreen.kt`. **Per-folder include/exclude path globs** ship via the Edit folder dialog: comma-separated `**/Spoken Word/**` / `*.flac` patterns get parsed, filtered for empties, and persisted via `FolderRepository.setGlobs(id, includeGlobs, excludeGlobs)`. The `folder` table already had `include_globs` / `exclude_globs` columns + `setGlobs` query — only the UI was missing.
 - [x] Optional file-mode browser (power-user toggle, off by default) *(shipped as a full in-app file manager — `ui/library/FolderBrowserScreen.kt`. Reached from Track Info → "Open folder". Greatly expanded post-v1: breadcrumb, sort, in-page filter, multi-select, custom user bookmarks, audio-duration overlay — see Phase 19 for the full feature set.)*
 - [x] Onboarding steps 1–5 — `ui/onboarding/OnboardingScreen.kt`: Welcome → Permissions → Folder → Scan → Done
 - [x] Search UI — `ui/search/SearchScreen.kt`. *Backing is `LIKE` not FTS5: SQLDelight 2.1's parser crashes on FTS5 `MATCH` queries (and on virtual-table compound `name { ... }` blocks). Acceptable for libraries up to ~10k tracks. Revisit when SQLDelight 3.x lands or we evaluate alternatives.*
@@ -1335,7 +1335,7 @@ Goal: user can move their setup between devices and platforms.
 - [ ] Zip archive writer/reader (cross-platform) *(deferred — current bundle is plain JSON, which keeps things human-readable but rules out artwork blobs)*
 - [ ] AES-256-GCM passphrase encryption *(deferred with zip)*
 - [x] Auto-backup scheduler — `BackupService` runs weekly via `WorkManager` when enabled; `SettingsStore.getAutoBackupEnabled()` toggles it. Auto-prune to last N keeps the directory tidy.
-- [~] Restore wizard UI — Settings → Backup & Restore lists every bundle with relative timestamps, supports import via the system file picker (#206), runs a per-key type-validating restore (`SettingsStore.restoreFromBackup`), and matches moved tracks via path-suffix fallback (#212). A pre-restore preview / conflict-resolution modal is still deferred.
+- [~] Restore wizard UI — Settings → Backup & Restore lists every bundle with relative timestamps, supports import via the system file picker (#206), runs a per-key type-validating restore (`SettingsStore.restoreFromBackup`), and matches moved tracks via path-suffix fallback (#212). The Restore? confirmation dialog now opens with a **pre-restore preview** powered by `BackupService.preview(uri)` — parses the bundle without applying anything and shows a single-line summary ("3 stations · 5 playlists · 142 ratings · 12 liked · 7 settings · 2 EQ presets") so the user knows what they're about to merge before committing. True conflict-resolution UI (per-station merge vs replace) is still deferred.
 - [ ] Cross-platform restore: Android backup → iOS restore (and vice versa) *(deferred — pairs with iOS implementation pass)*
 
 ### Phase 13 — Widgets (~1 week)
@@ -1666,6 +1666,20 @@ common `nowMs` / `sinceMs` envelope so all three views stay in sync.
   StationEditor on the new row. The canonical SPEC §7.1
   "Create station from this artist / from this album" CTA, finally
   wired through.
+- [x] Library Browser sort dropdowns for Albums + Genres tabs.
+  Albums sort: Title A→Z / Z→A, Year — oldest first / newest first,
+  Most played. Genres sort: Name A→Z / Z→A. Persisted via
+  `SettingsStore.getLibraryAlbumSort()` / `getLibraryGenreSort()`.
+  Most-played album sort lazy-loads `topPlayedAlbums(Long.MAX_VALUE)`
+  only when that sort is active.
+- [x] MiniPlayer haptic feedback on swipe-skip. Uses
+  `LocalHapticFeedback.current` to fire `HapticFeedbackType.LongPress`
+  when the horizontal swipe threshold is crossed and the skip
+  command actually goes out — the user feels the gesture confirm
+  without having to look at the screen.
+- [x] Stations Home empty-state CTA. The "No stations yet." card
+  now ends with a "Go to Library" button so users can register a
+  folder without having to backtrack to Home first.
 
 #### Search polish
 

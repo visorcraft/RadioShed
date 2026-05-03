@@ -275,10 +275,18 @@ fun LibrarySettingsScreen(
         EditFolderDialog(
             folder = folder,
             onDismiss = { editingFolder = null },
-            onRename = { newName ->
+            onSave = { newName, includeGlobs, excludeGlobs ->
                 scope.launch {
-                    runCatching { folderRepo.rename(folder.id, newName) }
-                        .onFailure { scanError = it.message }
+                    runCatching {
+                        if (newName != folder.displayName) {
+                            folderRepo.rename(folder.id, newName)
+                        }
+                        if (includeGlobs != folder.includeGlobs ||
+                            excludeGlobs != folder.excludeGlobs
+                        ) {
+                            folderRepo.setGlobs(folder.id, includeGlobs, excludeGlobs)
+                        }
+                    }.onFailure { scanError = it.message }
                 }
                 editingFolder = null
             },
@@ -620,36 +628,88 @@ private fun VolumeChip(
 private fun EditFolderDialog(
     folder: Folder,
     onDismiss: () -> Unit,
-    onRename: (String) -> Unit,
+    onSave: (
+        displayName: String,
+        includeGlobs: List<String>,
+        excludeGlobs: List<String>,
+    ) -> Unit,
 ) {
     var name by remember { mutableStateOf(folder.displayName) }
-    val confirmRename: () -> Unit = {
-        if (name.isNotBlank() && name != folder.displayName) onRename(name)
+    // Globs are stored as a `List<String>`; the editor presents them
+    // as comma-separated text for ergonomics (matches the
+    // StationEditor's tag-values + path-pattern flows). Empty
+    // entries are filtered out on save.
+    var includeText by remember {
+        mutableStateOf(folder.includeGlobs.joinToString(", "))
+    }
+    var excludeText by remember {
+        mutableStateOf(folder.excludeGlobs.joinToString(", "))
+    }
+    val parseGlobs: (String) -> List<String> = { raw ->
+        raw.split(',').map { it.trim() }.filter { it.isNotEmpty() }
+    }
+    val nameClean = name.trim()
+    val newIncludes = parseGlobs(includeText)
+    val newExcludes = parseGlobs(excludeText)
+    val canSave = nameClean.isNotBlank() && (
+        nameClean != folder.displayName ||
+            newIncludes != folder.includeGlobs ||
+            newExcludes != folder.excludeGlobs
+    )
+    val confirmSave: () -> Unit = {
+        if (canSave) onSave(nameClean, newIncludes, newExcludes)
     }
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
-            Button(
-                onClick = confirmRename,
-                enabled = name.isNotBlank() && name != folder.displayName,
-            ) { Text("Save") }
+            Button(onClick = confirmSave, enabled = canSave) { Text("Save") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
-        title = { Text("Rename folder") },
+        title = { Text("Edit folder") },
         text = {
-            OutlinedTextField(
-                value = name,
-                onValueChange = { name = it },
-                label = { Text("Display name") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                    imeAction = androidx.compose.ui.text.input.ImeAction.Done,
-                ),
-                keyboardActions = androidx.compose.foundation.text.KeyboardActions(
-                    onDone = { confirmRename() },
-                ),
-            )
+            Column {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Display name") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        imeAction = androidx.compose.ui.text.input.ImeAction.Next,
+                    ),
+                )
+                Spacer(Modifier.height(12.dp))
+                // Glob include / exclude. Comma-separated patterns
+                // matched against each track's path during the scan
+                // (FileEnumerator side). Common cases: `**/Spoken
+                // Word/**` to exclude an audiobook tree, `*.flac` to
+                // include only lossless. Empty = no filter.
+                Text(
+                    "Path filters (comma-separated globs)",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                )
+                Spacer(Modifier.height(4.dp))
+                OutlinedTextField(
+                    value = includeText,
+                    onValueChange = { includeText = it },
+                    label = { Text("Include patterns") },
+                    placeholder = { Text("*.flac, **/Music/**") },
+                    singleLine = false,
+                    maxLines = 2,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = excludeText,
+                    onValueChange = { excludeText = it },
+                    label = { Text("Exclude patterns") },
+                    placeholder = { Text("**/Spoken Word/**, *.m4b") },
+                    singleLine = false,
+                    maxLines = 2,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
         },
     )
 }

@@ -186,9 +186,31 @@ fun LibraryBrowserScreen(
                 .associate { it.id to it.plays }
         }
     }
+    var albumSort by remember {
+        mutableStateOf(
+            runCatching { AlbumSort.valueOf(settings.getLibraryAlbumSort()) }
+                .getOrDefault(AlbumSort.TitleAsc),
+        )
+    }
+    var genreSort by remember {
+        mutableStateOf(
+            runCatching { GenreSort.valueOf(settings.getLibraryGenreSort()) }
+                .getOrDefault(GenreSort.NameAsc),
+        )
+    }
+    // Per-album play count map for the "Most played" sort.
+    var albumPlayCounts by remember { mutableStateOf<Map<Long, Long>>(emptyMap()) }
+    LaunchedEffect(albumSort) {
+        if (albumSort == AlbumSort.MostPlayed && albumPlayCounts.isEmpty()) {
+            albumPlayCounts = stationRepo.topPlayedAlbums(Long.MAX_VALUE)
+                .associate { it.id to it.plays }
+        }
+    }
     LaunchedEffect(selectedTab) { settings.setLibraryTabIndex(selectedTab.ordinal) }
     LaunchedEffect(sortOrder) { settings.setLibrarySongSort(sortOrder.name) }
     LaunchedEffect(artistSort) { settings.setLibraryArtistSort(artistSort.name) }
+    LaunchedEffect(albumSort) { settings.setLibraryAlbumSort(albumSort.name) }
+    LaunchedEffect(genreSort) { settings.setLibraryGenreSort(genreSort.name) }
 
     Scaffold(
         topBar = {
@@ -259,6 +281,54 @@ fun LibraryBrowserScreen(
                                         text = { Text(option.label) },
                                         onClick = {
                                             artistSort = option
+                                            sortMenuOpen = false
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    if (selectedTab == LibraryTab.Albums && albums.isNotEmpty()) {
+                        Box {
+                            IconButton(onClick = { sortMenuOpen = true }) {
+                                Text(
+                                    text = "↕",
+                                    style = MaterialTheme.typography.titleMedium,
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = sortMenuOpen,
+                                onDismissRequest = { sortMenuOpen = false },
+                            ) {
+                                AlbumSort.entries.forEach { option ->
+                                    DropdownMenuItem(
+                                        text = { Text(option.label) },
+                                        onClick = {
+                                            albumSort = option
+                                            sortMenuOpen = false
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    if (selectedTab == LibraryTab.Genres && genres.isNotEmpty()) {
+                        Box {
+                            IconButton(onClick = { sortMenuOpen = true }) {
+                                Text(
+                                    text = "↕",
+                                    style = MaterialTheme.typography.titleMedium,
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = sortMenuOpen,
+                                onDismissRequest = { sortMenuOpen = false },
+                            ) {
+                                GenreSort.entries.forEach { option ->
+                                    DropdownMenuItem(
+                                        text = { Text(option.label) },
+                                        onClick = {
+                                            genreSort = option
                                             sortMenuOpen = false
                                         },
                                     )
@@ -466,15 +536,39 @@ fun LibraryBrowserScreen(
                     )
                 }
                 LibraryTab.Albums -> {
+                    val sortedAlbums = remember(albums, albumSort, albumPlayCounts) {
+                        when (albumSort) {
+                            AlbumSort.TitleAsc ->
+                                albums.sortedBy { it.title.lowercase() }
+                            AlbumSort.TitleDesc ->
+                                albums.sortedByDescending { it.title.lowercase() }
+                            AlbumSort.YearAsc ->
+                                albums.sortedBy { it.year ?: Int.MAX_VALUE }
+                            AlbumSort.YearDesc ->
+                                albums.sortedByDescending { it.year ?: Int.MIN_VALUE }
+                            AlbumSort.MostPlayed ->
+                                albums.sortedByDescending {
+                                    albumPlayCounts[it.id] ?: 0L
+                                }
+                        }
+                    }
                     AlbumList(
-                        albums = albums,
+                        albums = sortedAlbums,
                         onPick = { al -> onAlbumTap(al.id) },
                         onLongPress = { al -> contextAlbum = al },
                     )
                 }
                 LibraryTab.Genres -> {
+                    val sortedGenres = remember(genres, genreSort, allTracks) {
+                        when (genreSort) {
+                            GenreSort.NameAsc ->
+                                genres.sortedBy { it.lowercase() }
+                            GenreSort.NameDesc ->
+                                genres.sortedByDescending { it.lowercase() }
+                        }
+                    }
                     GenreList(
-                        genres = genres,
+                        genres = sortedGenres,
                         onPick = { g -> onGenreTap(g) },
                     )
                 }
@@ -573,6 +667,19 @@ private enum class ArtistSort(val label: String) {
     NameAsc("Name — A to Z"),
     NameDesc("Name — Z to A"),
     MostPlayed("Most played"),
+}
+
+private enum class AlbumSort(val label: String) {
+    TitleAsc("Title — A to Z"),
+    TitleDesc("Title — Z to A"),
+    YearAsc("Year — oldest first"),
+    YearDesc("Year — newest first"),
+    MostPlayed("Most played"),
+}
+
+private enum class GenreSort(val label: String) {
+    NameAsc("Name — A to Z"),
+    NameDesc("Name — Z to A"),
 }
 
 @Composable
