@@ -1057,14 +1057,31 @@ private fun AlbumArtPlaceholder(
         contentAlignment = Alignment.Center,
     ) {
         if (artworkUri != null) {
-            // Real album art (file:// URI from AndroidArtworkPersister).
-            // Coil renders it on top of the gradient; gradient stays visible
-            // briefly during load and as fallback if decode fails.
+            // Two-layer composition for non-square artwork: the
+            // blurred backdrop is the same image cropped to fill,
+            // and the foreground uses `Fit` so non-square sources
+            // letterbox cleanly INTO the blurred edges instead of
+            // showing dead gradient strips. For square art the two
+            // layers are pixel-identical inside the frame and the
+            // composition reads as a single image — there's no
+            // visible cost. The tradeoff vs the previous straight-
+            // crop approach: square art is unchanged; non-square
+            // art now shows the full image (no edge clipping) with
+            // its own blurred halo filling the letterbox.
+            coil3.compose.AsyncImage(
+                model = artworkUri,
+                contentDescription = null,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .blur(28.dp),
+                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                alpha = 0.85f,
+            )
             coil3.compose.AsyncImage(
                 model = artworkUri,
                 contentDescription = null,
                 modifier = Modifier.fillMaxSize(),
-                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                contentScale = androidx.compose.ui.layout.ContentScale.Fit,
             )
         } else {
             Text(

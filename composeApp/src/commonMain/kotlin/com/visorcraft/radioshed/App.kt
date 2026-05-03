@@ -57,7 +57,12 @@ fun App(
     // app instantly when the user changes it (no app restart needed).
     var themeMode by remember { mutableStateOf(settings.getThemeMode()) }
     var materialYou by remember { mutableStateOf(settings.getMaterialYouEnabled()) }
-    RadioShedTheme(mode = themeMode, useMaterialYou = materialYou) {
+    var fontScale by remember { mutableStateOf(settings.getFontScale()) }
+    RadioShedTheme(
+        mode = themeMode,
+        useMaterialYou = materialYou,
+        fontScale = fontScale,
+    ) {
         // Determine the initial screen exactly once per app launch.
         val startScreen = remember {
             if (settings.isOnboardingComplete()) AppScreen.Home else AppScreen.Onboarding
@@ -310,6 +315,8 @@ fun App(
                             onThemeModeChange = { themeMode = it },
                             currentMaterialYou = materialYou,
                             onMaterialYouChange = { materialYou = it },
+                            currentFontScale = fontScale,
+                            onFontScaleChange = { fontScale = it },
                             onOpenEqualizer = { current = AppScreen.Equalizer },
                             onOpenPlaylists = { current = AppScreen.Playlists },
                             onOpenBackup = { current = AppScreen.BackupRestore },

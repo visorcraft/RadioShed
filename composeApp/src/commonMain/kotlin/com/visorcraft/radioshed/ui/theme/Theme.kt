@@ -2,9 +2,11 @@ package com.visorcraft.radioshed.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 
 private val LightColors = lightColorScheme(
     primary = LightPrimary,
@@ -51,6 +53,7 @@ enum class ThemeMode { System, Light, Dark, Amoled }
 fun RadioShedTheme(
     mode: ThemeMode = ThemeMode.System,
     useMaterialYou: Boolean = false,
+    fontScale: Float = 1f,
     content: @Composable () -> Unit,
 ) {
     val systemDark = isSystemInDarkTheme()
@@ -78,5 +81,37 @@ fun RadioShedTheme(
         materialYou != null -> materialYou
         else -> brandColors
     }
-    MaterialTheme(colorScheme = colors, content = content)
+    // Apply the user's app-wide font scale on top of Material's
+    // default Typography. Done by copying every text style with its
+    // fontSize multiplied by the scale — Compose's `TextUnit *
+    // Float` keeps unit semantics so sp values stay sp.
+    val typography = remember(fontScale) {
+        if (fontScale == 1f) Typography()
+        else scaledTypography(Typography(), fontScale)
+    }
+    MaterialTheme(colorScheme = colors, typography = typography, content = content)
 }
+
+/**
+ * Multiply every Material text style's `fontSize` by [scale], leaving
+ * weight / line-height / letter-spacing untouched. Re-uses the input
+ * Typography as the base so future Material updates that add new
+ * styles flow through automatically — we only override what's known.
+ */
+private fun scaledTypography(base: Typography, scale: Float): Typography = Typography(
+    displayLarge = base.displayLarge.copy(fontSize = base.displayLarge.fontSize * scale),
+    displayMedium = base.displayMedium.copy(fontSize = base.displayMedium.fontSize * scale),
+    displaySmall = base.displaySmall.copy(fontSize = base.displaySmall.fontSize * scale),
+    headlineLarge = base.headlineLarge.copy(fontSize = base.headlineLarge.fontSize * scale),
+    headlineMedium = base.headlineMedium.copy(fontSize = base.headlineMedium.fontSize * scale),
+    headlineSmall = base.headlineSmall.copy(fontSize = base.headlineSmall.fontSize * scale),
+    titleLarge = base.titleLarge.copy(fontSize = base.titleLarge.fontSize * scale),
+    titleMedium = base.titleMedium.copy(fontSize = base.titleMedium.fontSize * scale),
+    titleSmall = base.titleSmall.copy(fontSize = base.titleSmall.fontSize * scale),
+    bodyLarge = base.bodyLarge.copy(fontSize = base.bodyLarge.fontSize * scale),
+    bodyMedium = base.bodyMedium.copy(fontSize = base.bodyMedium.fontSize * scale),
+    bodySmall = base.bodySmall.copy(fontSize = base.bodySmall.fontSize * scale),
+    labelLarge = base.labelLarge.copy(fontSize = base.labelLarge.fontSize * scale),
+    labelMedium = base.labelMedium.copy(fontSize = base.labelMedium.fontSize * scale),
+    labelSmall = base.labelSmall.copy(fontSize = base.labelSmall.fontSize * scale),
+)

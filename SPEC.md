@@ -1184,7 +1184,7 @@ Goal: user can create stations; engine plays tracks per source + playback rules.
 - [x] Built-in presets registry — `PresetSeeder` seeds Latest Hits / All Music / Discover / Top Rated / Recently Added / Forgotten Gems / Liked Songs. Per-decade and per-genre auto-stations are still deferred.
 - [x] Station editor UI: identity, source builder, playback rules — `ui/stations/StationEditorScreen.kt` covers identity, color, every `SourceRule` selector + set-operator combiner, and every `PlaybackRule` knob.
 - [x] Drag-to-reorder station list — `ui/stations/ReorderStationsScreen.kt` via the shared `ui/util/DragReorder.kt` utility. The Stations Home long-press sheet also offers per-row Move up / Move down for one-step nudges without entering reorder mode.
-- [~] Station duplicate / delete / rename — `StationActionSheet` (defined in `StationsHomeScreen.kt`) ships Open / Edit / Pin / Move up / Move down / Delete; rename happens in the editor. **Duplicate is the one missing action** and is still deferred.
+- [x] Station duplicate / delete / rename — `StationActionSheet` ships Open / Edit / **Duplicate** / Pin / Move up / Move down / Delete. Duplicate clones source + playback + cosmetics into a new user-row with a `(copy)` name suffix, then drops the user straight into the editor on the copy (the canonical "tweak this rule chain" workflow).
 - [x] Auto-collage station artwork (4-album-cover grid) — generated from the station's first 4 distinct album covers when no custom artwork is set.
 - [x] Custom artwork upload per station — `ui/util/ImagePicker` (with `supportsImagePicker()` + `rememberImagePicker { bytes -> … }`) round-trips an image picked from the system file picker into the station's artwork bytes column.
 - [~] Onboarding steps 5–6 (taste setup + first custom station) — superseded by the linear 5-step flow shipped in current `OnboardingScreen.kt`. The "Done" step shows a 3-card mini-tour (Stations / Drive Mode / AI DJ teaser) instead of dedicated taste-setup screens. Re-evaluate post-v1 if user testing flags the simpler flow as missing context.
@@ -1205,19 +1205,19 @@ Goal: app feels like a music app, not a tech demo. Looks great on every form fac
 
 - [x] Stations Home: responsive grid (1 col compact, adaptive ≥240dp tiles for medium+) *(Phase 6 part 1 — sort/group/list-toggle deferred)*
 - [ ] Stations Home: list/grid view toggle, sort menus, tile size XS–L preference
-- [~] Long-press tile → quick actions — `StationActionSheet` (in `StationsHomeScreen.kt`) ships Open station / Edit / Pin to top / Move up / Move down / Delete. **Duplicate, "Add to Drive Mode quick-list", and "Add to Widget" are still deferred** — the latter two pair with the Drive Mode overlay (Phase 8) and the widget-config UI (Phase 13).
+- [~] Long-press tile → quick actions — `StationActionSheet` (in `StationsHomeScreen.kt`) ships Open station / Edit / Duplicate / Pin to top / Move up / Move down / Delete. **"Add to Drive Mode quick-list" and "Add to Widget" are still deferred** — they pair with the Drive Mode overlay (Phase 8) and the widget-config UI (Phase 13).
 - [x] Now Playing screen: full-screen art, scrubber, controls — Coil-driven `AsyncImage` artwork, full transport, blurred backdrop (`BlurredBackdrop`), tap-to-expand fullscreen lightbox.
 - [x] Now Playing: layout variants for compact (stacked) and medium+ (two-pane) *(Phase 6 part 1 — three-pane queue/lyrics deferred to large-tablet pass)*
-- [ ] Album-art aspect-ratio handling (square crop + blurred letterbox fill) *(needs real artwork — Phase 10)*
+- [x] Album-art aspect-ratio handling (square crop + blurred letterbox fill) — `AlbumArtPlaceholder` renders a two-layer composition: a `Modifier.blur(28.dp)`-cropped backdrop of the same image plus a `ContentScale.Fit` foreground. Square art reads as a single image (the layers are pixel-identical inside the frame); non-square art shows the full image with its own blurred halo filling the letterbox instead of edge-clipping.
 - [~] Gesture handling: swipe, pinch, long-press — long-press skip-menu, MiniPlayer swipe-up to expand, MiniPlayer horizontal swipe-to-skip (left = next, right = previous). Pinch-to-lyrics still deferred.
 - [x] Lyrics view: synced LRC karaoke + plain text fallback — LRClib + sidecar `.lrc` + embedded USLT/SYLT, tap-to-seek, copy to clipboard, A−/A+ font scale (persisted), source attribution badge, manual artist/title override on miss, cooperative auto-scroll (drag suppresses for ~5s) + "Jump to current line" FAB when active line scrolls off-screen.
 - [x] Star rating UI (1–5) + tap-same-star-to-clear — half-star precision shipped (`SettingsStore.useHalfStarRatings`).
 - [x] Skip tracking instrumentation — feeds the Stats screen's most-skipped tracks card and per-station skip rate.
 - [x] "Don't play on this station again" dislike menu *(Phase 6 part 1 — long-press skip-next)*; global "Don't play on any station" override also available.
 - [x] Onboarding steps 7–9 (in-car preview, AI DJ intro, done) — superseded by the linear 5-step flow with a 3-card "Done" mini-tour. Live-file ticker + filename basename rendered during the scan step. See Phase 19 for ticker polish.
-- [~] Theme system: light, dark, AMOLED-black, accent color — light/dark/system shipped (`ThemeMode`); accent color follows Material You when enabled. AMOLED-black variant still deferred.
+- [x] Theme system: light, dark, AMOLED-black, accent color — `ThemeMode { System, Light, Dark, Amoled }` ships in `ui/theme/Theme.kt` with all four options exposed in Settings → Theme. AMOLED forces pure-black background/surface even when Material You dynamic color is active (the user's true-black preference wins over the wallpaper palette).
 - [x] Material You dynamic color (Android 12+) opt-in — `SettingsStore.getMaterialYouEnabled()`, applied via `RadioShedTheme`.
-- [ ] Font scaling (XS–XXL) — only Lyrics has a font-size adjuster today; app-wide scale still deferred.
+- [x] Font scaling (XS–XXL) — Settings → Accessibility offers six discrete stops (XS / S / M / L / XL / XXL → 0.85× / 0.92× / 1.0× / 1.10× / 1.20× / 1.30×) that scale every Material text style across the app via `RadioShedTheme(fontScale = …)`. Persisted via `SettingsStore.getFontScale()`. The Lyrics A−/A+ adjuster still operates on top of this for that one screen.
 - [x] Reduce-motion mode — `SettingsStore.getReduceMotion()` honored across animated transitions and the blurred backdrop.
 - [ ] Accessibility audit: TalkBack on Android, VoiceOver on iOS
 - [ ] CI snapshot-test pass across §1.1 form factor matrix

@@ -92,6 +92,34 @@ class StationRepository(private val db: RadioShedDatabase) {
         ).executeAsOne()
     }
 
+    /**
+     * Clone an existing station's source / playback / cosmetic fields
+     * into a new row with a `(copy)` suffix on the name. Reset stats
+     * (the duplicate hasn't been played yet), reset built-in flag
+     * (the copy is a user station even if seeded from a preset), and
+     * append at the bottom of sort order so it doesn't shove existing
+     * stations around. Returns the new station id.
+     *
+     * Lets users clone "Latest Hits" to make "Latest Hits — Metal
+     * Only" without rebuilding the whole rule chain — the most-asked
+     * Stations Home action that the app didn't ship with.
+     */
+    suspend fun duplicate(stationId: Long): Long? = withContext(IODispatcher) {
+        val src = getById(stationId) ?: return@withContext null
+        val maxSort = list().maxOfOrNull { it.sortPosition } ?: 0
+        insert(
+            name = "${src.name} (copy)",
+            source = src.source,
+            playback = src.playback,
+            color = src.color,
+            icon = src.icon,
+            artworkUri = src.artworkUri,
+            sortPosition = maxSort + 1,
+            customSubtitle = src.customSubtitle,
+            isBuiltIn = false,
+        )
+    }
+
     suspend fun update(
         id: Long,
         name: String,

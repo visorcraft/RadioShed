@@ -76,6 +76,8 @@ fun AppSettingsScreen(
     onThemeModeChange: (ThemeMode) -> Unit,
     currentMaterialYou: Boolean = false,
     onMaterialYouChange: (Boolean) -> Unit = {},
+    currentFontScale: Float = 1f,
+    onFontScaleChange: (Float) -> Unit = {},
     onOpenEqualizer: () -> Unit = {},
     onOpenPlaylists: () -> Unit = {},
     onOpenBackup: () -> Unit = {},
@@ -165,6 +167,14 @@ fun AppSettingsScreen(
 
             // ---- Accessibility ----
             SectionHeader("Accessibility")
+            FontScaleRow(
+                value = currentFontScale,
+                onChange = { v ->
+                    onFontScaleChange(v)
+                    settings.setFontScale(v)
+                },
+            )
+            Spacer(Modifier.height(8.dp))
             ToggleRow(
                 title = "Reduce motion",
                 subtitle = "Minimize animations across the app. Useful for motion-sensitivity, also " +
@@ -803,4 +813,62 @@ private enum class ThemeOption(
         description = "True-black background — saves battery on OLED displays",
         icon = Icons.Filled.NightsStay,
     ),
+}
+
+/**
+ * Six discrete typography stops (XS / S / M / L / XL / XXL) mapped to
+ * 0.85 / 0.92 / 1.0 / 1.10 / 1.20 / 1.30. Discrete stops are friendlier
+ * than a continuous slider — users have a shared vocabulary, snapshots
+ * are reproducible, and the slider's drag-to-write debounce isn't
+ * needed because each tap is one discrete write.
+ */
+private val FONT_SCALE_STOPS = listOf(0.85f, 0.92f, 1.0f, 1.10f, 1.20f, 1.30f)
+private val FONT_SCALE_LABELS = listOf("XS", "S", "M", "L", "XL", "XXL")
+
+@Composable
+private fun FontScaleRow(value: Float, onChange: (Float) -> Unit) {
+    val activeIdx = remember(value) {
+        // Snap whatever's persisted to the nearest stop so the chip
+        // row reads cleanly even if a future slider write produced
+        // an intermediate value.
+        FONT_SCALE_STOPS.indices.minByOrNull {
+            kotlin.math.abs(FONT_SCALE_STOPS[it] - value)
+        } ?: 2
+    }
+    androidx.compose.material3.Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+            Text(
+                "Text size",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Scale every screen's typography. Affects buttons, titles, body text, " +
+                    "and lists. Lyrics has its own A−/A+ on top of this.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+            )
+            Spacer(Modifier.height(10.dp))
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                FONT_SCALE_STOPS.forEachIndexed { i, stop ->
+                    val active = i == activeIdx
+                    androidx.compose.material3.FilterChip(
+                        selected = active,
+                        onClick = { if (!active) onChange(stop) },
+                        label = { Text(FONT_SCALE_LABELS[i]) },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+        }
+    }
 }

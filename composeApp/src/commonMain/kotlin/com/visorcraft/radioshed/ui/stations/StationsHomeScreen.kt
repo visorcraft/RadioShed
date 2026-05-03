@@ -39,6 +39,7 @@ import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.NewReleases
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.SwapVert
@@ -423,6 +424,18 @@ fun StationsHomeScreen(
                     actionsForStationId = null
                     onEditStation(id)
                 },
+                onDuplicate = {
+                    actionsForStationId = null
+                    scope.launch {
+                        // Drop the user straight into the editor so
+                        // they can tweak the clone immediately —
+                        // duplicating without a follow-up edit is
+                        // rare in practice (the whole point of a
+                        // copy is to change something).
+                        val newId = stationRepo.duplicate(id)
+                        if (newId != null) onEditStation(newId)
+                    }
+                },
                 onTogglePin = {
                     actionsForStationId = null
                     scope.launch { stationRepo.setPinned(id, !station.isPinned) }
@@ -497,6 +510,7 @@ private fun StationActionSheet(
     onDismiss: () -> Unit,
     onOpenDetail: () -> Unit,
     onEdit: () -> Unit,
+    onDuplicate: () -> Unit,
     onTogglePin: () -> Unit,
     onMoveUp: () -> Unit,
     onMoveDown: () -> Unit,
@@ -522,6 +536,15 @@ private fun StationActionSheet(
                 icon = Icons.Filled.Edit,
                 label = if (station.isBuiltIn) "Edit (cosmetic only)" else "Edit",
                 onClick = onEdit,
+            )
+            // Duplicate clones the source / playback / cosmetics into a
+            // new user station and drops the user straight into the
+            // editor on the copy — the canonical "I want this station's
+            // rules but with one tweak" workflow.
+            ActionRow(
+                icon = Icons.Filled.ContentCopy,
+                label = "Duplicate",
+                onClick = onDuplicate,
             )
             ActionRow(
                 icon = if (station.isPinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,

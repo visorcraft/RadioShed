@@ -59,6 +59,21 @@ class SettingsStore(private val settings: Settings) {
     fun setReduceMotion(enabled: Boolean) = settings.putBoolean(KEY_REDUCE_MOTION, enabled)
 
     /**
+     * App-wide typography scale, applied across every Material text
+     * style by `RadioShedTheme`. Range 0.85–1.30 (clamped on read so
+     * a corrupted preference can't blow up the UI). 1.0 = the
+     * Material default; 0.85 ≈ "XS"; 1.30 ≈ "XXL". Distinct from the
+     * Lyrics-only font adjuster, which still operates inside its own
+     * scope on top of this.
+     */
+    fun getFontScale(): Float =
+        settings.getFloat(KEY_FONT_SCALE, 1f).coerceIn(0.85f, 1.30f)
+
+    fun setFontScale(value: Float) {
+        settings.putFloat(KEY_FONT_SCALE, value.coerceIn(0.85f, 1.30f))
+    }
+
+    /**
      * Drive Mode bumps transport / rating tap targets to be safer
      * to hit while driving. Off by default; users opt in once and
      * the setting follows them across sessions.
@@ -482,6 +497,7 @@ class SettingsStore(private val settings: Settings) {
         const val KEY_MATERIAL_YOU = "ui.materialYou"
         const val KEY_USER_VOLUME = "audio.userVolume"
         const val KEY_REDUCE_MOTION = "ui.reduceMotion"
+        const val KEY_FONT_SCALE = "ui.fontScale"
         const val KEY_CONNECTIVITY_POLICY = "online.connectivityPolicy"
         const val KEY_ONBOARDING_DONE = "onboarding.complete"
         const val KEY_LAST_STATION_ID = "playback.lastStationId"
