@@ -8,8 +8,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.launchIn
-import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlin.time.TimeSource
@@ -50,11 +48,24 @@ class SleepTimer(private val audioEngine: AudioEngine) {
      */
     private var capturedVolume: Float? = null
 
+    /**
+     * Real-time tracking of the in-flight timer. The StateFlow's
+     * `remainingMs` is sampled at TICK_INTERVAL_MS and lags reality
+     * by up to a full second; [extend] needs the precise remaining
+     * time so a +15 minute extension produces a 15:00:00 window
+     * rather than 15:00:00 ± 1s. Cleared in [cancel] and at natural
+     * end of the running coroutine.
+     */
+    private var startedMark: kotlin.time.TimeSource.Monotonic.ValueTimeMark? = null
+    private var currentDurationMs: Long = 0L
+
     /** Schedule a hard pause after [durationMs] of wall-clock time. */
     fun start(durationMs: Long) {
         cancel()
         if (durationMs <= 0L) return
         val started = TimeSource.Monotonic.markNow()
+        startedMark = started
+        currentDurationMs = durationMs
         // Capture before starting so the fade ramp has the right ceiling
         // even if ReplayGain or another consumer mutates the volume mid-
         // timer. We restore this value on cancel / after final pause.
@@ -84,36 +95,48 @@ class SleepTimer(private val audioEngine: AudioEngine) {
             // track's RG re-application starts from a normal baseline.
             audioEngine.setVolume(startVolume)
             capturedVolume = null
+            startedMark = null
+            currentDurationMs = 0L
             _state.value = State.Idle
         }
     }
 
     /**
-     * Pause the moment the current track finishes. The player emits
-     * [PlayerState.Ended] right before StationPlayback's auto-advance
-     * kicks in — we observe that and pause before the queue moves on.
+     * Arm a pause for the moment the current track finishes. Just
+     * flips the state to [State.EndOfTrack]; the actual pause is
+     * driven by [StationPlayback]'s Ended handler via
+     * [consumeEndOfTrackPause]. We can't have two coroutines both
+     * watching `audioEngine.state` for `Ended` — whichever one
+     * scheduled later runs after the auto-advance has already
+     * loaded the next track and the pause lands on the wrong song.
      *
-     * If nothing is currently playing, this is a no-op (Idle).
+     * If nothing is currently playing, this still arms the timer —
+     * the next playback's natural end will trigger it.
      */
     fun startEndOfTrack() {
         cancel()
         _state.value = State.EndOfTrack
-        // StateFlow already deduplicates, so no need for distinctUntilChanged
-        // (which the compiler warns is a no-op on StateFlow anyway).
-        endOfTrackWatcher = audioEngine.state
-            .onEach { s ->
-                if (s == PlayerState.Ended) {
-                    audioEngine.pause()
-                    _state.value = State.Idle
-                    endOfTrackWatcher?.cancel()
-                }
-            }
-            .launchIn(scope)
+    }
+
+    /**
+     * Called by [StationPlayback] inside its Ended handler. Returns
+     * true if the timer is armed and we should pause instead of
+     * advancing. Resets the timer state to Idle on consumption so
+     * the next track plays normally.
+     */
+    fun consumeEndOfTrackPause(): Boolean {
+        if (_state.value !is State.EndOfTrack) return false
+        _state.value = State.Idle
+        return true
     }
 
     fun cancel() {
         ticker?.cancel()
         ticker = null
+        // endOfTrackWatcher removed — StationPlayback now consumes
+        // the EndOfTrack state directly. Keeping this null-safe in
+        // case migration leaves a stale Job lying around on a hot
+        // reload.
         endOfTrackWatcher?.cancel()
         endOfTrackWatcher = null
         // If we'd been mid-fade, snap back to where the user was. Without
@@ -121,6 +144,8 @@ class SleepTimer(private val audioEngine: AudioEngine) {
         // 25%-volume track until the next track loads and RG re-applies.
         capturedVolume?.let { audioEngine.setVolume(it) }
         capturedVolume = null
+        startedMark = null
+        currentDurationMs = 0L
         _state.value = State.Idle
     }
 
@@ -135,10 +160,16 @@ class SleepTimer(private val audioEngine: AudioEngine) {
      * imperceptible since both calls happen synchronously here.
      */
     fun extend(extendByMs: Long) {
-        val running = _state.value as? State.Running ?: return
+        if (_state.value !is State.Running) return
         if (extendByMs <= 0L) return
-        val newDuration = running.remainingMs + extendByMs
-        start(newDuration)
+        // Compute the precise remaining time from the monotonic clock
+        // rather than the StateFlow's tick-rate sample (which lags by
+        // up to TICK_INTERVAL_MS = 1s). Without this the new window
+        // is consistently off by a small but observable amount.
+        val started = startedMark ?: return
+        val elapsed = started.elapsedNow().inWholeMilliseconds
+        val realRemaining = (currentDurationMs - elapsed).coerceAtLeast(0L)
+        start(realRemaining + extendByMs)
     }
 
     sealed interface State {

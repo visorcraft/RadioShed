@@ -464,6 +464,13 @@ private fun ThemeChoiceRow(
  */
 @Composable
 private fun EndFadeSlider(seconds: Int, onChange: (Int) -> Unit) {
+    // Same lift-up-state pattern as PreampSlider so the readout
+    // tracks the drag without burning a SharedPreferences write
+    // every frame. Discrete steps mean fewer onValueChange events
+    // per drag than a continuous slider, but the cost is the same.
+    var dragging by remember { mutableStateOf(false) }
+    var pending by remember { mutableStateOf(seconds) }
+    val display = if (dragging) pending else seconds
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -476,7 +483,7 @@ private fun EndFadeSlider(seconds: Int, onChange: (Int) -> Unit) {
                 modifier = Modifier.weight(1f),
             )
             Text(
-                text = if (seconds == 0) "Off" else "${seconds}s",
+                text = if (display == 0) "Off" else "${display}s",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
             )
@@ -490,8 +497,15 @@ private fun EndFadeSlider(seconds: Int, onChange: (Int) -> Unit) {
             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
         )
         androidx.compose.material3.Slider(
-            value = seconds.toFloat(),
-            onValueChange = { onChange(it.toInt()) },
+            value = display.toFloat(),
+            onValueChange = {
+                dragging = true
+                pending = it.toInt()
+            },
+            onValueChangeFinished = {
+                onChange(pending)
+                dragging = false
+            },
             valueRange = 0f..10f,
             steps = 9,
             modifier = Modifier.fillMaxWidth(),
@@ -501,6 +515,14 @@ private fun EndFadeSlider(seconds: Int, onChange: (Int) -> Unit) {
 
 @Composable
 private fun PreampSlider(valueDb: Float, onChange: (Float) -> Unit) {
+    // Local pending state so the dB readout AND slider track the
+    // drag in real time, but the SharedPreferences write (which
+    // onChange routes through) only fires on onValueChangeFinished.
+    // Without this each drag frame persists, thrashing prefs 30-60×
+    // per gesture.
+    var dragging by remember { mutableStateOf(false) }
+    var pending by remember { mutableStateOf(valueDb) }
+    val display = if (dragging) pending else valueDb
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
@@ -525,14 +547,21 @@ private fun PreampSlider(valueDb: Float, onChange: (Float) -> Unit) {
                 }
                 Spacer(Modifier.size(12.dp))
                 Text(
-                    "${if (valueDb >= 0f) "+" else ""}${"%.1f".format(valueDb)} dB",
+                    "${if (display >= 0f) "+" else ""}${"%.1f".format(display)} dB",
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
             }
             androidx.compose.material3.Slider(
-                value = valueDb,
-                onValueChange = onChange,
+                value = display,
+                onValueChange = {
+                    dragging = true
+                    pending = it
+                },
+                onValueChangeFinished = {
+                    onChange(pending)
+                    dragging = false
+                },
                 valueRange = -6f..12f,
                 steps = 0,
                 modifier = Modifier.fillMaxWidth(),

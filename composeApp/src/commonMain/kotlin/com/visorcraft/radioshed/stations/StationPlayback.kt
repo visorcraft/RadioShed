@@ -46,6 +46,7 @@ class StationPlayback(
     private val audioEngine: AudioEngine,
     private val libraryRepo: LibraryRepository,
     private val settings: SettingsStore,
+    private val sleepTimer: com.visorcraft.radioshed.audio.SleepTimer,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -237,6 +238,17 @@ class StationPlayback(
             audioEngine.state.collect { state ->
                 if (state == PlayerState.Ended && !suppressAutoAdvance) {
                     advanceMutex.withLock {
+                        // Sleep timer (end-of-track mode) — pause the
+                        // engine here, INSIDE the mutex, BEFORE the
+                        // queue moves on. Previously SleepTimer had
+                        // its own coroutine watching for Ended, which
+                        // raced with this auto-advance: whichever ran
+                        // first decided whether the pause landed on
+                        // the intended track or the next one.
+                        if (sleepTimer.consumeEndOfTrackPause()) {
+                            audioEngine.pause()
+                            return@withLock
+                        }
                         if (_repeatMode.value == RepeatMode.One) {
                             replayCurrentTrack()
                         } else {
@@ -785,16 +797,38 @@ class StationPlayback(
     private val _userVolume = MutableStateFlow(settings.getUserVolume())
     val userVolume: StateFlow<Float> = _userVolume.asStateFlow()
 
-    fun setUserVolume(value: Float) {
+    /**
+     * Live-update the engine volume without persisting to settings.
+     * The slider drag fires this on every frame so the audio
+     * responds in real time, but the settings write is deferred to
+     * [commitUserVolume] which the UI calls on drag-end. This
+     * avoids 30+ SharedPreferences writes per gesture.
+     */
+    fun previewUserVolume(value: Float) {
+        val clamped = value.coerceIn(0f, 1f)
+        _userVolume.value = clamped
+        currentTrack?.let { applyEffectiveVolume(it) }
+    }
+
+    /**
+     * Persist the user volume after a drag gesture ends. Idempotent —
+     * safe to call repeatedly with the same value. Replaces the
+     * previous always-persist behaviour of [setUserVolume].
+     */
+    fun commitUserVolume(value: Float) {
         val clamped = value.coerceIn(0f, 1f)
         _userVolume.value = clamped
         settings.setUserVolume(clamped)
-        // Re-apply against the currently-loaded track so the change
-        // takes effect immediately instead of only on the next
-        // track. ReplayGain may scale this further depending on the
-        // track's tags.
         currentTrack?.let { applyEffectiveVolume(it) }
     }
+
+    /**
+     * Backwards-compat wrapper: legacy callers (Bluetooth, notification
+     * actions, programmatic adjusts) still use the single-call API.
+     * For interactive sliders use [previewUserVolume] +
+     * [commitUserVolume] instead so we don't thrash settings.
+     */
+    fun setUserVolume(value: Float) = commitUserVolume(value)
 
     /**
      * Compute and push the engine volume = userVolume × replayGain

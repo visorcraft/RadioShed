@@ -559,7 +559,8 @@ fun NowPlayingScreen(
                         }
                     },
                     onToggleLike = onToggleLike,
-                    onVolume = { stationPlayback.setUserVolume(it) },
+                    onVolumeLive = { stationPlayback.previewUserVolume(it) },
+                    onVolumeCommit = { stationPlayback.commitUserVolume(it) },
                     onDislikeOnStation = {
                         val stationId = currentStation?.id ?: return@CompactLayout
                         scope.launch {
@@ -604,7 +605,8 @@ fun NowPlayingScreen(
                         }
                     },
                     onToggleLike = onToggleLike,
-                    onVolume = { stationPlayback.setUserVolume(it) },
+                    onVolumeLive = { stationPlayback.previewUserVolume(it) },
+                    onVolumeCommit = { stationPlayback.commitUserVolume(it) },
                     onDislikeOnStation = {
                         val stationId = currentStation?.id ?: return@TwoPaneLayout
                         scope.launch {
@@ -736,7 +738,8 @@ private fun CompactLayout(
     onNext: () -> Unit,
     onRate: (Double) -> Unit,
     onToggleLike: () -> Unit,
-    onVolume: (Float) -> Unit,
+    onVolumeLive: (Float) -> Unit,
+    onVolumeCommit: (Float) -> Unit,
     onDislikeOnStation: () -> Unit,
     onTapArtwork: () -> Unit,
     onTapArtist: () -> Unit,
@@ -788,7 +791,11 @@ private fun CompactLayout(
             onToggleLike = onToggleLike,
         )
         Spacer(Modifier.height(8.dp))
-        VolumeRow(volume = volume, onVolume = onVolume)
+        VolumeRow(
+            volume = volume,
+            onVolumeLive = onVolumeLive,
+            onVolumeCommit = onVolumeCommit,
+        )
     }
 }
 
@@ -809,7 +816,8 @@ private fun TwoPaneLayout(
     onNext: () -> Unit,
     onRate: (Double) -> Unit,
     onToggleLike: () -> Unit,
-    onVolume: (Float) -> Unit,
+    onVolumeLive: (Float) -> Unit,
+    onVolumeCommit: (Float) -> Unit,
     onDislikeOnStation: () -> Unit,
     onTapArtwork: () -> Unit,
     onTapArtist: () -> Unit,
@@ -880,7 +888,11 @@ private fun TwoPaneLayout(
                 onToggleLike = onToggleLike,
             )
             Spacer(Modifier.height(8.dp))
-            VolumeRow(volume = volume, onVolume = onVolume)
+            VolumeRow(
+                volume = volume,
+                onVolumeLive = onVolumeLive,
+                onVolumeCommit = onVolumeCommit,
+            )
         }
     }
 }
@@ -1395,15 +1407,28 @@ private fun RatingRow(
  * with -6 dB ReplayGain ends up at ~25% engine volume.
  */
 @Composable
-private fun VolumeRow(volume: Float, onVolume: (Float) -> Unit) {
+private fun VolumeRow(
+    volume: Float,
+    onVolumeLive: (Float) -> Unit,
+    onVolumeCommit: (Float) -> Unit,
+) {
+    // Local pending value while the user is dragging — the engine
+    // responds to onVolumeLive in real time, but the persist hop
+    // through SharedPreferences fires only on onValueChangeFinished.
+    // Without this, every frame of the drag persisted to disk:
+    // 30-60 settings writes per gesture and noticeable jank on
+    // older Android devices.
+    var dragging by remember { mutableStateOf(false) }
+    var pending by remember { mutableFloatStateOf(volume) }
+    val display = if (dragging) pending else volume
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
             imageVector = when {
-                volume < 0.02f -> Icons.AutoMirrored.Filled.VolumeOff
-                volume < 0.5f -> Icons.AutoMirrored.Filled.VolumeDown
+                display < 0.02f -> Icons.AutoMirrored.Filled.VolumeOff
+                display < 0.5f -> Icons.AutoMirrored.Filled.VolumeDown
                 else -> Icons.AutoMirrored.Filled.VolumeUp
             },
             contentDescription = "Volume",
@@ -1412,8 +1437,16 @@ private fun VolumeRow(volume: Float, onVolume: (Float) -> Unit) {
         )
         Spacer(Modifier.width(8.dp))
         Slider(
-            value = volume,
-            onValueChange = onVolume,
+            value = display,
+            onValueChange = {
+                dragging = true
+                pending = it
+                onVolumeLive(it)
+            },
+            onValueChangeFinished = {
+                onVolumeCommit(pending)
+                dragging = false
+            },
             valueRange = 0f..1f,
             modifier = Modifier.weight(1f),
             colors = SliderDefaults.colors(),

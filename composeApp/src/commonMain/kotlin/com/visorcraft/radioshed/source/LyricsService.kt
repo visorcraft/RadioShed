@@ -32,7 +32,21 @@ class LyricsService(
     suspend fun resolve(trackId: Long, forceRefresh: Boolean = false): Lyrics? {
         if (!forceRefresh) {
             cache.get(trackId)?.let { entry ->
-                return entry.toLyrics(trackId)
+                // Negative-cache TTL: a "not found" hit on LRClib that's
+                // older than MISS_TTL_MS gets a re-fetch — LRClib adds
+                // tracks over time and we'd never surface those without
+                // the user manually force-refreshing. Hit cache for
+                // positive entries (lyrics, instrumental flag, local
+                // sidecar) is permanent because the file content
+                // doesn't shift over time the way the LRClib database
+                // does.
+                val isMiss = entry.source == MISS_SENTINEL
+                val ageMs = com.visorcraft.radioshed.data.nowMillis() - entry.fetchedAt
+                if (isMiss && ageMs > MISS_TTL_MS) {
+                    cache.delete(trackId)
+                } else {
+                    return entry.toLyrics(trackId)
+                }
             }
         }
 
@@ -191,5 +205,15 @@ class LyricsService(
         const val MISS_SENTINEL = "lrclib:miss"
         const val INSTRUMENTAL_SENTINEL = "lrclib:instrumental"
         const val LOCAL_SOURCE = "local"
+
+        /**
+         * How long a "not found" cache entry stays valid before we'll
+         * re-hit LRClib. 30 days strikes a balance: long enough that
+         * the network isn't pinged on every play of an obscure track
+         * we already established isn't there; short enough that a
+         * track LRClib added in the meantime surfaces eventually
+         * without user intervention.
+         */
+        const val MISS_TTL_MS: Long = 30L * 24L * 60L * 60L * 1_000L
     }
 }

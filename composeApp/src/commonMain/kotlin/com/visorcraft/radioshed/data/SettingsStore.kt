@@ -354,6 +354,13 @@ class SettingsStore(private val settings: Settings) {
      * Restore settings from a backup. Unknown keys are silently
      * ignored — keeps forward compatibility when an older app reads
      * a newer bundle (it just doesn't apply the new keys).
+     *
+     * Per-key type validation: a key is only written if the bundle's
+     * value type matches what the app currently stores at that key.
+     * Without this guard, a future app version that promotes
+     * `KEY_REPLAY_GAIN_PREAMP` from Float to Int would silently
+     * corrupt the prefs slot when reading an older Float-typed
+     * bundle, and `getFloat()` would then return the default.
      */
     fun restoreFromBackup(snapshot: Map<String, com.visorcraft.radioshed.source.BackupSettingValue>) {
         for ((key, value) in snapshot) {
@@ -361,6 +368,15 @@ class SettingsStore(private val settings: Settings) {
             // tampered bundle — defence-in-depth even though we
             // never write those keys to the dump.
             if (key in BLOCKED_RESTORE_KEYS) continue
+            // Skip when the bundle's type doesn't match what the
+            // app's dump would produce for this key today. Unknown
+            // keys (introduced in a newer bundle) fall through to
+            // the type-match write because there's no expected type
+            // recorded — they just go through with whatever type
+            // the bundle declared.
+            val expected = expectedTypeForKey(key)
+            val actual = bundleValueType(value)
+            if (expected != null && expected != actual) continue
             when (value) {
                 is com.visorcraft.radioshed.source.BackupSettingValue.Bool ->
                     settings.putBoolean(key, value.value)
@@ -374,6 +390,33 @@ class SettingsStore(private val settings: Settings) {
                     settings.putFloat(key, value.value)
             }
         }
+    }
+
+    private enum class SettingType { BOOL, STR, INT, LONG, FLOAT }
+
+    private fun bundleValueType(value: com.visorcraft.radioshed.source.BackupSettingValue): SettingType =
+        when (value) {
+            is com.visorcraft.radioshed.source.BackupSettingValue.Bool -> SettingType.BOOL
+            is com.visorcraft.radioshed.source.BackupSettingValue.Str -> SettingType.STR
+            is com.visorcraft.radioshed.source.BackupSettingValue.IntValue -> SettingType.INT
+            is com.visorcraft.radioshed.source.BackupSettingValue.LongValue -> SettingType.LONG
+            is com.visorcraft.radioshed.source.BackupSettingValue.FloatValue -> SettingType.FLOAT
+        }
+
+    /**
+     * Source-of-truth type for each user-portable settings key. Mirrors
+     * what [dumpForBackup] writes. Returns null for keys not on the
+     * known list — those flow through restore as-is so a newer bundle
+     * adding a new key isn't dropped on the floor.
+     */
+    private fun expectedTypeForKey(key: String): SettingType? = when (key) {
+        KEY_THEME_MODE, KEY_CONNECTIVITY_POLICY -> SettingType.STR
+        KEY_MATERIAL_YOU, KEY_REDUCE_MOTION, KEY_DRIVE_MODE,
+        KEY_REPLAY_GAIN, KEY_AUTO_RESUME_STATION, KEY_AUTO_BACKUP,
+        KEY_AUTO_RESCAN_ON_LAUNCH, KEY_EQ_ENABLED -> SettingType.BOOL
+        KEY_USER_VOLUME, KEY_REPLAY_GAIN_PREAMP -> SettingType.FLOAT
+        KEY_END_FADE_SEC -> SettingType.INT
+        else -> null
     }
 
     private companion object {

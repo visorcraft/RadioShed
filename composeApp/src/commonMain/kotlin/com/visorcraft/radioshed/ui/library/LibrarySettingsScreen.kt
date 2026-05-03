@@ -418,10 +418,14 @@ private fun FolderColorRow(
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
         )
         // "No color" slot. Visually a hollow swatch matching surface.
+        // Guard against a redundant clear when already null — palette
+        // swatches already have toggle semantics, so re-tapping a
+        // color un-tags. The null swatch should be a no-op when the
+        // folder already has no color.
         ColorSwatch(
             color = null,
             selected = current == null,
-            onClick = { onPick(null) },
+            onClick = { if (current != null) onPick(null) },
         )
         FolderTagPalette.forEach { color ->
             ColorSwatch(

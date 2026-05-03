@@ -185,7 +185,16 @@ fun OnboardingScreen(
                                 step = OnboardingStep.Scan
                                 scanJob = scope.launch {
                                     runCatching {
-                                        val id = folderRepo.insert(
+                                        // Re-use the existing folder row when the
+                                        // user comes back to this step after a
+                                        // failed scan (or just bounces Back +
+                                        // Scan-now). The folder.uri column has a
+                                        // UNIQUE index, so a naked .insert() would
+                                        // throw a SQLite constraint exception on
+                                        // the second attempt and trap the user in
+                                        // an unrecoverable error loop.
+                                        val existing = folderRepo.getByUri(folderPath)
+                                        val id = existing?.id ?: folderRepo.insert(
                                             displayName = folderName.ifBlank {
                                                 folderPath.substringAfterLast('/').ifBlank { folderPath }
                                             },
@@ -866,7 +875,13 @@ private fun canProceed(
     scanStatus: ScanProgress?,
 ): Boolean = when (step) {
     OnboardingStep.Welcome -> true
-    OnboardingStep.Permissions -> true
+    // Permissions step: the primary "Next" path is gated on the
+    // user actually granting permission. The Skip button (separate)
+    // is the explicit escape hatch that proceeds without it. Before
+    // this gate, Next and Skip were functionally identical, which
+    // was confusing and let users blow past the permission ask
+    // without realising it was meaningful.
+    OnboardingStep.Permissions -> permissionGranted
     OnboardingStep.Folder -> folderPath.isNotBlank()
     OnboardingStep.Scan -> false
     OnboardingStep.Done -> true
