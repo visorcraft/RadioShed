@@ -366,6 +366,67 @@ class StationRepository(private val db: RadioShedDatabase) {
         db.stationsQueries.countAllPlays().executeAsOne()
     }
 
+    /**
+     * Day-bucketed play activity for the last [windowDays]. Returns a
+     * dense list of [windowDays] entries — index 0 is the oldest day,
+     * the last index is "today" — so the caller can render a uniform
+     * bar chart without having to fill in zero-play gaps. Bucketing
+     * is by 24-hour rolling windows from now (not local calendar
+     * days), which is close enough for the visualization and avoids
+     * timezone math in SQL.
+     */
+    suspend fun dailyActivity(windowDays: Int = 30): List<DailyActivity> =
+        withContext(IODispatcher) {
+            val now = nowMillis()
+            val sinceMs = now - windowDays.toLong() * DAY_MS
+            val rows = db.stationsQueries.selectPlaysPerDayWindow(
+                nowMs = now,
+                sinceMs = sinceMs,
+            ).executeAsList()
+            val byDaysAgo = rows.associate {
+                it.days_ago.toInt() to (it.plays to it.listened_ms)
+            }
+            // Render oldest → newest so the bar chart reads left-to-
+            // right with "today" on the right.
+            (windowDays - 1 downTo 0).map { offset ->
+                val (plays, listenedMs) = byDaysAgo[offset] ?: (0L to 0L)
+                DailyActivity(
+                    daysAgo = offset,
+                    plays = plays,
+                    listenedMs = listenedMs,
+                )
+            }
+        }
+
+    /**
+     * Plays bucketed by local hour-of-day (0..23) over the last
+     * [windowDays]. Returns a dense array of 24 longs — one per
+     * hour, hour 0 first. Useful for "what time of day do I listen?"
+     * histogram on the Stats screen.
+     */
+    suspend fun playsByHourOfDay(windowDays: Int = 30): LongArray =
+        withContext(IODispatcher) {
+            val sinceMs = nowMillis() - windowDays.toLong() * DAY_MS
+            val rows = db.stationsQueries.selectPlaysPerHourWindow(sinceMs).executeAsList()
+            val out = LongArray(24)
+            rows.forEach { row ->
+                val h = row.hour?.toInt()?.coerceIn(0, 23) ?: return@forEach
+                out[h] = row.plays
+            }
+            out
+        }
+
+    /**
+     * Completion-rate over the entire station_history table.
+     * Returned as (completedPlays, totalPlays) so the caller can
+     * decide how to format (percentage, ratio, etc.). The cold-start
+     * case returns 0 / 0; UI must guard against divide-by-zero.
+     */
+    suspend fun completionStats(): Pair<Long, Long> = withContext(IODispatcher) {
+        val row = db.stationsQueries.selectCompletionStats().executeAsOne()
+        (row.completed ?: 0L) to row.total
+    }
+
     /** Top artists by play count. Returned as (artistId, artistName, plays). */
     suspend fun topPlayedArtists(limit: Long): List<TopArtistEntry> =
         withContext(IODispatcher) {
@@ -438,6 +499,16 @@ data class HistoryEntry(
 )
 
 data class TopArtistEntry(val id: Long, val name: String, val plays: Long)
+
+/** One bar in the listening-activity bar chart on the Stats screen. */
+data class DailyActivity(
+    /** 0 = today's bucket, increasing into the past. */
+    val daysAgo: Int,
+    val plays: Long,
+    val listenedMs: Long,
+)
+
+private const val DAY_MS: Long = 24L * 60L * 60L * 1000L
 
 data class TopAlbumEntry(
     val id: Long,

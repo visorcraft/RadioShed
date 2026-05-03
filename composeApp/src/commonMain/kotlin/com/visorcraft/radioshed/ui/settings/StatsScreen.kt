@@ -92,6 +92,14 @@ fun StatsScreen(
     var mostSkipped by remember {
         mutableStateOf<List<Pair<Track, Long>>>(emptyList())
     }
+    // 30-day daily play activity for the listening-timeline bar
+    // chart. Populated from the same station_history table that
+    // backs the rest of the stats.
+    var dailyActivity by remember {
+        mutableStateOf<List<com.visorcraft.radioshed.data.DailyActivity>>(emptyList())
+    }
+    var hourActivity by remember { mutableStateOf<LongArray>(LongArray(24)) }
+    var completionStats by remember { mutableStateOf<Pair<Long, Long>>(0L to 0L) }
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
@@ -114,6 +122,9 @@ fun StatsScreen(
             .sortedByDescending { it.stats.playCount }
             .take(5)
         mostSkipped = ratingRepo.mostSkippedTracks(limit = 10L)
+        dailyActivity = stationRepo.dailyActivity(windowDays = 30)
+        hourActivity = stationRepo.playsByHourOfDay(windowDays = 30)
+        completionStats = stationRepo.completionStats()
     }
 
     Scaffold(
@@ -149,7 +160,45 @@ fun StatsScreen(
                         modifier = Modifier.weight(1f),
                     )
                 }
+                if (completionStats.second > 0L) {
+                    Spacer(Modifier.height(12.dp))
+                    val pct = (completionStats.first.toDouble() /
+                        completionStats.second.toDouble() * 100.0).toInt()
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        StatTile(
+                            label = "Completion rate",
+                            value = "$pct%",
+                            modifier = Modifier.weight(1f),
+                        )
+                        StatTile(
+                            label = "Finished",
+                            value = "${completionStats.first} / ${completionStats.second}",
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
                 Spacer(Modifier.height(20.dp))
+            }
+
+            if (dailyActivity.any { it.plays > 0 }) {
+                item {
+                    SectionHeader("Last 30 days")
+                    Spacer(Modifier.height(4.dp))
+                    ActivityTimeline(dailyActivity)
+                    Spacer(Modifier.height(20.dp))
+                }
+            }
+
+            if (hourActivity.any { it > 0L }) {
+                item {
+                    SectionHeader("By hour of day")
+                    Spacer(Modifier.height(4.dp))
+                    HourHistogram(hourActivity)
+                    Spacer(Modifier.height(20.dp))
+                }
             }
 
             if (
@@ -440,6 +489,188 @@ private fun StatTile(label: String, value: String, modifier: Modifier = Modifier
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface,
             )
+        }
+    }
+}
+
+/**
+ * 24-bar hour-of-day histogram. Each bar is the play count at that
+ * local hour. The label row underneath shows 0 / 6 / 12 / 18 / 24
+ * gridlines so the user can read "morning" vs "evening" at a glance
+ * without us cluttering with 24 labels.
+ */
+@Composable
+private fun HourHistogram(plays: LongArray) {
+    val peak = remember(plays) { (plays.maxOrNull() ?: 0L).coerceAtLeast(1L) }
+    val peakHour = remember(plays) {
+        val idx = plays.indices.maxByOrNull { plays[it] } ?: 0
+        idx
+    }
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = "Peak around ${formatHour(peakHour)}",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+            )
+            Spacer(Modifier.height(10.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(72.dp),
+                verticalAlignment = Alignment.Bottom,
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                for (h in 0..23) {
+                    val v = plays[h]
+                    val ratio = if (v == 0L) 0.04f
+                                else (0.12f + 0.88f * (v.toFloat() / peak.toFloat()))
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxSize(),
+                        contentAlignment = Alignment.BottomCenter,
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height((72f * ratio).dp.coerceAtLeast(2.dp))
+                                .clip(RoundedCornerShape(2.dp))
+                                .background(
+                                    if (v == 0L)
+                                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
+                                    else
+                                        MaterialTheme.colorScheme.tertiary.copy(
+                                            alpha = (0.45f + 0.55f * (v.toFloat() / peak.toFloat()))
+                                                .coerceAtMost(1f),
+                                        ),
+                                ),
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.height(6.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                listOf("12am", "6am", "noon", "6pm", "12am").forEach { label ->
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** Format a 0..23 hour as "7am" / "1pm" / "midnight" / "noon". */
+private fun formatHour(h: Int): String = when (h) {
+    0 -> "midnight"
+    12 -> "noon"
+    in 1..11 -> "${h}am"
+    else -> "${h - 12}pm"
+}
+
+/**
+ * 30-day daily-plays bar chart. Each entry in [activity] is rendered
+ * as one column scaled against the busiest day in the window. Empty
+ * days become a hairline at the baseline so the row reads as a
+ * uniform timeline rather than a sparse one. Today is the rightmost
+ * bar.
+ */
+@Composable
+private fun ActivityTimeline(
+    activity: List<com.visorcraft.radioshed.data.DailyActivity>,
+) {
+    val peak = remember(activity) { (activity.maxOfOrNull { it.plays } ?: 0L).coerceAtLeast(1L) }
+    val totalPlays = remember(activity) { activity.sumOf { it.plays } }
+    val totalListenedMs = remember(activity) { activity.sumOf { it.listenedMs } }
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Bottom,
+            ) {
+                Text(
+                    text = "$totalPlays plays · ${formatTotalDuration(totalListenedMs)}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                )
+                Text(
+                    text = "peak ${peak.takeIf { it > 0L } ?: 0L}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                )
+            }
+            Spacer(Modifier.height(10.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(72.dp),
+                verticalAlignment = Alignment.Bottom,
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                activity.forEach { day ->
+                    // Logarithmic-ish feel: a single play should
+                    // still be visible against a peak of 50, so we
+                    // floor empty bars at 6% and scale the rest
+                    // linearly. Looks better than a strict linear
+                    // mapping where lone plays disappear.
+                    val ratio = if (day.plays == 0L) 0.04f
+                                else (0.12f + 0.88f * (day.plays.toFloat() / peak.toFloat()))
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxSize()
+                            .padding(horizontal = 0.dp),
+                        contentAlignment = Alignment.BottomCenter,
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height((72f * ratio).dp.coerceAtLeast(2.dp))
+                                .clip(RoundedCornerShape(2.dp))
+                                .background(
+                                    if (day.plays == 0L)
+                                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
+                                    else
+                                        MaterialTheme.colorScheme.primary.copy(
+                                            alpha = (0.45f + 0.55f * (day.plays.toFloat() / peak.toFloat()))
+                                                .coerceAtMost(1f),
+                                        ),
+                                ),
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.height(6.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    text = "30 days ago",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                )
+                Text(
+                    text = "today",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                )
+            }
         }
     }
 }

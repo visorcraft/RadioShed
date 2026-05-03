@@ -1,6 +1,7 @@
 package com.visorcraft.radioshed.ui.player
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -120,6 +121,29 @@ fun MiniPlayer(
                     },
                     onDragCancel = { accum = 0f },
                     onVerticalDrag = { _, dy -> accum += dy },
+                )
+            }
+            // Horizontal swipe: left = next track, right = previous.
+            // Lives in its own pointerInput so Compose's gesture-
+            // resolution can arbitrate between this and the vertical
+            // swipe — whichever axis exceeds touch-slop first wins,
+            // and the other is cancelled. Both fire only on drag-end
+            // so the user has to commit to the gesture (no
+            // accidental skips from a small horizontal twitch while
+            // tapping).
+            .pointerInput(Unit) {
+                var accum = 0f
+                detectHorizontalDragGestures(
+                    onDragStart = { accum = 0f },
+                    onDragEnd = {
+                        when {
+                            accum < -SWIPE_THRESHOLD_PX -> stationPlayback.skipNext()
+                            accum > SWIPE_THRESHOLD_PX -> stationPlayback.skipPrevious()
+                        }
+                        accum = 0f
+                    },
+                    onDragCancel = { accum = 0f },
+                    onHorizontalDrag = { _, dx -> accum += dx },
                 )
             },
         color = MaterialTheme.colorScheme.surface,

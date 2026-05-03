@@ -229,6 +229,43 @@ SELECT IFNULL(SUM(listened_ms), 0) FROM station_history;
 countAllPlays:
 SELECT COUNT(*) FROM station_history;
 
+-- Daily play counts within a rolling window. ?1 is "now" in epoch
+-- ms, ?2 is the cutoff (now - windowMs). Returns one row per day
+-- with at least one play, with days_ago=0 = today's bucket. The
+-- chart renderer fills in zero-play days client-side.
+selectPlaysPerDayWindow:
+SELECT
+    CAST((:nowMs - played_at) / (24 * 60 * 60 * 1000) AS INTEGER) AS days_ago,
+    COUNT(*) AS plays,
+    IFNULL(SUM(listened_ms), 0) AS listened_ms
+FROM station_history
+WHERE played_at >= :sinceMs
+GROUP BY days_ago
+ORDER BY days_ago;
+
+-- Hour-of-day play distribution within a rolling window. SQLite's
+-- strftime needs seconds, hence /1000, and 'localtime' tells it to
+-- use the JVM/process timezone so 'hour 19' means the user's local
+-- 7 pm regardless of where they are. Returns one row per hour with
+-- at least one play; the renderer fills in zero-play hours.
+selectPlaysPerHourWindow:
+SELECT
+    CAST(strftime('%H', played_at / 1000, 'unixepoch', 'localtime') AS INTEGER) AS hour,
+    COUNT(*) AS plays
+FROM station_history
+WHERE played_at >= :sinceMs
+GROUP BY hour
+ORDER BY hour;
+
+-- Completion-rate aggregates over all of station_history. Two
+-- counts in one query is cheaper than two scans even on a tiny
+-- index; SQLite does it in one pass.
+selectCompletionStats:
+SELECT
+    SUM(CASE WHEN completed = 1 THEN 1 ELSE 0 END) AS completed,
+    COUNT(*) AS total
+FROM station_history;
+
 -- Top artists by play count, joining through track_artist (primary
 -- role only — features / album-artist links would over-count). Returns
 -- (artistId, artistName, plays). Album/album-artist counted as plays

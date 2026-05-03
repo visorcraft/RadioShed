@@ -173,6 +173,12 @@ fun NowPlayingScreen(
     // entries since removing a rule-driven row would just regenerate
     // the same track on next peek).
     var priorityCount by remember { mutableStateOf(0) }
+    // Album-id → artworkUri map for the queue sheet's track rows.
+    // Built lazily from the union of upcoming + recent each time the
+    // sheet opens — small enough (<=40 distinct albums in practice)
+    // that the round-trip per album is cheap and beats subscribing to
+    // a live observable for a transient bottom sheet.
+    var queueArtwork by remember { mutableStateOf<Map<Long, String?>>(emptyMap()) }
     // Re-fetch the canonical state whenever the sheet opens or the
     // current track changes (which is also when the priority head
     // gets consumed). Optimistic local mutations from the X / Clear
@@ -183,6 +189,10 @@ fun NowPlayingScreen(
             upcoming = stationPlayback.upcoming(count = 20)
             priorityCount = stationPlayback.priorityCount()
             recent = stationPlayback.recentSnapshot().reversed()  // newest first
+            val albumIds = (upcoming + recent).mapNotNull { it.albumId }.distinct()
+            queueArtwork = albumIds.associateWith { id ->
+                libraryRepo.getAlbumById(id)?.artworkUri
+            }
         }
     }
 
@@ -446,6 +456,7 @@ fun NowPlayingScreen(
             QueueBottomSheet(
                 upcoming = upcoming,
                 recent = recent,
+                artworkByAlbumId = queueArtwork,
                 priorityCount = priorityCount,
                 isShuffleMode = currentStation?.playback?.order != com.visorcraft.radioshed.domain.PlayOrder.Sequential
                     && currentStation != null,
@@ -1789,6 +1800,7 @@ private fun InfoLineTappable(label: String, value: String, onClick: () -> Unit) 
 private fun QueueBottomSheet(
     upcoming: List<Track>,
     recent: List<Track>,
+    artworkByAlbumId: Map<Long, String?>,
     priorityCount: Int,
     isShuffleMode: Boolean,
     onDismiss: () -> Unit,
@@ -1836,6 +1848,7 @@ private fun QueueBottomSheet(
                 items(recent, key = { "r:${it.id}" }) { track ->
                     QueueTrackRow(
                         track = track,
+                        artworkUri = track.albumId?.let(artworkByAlbumId::get),
                         dim = true,
                         onTap = null,
                         onRemove = null,
@@ -1889,6 +1902,7 @@ private fun QueueBottomSheet(
                     }
                     QueueTrackRow(
                         track = track,
+                        artworkUri = track.albumId?.let(artworkByAlbumId::get),
                         dim = false,
                         onTap = { onJumpUpcoming(idx) },
                         onRemove = if (canRemove) {
@@ -1917,6 +1931,7 @@ private fun QueueSectionHeader(label: String) {
 @Composable
 private fun QueueTrackRow(
     track: Track,
+    artworkUri: String?,
     dim: Boolean,
     onTap: (() -> Unit)?,
     onRemove: (() -> Unit)?,
@@ -1930,12 +1945,33 @@ private fun QueueTrackRow(
         modifier = rowMod.padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(
-            imageVector = Icons.Filled.MusicNote,
-            contentDescription = null,
-            modifier = Modifier.size(18.dp),
-            tint = baseColor.copy(alpha = 0.6f),
-        )
+        // 32dp thumbnail keeps the row scannable without crowding —
+        // visual rhythm matches the title/MM:SS layout. Falls back
+        // to the music-note icon when art is missing or the track's
+        // album hasn't been resolved yet.
+        Box(
+            modifier = Modifier
+                .size(32.dp)
+                .clip(RoundedCornerShape(4.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (artworkUri != null) {
+                coil3.compose.AsyncImage(
+                    model = artworkUri,
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                )
+            } else {
+                Icon(
+                    imageVector = Icons.Filled.MusicNote,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint = baseColor.copy(alpha = 0.6f),
+                )
+            }
+        }
         Spacer(Modifier.size(10.dp))
         Text(
             text = track.title.ifBlank { track.fileName },
