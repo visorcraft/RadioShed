@@ -421,6 +421,20 @@ class LibraryRepository(private val db: RadioShedDatabase) {
     }
 
     /**
+     * Album IDs in `[minYear, maxYear]` inclusive. Albums with NULL
+     * year are excluded so a "60s" decade station isn't padded with
+     * year-less rips that may or may not actually belong there.
+     * Used by the Generate-decade-stations action.
+     */
+    suspend fun albumIdsByYearRange(minYear: Int, maxYear: Int): List<Long> =
+        withContext(IODispatcher) {
+            db.libraryQueries.selectAlbumIdsByYearRange(
+                minYear.toLong(),
+                maxYear.toLong(),
+            ).executeAsList()
+        }
+
+    /**
      * Live track count. Used as a "library has changed" signal by
      * screens (Library Browser) that load track lists eagerly and
      * need to refresh when a scan adds rows. Counter-based rather

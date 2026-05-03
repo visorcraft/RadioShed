@@ -351,6 +351,12 @@ fun AppSettingsScreen(
             // without producing duplicates.
             GenerateGenreStationsRow()
             Spacer(Modifier.height(8.dp))
+            // Same idempotent pattern for decade auto-stations.
+            // Album.year drives the bucket; albums with NULL year
+            // sit out (avoids padding a "60s" station with
+            // year-less rips that may or may not belong).
+            GenerateDecadeStationsRow()
+            Spacer(Modifier.height(8.dp))
             // Clear lyrics cache. Used when LRClib improves their
             // database — the user gets a re-fetch on next track plays.
             // Keeps user-supplied artist/title overrides intact since
@@ -1155,6 +1161,125 @@ private fun GenerateGenreStationsRow(
                                 if (inserted != 1) append("s")
                                 if (skipped > 0) append(" ($skipped already existed)")
                                 append(".")
+                            }
+                        } finally {
+                            working = false
+                        }
+                    }
+                },
+                enabled = !working,
+            ) { Text(if (working) "Working…" else "Generate") }
+        }
+    }
+}
+
+/**
+ * One-tap "Generate decade stations" — picks decades that have at
+ * least 50 albums (per SPEC §5: "only created for decades with
+ * ≥50 tracks", upgraded to ≥50 albums here since we group by
+ * Album.year). Each decade gets a `60s` / `70s` / `2000s`-style
+ * station seeded with `AlbumSelector` over the in-decade album
+ * IDs. Idempotent: skips stations whose name already exists.
+ *
+ * Decade-of-1990s = albums with `1990 ≤ year ≤ 1999`. Pre-1950s
+ * gets a single "Pre-50s" bucket so a couple of 1948 jazz albums
+ * don't go missing.
+ */
+@Composable
+private fun GenerateDecadeStationsRow(
+    libraryRepo: com.visorcraft.radioshed.data.LibraryRepository = koinInject(),
+    stationRepo: com.visorcraft.radioshed.data.StationRepository = koinInject(),
+) {
+    val scope = rememberCoroutineScope()
+    var status by remember { mutableStateOf<String?>(null) }
+    var working by remember { mutableStateOf(false) }
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+            Text(
+                "Generate decade stations",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Buckets albums by Album.year and creates one " +
+                    "station per decade with ≥3 albums. Skips " +
+                    "albums with no year tag and skips stations " +
+                    "that already exist.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+            )
+            Spacer(Modifier.height(8.dp))
+            status?.let { msg ->
+                Text(
+                    text = msg,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Spacer(Modifier.height(6.dp))
+            }
+            androidx.compose.material3.OutlinedButton(
+                onClick = {
+                    if (working) return@OutlinedButton
+                    working = true
+                    status = "Bucketing albums by decade…"
+                    scope.launch {
+                        try {
+                            val nowYear = 2030 // safe upper-cap; covers 2020s
+                            val buckets = listOf(
+                                "Pre-50s" to (1900 to 1949),
+                                "50s" to (1950 to 1959),
+                                "60s" to (1960 to 1969),
+                                "70s" to (1970 to 1979),
+                                "80s" to (1980 to 1989),
+                                "90s" to (1990 to 1999),
+                                "2000s" to (2000 to 2009),
+                                "2010s" to (2010 to 2019),
+                                "2020s" to (2020 to nowYear),
+                            )
+                            val existing = stationRepo.list()
+                            val existingNames = existing.map { it.name }.toSet()
+                            val maxSort = existing.maxOfOrNull { it.sortPosition } ?: 0
+                            var inserted = 0
+                            var skipped = 0
+                            buckets.forEachIndexed { idx, (label, range) ->
+                                val (minYr, maxYr) = range
+                                val albumIds = libraryRepo.albumIdsByYearRange(minYr, maxYr)
+                                if (albumIds.size < 3) return@forEachIndexed
+                                val name = "Decade: $label"
+                                if (name in existingNames) {
+                                    skipped += 1
+                                    return@forEachIndexed
+                                }
+                                stationRepo.insert(
+                                    name = name,
+                                    source = com.visorcraft.radioshed.domain
+                                        .SourceRule.AlbumSelector(albumIds = albumIds),
+                                    playback = com.visorcraft.radioshed.domain
+                                        .PlaybackRule(
+                                            order = com.visorcraft.radioshed.domain
+                                                .PlayOrder.SmartShuffle,
+                                        ),
+                                    sortPosition = maxSort + 1 + idx,
+                                    customSubtitle = "${albumIds.size} albums",
+                                )
+                                inserted += 1
+                            }
+                            status = if (inserted == 0 && skipped == 0) {
+                                "No decades with at least 3 albums. Tag your " +
+                                    "albums' year fields and re-run."
+                            } else {
+                                buildString {
+                                    append("Created $inserted station")
+                                    if (inserted != 1) append("s")
+                                    if (skipped > 0) append(" ($skipped already existed)")
+                                    append(".")
+                                }
                             }
                         } finally {
                             working = false

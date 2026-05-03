@@ -166,6 +166,14 @@ SELECT * FROM album WHERE artist_id = ? ORDER BY year, sort_title;
 selectAllAlbums:
 SELECT * FROM album ORDER BY sort_title;
 
+-- Album IDs whose `year` falls within [minYear, maxYear] (inclusive).
+-- Used by the "Generate decade stations" bulk action to seed
+-- `AlbumSelector` rules per decade. Albums with NULL year are
+-- excluded — a decade station shouldn't sweep up unspecified-year
+-- albums that happen to slot incorrectly.
+selectAlbumIdsByYearRange:
+SELECT id FROM album WHERE year IS NOT NULL AND year >= ? AND year <= ?;
+
 countAlbums:
 SELECT COUNT(*) FROM album;
 

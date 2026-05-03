@@ -1181,7 +1181,7 @@ Goal: user can create stations; engine plays tracks per source + playback rules.
 - [x] Weighting policies: `Uniform`, `FavorRecent` *(others fall back to Uniform in v1; need richer per-track stats — Phase 5 part 2)*
 - [ ] Adaptive Mix smart query (learns from listening history) *(falls back to LeastPlayed for v1)*
 - [ ] Auto-rotate refresh job for SmartQueries (e.g. Latest Hits re-eval daily) *(deferred)*
-- [~] Built-in presets registry — `PresetSeeder` seeds Latest Hits / All Music / Discover / Top Rated / Recently Added / Forgotten Gems / Liked Songs at first-scan completion. **Genre auto-stations** ship as a one-tap "Generate genre stations" card in Settings → Library: picks top-N genre tags by track count (≥20 tracks), creates `Genre: X` stations seeded with `TagFilter("GENRE", [name])` + Smart Shuffle, idempotent (skips names that already exist). **Per-decade auto-stations** are still deferred — track-level year metadata isn't currently indexed as a tag, so a `YearRange` `SourceRule` would have to be added first.
+- [x] Built-in presets registry — `PresetSeeder` seeds Latest Hits / All Music / Discover / Top Rated / Recently Added / Forgotten Gems / Liked Songs at first-scan completion. **Genre auto-stations** ship as a one-tap "Generate genre stations" card in Settings → Library: picks top-N genre tags by track count (≥20 tracks), creates `Genre: X` stations seeded with `TagFilter("GENRE", [name])` + Smart Shuffle, idempotent. **Decade auto-stations** ship as a sibling "Generate decade stations" card: buckets albums by `Album.year` into Pre-50s / 50s / 60s / … / 2020s, creates a `Decade: X` station seeded with `AlbumSelector` over the in-decade album IDs (≥3 albums per bucket), idempotent. Backed by a new `selectAlbumIdsByYearRange` SQL query and `LibraryRepository.albumIdsByYearRange(min, max)`.
 - [x] Station editor UI: identity, source builder, playback rules — `ui/stations/StationEditorScreen.kt` covers identity, color, every `SourceRule` selector + set-operator combiner, and every `PlaybackRule` knob.
 - [x] Drag-to-reorder station list — `ui/stations/ReorderStationsScreen.kt` via the shared `ui/util/DragReorder.kt` utility. The Stations Home long-press sheet also offers per-row Move up / Move down for one-step nudges without entering reorder mode.
 - [x] Station duplicate / delete / rename — `StationActionSheet` ships Open / Edit / **Duplicate** / Pin / Move up / Move down / Delete. Duplicate clones source + playback + cosmetics into a new user-row with a `(copy)` name suffix, then drops the user straight into the editor on the copy (the canonical "tweak this rule chain" workflow).
@@ -1671,6 +1671,16 @@ common `nowMs` / `sinceMs` envelope so all three views stay in sync.
   StationEditor on the new row. The canonical SPEC §7.1
   "Create station from this artist / from this album" CTA, finally
   wired through.
+- [x] Library Browser Songs tab — quick text filter above the
+  list. Substring match (case-insensitive) against title or
+  filename, composes with the existing sort + artist/album
+  filters. Saves a trip to the global Search screen for the
+  common "find that song in this view" task.
+- [x] Library Browser tab labels — inline count badges
+  ("Songs · 1234", "Albums · 187", …) so users can see the size
+  of each pile at a glance. Hidden when the count is zero so
+  fresh installs read as plain "Songs / Artists / Albums /
+  Genres".
 - [x] Library Browser sort dropdowns for Albums + Genres tabs.
   Albums sort: Title A→Z / Z→A, Year — oldest first / newest first,
   Most played. Genres sort: Name A→Z / Z→A. Persisted via

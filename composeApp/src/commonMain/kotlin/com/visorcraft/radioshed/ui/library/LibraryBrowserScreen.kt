@@ -27,6 +27,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.Casino
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Shuffle
@@ -395,11 +396,24 @@ fun LibraryBrowserScreen(
                 selectedTabIndex = selectedTab.ordinal,
                 containerColor = MaterialTheme.colorScheme.surface,
             ) {
+                // Tab labels carry their own count badge so users can
+                // tell at a glance how big each pile is. The count
+                // adjusts as the library grows; rendered inline as
+                // "Songs · 1234" style rather than a Material badge
+                // because the badge clips at the tab's right edge on
+                // narrow phones.
                 LibraryTab.entries.forEach { tab ->
+                    val count = when (tab) {
+                        LibraryTab.Songs -> allTracks.size
+                        LibraryTab.Artists -> artists.size
+                        LibraryTab.Albums -> albums.size
+                        LibraryTab.Genres -> genres.size
+                    }
+                    val label = if (count > 0) "${tab.label} · $count" else tab.label
                     Tab(
                         selected = selectedTab == tab,
                         onClick = { selectedTab = tab },
-                        text = { Text(tab.label) },
+                        text = { Text(label) },
                     )
                 }
             }
@@ -443,6 +457,39 @@ fun LibraryBrowserScreen(
 
             when (selectedTab) {
                 LibraryTab.Songs -> {
+                    // Quick text filter on the visible Songs view — substring
+                    // match against title or filename, case-insensitive.
+                    // Composes with sort + artist/album filters; gives users
+                    // a "find that song" affordance without leaving the
+                    // browser for the global Search screen.
+                    var songsFilter by remember { mutableStateOf("") }
+                    androidx.compose.material3.OutlinedTextField(
+                        value = songsFilter,
+                        onValueChange = { songsFilter = it },
+                        placeholder = { Text("Filter songs in this view…") },
+                        singleLine = true,
+                        leadingIcon = {
+                            Icon(
+                                imageVector = androidx.compose.material.icons.Icons.Filled.Search,
+                                contentDescription = null,
+                            )
+                        },
+                        trailingIcon = if (songsFilter.isNotEmpty()) {
+                            {
+                                androidx.compose.material3.IconButton(onClick = {
+                                    songsFilter = ""
+                                }) {
+                                    Icon(
+                                        imageVector = androidx.compose.material.icons.Icons.Filled.Clear,
+                                        contentDescription = "Clear filter",
+                                    )
+                                }
+                            }
+                        } else null,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 4.dp),
+                    )
                     val filtered = allTracks
                         .let { tracks ->
                             albumFilter?.let { al -> tracks.filter { it.albumId == al.id } } ?: tracks
@@ -455,6 +502,14 @@ fun LibraryBrowserScreen(
                             // their tracks separately. Simpler than passing the
                             // pre-fetched list around.
                             tracks
+                        }
+                        .let { tracks ->
+                            val q = songsFilter.trim()
+                            if (q.isBlank()) tracks
+                            else tracks.filter {
+                                it.title.contains(q, ignoreCase = true) ||
+                                    it.fileName.contains(q, ignoreCase = true)
+                            }
                         }
                     val sorted = when (sortOrder) {
                         SongSort.TitleAsc -> filtered.sortedBy { it.title.lowercase() }
