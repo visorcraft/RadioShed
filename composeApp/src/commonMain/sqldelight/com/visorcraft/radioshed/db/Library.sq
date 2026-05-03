@@ -320,6 +320,13 @@ LIMIT ?;
 countTracks:
 SELECT COUNT(*) FROM track;
 
+-- Total library runtime in milliseconds across every indexed track.
+-- Surfaced by Settings → About so the user has a sense of "how much
+-- music do I actually have?". IFNULL keeps the cold-start case
+-- (zero rows) returning 0 rather than NULL.
+totalLibraryDurationMs:
+SELECT IFNULL(SUM(duration_ms), 0) FROM track;
+
 countTracksInFolder:
 SELECT COUNT(DISTINCT track_id) FROM track_folder WHERE folder_id = ?;
 

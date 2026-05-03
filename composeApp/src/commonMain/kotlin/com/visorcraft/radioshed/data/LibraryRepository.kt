@@ -411,6 +411,16 @@ class LibraryRepository(private val db: RadioShedDatabase) {
     }
 
     /**
+     * Total runtime of every indexed track in ms. Surfaced by
+     * Settings → About so the user has a "how much music do I have?"
+     * stat alongside the count tile. Cheap aggregate — `duration_ms`
+     * is non-null on the table.
+     */
+    suspend fun totalLibraryDurationMs(): Long = withContext(IODispatcher) {
+        db.libraryQueries.totalLibraryDurationMs().executeAsOne()
+    }
+
+    /**
      * Live track count. Used as a "library has changed" signal by
      * screens (Library Browser) that load track lists eagerly and
      * need to refresh when a scan adds rows. Counter-based rather

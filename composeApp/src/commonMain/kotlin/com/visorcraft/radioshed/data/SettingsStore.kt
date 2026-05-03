@@ -74,6 +74,22 @@ class SettingsStore(private val settings: Settings) {
     }
 
     /**
+     * Stations Home tile-size preference. Persisted as the minimum
+     * adaptive cell width in dp — the grid still flexes column count
+     * to whatever the screen affords, the user just nudges the
+     * lower bound. Compact (single-column) layout below 600dp width
+     * ignores this and always shows one tile per row; the setting
+     * only kicks in on medium+ widths. Default 280dp matches the
+     * pre-setting hard-coded value.
+     */
+    fun getStationsTileSizeDp(): Int =
+        settings.getInt(KEY_STATIONS_TILE_SIZE, 280).coerceIn(160, 480)
+
+    fun setStationsTileSizeDp(value: Int) {
+        settings.putInt(KEY_STATIONS_TILE_SIZE, value.coerceIn(160, 480))
+    }
+
+    /**
      * Drive Mode bumps transport / rating tap targets to be safer
      * to hit while driving. Off by default; users opt in once and
      * the setting follows them across sessions.
@@ -498,6 +514,7 @@ class SettingsStore(private val settings: Settings) {
         const val KEY_USER_VOLUME = "audio.userVolume"
         const val KEY_REDUCE_MOTION = "ui.reduceMotion"
         const val KEY_FONT_SCALE = "ui.fontScale"
+        const val KEY_STATIONS_TILE_SIZE = "ui.stations.tileSizeDp"
         const val KEY_CONNECTIVITY_POLICY = "online.connectivityPolicy"
         const val KEY_ONBOARDING_DONE = "onboarding.complete"
         const val KEY_LAST_STATION_ID = "playback.lastStationId"

@@ -354,10 +354,97 @@ fun AppSettingsScreen(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
             )
+            Spacer(Modifier.height(12.dp))
+            LibrarySummaryCard()
 
             Spacer(Modifier.height(16.dp))
         }
     }
+}
+
+/**
+ * "Stations summary" card from §7.5 About — track / album / artist
+ * counts plus total library runtime. Loaded once per composition;
+ * updates when the user navigates back to Settings after a rescan.
+ */
+@Composable
+private fun LibrarySummaryCard(
+    libraryRepo: com.visorcraft.radioshed.data.LibraryRepository = koinInject(),
+    stationRepo: com.visorcraft.radioshed.data.StationRepository = koinInject(),
+) {
+    var trackCount by remember { mutableStateOf<Long?>(null) }
+    var albumCount by remember { mutableStateOf<Long?>(null) }
+    var artistCount by remember { mutableStateOf<Long?>(null) }
+    var stationCount by remember { mutableStateOf<Long?>(null) }
+    var totalRuntimeMs by remember { mutableStateOf<Long?>(null) }
+    LaunchedEffect(Unit) {
+        trackCount = libraryRepo.countTracks()
+        albumCount = libraryRepo.countAlbums()
+        artistCount = libraryRepo.countArtists()
+        stationCount = stationRepo.list().size.toLong()
+        totalRuntimeMs = libraryRepo.totalLibraryDurationMs()
+    }
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+            Text(
+                "Library summary",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Spacer(Modifier.height(8.dp))
+            SummaryRow("Tracks", trackCount?.toString() ?: "…")
+            SummaryRow("Albums", albumCount?.toString() ?: "…")
+            SummaryRow("Artists", artistCount?.toString() ?: "…")
+            SummaryRow("Stations", stationCount?.toString() ?: "…")
+            SummaryRow(
+                "Total runtime",
+                totalRuntimeMs?.let { formatLibraryRuntime(it) } ?: "…",
+            )
+        }
+    }
+}
+
+@Composable
+private fun SummaryRow(label: String, value: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+    }
+}
+
+/**
+ * Library-scope runtime formatter. Always switches to days at 24h+
+ * because a real library can be 100s of hours and a `1234h 56m`
+ * format gets unwieldy. "47 min" / "12h 34m" / "8d 14h".
+ */
+private fun formatLibraryRuntime(ms: Long): String {
+    val totalMin = ms / 60_000L
+    if (totalMin < 60L) return "$totalMin min"
+    val totalHr = totalMin / 60L
+    if (totalHr < 24L) {
+        val mins = totalMin % 60L
+        return if (mins == 0L) "${totalHr}h" else "${totalHr}h ${mins}m"
+    }
+    val days = totalHr / 24L
+    val hrs = totalHr % 24L
+    return if (hrs == 0L) "${days}d" else "${days}d ${hrs}h"
 }
 
 @Composable

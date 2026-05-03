@@ -39,7 +39,9 @@ import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.NewReleases
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.SwapVert
@@ -51,6 +53,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -120,7 +123,13 @@ fun StationsHomeScreen(
     libraryRepo: LibraryRepository = koinInject(),
     scanner: com.visorcraft.radioshed.scanner.Scanner = koinInject(),
     folderRepo: com.visorcraft.radioshed.data.FolderRepository = koinInject(),
+    settings: com.visorcraft.radioshed.data.SettingsStore = koinInject(),
 ) {
+    // Tile-size preference. Held in compose state so the dropdown
+    // re-themes the grid instantly without leaving the screen. The
+    // four stops cover phone (Small / Medium) through tablet
+    // (Large / X-Large) sensibilities.
+    var tileSizeDp by remember { mutableStateOf(settings.getStationsTileSizeDp()) }
     val stations by stationRepo.observeAll().collectAsState(initial = emptyList())
     val currentStation by stationPlayback.currentStation.collectAsState()
     val playerState by audioEngine.state.collectAsState()
@@ -230,14 +239,55 @@ fun StationsHomeScreen(
         }
     }
 
+    var tileSizeMenuOpen by remember { mutableStateOf(false) }
     Scaffold(
         topBar = {
-            // Slim top bar — just the back affordance. The page title moves
-            // into a richer header inside the grid so it can reflow with the
-            // content and breathe more on wide screens.
+            // Slim top bar — back affordance + tile-size selector. The
+            // page title moves into a richer header inside the grid so
+            // it can reflow with the content and breathe more on wide
+            // screens; the top bar carries only what needs to stay
+            // pinned (nav + density override).
             TopAppBar(
                 title = {},
                 navigationIcon = { TextButton(onClick = onBack) { Text("Back") } },
+                actions = {
+                    Box {
+                        IconButton(onClick = { tileSizeMenuOpen = true }) {
+                            Icon(
+                                imageVector = Icons.Filled.GridView,
+                                contentDescription = "Tile size",
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = tileSizeMenuOpen,
+                            onDismissRequest = { tileSizeMenuOpen = false },
+                        ) {
+                            TILE_SIZE_STOPS.forEach { (label, dp) ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                        ) {
+                                            Text(label, modifier = Modifier.weight(1f))
+                                            if (tileSizeDp == dp) {
+                                                Icon(
+                                                    Icons.Filled.Check,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(16.dp),
+                                                )
+                                            }
+                                        }
+                                    },
+                                    onClick = {
+                                        tileSizeDp = dp
+                                        settings.setStationsTileSizeDp(dp)
+                                        tileSizeMenuOpen = false
+                                    },
+                                )
+                            }
+                        }
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface,
                 ),
@@ -257,8 +307,12 @@ fun StationsHomeScreen(
                 return@BoxWithConstraints
             }
 
+            // On compact (phone-portrait) widths the single-column
+            // layout always wins — the tile-size selector is a
+            // medium+ affordance, since under ~600dp width even the
+            // smallest stop would still produce one column.
             val columns = if (isCompact) GridCells.Fixed(1)
-                          else GridCells.Adaptive(minSize = 280.dp)
+                          else GridCells.Adaptive(minSize = tileSizeDp.dp)
 
             androidx.compose.material3.pulltorefresh.PullToRefreshBox(
                 isRefreshing = rescanInFlight,
@@ -1355,6 +1409,21 @@ private fun BuiltInBadge() {
 
 /** "Forgotten about it" cutoff for the Rediscover carousel, in days. */
 private const val REDISCOVER_THRESHOLD_DAYS: Long = 30L
+
+/**
+ * Stops for the Stations Home tile-size selector. Each maps a label
+ * to the minimum cell width passed to `GridCells.Adaptive`. The grid
+ * still flexes column count to whatever the screen affords; the
+ * setting just nudges the lower bound. Below 600dp width the
+ * selector is moot — single-column always wins on phones in
+ * portrait.
+ */
+private val TILE_SIZE_STOPS: List<Pair<String, Int>> = listOf(
+    "Small" to 200,
+    "Medium" to 240,
+    "Large" to 280,
+    "Extra-large" to 360,
+)
 
 private fun stationColor(station: Station): Color {
     if (station.color == 0) return Color(0xFFFF7F1A) // brand amber default

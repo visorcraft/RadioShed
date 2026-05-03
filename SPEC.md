@@ -1204,7 +1204,7 @@ Goal: app feels like a music app, not a tech demo. Looks great on every form fac
 **Phase 6 part 1 (done):** responsive Stations Home grid + full-screen Now Playing with scrubber / transport / star rating / long-press dislike menu.
 
 - [x] Stations Home: responsive grid (1 col compact, adaptive ≥240dp tiles for medium+) *(Phase 6 part 1 — sort/group/list-toggle deferred)*
-- [ ] Stations Home: list/grid view toggle, sort menus, tile size XS–L preference
+- [~] Stations Home: list/grid view toggle, sort menus, tile size XS–L preference — **tile-size selector ships** (Small / Medium / Large / Extra-large mapped to 200 / 240 / 280 / 360 dp Adaptive minSize, persisted via `SettingsStore.getStationsTileSizeDp`, exposed as a top-bar dropdown). Compact widths still force single-column. The list/grid toggle and the sort menus are still deferred — a future surface where users want them, but the tile grid + drag-reorder + long-press sort already cover most reorganizing use cases.
 - [~] Long-press tile → quick actions — `StationActionSheet` (in `StationsHomeScreen.kt`) ships Open station / Edit / Duplicate / Pin to top / Move up / Move down / Delete. **"Add to Drive Mode quick-list" and "Add to Widget" are still deferred** — they pair with the Drive Mode overlay (Phase 8) and the widget-config UI (Phase 13).
 - [x] Now Playing screen: full-screen art, scrubber, controls — Coil-driven `AsyncImage` artwork, full transport, blurred backdrop (`BlurredBackdrop`), tap-to-expand fullscreen lightbox.
 - [x] Now Playing: layout variants for compact (stacked) and medium+ (two-pane) *(Phase 6 part 1 — three-pane queue/lyrics deferred to large-tablet pass)*
