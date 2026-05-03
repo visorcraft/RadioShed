@@ -57,6 +57,8 @@ import org.koin.compose.koinInject
 @Composable
 fun SearchScreen(
     onBack: () -> Unit,
+    onArtistTap: (Long) -> Unit = {},
+    onAlbumTap: (Long) -> Unit = {},
     searchRepo: SearchRepository = koinInject(),
     stationPlayback: StationPlayback = koinInject(),
     settings: SettingsStore = koinInject(),
@@ -180,11 +182,15 @@ fun SearchScreen(
 
                     if (showArtists) {
                         item { SectionHeader("Artists (${results.artists.size})") }
-                        items(results.artists, key = { "artist:${it.id}" }) { ArtistRow(it) }
+                        items(results.artists, key = { "artist:${it.id}" }) { artist ->
+                            ArtistRow(artist, onTap = { onArtistTap(artist.id) })
+                        }
                     }
                     if (showAlbums) {
                         item { SectionHeader("Albums (${results.albums.size})") }
-                        items(results.albums, key = { "album:${it.id}" }) { AlbumRow(it) }
+                        items(results.albums, key = { "album:${it.id}" }) { album ->
+                            AlbumRow(album, onTap = { onAlbumTap(album.id) })
+                        }
                     }
                     if (showTracks) {
                         item { SectionHeader("Tracks (${results.tracks.size})") }
@@ -301,15 +307,25 @@ private fun SectionHeader(label: String) {
 }
 
 @Composable
-private fun ArtistRow(artist: Artist) {
-    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+private fun ArtistRow(artist: Artist, onTap: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onTap)
+            .padding(vertical = 8.dp, horizontal = 4.dp),
+    ) {
         Text(artist.name, style = MaterialTheme.typography.bodyLarge)
     }
 }
 
 @Composable
-private fun AlbumRow(album: Album) {
-    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+private fun AlbumRow(album: Album, onTap: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onTap)
+            .padding(vertical = 8.dp, horizontal = 4.dp),
+    ) {
         Text(album.title, style = MaterialTheme.typography.bodyLarge)
         album.year?.let {
             Text(

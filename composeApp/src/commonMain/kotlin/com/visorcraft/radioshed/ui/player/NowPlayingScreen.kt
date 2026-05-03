@@ -1092,6 +1092,8 @@ private fun TrackInfoDialog(
     onDismiss: () -> Unit,
 ) {
     val stationRepo: com.visorcraft.radioshed.data.StationRepository = koinInject()
+    val folderRevealer: com.visorcraft.radioshed.source.FolderRevealer = koinInject()
+    val scope = rememberCoroutineScope()
     var track by remember { mutableStateOf<Track?>(null) }
     var stats by remember {
         mutableStateOf<com.visorcraft.radioshed.data.TrackHistoryStats?>(null)
@@ -1103,6 +1105,24 @@ private fun TrackInfoDialog(
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+        // Open folder lives on the dismissButton slot so it sits to
+        // the LEFT of Close per Material's button-bar conventions.
+        // Disabled until the track row resolves so we don't fire
+        // with a null path.
+        dismissButton = {
+            val t = track
+            TextButton(
+                onClick = {
+                    if (t != null) {
+                        scope.launch { folderRevealer.revealParent(t.path) }
+                        onDismiss()
+                    }
+                },
+                enabled = t != null,
+            ) {
+                Text("Open folder")
+            }
+        },
         title = { Text("Track info") },
         text = {
             val t = track

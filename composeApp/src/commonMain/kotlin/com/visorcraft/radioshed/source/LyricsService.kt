@@ -59,18 +59,37 @@ class LyricsService(
             )
         }
 
-        val artistName = libraryRepo.artistsForTrack(trackId)
+        val taggedArtist = libraryRepo.artistsForTrack(trackId)
             .firstOrNull { it.name.isNotBlank() }?.name
-            ?: track.fileName  // fallback so the fetcher still attempts
+        val taggedTitle = track.title.takeIf { it.isNotBlank() }
 
         val albumTitle = track.albumId?.let { libraryRepo.getAlbumById(it)?.title }
+        val durationSec = (track.durationMs / 1000L).takeIf { it > 0 }
 
-        val raw = fetcher.fetch(
-            artist = artistName,
-            title = track.title.ifBlank { track.fileName.substringBeforeLast('.', track.fileName) },
-            album = albumTitle,
-            durationSeconds = (track.durationMs / 1000L).takeIf { it > 0 },
+        // Try multiple (artist, title) candidate pairs. LRClib is strict
+        // about exact matches, so a single attempt with messy tags
+        // misses popular tracks whose stored title is "Song (Remastered
+        // 2008)" or whose artist is "Roberta Flack feat. Donny Hathaway".
+        // The candidate generator strips parentheticals, drops
+        // featured-artist suffixes, and falls back to filename parsing
+        // when the metadata is missing entirely. We stop on the first
+        // hit to keep network use bounded.
+        val candidates = lyricsQueryCandidates(
+            taggedArtist = taggedArtist,
+            taggedTitle = taggedTitle,
+            fileName = track.fileName,
         )
+
+        var raw: RawLyricsResponse? = null
+        for (candidate in candidates) {
+            raw = fetcher.fetch(
+                artist = candidate.artist,
+                title = candidate.title,
+                album = albumTitle,
+                durationSeconds = durationSec,
+            )
+            if (raw != null) break
+        }
 
         if (raw == null) {
             // Cache the miss so we don't keep hitting the network.

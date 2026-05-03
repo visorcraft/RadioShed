@@ -19,6 +19,7 @@ import com.visorcraft.radioshed.source.AndroidBackupStorage
 import com.visorcraft.radioshed.source.AndroidCoverArtFetcher
 import com.visorcraft.radioshed.source.AndroidFileBrowser
 import com.visorcraft.radioshed.source.AndroidFileEnumerator
+import com.visorcraft.radioshed.source.AndroidFolderRevealer
 import com.visorcraft.radioshed.source.AndroidLocalLyricsLoader
 import com.visorcraft.radioshed.source.AndroidLyricsFetcher
 import com.visorcraft.radioshed.source.AndroidTagReader
@@ -28,6 +29,7 @@ import com.visorcraft.radioshed.source.BackupStorage
 import com.visorcraft.radioshed.source.CoverArtFetcher
 import com.visorcraft.radioshed.source.FileBrowser
 import com.visorcraft.radioshed.source.FileEnumerator
+import com.visorcraft.radioshed.source.FolderRevealer
 import com.visorcraft.radioshed.source.LocalLyricsLoader
 import com.visorcraft.radioshed.source.LyricsFetcher
 import com.visorcraft.radioshed.source.StorageVolumes
@@ -54,6 +56,7 @@ actual val platformModule: Module = module {
     single<BackupStorage> { AndroidBackupStorage(androidContext()) }
     single<BackupSharer> { AndroidBackupSharer(androidContext()) }
     single<FileBrowser> { AndroidFileBrowser() }
+    single<FolderRevealer> { AndroidFolderRevealer(androidContext()) }
     single { StoragePermissions(androidContext()) }
     single { StorageVolumes(androidContext()) }
 

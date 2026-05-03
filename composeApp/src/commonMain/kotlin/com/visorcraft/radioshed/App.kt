@@ -318,7 +318,11 @@ fun App(
 
                     AppScreen.Search -> {
                         PlatformBackHandler { current = AppScreen.Home }
-                        SearchScreen(onBack = { current = AppScreen.Home })
+                        SearchScreen(
+                            onBack = { current = AppScreen.Home },
+                            onArtistTap = { id -> current = AppScreen.ArtistDetail(id) },
+                            onAlbumTap = { id -> current = AppScreen.AlbumDetail(id) },
+                        )
                     }
 
                     AppScreen.Stations -> {
