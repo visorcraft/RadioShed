@@ -18,8 +18,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -84,6 +86,10 @@ fun HistoryScreen(
     // filtered on may have just been deleted, and a stale id would
     // produce an empty list with no obvious cause.
     var selectedStationId by remember { mutableStateOf<Long?>(null) }
+    // Free-text filter on track title or artist name. Composes with
+    // the station chip — the visible list is the intersection of
+    // both filters. Empty string means no text filter.
+    var searchQuery by remember { mutableStateOf("") }
     val nowPlaying by audioEngine.nowPlaying.collectAsState()
     val currentTrackId = nowPlaying?.trackId
     val scope = rememberCoroutineScope()
@@ -153,11 +159,55 @@ fun HistoryScreen(
                     .distinctBy { it.stationId }
                     .map { it.stationId to it.stationName }
             }
-            val visibleEntries = remember(entries, selectedStationId) {
-                if (selectedStationId == null) entries
-                else entries.filter { it.stationId == selectedStationId }
+            val visibleEntries = remember(entries, selectedStationId, searchQuery, trackById) {
+                val byStation = if (selectedStationId == null) entries
+                                else entries.filter { it.stationId == selectedStationId }
+                val q = searchQuery.trim()
+                if (q.isBlank()) byStation
+                else byStation.filter { entry ->
+                    // Match on track title OR file name (for tracks with
+                    // empty title tags). Removed-from-library tracks
+                    // also fall through here — they won't have a row
+                    // in trackById and thus never match the filter,
+                    // which is the right behavior (a search shouldn't
+                    // surface ghost rows).
+                    val track = trackById[entry.trackId] ?: return@filter false
+                    track.title.contains(q, ignoreCase = true) ||
+                        track.fileName.contains(q, ignoreCase = true) ||
+                        entry.stationName.contains(q, ignoreCase = true)
+                }
             }
             Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+                // Free-text search row above the station filter chips.
+                // Matches on track title / filename / station name —
+                // composes with the station filter so users can
+                // narrow ("show me 'Rain' on Latest Hits") rather
+                // than choose between filters.
+                androidx.compose.material3.OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    placeholder = { Text("Search played tracks…") },
+                    singleLine = true,
+                    leadingIcon = {
+                        Icon(
+                            imageVector = androidx.compose.material.icons.Icons.Filled.Search,
+                            contentDescription = null,
+                        )
+                    },
+                    trailingIcon = if (searchQuery.isNotEmpty()) {
+                        {
+                            IconButton(onClick = { searchQuery = "" }) {
+                                Icon(
+                                    imageVector = androidx.compose.material.icons.Icons.Filled.Clear,
+                                    contentDescription = "Clear search",
+                                )
+                            }
+                        }
+                    } else null,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 4.dp),
+                )
                 if (stationOptions.size > 1) {
                     androidx.compose.foundation.lazy.LazyRow(
                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),

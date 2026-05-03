@@ -1304,7 +1304,7 @@ Goal: power users with connectivity get richer art, lyrics, scrobbling, recs.
 - [ ] AcoustID + Chromaprint fingerprinting *(deferred)*
 - [ ] Open-Meteo client (weather variable for DJ templates) *(deferred — paired with AI DJ)*
 - [ ] Wikipedia/Wikidata client (artist bio) *(deferred)*
-- [ ] Per-service toggle UI in Settings → Online & Sync *(deferred — `ConnectivityPolicy` is a single global gate today)*
+- [~] Per-service toggle UI in Settings → Online & Sync — Settings → Online now exposes the four-way `ConnectivityPolicy` picker (Always / Wi-Fi only / Ask each time / Never) with a one-line subtitle that explains what's currently gated. Per-service toggles (Cover Art Archive vs LRClib individually) are still deferred but the global gate is no longer hidden.
 
 ### Phase 11 — Cast & multi-room output (~1–2 weeks)
 

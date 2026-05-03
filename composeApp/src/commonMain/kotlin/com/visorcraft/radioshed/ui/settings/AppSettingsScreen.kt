@@ -103,6 +103,7 @@ fun AppSettingsScreen(
     var autoBackup by remember { mutableStateOf(settings.getAutoBackupEnabled()) }
     var autoRescan by remember { mutableStateOf(settings.getAutoRescanOnLaunch()) }
     var endFadeSec by remember { mutableStateOf(settings.getEndFadeSec()) }
+    var connectivityPolicy by remember { mutableStateOf(settings.getConnectivityPolicy()) }
     LaunchedEffect(Unit) {
         // Re-read on each entry so values written from sibling
         // screens (Backup, Equalizer, Library Manage, etc.) reflect
@@ -115,6 +116,7 @@ fun AppSettingsScreen(
         autoBackup = settings.getAutoBackupEnabled()
         autoRescan = settings.getAutoRescanOnLaunch()
         endFadeSec = settings.getEndFadeSec()
+        connectivityPolicy = settings.getConnectivityPolicy()
     }
     var artworkState by remember { mutableStateOf<ArtworkSyncState>(ArtworkSyncState.Idle) }
     var artworkJob by remember { mutableStateOf<Job?>(null) }
@@ -290,6 +292,22 @@ fun AppSettingsScreen(
                 subtitle = "Recent crashes / ANRs reported by Android. Local-only — " +
                     "share via the system share sheet if you want to send a report.",
                 onClick = onOpenCrashLog,
+            )
+
+            Spacer(Modifier.height(24.dp))
+
+            // ---- Online & Sync ----
+            // Single global gate for online lookups (Cover Art Archive,
+            // LRClib). Per-service toggles are still deferred per
+            // SPEC §7.5 — the four-way enum here covers the broad
+            // user intents in the meantime.
+            SectionHeader("Online")
+            ConnectivityPolicyRow(
+                current = connectivityPolicy,
+                onPick = { p ->
+                    connectivityPolicy = p
+                    settings.setConnectivityPolicy(p)
+                },
             )
 
             Spacer(Modifier.height(24.dp))
@@ -911,6 +929,74 @@ private enum class ThemeOption(
  */
 private val FONT_SCALE_STOPS = listOf(0.85f, 0.92f, 1.0f, 1.10f, 1.20f, 1.30f)
 private val FONT_SCALE_LABELS = listOf("XS", "S", "M", "L", "XL", "XXL")
+
+/**
+ * Picker for the four `ConnectivityPolicy` modes. Renders as a card
+ * with one FilterChip per mode plus a one-line subtitle explaining
+ * what's currently gated. The four modes — Always / Wi-Fi only /
+ * Never / Manual — match the SPEC §7.5 vocabulary; Manual is the
+ * current default and asks the user before each online fetch.
+ */
+@Composable
+private fun ConnectivityPolicyRow(
+    current: com.visorcraft.radioshed.domain.ConnectivityPolicy,
+    onPick: (com.visorcraft.radioshed.domain.ConnectivityPolicy) -> Unit,
+) {
+    val options = listOf(
+        com.visorcraft.radioshed.domain.ConnectivityPolicy.Always to "Always",
+        com.visorcraft.radioshed.domain.ConnectivityPolicy.WiFiOnly to "Wi-Fi only",
+        com.visorcraft.radioshed.domain.ConnectivityPolicy.Manual to "Ask each time",
+        com.visorcraft.radioshed.domain.ConnectivityPolicy.Never to "Never",
+    )
+    val explanation = when (current) {
+        com.visorcraft.radioshed.domain.ConnectivityPolicy.Always ->
+            "Cover Art Archive + LRClib lyrics fetch on demand whenever the app needs them."
+        com.visorcraft.radioshed.domain.ConnectivityPolicy.WiFiOnly ->
+            "Online fetches only happen on Wi-Fi — keeps mobile data quiet."
+        com.visorcraft.radioshed.domain.ConnectivityPolicy.Manual ->
+            "The app asks before every online fetch. Slower but in your hands."
+        com.visorcraft.radioshed.domain.ConnectivityPolicy.Never ->
+            "All online lookups disabled — only embedded artwork + sidecar lyrics."
+    }
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+            Text(
+                "Online lookups",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                explanation,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+            )
+            Spacer(Modifier.height(10.dp))
+            // Two rows of two chips each — one row would clip on
+            // narrow screens since "Ask each time" is wide. Wrap
+            // sensibly via a flow layout instead of a single Row.
+            androidx.compose.foundation.layout.FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                options.forEach { (policy, label) ->
+                    val active = policy == current
+                    androidx.compose.material3.FilterChip(
+                        selected = active,
+                        onClick = { if (!active) onPick(policy) },
+                        label = { Text(label) },
+                    )
+                }
+            }
+        }
+    }
+}
 
 @Composable
 private fun FontScaleRow(value: Float, onChange: (Float) -> Unit) {
