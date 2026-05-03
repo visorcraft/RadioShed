@@ -44,6 +44,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.visorcraft.radioshed.data.FolderRepository
 import com.visorcraft.radioshed.permissions.StoragePermissions
@@ -630,13 +631,20 @@ private fun FolderStep(
 
 @Composable
 private fun ScanStep(isWide: Boolean, progress: ScanProgress?) {
-    val statusText = when (val p = progress) {
-        null -> "Starting…"
-        is ScanProgress.Started -> "Walking the folder…"
-        is ScanProgress.Progress -> "${p.tracksProcessed} tracks · ${p.currentFile}"
-        is ScanProgress.Warning -> "Skipped: ${p.message}"
-        is ScanProgress.Completed -> "Done — ${p.totalTracks} tracks"
-        is ScanProgress.Failed -> "Failed: ${p.message}"
+    // Two-line status: a "headline" with the count + state, and a
+    // "subline" with the currently-scanning filename. The previous
+    // single-line form ran a long full path off the right edge on
+    // narrow screens AND hid the track count behind the basename.
+    val (headline, subline) = when (val p = progress) {
+        null -> "Starting…" to null
+        is ScanProgress.Started -> "Walking the folder…" to null
+        is ScanProgress.Progress -> {
+            val count = "${p.tracksProcessed} track${if (p.tracksProcessed == 1) "" else "s"} scanned"
+            count to baseFileName(p.currentFile)
+        }
+        is ScanProgress.Warning -> "Skipped" to p.message
+        is ScanProgress.Completed -> "Done — ${p.totalTracks} tracks" to null
+        is ScanProgress.Failed -> "Failed" to p.message
     }
 
     if (isWide) {
@@ -649,7 +657,7 @@ private fun ScanStep(isWide: Boolean, progress: ScanProgress?) {
             rightContent = {
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     LinearProgressIndicator(
@@ -657,11 +665,9 @@ private fun ScanStep(isWide: Boolean, progress: ScanProgress?) {
                             .fillMaxWidth()
                             .heightIn(min = 6.dp),
                     )
-                    Text(
-                        text = statusText,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
-                        textAlign = TextAlign.Center,
+                    ScanStatusLines(
+                        headline = headline,
+                        subline = subline,
                     )
                 }
             },
@@ -681,15 +687,52 @@ private fun ScanStep(isWide: Boolean, progress: ScanProgress?) {
                 .heightIn(min = 6.dp)
                 .widthIn(max = 480.dp),
         )
-        Spacer(Modifier.height(16.dp))
-        Text(
-            text = statusText,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
-            textAlign = TextAlign.Center,
+        Spacer(Modifier.height(12.dp))
+        ScanStatusLines(
+            headline = headline,
+            subline = subline,
             modifier = Modifier.widthIn(max = 480.dp),
         )
     }
+}
+
+@Composable
+private fun ScanStatusLines(
+    headline: String,
+    subline: String?,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        Text(
+            text = headline,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        if (subline != null) {
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = subline,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+    }
+}
+
+/** Basename — last `/` or `\` segment. Falls back to the full string. */
+private fun baseFileName(path: String): String {
+    val sep = path.lastIndexOfAny(charArrayOf('/', '\\'))
+    return if (sep >= 0 && sep < path.length - 1) path.substring(sep + 1) else path
 }
 
 @Composable

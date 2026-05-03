@@ -1,6 +1,9 @@
 package com.visorcraft.radioshed.ui.player
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,6 +33,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -44,6 +48,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.visorcraft.radioshed.audio.AudioEngine
 import com.visorcraft.radioshed.data.LyricsCacheRepository
+import com.visorcraft.radioshed.data.nowMillis
 import com.visorcraft.radioshed.domain.LyricLine
 import com.visorcraft.radioshed.domain.Lyrics
 import com.visorcraft.radioshed.source.LyricsService
@@ -346,50 +351,111 @@ private fun SyncedLyrics(
     }
 
     val listState = rememberLazyListState()
-    LaunchedEffect(activeIndex) {
-        if (activeIndex >= 0 && activeIndex < lines.size) {
-            // Scroll the active line near the top-third of the viewport.
-            // animateScrollToItem keeps the motion smooth as lines tick by.
-            runCatching {
-                listState.animateScrollToItem(activeIndex.coerceAtLeast(0), -120)
+    // True only while the user's finger is actively dragging the
+    // list. Distinguishes user-driven scrolls from
+    // animateScrollToItem (which sets isScrollInProgress but isn't
+    // a drag). When this flips to true we record the time so we can
+    // hold off auto-scroll for an idle grace period afterward.
+    val isUserDragging by listState.interactionSource
+        .collectIsDraggedAsState()
+    var lastUserScrollAt by remember { mutableStateOf(0L) }
+    LaunchedEffect(isUserDragging) {
+        if (isUserDragging) lastUserScrollAt = nowMillis()
+    }
+    // Active line off-screen? Used to surface the "Jump to current"
+    // FAB when the user has scrolled away. Re-derives every frame
+    // off layoutInfo, which is cheap.
+    val activeOffscreen by remember(activeIndex) {
+        derivedStateOf {
+            if (activeIndex < 0) false
+            else {
+                val info = listState.layoutInfo.visibleItemsInfo
+                info.none { it.index == activeIndex }
             }
         }
     }
+    val coroutineScope = rememberCoroutineScope()
 
-    LazyColumn(
-        state = listState,
-        modifier = modifier,
-        contentPadding = PaddingValues(horizontal = 24.dp, vertical = 32.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        itemsIndexed(lines, key = { i, l -> "$i:${l.timeMs}" }) { i, line ->
-            val isActive = i == activeIndex
-            val isPast = i < activeIndex
-            // Tap-to-seek: jump player position to this line's
-            // timestamp. The Spotify / Apple Music gesture vocab —
-            // people instinctively tap a lyric line they want to
-            // start from. Lines with no text (instrumental gaps in
-            // the LRC) still seek; that's the right behavior.
-            val baseStyle = if (isActive) MaterialTheme.typography.headlineSmall
-                            else MaterialTheme.typography.titleMedium
-            Text(
-                text = line.text.ifBlank { " " },  // preserve breath gaps
-                style = baseStyle.copy(fontSize = baseStyle.fontSize * fontScale),
-                fontWeight = if (isActive) FontWeight.Bold else FontWeight.Medium,
-                color = when {
-                    isActive -> MaterialTheme.colorScheme.primary
-                    isPast -> MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
-                    else -> MaterialTheme.colorScheme.onBackground.copy(alpha = 0.85f)
+    LaunchedEffect(activeIndex, isUserDragging, lastUserScrollAt) {
+        if (activeIndex < 0 || activeIndex >= lines.size) return@LaunchedEffect
+        // Hold off while the user is touching, plus a ~5s grace
+        // window so they can read a verse without being yanked
+        // back. The next position tick re-evaluates this and will
+        // resume auto-scroll once the window has elapsed.
+        if (isUserDragging) return@LaunchedEffect
+        val sinceUser = nowMillis() - lastUserScrollAt
+        if (lastUserScrollAt != 0L && sinceUser < USER_OVERRIDE_MS) return@LaunchedEffect
+        // Scroll the active line near the top-third of the viewport.
+        // animateScrollToItem keeps the motion smooth as lines tick by.
+        runCatching {
+            listState.animateScrollToItem(activeIndex.coerceAtLeast(0), -120)
+        }
+    }
+
+    Box(modifier = modifier) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(horizontal = 24.dp, vertical = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            itemsIndexed(lines, key = { i, l -> "$i:${l.timeMs}" }) { i, line ->
+                val isActive = i == activeIndex
+                val isPast = i < activeIndex
+                // Tap-to-seek: jump player position to this line's
+                // timestamp. The Spotify / Apple Music gesture vocab —
+                // people instinctively tap a lyric line they want to
+                // start from. Lines with no text (instrumental gaps in
+                // the LRC) still seek; that's the right behavior.
+                val baseStyle = if (isActive) MaterialTheme.typography.headlineSmall
+                                else MaterialTheme.typography.titleMedium
+                Text(
+                    text = line.text.ifBlank { " " },  // preserve breath gaps
+                    style = baseStyle.copy(fontSize = baseStyle.fontSize * fontScale),
+                    fontWeight = if (isActive) FontWeight.Bold else FontWeight.Medium,
+                    color = when {
+                        isActive -> MaterialTheme.colorScheme.primary
+                        isPast -> MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
+                        else -> MaterialTheme.colorScheme.onBackground.copy(alpha = 0.85f)
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onSeek(line.timeMs) }
+                        .padding(vertical = 4.dp),
+                    textAlign = TextAlign.Start,
+                )
+            }
+        }
+        // "Jump back to current line" — only rendered when the user
+        // has scrolled the active line off-screen. Tap: scroll to it
+        // immediately and clear the user-override window so
+        // subsequent auto-scrolls resume.
+        if (activeOffscreen && activeIndex >= 0) {
+            androidx.compose.material3.SmallFloatingActionButton(
+                onClick = {
+                    lastUserScrollAt = 0L
+                    coroutineScope.launch {
+                        runCatching {
+                            listState.animateScrollToItem(activeIndex, -120)
+                        }
+                    }
                 },
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onSeek(line.timeMs) }
-                    .padding(vertical = 4.dp),
-                textAlign = TextAlign.Start,
-            )
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 16.dp),
+            ) {
+                androidx.compose.material3.Icon(
+                    imageVector = Icons.Filled.ArrowDownward,
+                    contentDescription = "Jump to current line",
+                )
+            }
         }
     }
 }
+
+private const val USER_OVERRIDE_MS = 5_000L
 
 @Composable
 private fun PlainLyrics(text: String, fontScale: Float, modifier: Modifier = Modifier) {
