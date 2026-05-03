@@ -259,7 +259,17 @@ class SettingsStore(private val settings: Settings) {
     // ---- Library Browser persisted state ----
 
     /** Tab index restored on entry. 0 = Songs, 1 = Artists, 2 = Albums. */
-    fun getLibraryTabIndex(): Int = settings.getInt(KEY_LIB_TAB, 0).coerceIn(0, 2)
+    /**
+     * Persisted tab index for the Library Browser. The upper bound
+     * was 2 from the original three-tab layout (Songs / Artists /
+     * Albums); when Genres landed it was silently downgraded to
+     * Albums on relaunch because of the coerce. The call site
+     * (`LibraryBrowserScreen`) already guards with
+     * `LibraryTab.entries.getOrElse(...) { LibraryTab.Songs }`, so
+     * we only need a generous floor/ceiling here to keep negative
+     * or comically-large stored values from blowing up.
+     */
+    fun getLibraryTabIndex(): Int = settings.getInt(KEY_LIB_TAB, 0).coerceAtLeast(0)
     fun setLibraryTabIndex(index: Int) = settings.putInt(KEY_LIB_TAB, index)
 
     /** Songs tab sort order — string-encoded enum name. */

@@ -135,9 +135,26 @@ class PlaybackQueue(
         priority.addFirst(track)
     }
 
+    /**
+     * Inject [tracks] so they play in the given order before the next
+     * rule-driven pick. Use this from "Play this album next" / "Play
+     * this artist next" so the caller doesn't need to know the queue's
+     * LIFO addFirst implementation detail (and so the order can't
+     * silently invert if [enqueueNext] semantics ever change).
+     */
+    fun enqueueNextAll(tracks: List<Track>) {
+        // addFirst is LIFO, so iterate in reverse to preserve order.
+        for (i in tracks.indices.reversed()) priority.addFirst(tracks[i])
+    }
+
     /** Append [track] to the priority buffer's tail. FIFO append. */
     fun enqueueLast(track: Track) {
         priority.addLast(track)
+    }
+
+    /** Append [tracks] to the priority buffer's tail in order. */
+    fun enqueueLastAll(tracks: List<Track>) {
+        for (t in tracks) priority.addLast(t)
     }
 
     /** Snapshot of the priority buffer for the UI (Up Next sheet). */
@@ -152,13 +169,16 @@ class PlaybackQueue(
      * Remove the track at [index] from the priority buffer. No-op when
      * the index is out of range — the UI may race the queue if the
      * current track transitions while the user is mid-tap.
+     *
+     * Single-operation removal so concurrent next() calls never see
+     * an empty deque: a clear-then-rebuild approach opens a window
+     * where the rule pipeline takes over and silently skips queued
+     * tracks. ArrayDeque.removeAt is O(n) but bounded by queue size
+     * (typically <50), so it's fine.
      */
     fun removePriorityAt(index: Int) {
         if (index in priority.indices) {
-            val list = priority.toMutableList()
-            list.removeAt(index)
-            priority.clear()
-            priority.addAll(list)
+            priority.removeAt(index)
         }
     }
 

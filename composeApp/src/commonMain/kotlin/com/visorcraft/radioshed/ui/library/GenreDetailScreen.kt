@@ -104,9 +104,7 @@ fun GenreDetailScreen(
                                 enabled = tracks.isNotEmpty(),
                                 onClick = {
                                     overflowOpen = false
-                                    tracks.asReversed().forEach {
-                                        stationPlayback.playNext(it)
-                                    }
+                                    stationPlayback.playNextAll(tracks)
                                 },
                             )
                             DropdownMenuItem(
@@ -117,7 +115,7 @@ fun GenreDetailScreen(
                                 enabled = tracks.isNotEmpty(),
                                 onClick = {
                                     overflowOpen = false
-                                    tracks.forEach { stationPlayback.addToQueue(it) }
+                                    stationPlayback.addAllToQueue(tracks)
                                 },
                             )
                         }

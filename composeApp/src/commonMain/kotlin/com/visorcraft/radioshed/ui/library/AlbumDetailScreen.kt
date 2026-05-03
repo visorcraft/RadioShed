@@ -128,14 +128,7 @@ fun AlbumDetailScreen(
                                 enabled = tracks.isNotEmpty(),
                                 onClick = {
                                     overflowOpen = false
-                                    // Reverse so the album plays in
-                                    // track order — each playNext
-                                    // pushes onto the head of the
-                                    // priority buffer, so without the
-                                    // reverse we'd queue track 1 last.
-                                    tracks.asReversed().forEach {
-                                        stationPlayback.playNext(it)
-                                    }
+                                    stationPlayback.playNextAll(tracks)
                                 },
                             )
                             DropdownMenuItem(
@@ -149,7 +142,7 @@ fun AlbumDetailScreen(
                                 enabled = tracks.isNotEmpty(),
                                 onClick = {
                                     overflowOpen = false
-                                    tracks.forEach { stationPlayback.addToQueue(it) }
+                                    stationPlayback.addAllToQueue(tracks)
                                 },
                             )
                             DropdownMenuItem(

@@ -437,6 +437,20 @@ class LibraryRepository(private val db: RadioShedDatabase) {
                 .associate { it.track_id to it.artist_id }
         }
 
+    /**
+     * Batched (trackId → primary artist name) lookup for callers that
+     * only need the display name, not the artist row. Used by the
+     * .m3u export to fill `#EXTINF:dur,Artist - Title` headers in a
+     * single query. Tracks without a primary artist link are absent
+     * from the map.
+     */
+    suspend fun primaryArtistNameMap(trackIds: Collection<Long>): Map<Long, String> =
+        withContext(IODispatcher) {
+            if (trackIds.isEmpty()) return@withContext emptyMap()
+            db.libraryQueries.selectPrimaryArtistNamesForTracks(trackIds).executeAsList()
+                .associate { it.track_id to it.name }
+        }
+
     suspend fun tracksForAlbum(albumId: Long): List<Track> = withContext(IODispatcher) {
         db.libraryQueries.selectTracksByAlbum(albumId).executeAsList().map { it.toDomain() }
     }

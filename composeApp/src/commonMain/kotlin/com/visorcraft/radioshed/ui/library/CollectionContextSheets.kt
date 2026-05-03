@@ -130,7 +130,7 @@ fun AlbumContextSheet(
                     onClick = {
                         scope.launch {
                             val tracks = libraryRepo.tracksForAlbum(album.id)
-                            tracks.forEach { stationPlayback.addToQueue(it) }
+                            stationPlayback.addAllToQueue(tracks)
                             onDismiss()
                         }
                     },
@@ -141,11 +141,7 @@ fun AlbumContextSheet(
                     onClick = {
                         scope.launch {
                             val tracks = libraryRepo.tracksForAlbum(album.id)
-                            // Reverse so the first track ends up at the
-                            // top of the priority buffer after each
-                            // playNext shoves things down. Without this
-                            // the album plays back in reverse order.
-                            tracks.asReversed().forEach { stationPlayback.playNext(it) }
+                            stationPlayback.playNextAll(tracks)
                             onDismiss()
                         }
                     },
@@ -238,7 +234,7 @@ fun ArtistContextSheet(
                     onClick = {
                         scope.launch {
                             val tracks = libraryRepo.tracksForArtist(artist.id)
-                            tracks.forEach { stationPlayback.addToQueue(it) }
+                            stationPlayback.addAllToQueue(tracks)
                             onDismiss()
                         }
                     },
@@ -283,6 +279,14 @@ private fun CollectionPlaylistPicker(
     val playlists by repo.observeAll().collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
     var createOpen by remember { mutableStateOf(false) }
+    // Re-entry guard: Once the user picks a destination playlist (or
+    // hits the Create dialog's Save button) we lock subsequent taps
+    // out until the launched coroutine finishes. Without this, a
+    // double-tap on the same row launches two coroutines that both
+    // read repo.trackCount() before either's writes commit, so both
+    // compute the same starting position and end up duplicating the
+    // album/artist into the same slots.
+    var inFlight by remember { mutableStateOf(false) }
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp)) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -304,7 +308,7 @@ private fun CollectionPlaylistPicker(
                 CollectionActionRow(
                     icon = Icons.Filled.Add,
                     label = "Create new playlist…",
-                    onClick = { createOpen = true },
+                    onClick = { if (!inFlight) createOpen = true },
                 )
             }
             items(playlists, key = { it.id }) { playlist ->
@@ -312,14 +316,21 @@ private fun CollectionPlaylistPicker(
                     icon = Icons.AutoMirrored.Filled.QueueMusic,
                     label = playlist.name,
                     onClick = {
-                        scope.launch {
-                            val tracks = resolveTracks()
-                            var pos = repo.trackCount(playlist.id).toInt()
-                            tracks.forEach { t ->
-                                repo.addTrack(playlist.id, t.id, position = pos)
-                                pos += 1
+                        if (!inFlight) {
+                            inFlight = true
+                            scope.launch {
+                                try {
+                                    val tracks = resolveTracks()
+                                    var pos = repo.trackCount(playlist.id).toInt()
+                                    tracks.forEach { t ->
+                                        repo.addTrack(playlist.id, t.id, position = pos)
+                                        pos += 1
+                                    }
+                                    onDone()
+                                } finally {
+                                    inFlight = false
+                                }
                             }
-                            onDone()
                         }
                     },
                 )
@@ -345,15 +356,20 @@ private fun CollectionPlaylistPicker(
                 TextButton(
                     onClick = {
                         val n = newName.trim()
-                        if (n.isNotEmpty()) {
+                        if (n.isNotEmpty() && !inFlight) {
+                            inFlight = true
                             scope.launch {
-                                val id = repo.insert(name = n)
-                                val tracks = resolveTracks()
-                                tracks.forEachIndexed { idx, t ->
-                                    repo.addTrack(id, t.id, position = idx)
+                                try {
+                                    val id = repo.insert(name = n)
+                                    val tracks = resolveTracks()
+                                    tracks.forEachIndexed { idx, t ->
+                                        repo.addTrack(id, t.id, position = idx)
+                                    }
+                                    createOpen = false
+                                    onDone()
+                                } finally {
+                                    inFlight = false
                                 }
-                                createOpen = false
-                                onDone()
                             }
                         }
                     },

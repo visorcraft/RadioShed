@@ -171,11 +171,12 @@ fun NowPlayingScreen(
     // entries since removing a rule-driven row would just regenerate
     // the same track on next peek).
     var priorityCount by remember { mutableStateOf(0) }
-    // Bumped every time we mutate the priority buffer so the
-    // LaunchedEffect re-collects upcoming + priorityCount without
-    // having to wait for a track transition.
-    var queueRefreshTick by remember { mutableStateOf(0) }
-    LaunchedEffect(queueSheetOpen, nowPlaying?.trackId, queueRefreshTick) {
+    // Re-fetch the canonical state whenever the sheet opens or the
+    // current track changes (which is also when the priority head
+    // gets consumed). Optimistic local mutations from the X / Clear
+    // affordances handle the in-sheet remove paths without needing
+    // a separate refresh tick.
+    LaunchedEffect(queueSheetOpen, nowPlaying?.trackId) {
         if (queueSheetOpen) {
             upcoming = stationPlayback.upcoming(count = 20)
             priorityCount = stationPlayback.priorityCount()
@@ -437,12 +438,30 @@ fun NowPlayingScreen(
                     }
                 },
                 onRemoveQueueItem = { idx ->
-                    stationPlayback.removeFromQueue(idx)
-                    queueRefreshTick += 1
+                    // Optimistic local update — the UI removes the
+                    // row immediately so rapid taps don't address the
+                    // pre-removal indices. The mutex-protected async
+                    // remove on the queue then persists the change.
+                    // This avoids the off-by-one bug where two quick
+                    // taps would remove rows N and N+1 instead of N
+                    // and N+2 (because the second tap saw the stale
+                    // pre-first-remove list).
+                    if (idx in upcoming.indices && idx < priorityCount) {
+                        upcoming = upcoming.toMutableList().also { it.removeAt(idx) }
+                        priorityCount -= 1
+                        stationPlayback.removeFromQueue(idx)
+                    }
                 },
                 onClearQueue = {
-                    stationPlayback.clearQueue()
-                    queueRefreshTick += 1
+                    // Optimistic: drop all priority items from the
+                    // visible list immediately. Rule-driven peeks
+                    // remain so users still see what's coming up
+                    // from the station. The async clearQueue catches up.
+                    if (priorityCount > 0) {
+                        upcoming = upcoming.drop(priorityCount)
+                        priorityCount = 0
+                        stationPlayback.clearQueue()
+                    }
                 },
             )
         }
@@ -755,7 +774,7 @@ private fun CompactLayout(
             onNext = onNext,
             onReplay10 = { onSeek((positionMs - 10_000).coerceAtLeast(0L)) },
             onForward10 = {
-                val cap = if (durationMs > 0) durationMs - 250L else Long.MAX_VALUE
+                val cap = if (durationMs > 0) (durationMs - 250L).coerceAtLeast(0L) else Long.MAX_VALUE
                 onSeek((positionMs + 10_000).coerceAtMost(cap))
             },
             onDislikeOnStation = onDislikeOnStation,
@@ -847,7 +866,7 @@ private fun TwoPaneLayout(
                 onNext = onNext,
                 onReplay10 = { onSeek((positionMs - 10_000).coerceAtLeast(0L)) },
                 onForward10 = {
-                    val cap = if (durationMs > 0) durationMs - 250L else Long.MAX_VALUE
+                    val cap = if (durationMs > 0) (durationMs - 250L).coerceAtLeast(0L) else Long.MAX_VALUE
                     onSeek((positionMs + 10_000).coerceAtMost(cap))
                 },
                 onDislikeOnStation = onDislikeOnStation,
@@ -1747,7 +1766,11 @@ private fun QueueBottomSheet(
                 }
             } else {
                 itemsIndexed(
-                    upcoming, key = { _, t -> "u:${t.id}" },
+                    // Position-based key: track ids can repeat
+                    // legitimately in the priority queue (e.g.,
+                    // user "Play next"-ed the same song twice),
+                    // and Compose throws on duplicate item keys.
+                    upcoming, key = { idx, _ -> "u:$idx" },
                 ) { idx, track ->
                     // Only the first `priorityCount` rows are user-
                     // queued items we can actually remove. Rule-

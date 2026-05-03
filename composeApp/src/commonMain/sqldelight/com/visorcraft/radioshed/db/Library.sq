@@ -379,6 +379,15 @@ selectPrimaryArtistForTracks:
 SELECT track_id, artist_id FROM track_artist
 WHERE role = 'primary' AND track_id IN ?;
 
+-- Same as above but joins through to artist.name so the caller gets
+-- name resolution in a single query. Used by .m3u export and
+-- anywhere else we need (trackId → artistName) without a second
+-- batch fetch on artist ids.
+selectPrimaryArtistNamesForTracks:
+SELECT ta.track_id, a.name FROM track_artist ta
+JOIN artist a ON a.id = ta.artist_id
+WHERE ta.role = 'primary' AND ta.track_id IN ?;
+
 selectTracksByArtist:
 SELECT track.* FROM track
 JOIN track_artist ta ON ta.track_id = track.id

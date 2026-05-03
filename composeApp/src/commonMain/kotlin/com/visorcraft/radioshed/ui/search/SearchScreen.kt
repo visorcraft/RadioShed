@@ -83,13 +83,17 @@ fun SearchScreen(
     var likedOnly by remember { mutableStateOf(false) }
     var likedSet by remember { mutableStateOf<Set<Long>>(emptySet()) }
     val likedCount by ratingRepo.observeLikedCount().collectAsState(initial = 0L)
-    LaunchedEffect(likedCount, results) {
-        // Resolve liked ids only when the filter is on or about to
-        // turn on (we toggle the chip eagerly). For a tiny library
-        // this is cheap; for a large one it's still a single
-        // indexed query so we don't bother caching across queries.
-        if (results.tracks.isNotEmpty()) {
+    LaunchedEffect(likedCount, results, likedOnly) {
+        // Only hit the DB when the chip is on. Toggling off clears
+        // the set so a stale snapshot can't accidentally keep
+        // filtering after the user drops the filter chip. Without
+        // the likedOnly gate, every search query was triggering a
+        // full likedTrackIds() scan even when the filter wasn't
+        // applied — wasted DB roundtrip on every keystroke debounce.
+        if (likedOnly && results.tracks.isNotEmpty()) {
             likedSet = ratingRepo.likedTrackIds().toSet()
+        } else if (!likedOnly) {
+            likedSet = emptySet()
         }
     }
     // Read once on entry; we maintain it in-state and only flush back
@@ -307,8 +311,17 @@ fun SearchScreen(
                     }
                     if (!showArtists && !showAlbums && !showTracks) {
                         item {
+                            // The Liked filter can zero out a non-
+                            // empty result set; the user needs to see
+                            // that's why, not "no matches" which
+                            // implies the search itself missed.
+                            val msg = if (likedOnly && results.tracks.isNotEmpty() && visibleTracks.isEmpty()) {
+                                "No liked tracks in these results. Turn off the Liked filter to see all matches."
+                            } else {
+                                "No matches in this scope."
+                            }
                             Text(
-                                "No matches in this scope.",
+                                text = msg,
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
                             )

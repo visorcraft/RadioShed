@@ -121,15 +121,19 @@ fun PlaylistDetailScreen(
                                     val name = playlist?.name ?: "playlist"
                                     val snapshot = tracks
                                     scope.launch {
-                                        // Resolve primary-artist names per track in
-                                        // one pass before building the entry list.
-                                        // This avoids holding a partial list with
-                                        // missing artists in the EXTINF labels.
-                                        val artistByTrack: Map<Long, String?> =
-                                            snapshot.associate { t ->
-                                                t.id to libraryRepo.artistsForTrack(t.id)
-                                                    .firstOrNull()?.name
-                                            }
+                                        // Single batched query for all
+                                        // (trackId → primary-artist
+                                        // name) pairs. The previous
+                                        // per-track artistsForTrack(id)
+                                        // loop was N round-trips
+                                        // through the IO dispatcher —
+                                        // a 200-track playlist froze
+                                        // the export for ~2s while the
+                                        // queries serialized.
+                                        val artistByTrack: Map<Long, String> =
+                                            libraryRepo.primaryArtistNameMap(
+                                                snapshot.map { it.id },
+                                            )
                                         val entries = snapshot.map { t ->
                                             com.visorcraft.radioshed.source.M3uEntry(
                                                 absolutePath = t.path,

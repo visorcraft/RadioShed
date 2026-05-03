@@ -116,9 +116,7 @@ fun ArtistDetailScreen(
                                 enabled = tracks.isNotEmpty(),
                                 onClick = {
                                     overflowOpen = false
-                                    tracks.asReversed().forEach {
-                                        stationPlayback.playNext(it)
-                                    }
+                                    stationPlayback.playNextAll(tracks)
                                 },
                             )
                             DropdownMenuItem(
@@ -132,7 +130,7 @@ fun ArtistDetailScreen(
                                 enabled = tracks.isNotEmpty(),
                                 onClick = {
                                     overflowOpen = false
-                                    tracks.forEach { stationPlayback.addToQueue(it) }
+                                    stationPlayback.addAllToQueue(tracks)
                                 },
                             )
                         }

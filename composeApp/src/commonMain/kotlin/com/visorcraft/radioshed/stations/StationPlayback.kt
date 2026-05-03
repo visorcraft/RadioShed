@@ -429,9 +429,15 @@ class StationPlayback(
         // session counts as a skip (didn't reach the completion
         // threshold). Auto-advance via PlayerState.Ended doesn't set
         // the flag — that's a natural end, not a user skip.
-        userSkipPending = true
+        //
+        // Set the flag INSIDE the lock so a concurrent
+        // PlayerState.Ended path can't observe it before our
+        // advanceToNext runs and mis-attribute the previous track.
         scope.launch {
-            advanceMutex.withLock { advanceToNext() }
+            advanceMutex.withLock {
+                userSkipPending = true
+                advanceToNext()
+            }
         }
     }
 
@@ -446,8 +452,38 @@ class StationPlayback(
             playTracks(listOf(track), startIndex = 0)
             return
         }
-        q.enqueueNext(track)
-        republishPriorityCount()
+        scope.launch {
+            advanceMutex.withLock {
+                q.enqueueNext(track)
+                // Publish INSIDE the lock so an interleaved
+                // advanceToNext can't snatch the priority head
+                // between the enqueue and the count publish, which
+                // would leak a stale count to the badge.
+                republishPriorityCount()
+            }
+        }
+    }
+
+    /**
+     * Inject [tracks] in their given order to play right after the
+     * current track. Use this for "Play this album next" / "Play this
+     * artist next" — a single mutex-protected enqueue preserves order
+     * without callers having to know about the underlying LIFO/FIFO
+     * mechanics. Falls back to ad-hoc playback when no queue exists.
+     */
+    fun playNextAll(tracks: List<Track>) {
+        if (tracks.isEmpty()) return
+        val q = queue
+        if (q == null) {
+            playTracks(tracks, startIndex = 0)
+            return
+        }
+        scope.launch {
+            advanceMutex.withLock {
+                q.enqueueNextAll(tracks)
+                republishPriorityCount()
+            }
+        }
     }
 
     /**
@@ -461,8 +497,32 @@ class StationPlayback(
             playTracks(listOf(track), startIndex = 0)
             return
         }
-        q.enqueueLast(track)
-        republishPriorityCount()
+        scope.launch {
+            advanceMutex.withLock {
+                q.enqueueLast(track)
+                republishPriorityCount()
+            }
+        }
+    }
+
+    /**
+     * Append [tracks] to the priority buffer's tail in order. Single
+     * mutex acquisition for the whole batch so the queue can't be
+     * advanced mid-iteration.
+     */
+    fun addAllToQueue(tracks: List<Track>) {
+        if (tracks.isEmpty()) return
+        val q = queue
+        if (q == null) {
+            playTracks(tracks, startIndex = 0)
+            return
+        }
+        scope.launch {
+            advanceMutex.withLock {
+                q.enqueueLastAll(tracks)
+                republishPriorityCount()
+            }
+        }
     }
 
     /**
@@ -472,17 +532,26 @@ class StationPlayback(
      * with no active queue.
      */
     fun clearQueue() {
-        queue?.clearPriority()
-        republishPriorityCount()
+        scope.launch {
+            advanceMutex.withLock {
+                queue?.clearPriority()
+                republishPriorityCount()
+            }
+        }
     }
 
     /**
      * Remove a single entry from the priority buffer at the visible
-     * Up-Next index. Bounds-checked inside the queue.
+     * Up-Next index. Bounds-checked inside the queue. Mutex-protected
+     * so it can't race with auto-advance.
      */
     fun removeFromQueue(index: Int) {
-        queue?.removePriorityAt(index)
-        republishPriorityCount()
+        scope.launch {
+            advanceMutex.withLock {
+                queue?.removePriorityAt(index)
+                republishPriorityCount()
+            }
+        }
     }
 
     /**
@@ -534,19 +603,28 @@ class StationPlayback(
     fun skipPrevious() {
         val positionMs = audioEngine.position.value.currentMs
         if (positionMs > PREVIOUS_RESTART_THRESHOLD_MS) {
-            audioEngine.seekTo(0L)
-            return
-        }
-        val prev = history.removeLastOrNull()
-        if (prev == null) {
+            // Rewind-semantic path is safe outside the mutex — it
+            // doesn't touch shared collections, just seeks the engine.
             audioEngine.seekTo(0L)
             return
         }
         // Skipping back IS a skip of whatever's currently playing
-        // (the user gave up on it before it ended naturally).
-        userSkipPending = true
+        // (the user gave up on it before it ended naturally). Both
+        // the userSkipPending flag write AND the history mutation
+        // need to be inside the mutex so an interleaved auto-advance
+        // can't see a half-applied state — without this guard the
+        // auto-advance path could read userSkipPending=true,
+        // attribute the previous track's record to a "skip" event,
+        // clear the flag, and the actual skipPrevious work would
+        // then run unaccounted.
         scope.launch {
             advanceMutex.withLock {
+                userSkipPending = true
+                val prev = history.removeLastOrNull()
+                if (prev == null) {
+                    audioEngine.seekTo(0L)
+                    return@withLock
+                }
                 recordPreviousIfAny()
                 playTrack(prev, recordHistory = false)
             }
@@ -652,6 +730,11 @@ class StationPlayback(
             audioEngine.stop()
             return
         }
+        // q.next() consumes the priority head when one is queued, so
+        // the badge count needs to refresh — without this the UI's
+        // queue-button badge stays at the pre-consume count until the
+        // user does another playNext/addToQueue/clearQueue op.
+        republishPriorityCount()
         playTrack(next, recordHistory = true)
     }
 

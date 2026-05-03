@@ -1424,75 +1424,137 @@ for the current Android build, but each is tracked here so nothing slips
 between phases. Some duplicate placeholders that already exist earlier in
 the plan — kept here as a single discoverable list with cross-references.
 
+Status legend: `[x]` = shipped on Android; `[~]` = partial / Android only,
+iOS deferred; `[ ]` = still deferred.
+
 #### Big features deferred (multi-day each)
 
 - [ ] **Crossfade + gapless verification (#112)** — needs dual-ExoPlayer
   pipeline or a custom `AudioProcessor`. Cross-references Phase 4
   ("Verify contiguous decoding") and Phase 7 ("Crossfade impl on both
-  engines", "Gapless playback verified sample-accurate").
+  engines", "Gapless playback verified sample-accurate"). End-of-track
+  fade-out (single-player) ships today as the lighter alternative.
 - [ ] **iOS implementation pass** — every `AudioEngineIos`,
   `FileEnumeratorIos`, `TagReaderIos`, `AVAudioSession`,
   `MPNowPlayingInfoCenter`, document-picker, and security-scoped-bookmark
   stub from Phases 3–4. Needs Mac access; requires a dedicated build-out
-  cycle. See lines 1123–1125, 1128, 1150, 1152–1153 for the existing
-  per-feature stubs.
+  cycle.
 - [ ] **Cast / multi-room output** — entire Phase 11 (Chromecast, AirPlay,
   UPnP/DLNA, Sonos, Plex/Kodi, transcoding, multi-room sync, auto-cast
   rules). No code yet beyond the `CastTarget` schema row.
-- [ ] **Home-screen widget** — Android `AppWidgetProvider` + Glance UI,
-  iOS `WidgetKit`. Schema row (`widget_configs`) exists; renderer does
-  not.
-- [ ] **Search DSL parser** — `artist:Hendrix year:>1968 genre:rock` style
-  query language. Plain full-text search ships today; DSL deferred.
-  Duplicates line 1135.
-- [ ] **Drag-to-reorder** — stations list, playlist tracks, queue
-  reordering. Duplicates line 1181 (stations) and is implicit for
-  playlists/queue.
+- [~] **Home-screen widget** — Android `AppWidgetProvider` ships
+  (`androidMain/widget/NowPlayingWidget.kt`) with `RemoteViews` UI,
+  Koin-injected AudioEngine reads, and `PendingIntent` transport buttons
+  routed through `RadioShedMediaSessionService`. Implementation uses
+  classic `RemoteViews` rather than Glance — functionally equivalent.
+  iOS `WidgetKit` extension still deferred.
+- [x] **Search DSL parser** — `commonMain/data/SearchDsl.kt` implements
+  the full `artist:Hendrix year:>1968 genre:rock` query language with
+  tokenizer, field dispatch, year-range parser (exact, `>`, `>=`, `<`,
+  `<=`, `a-b` range), quote handling, and unknown-field fallthrough to
+  free text.
+- [~] **Drag-to-reorder** — stations
+  (`ui/stations/ReorderStationsScreen.kt`) and playlist tracks
+  (`ui/playlists/PlaylistDetailScreen.kt`) ship via the shared
+  `ui/util/DragReorder.kt` utility. Queue reordering still deferred —
+  the Up Next sheet has interleaved priority + rule rows that complicate
+  drag handling. Remove + re-add ships as the workaround.
 
 #### Quality / polish deferred from the audit
 
-- [ ] **Background-blur perf on Now Playing** — current impl re-blurs on
-  every recomposition; needs caching keyed by artwork URI + size, or a
-  pre-rendered blurred bitmap held in memory while the track is current.
-  Affects scroll/animation smoothness on lower-tier Android devices.
-- [ ] **SQLDelight `verifyMigrations` enabled** — currently disabled
-  because we have no real migrations yet (baseline schema only). Turn on
+- [~] **Background-blur perf on Now Playing** — `BlurredBackdrop` is
+  isolated as its own composable with KDoc explaining the
+  recomposition-isolation strategy. Coil's memory cache backs the
+  bitmap reuse. Explicit `remember(artworkUri)`-keyed pre-render not
+  added; would help further on devices below Android 12 where
+  `Modifier.blur` is a no-op and the work falls to software.
+- [ ] **SQLDelight `verifyMigrations` enabled** — currently disabled.
+  `composeApp/build.gradle.kts` has the comment explaining why. Turn on
   the moment we add migration #1 so the harness catches schema drift in
-  CI. Cross-references line 1108.
+  CI.
 - [ ] **Media3 1.7+ bump** — clears the `CommandButton.Builder()`
   deprecation warnings. Holds until 1.7 is stable and the Media3 release
-  notes are reviewed for breaking changes on `MediaSession`.
-- [ ] **Scanner: first-seen-wins artwork** — when multiple tracks in an
-  album have differing embedded art, lock to the first one indexed
-  rather than the last-write-wins behaviour today. Avoids album-art
-  flicker as the scan progresses.
+  notes are reviewed for breaking changes on `MediaSession`. Pinned at
+  1.6.1 in `gradle/libs.versions.toml`.
+- [x] **Scanner: first-seen-wins artwork** — `Scanner.kt` allocates an
+  `albumsWithArtwork` set per scan and short-circuits on subsequent
+  hits; the DB-level `setAlbumArtworkIfMissing` (Library.sq) uses
+  `INSERT OR IGNORE` as a second guard.
 
 #### Stuff never built that some users might miss
 
-- [ ] **Pinned tracks per station** — user marks N tracks as "always
-  include in this station's pool", regardless of source rules.
-- [ ] **Per-station detail screen** — tile tap currently plays; a long-
-  press → "Open station" route would land on a screen showing source
-  rules, candidate count, recently played, top tracks for the station.
-  Partial overlap with line 1203 (long-press tile quick actions).
-- [ ] **Crash log surface** — in-app viewer of recent crashes/ANRs with
-  share-as-text. No telemetry uploaded — purely local triage aid.
-- [ ] **Onboarding polish** — steps 5–9 from Phase 5/6 (taste setup,
-  first custom station, in-car preview, AI DJ intro, done). The bones
-  exist (steps 1–5 ship); the post-scan flow needs design + copy.
-  Cross-references lines 1185, 1212.
-- [ ] **Bluetooth multi-click handling** — double-click → next, triple-
-  click → previous on BT headset buttons. Single-click play/pause works
-  via Media3's default; multi-click needs a custom
-  `MediaSession.Callback.onMediaButtonEvent` debounce.
-- [ ] **Now Playing overflow on narrow screens** — at <360dp width the
-  overflow menu's submenu items (Add to playlist, Go to album, Go to
-  artist, Track info) can clip. Needs a sheet-based fallback below a
-  width breakpoint.
-- [ ] **Forgotten Gems sort tweak** — current sort is "lowest play
-  count, ties broken by oldest last-played"; users have asked for
-  "highest-rated among never-played" as an alternative ordering. Add
-  as a sort-mode toggle on the Forgotten Gems preset.
+- [x] **Pinned tracks per station** — `station_pinned_track` table
+  (Stations.sq), full repo + UI + playback merge. `StationDetailScreen`
+  shows them with an Unpin button.
+- [x] **Per-station detail screen** — `ui/stations/StationDetailScreen.kt`
+  with header card, source-rule summary, candidate count, pinned tracks,
+  top played, recently played sections.
+- [x] **Crash log surface** — `ui/settings/CrashLogScreen.kt` lists
+  `CrashLogEntry` rows with expandable stack traces and Share buttons.
+  `AndroidCrashLogReader` uses `getHistoricalProcessExitReasons()`. iOS
+  is a Null stub (TestFlight handles iOS crashes anyway).
+- [~] **Onboarding polish** — current flow is 5 steps (Welcome →
+  Permissions → Folder → Scan → Done). The "Done" step shows a 3-card
+  mini-tour (Stations / Drive Mode / AI DJ teaser). The originally
+  spec'd interactive taste-setup / first-custom-station / in-car-preview
+  / AI-DJ-intro steps are not built — the linear 5-step flow ships
+  instead.
+- [x] **Bluetooth multi-click handling** —
+  `RadioShedMediaSessionService.kt`'s `RadioShedLibraryCallback`
+  intercepts `KEYCODE_HEADSETHOOK` / `KEYCODE_MEDIA_PLAY_PAUSE` with a
+  350ms click-count window: 1→play/pause, 2→skipNext, 3+→skipPrevious.
+- [x] **Now Playing overflow on narrow screens** — `NowPlayingScreen.kt`
+  switches to `OverflowSheet` (modal bottom sheet) at `<360dp` width so
+  submenu items don't clip. Wide screens keep the `DropdownMenu`.
+- [x] **Forgotten Gems sort tweak** — `SmartQueryKind.ForgottenGemsByRating`
+  is a distinct enum value with its own evaluator branch. Selectable in
+  the StationEditor as "Forgotten gems — highest rated".
+
+#### Polish shipped post-audit (not in original Phase 18)
+
+These features were built after the audit was written and aren't in the
+deferred list above. They're worth noting because they round out the v1
+experience:
+
+- Now Playing overflow `Go to album` / `Go to artist` / `Go to station`
+- Now Playing artwork tap-to-expand fullscreen lightbox
+- Now Playing tappable artist/album subtitle spans (jump from text)
+- Now Playing queue button shows live numeric badge of queued tracks
+- Replay-10s / Forward-10s transport buttons (hidden in Drive Mode)
+- MiniPlayer long-press → Track context sheet
+- Sleep-timer end-of-track mode + +15min extend
+- Track context sheet: Play next / Add to queue / Add to playlist / Go
+  to album / Go to artist / View lyrics / Set as ringtone / Share track
+- Album / Artist long-press in Library → context sheet (Play / Shuffle /
+  Play next / Add to queue / Add to playlist / Go to detail)
+- Album / Artist / Genre detail screens: Play next / Add to queue
+  overflow actions, total runtime + counts in the header
+- Library Songs sort by Most played / Top rated, album-name subtitle row
+- Library Browser: Random album button, Shuffle all
+- Search: Liked-only filter chip, Play all / Shuffle all on tracks
+- Stats: Most-skipped tracks card alongside Top played
+- History screen: filter chips by station
+- Lyrics: copy to clipboard, A− / A+ font size adjuster (persisted),
+  forgiving USLT/SYLT parser, manual artist/title override on miss,
+  source attribution badge
+- Liked Songs: dedicated screen, "Save as playlist…" action, preset
+  station, full backup/restore round-trip
+- Voice search via RecognizerIntent
+- Playlist export to .m3u via share sheet
+- Volume slider on Now Playing (separate from system volume)
+- Backup bundle v3: settings round-trip + custom EQ presets +
+  liked-track timestamps; auto-prune to last N; share intent; import
+  from system file picker; path-suffix fallback for moved files
+- Equalizer: 5-band + presets + custom presets + bypass switch +
+  preset export/import as JSON
+- Repeat mode (off / one / all) with notification action
+- Shuffle session toggle on Now Playing
+- Dynamic-color (Material You) toggle, reduce-motion mode, drive mode
+- Auto-collage station artwork, custom per-station artwork upload
+- Skip tracking instrumentation feeding the Stats screen
+- Track Info dialog: copy file path, tappable artist/album rows,
+  enriched stats (plays, skips, ReplayGain, BPM, etc.)
+- Settings: Clear lyrics cache button (preserves manual overrides)
 
 ---
 

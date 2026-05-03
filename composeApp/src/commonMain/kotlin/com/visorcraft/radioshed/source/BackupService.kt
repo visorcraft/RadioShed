@@ -118,10 +118,25 @@ class BackupService(
         // accumulate unboundedly. Errors during prune are swallowed —
         // a failed delete is not a reason to fail the export the user
         // just successfully completed.
+        //
+        // Sort newest-first explicitly here. The BackupStorage.list()
+        // contract isn't documented, and an alphabetical-ascending
+        // implementation would have us delete the NEWEST files via
+        // drop(N) — the exact opposite of what the user wants.
+        //
+        // Also exclude the just-written file from the prune candidate
+        // list. Some Android filesystems (especially SAF-backed) take
+        // a moment to surface newly-written files via list(); without
+        // this filter, a list() that doesn't yet see the new file
+        // could return exactly maxBackupsToRetain old entries and we'd
+        // delete one of them on a stale list — including, in some
+        // race orderings, the new file we just wrote.
         runCatching {
             val all = storage.list()
-            if (all.size > maxBackupsToRetain) {
-                all.drop(maxBackupsToRetain).forEach { stale ->
+                .filter { it.uri != file.uri }
+                .sortedByDescending { it.createdAt }
+            if (all.size >= maxBackupsToRetain) {
+                all.drop(maxBackupsToRetain - 1).forEach { stale ->
                     runCatching { storage.delete(stale.uri) }
                 }
             }

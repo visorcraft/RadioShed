@@ -32,7 +32,21 @@ class AndroidPlaylistExporter(private val context: Context) : PlaylistExporter {
                 .replace(Regex("[\\\\/:*?\"<>|]"), "_")
                 .ifBlank { "playlist" }
                 .take(80)
-            val outFile = File(cacheRoot, "$safeName.m3u")
+            // Stamp each export with the wall clock + a counter
+            // suffix on collision. Two exports within the same
+            // millisecond (rapid double-tap on the share button)
+            // would otherwise overwrite each other while the first
+            // share target is still consuming the URI. Counter is
+            // tried up to 32 times before giving up — practically
+            // a never-hit ceiling, but bounded so we don't spin
+            // forever if cacheDir somehow becomes append-only.
+            val stamp = System.currentTimeMillis()
+            var outFile = File(cacheRoot, "${safeName}_$stamp.m3u")
+            var counter = 1
+            while (outFile.exists() && counter <= 32) {
+                outFile = File(cacheRoot, "${safeName}_${stamp}_$counter.m3u")
+                counter += 1
+            }
             outFile.writeText(buildM3uText(entries))
 
             val authority = "${context.packageName}.fileprovider"
