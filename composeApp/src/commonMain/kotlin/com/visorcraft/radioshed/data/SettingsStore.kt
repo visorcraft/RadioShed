@@ -133,6 +133,19 @@ class SettingsStore(private val settings: Settings) {
     fun setAutoRescanOnLaunch(enabled: Boolean) =
         settings.putBoolean(KEY_AUTO_RESCAN_ON_LAUNCH, enabled)
 
+    /**
+     * Length (seconds) of the volume ramp at the end of each track.
+     * 0 disables the feature entirely (default). Range 0..10.
+     * NOT true crossfade — there's no overlap with the next track,
+     * just a fade-out so abrupt cuts don't jar. Real crossfade
+     * needs dual-ExoPlayer architecture and is tracked separately.
+     */
+    fun getEndFadeSec(): Int =
+        settings.getInt(KEY_END_FADE_SEC, 0).coerceIn(0, 10)
+    fun setEndFadeSec(seconds: Int) {
+        settings.putInt(KEY_END_FADE_SEC, seconds.coerceIn(0, 10))
+    }
+
     fun getLastAutoBackupAt(): Long = settings.getLong(KEY_AUTO_BACKUP_LAST, 0L)
     fun setLastAutoBackupAt(ts: Long) = settings.putLong(KEY_AUTO_BACKUP_LAST, ts)
 
@@ -283,6 +296,7 @@ class SettingsStore(private val settings: Settings) {
         const val KEY_AUTO_BACKUP = "backup.autoEnabled"
         const val KEY_AUTO_BACKUP_LAST = "backup.autoLastAt"
         const val KEY_AUTO_RESCAN_ON_LAUNCH = "library.autoRescanOnLaunch"
+        const val KEY_END_FADE_SEC = "audio.endFadeSec"
         const val KEY_DRIVE_MODE = "ui.driveMode"
         /** Cadence for the auto-backup background export. 7 days = once
          *  per week, which matches typical user back-up cadence

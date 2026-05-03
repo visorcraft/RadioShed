@@ -7,6 +7,8 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.AssistChip
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.ui.Alignment
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -136,11 +138,24 @@ fun SearchScreen(
             LaunchedEffect(Unit) {
                 runCatching { focusRequester.requestFocus() }
             }
+            val voicePicker = com.visorcraft.radioshed.ui.util.rememberVoiceInput { spoken ->
+                query = spoken
+            }
             OutlinedTextField(
                 value = query,
                 onValueChange = { query = it },
                 label = { Text("Title, artist, or album") },
                 singleLine = true,
+                trailingIcon = {
+                    if (com.visorcraft.radioshed.ui.util.supportsVoiceInput()) {
+                        androidx.compose.material3.IconButton(onClick = { voicePicker() }) {
+                            androidx.compose.material3.Icon(
+                                imageVector = Icons.Filled.Mic,
+                                contentDescription = "Voice search",
+                            )
+                        }
+                    }
+                },
                 modifier = Modifier
                     .fillMaxWidth()
                     .focusRequester(focusRequester),

@@ -135,6 +135,28 @@ class RadioShedMediaSessionService : MediaLibraryService() {
                     }
                 }
             }
+
+            override fun onMediaItemTransition(
+                mediaItem: androidx.media3.common.MediaItem?,
+                reason: Int,
+            ) {
+                // Push a fresh paint to any home-screen widget
+                // instances so they catch up to the new track.
+                // Cheap (no-op when zero widgets exist).
+                runCatching {
+                    com.visorcraft.radioshed.widget.NowPlayingWidget
+                        .pushUpdate(this@RadioShedMediaSessionService)
+                }
+            }
+
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                // Same reason as onMediaItemTransition — flip the
+                // widget's play/pause glyph when state changes.
+                runCatching {
+                    com.visorcraft.radioshed.widget.NowPlayingWidget
+                        .pushUpdate(this@RadioShedMediaSessionService)
+                }
+            }
         })
 
         librarySession = MediaLibrarySession.Builder(this, player, RadioShedLibraryCallback())

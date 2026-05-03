@@ -96,6 +96,7 @@ fun AppSettingsScreen(
     var driveMode by remember(settings) { mutableStateOf(settings.getDriveMode()) }
     var autoBackup by remember(settings) { mutableStateOf(settings.getAutoBackupEnabled()) }
     var autoRescan by remember(settings) { mutableStateOf(settings.getAutoRescanOnLaunch()) }
+    var endFadeSec by remember(settings) { mutableStateOf(settings.getEndFadeSec()) }
     var artworkState by remember { mutableStateOf<ArtworkSyncState>(ArtworkSyncState.Idle) }
     var artworkJob by remember { mutableStateOf<Job?>(null) }
     val scope = rememberCoroutineScope()
@@ -206,6 +207,14 @@ fun AppSettingsScreen(
                     },
                 )
             }
+            Spacer(Modifier.height(8.dp))
+            EndFadeSlider(
+                seconds = endFadeSec,
+                onChange = { v ->
+                    endFadeSec = v
+                    settings.setEndFadeSec(v)
+                },
+            )
             Spacer(Modifier.height(8.dp))
             NavRow(
                 title = "Equalizer",
@@ -397,6 +406,48 @@ private fun ThemeChoiceRow(
                 )
             }
         }
+    }
+}
+
+/**
+ * Slider for the end-of-track fade duration. 0 disables.
+ * Honest naming — this is a track-end fade-out, not real
+ * crossfade (no overlap into the next track).
+ */
+@Composable
+private fun EndFadeSlider(seconds: Int, onChange: (Int) -> Unit) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(
+                text = "End-of-track fade",
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                text = if (seconds == 0) "Off" else "${seconds}s",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
+            )
+        }
+        Text(
+            text = "Ramps the volume down over the last few seconds of " +
+                "each track to soften the cut. Doesn't overlap into the " +
+                "next track — true crossfade needs deeper plumbing and " +
+                "is on the roadmap.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+        )
+        androidx.compose.material3.Slider(
+            value = seconds.toFloat(),
+            onValueChange = { onChange(it.toInt()) },
+            valueRange = 0f..10f,
+            steps = 9,
+            modifier = Modifier.fillMaxWidth(),
+        )
     }
 }
 

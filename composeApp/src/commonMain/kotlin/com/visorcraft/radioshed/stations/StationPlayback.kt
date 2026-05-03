@@ -234,6 +234,50 @@ class StationPlayback(
                 }
             }
         }
+        // End-of-track fade-out. Polls position at the engine's
+        // ~2 Hz cadence; when remaining time enters the configured
+        // fade window, ramps the user-volume multiplier down toward
+        // 0 linearly. Restored to the persisted user-volume on the
+        // next track-load (applyEffectiveVolume re-reads
+        // _userVolume.value, which we don't mutate here).
+        //
+        // This is NOT true crossfade — there's no overlap with the
+        // next track. But it eliminates the most jarring symptom:
+        // hard cuts mid-decay. Real crossfade needs dual ExoPlayer
+        // and is tracked in SPEC's deferred list.
+        scope.launch {
+            audioEngine.position.collect { pos ->
+                val fadeSec = settings.getEndFadeSec()
+                if (fadeSec <= 0) return@collect
+                val track = currentTrack ?: return@collect
+                if (pos.durationMs <= 0L) return@collect
+                val remainingMs = pos.durationMs - pos.currentMs
+                val fadeWindowMs = fadeSec * 1_000L
+                if (remainingMs in 1L..fadeWindowMs) {
+                    val attenuation = remainingMs.toFloat() / fadeWindowMs.toFloat()
+                    applyEffectiveVolumeAttenuated(track, attenuation)
+                }
+            }
+        }
+    }
+
+    /**
+     * Like [applyEffectiveVolume] but with an extra multiplicative
+     * attenuation in [0..1]. Used by the end-of-track fade.
+     * Doesn't mutate persisted state — the next track-load resets
+     * back to the user's chosen volume × ReplayGain.
+     */
+    private fun applyEffectiveVolumeAttenuated(track: Track, attenuation: Float) {
+        val user = _userVolume.value
+        val rg = if (settings.getReplayGainEnabled()) {
+            val gainDb = track.replayGainTrack ?: track.replayGainAlbum
+            if (gainDb == null) 1f
+            else {
+                val preamp = settings.getReplayGainPreampDb()
+                10.0.pow((gainDb + preamp) / 20.0).toFloat().coerceIn(0f, 1f)
+            }
+        } else 1f
+        audioEngine.setVolume((user * rg * attenuation.coerceIn(0f, 1f)).coerceIn(0f, 1f))
     }
 
     /**
