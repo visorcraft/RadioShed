@@ -43,6 +43,17 @@ CREATE TABLE liked_track (
 
 CREATE INDEX liked_track_liked_at_idx ON liked_track(liked_at);
 
+-- Global track dislike: "never play this anywhere". Distinct from
+-- station_dislike (per-station hide) because the user wants a way
+-- to permanently exclude a track from every station's pool — Smart
+-- Shuffle, sequential, Forgotten Gems, all of them. Modeled as a
+-- track row's existence in this table; no payload other than the
+-- timestamp of when the user banned it.
+CREATE TABLE track_global_dislike (
+    track_id INTEGER NOT NULL PRIMARY KEY REFERENCES track(id) ON DELETE CASCADE,
+    disliked_at INTEGER NOT NULL
+);
+
 -- ==== Rating queries ====
 
 setRating:
@@ -200,3 +211,17 @@ SELECT COUNT(*) FROM station_dislike WHERE track_id = ? AND station_id = ?;
 
 selectDislikedTrackIdsForStation:
 SELECT track_id FROM station_dislike WHERE station_id = ?;
+
+-- ==== Global-dislike queries ====
+
+globalDislikeTrack:
+INSERT OR REPLACE INTO track_global_dislike (track_id, disliked_at) VALUES (?, ?);
+
+undoGlobalDislike:
+DELETE FROM track_global_dislike WHERE track_id = ?;
+
+isGloballyDisliked:
+SELECT COUNT(*) FROM track_global_dislike WHERE track_id = ?;
+
+selectGloballyDislikedIds:
+SELECT track_id FROM track_global_dislike;

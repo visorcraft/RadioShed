@@ -117,6 +117,8 @@ fun StationsHomeScreen(
     stationPlayback: StationPlayback = koinInject(),
     audioEngine: AudioEngine = koinInject(),
     libraryRepo: LibraryRepository = koinInject(),
+    scanner: com.visorcraft.radioshed.scanner.Scanner = koinInject(),
+    folderRepo: com.visorcraft.radioshed.data.FolderRepository = koinInject(),
 ) {
     val stations by stationRepo.observeAll().collectAsState(initial = emptyList())
     val currentStation by stationPlayback.currentStation.collectAsState()
@@ -204,6 +206,28 @@ fun StationsHomeScreen(
     // is currently visible; null when no sheet is open.
     var actionsForStationId by remember { mutableStateOf<Long?>(null) }
     var deleteConfirmStationId by remember { mutableStateOf<Long?>(null) }
+    // Pull-to-refresh-rescan: lets the user trigger a fresh library
+    // scan from Stations Home without navigating to Library Settings.
+    // Useful when the user just dropped new files into a folder and
+    // wants to see them surface in stations immediately.
+    var rescanInFlight by remember { mutableStateOf(false) }
+    val triggerRescan: () -> Unit = {
+        if (!rescanInFlight) {
+            rescanInFlight = true
+            scope.launch {
+                try {
+                    val targets = folderRepo.list()
+                    targets.forEach { folder ->
+                        runCatching {
+                            scanner.scanFolder(folder.id).collect { /* progress ignored */ }
+                        }
+                    }
+                } finally {
+                    rescanInFlight = false
+                }
+            }
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -235,6 +259,11 @@ fun StationsHomeScreen(
             val columns = if (isCompact) GridCells.Fixed(1)
                           else GridCells.Adaptive(minSize = 280.dp)
 
+            androidx.compose.material3.pulltorefresh.PullToRefreshBox(
+                isRefreshing = rescanInFlight,
+                onRefresh = triggerRescan,
+                modifier = Modifier.fillMaxSize(),
+            ) {
             LazyVerticalGrid(
                 columns = columns,
                 contentPadding = PaddingValues(
@@ -374,6 +403,7 @@ fun StationsHomeScreen(
                     }
                 }
             }
+            } // PullToRefreshBox
         }
     }
 

@@ -220,6 +220,37 @@ class RatingRepository(private val db: RadioShedDatabase) {
         withContext(IODispatcher) {
             db.ratingsQueries.selectDislikedTrackIdsForStation(stationId).executeAsList()
         }
+
+    // ---- Global dislike ----
+
+    /**
+     * Mark this track as never-play-anywhere. Filtered out of every
+     * station's candidate pool by SourceRuleEvaluator before per-
+     * station dislikes are applied. Idempotent — re-banning just
+     * refreshes the timestamp.
+     */
+    suspend fun globalDislike(trackId: Long, dislikedAt: Long = nowMillis()) =
+        withContext(IODispatcher) {
+            db.ratingsQueries.globalDislikeTrack(trackId, dislikedAt)
+        }
+
+    suspend fun undoGlobalDislike(trackId: Long) = withContext(IODispatcher) {
+        db.ratingsQueries.undoGlobalDislike(trackId)
+    }
+
+    suspend fun isGloballyDisliked(trackId: Long): Boolean = withContext(IODispatcher) {
+        db.ratingsQueries.isGloballyDisliked(trackId).executeAsOne() > 0L
+    }
+
+    /**
+     * Full set of globally-disliked track ids. Loaded once per
+     * station-load (hot path on the SourceRule evaluator) so we
+     * filter the candidate pool at construction time rather than
+     * checking each candidate individually.
+     */
+    suspend fun globallyDislikedIds(): Set<Long> = withContext(IODispatcher) {
+        db.ratingsQueries.selectGloballyDislikedIds().executeAsList().toSet()
+    }
 }
 
 data class PlayCountStat(

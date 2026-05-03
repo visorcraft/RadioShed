@@ -17,6 +17,7 @@ import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Album
+import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Lyrics
 import androidx.compose.material.icons.filled.Person
@@ -76,6 +77,7 @@ fun TrackContextSheet(
     var track by remember { mutableStateOf<Track?>(null) }
     var liked by remember { mutableStateOf(false) }
     var primaryArtistId by remember { mutableStateOf<Long?>(null) }
+    var globallyDisliked by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val navInstalled = com.visorcraft.radioshed.nav.LocalNavInstalled.current
     val navToAlbum = com.visorcraft.radioshed.nav.LocalNavigateToAlbum.current
@@ -90,6 +92,7 @@ fun TrackContextSheet(
     LaunchedEffect(trackId) {
         track = libraryRepo.getTrackById(trackId)
         liked = ratingRepo.isLiked(trackId)
+        globallyDisliked = ratingRepo.isGloballyDisliked(trackId)
         // Resolve the primary artist's id once so we can navigate
         // straight from this sheet without an extra DB hit at click
         // time. Tracks with multiple artist links pick the first
@@ -108,6 +111,7 @@ fun TrackContextSheet(
                 liked = liked,
                 navInstalled = navInstalled,
                 primaryArtistId = primaryArtistId,
+                globallyDisliked = globallyDisliked,
                 onPlayNext = {
                     track?.let { stationPlayback.playNext(it) }
                     onDismiss()
@@ -121,6 +125,14 @@ fun TrackContextSheet(
                     liked = target
                     scope.launch {
                         if (target) ratingRepo.like(trackId) else ratingRepo.unlike(trackId)
+                    }
+                },
+                onToggleGlobalDislike = {
+                    val target = !globallyDisliked
+                    globallyDisliked = target
+                    scope.launch {
+                        if (target) ratingRepo.globalDislike(trackId)
+                        else ratingRepo.undoGlobalDislike(trackId)
                     }
                 },
                 onAddToPlaylist = { step = Step.PlaylistPicker },
@@ -154,9 +166,11 @@ private fun MainStep(
     liked: Boolean,
     navInstalled: Boolean,
     primaryArtistId: Long?,
+    globallyDisliked: Boolean,
     onPlayNext: () -> Unit,
     onAddToQueue: () -> Unit,
     onToggleLike: () -> Unit,
+    onToggleGlobalDislike: () -> Unit,
     onAddToPlaylist: () -> Unit,
     onGoToAlbum: (Long) -> Unit,
     onGoToArtist: (Long) -> Unit,
@@ -229,6 +243,20 @@ private fun MainStep(
                 )
             }
         }
+        // Global dislike — "never play this anywhere" — sits at the
+        // bottom because it's a destructive-ish action distinct from
+        // the per-station "skip on this station". When already
+        // banned, the label flips so the user can undo it.
+        ContextActionRow(
+            icon = if (globallyDisliked) Icons.Filled.Favorite
+                   else Icons.Filled.Block,
+            label = if (globallyDisliked) "Allow on stations again"
+                    else "Don't play this anywhere",
+            enabled = track != null,
+            onClick = onToggleGlobalDislike,
+            iconTint = if (globallyDisliked) MaterialTheme.colorScheme.primary
+                       else MaterialTheme.colorScheme.error,
+        )
         Spacer(Modifier.height(8.dp))
     }
 }

@@ -182,6 +182,19 @@ class PlaybackQueue(
         }
     }
 
+    /**
+     * Move the priority entry at [from] to [to]. Used by Up Next
+     * drag-to-reorder. Both indices are clamped to the priority
+     * range so a stale UI tap (after a track auto-consumed the
+     * priority head) becomes a no-op rather than throwing.
+     */
+    fun movePriority(from: Int, to: Int) {
+        if (from == to) return
+        if (from !in priority.indices || to !in priority.indices) return
+        val track = priority.removeAt(from)
+        priority.add(to, track)
+    }
+
     private fun nextSequential(pool: List<Track>): Track {
         val track = pool[sequentialCursor.coerceIn(0, pool.size - 1)]
         sequentialCursor = (sequentialCursor + 1) % pool.size

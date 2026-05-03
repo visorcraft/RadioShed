@@ -369,7 +369,13 @@ class StationPlayback(
             val ids = ruleCandidates.mapTo(mutableSetOf()) { it.id }
             ruleCandidates + pinned.filter { it.id !in ids }
         }
-        val disliked = ratingRepo.dislikedTrackIdsForStation(stationId).toSet()
+        // Globally-disliked tracks ("never play this anywhere") and
+        // per-station dislikes are unioned and passed to the queue
+        // as a single filter set. Globals override pins — the user's
+        // explicit "never" beats their old "always include here".
+        val globallyDisliked = ratingRepo.globallyDislikedIds()
+        val perStation = ratingRepo.dislikedTrackIdsForStation(stationId).toSet()
+        val disliked = globallyDisliked + perStation
         // Pre-resolve trackId → primaryArtistId so PlaybackQueue can
         // apply artist-spacing without per-pick DB hits. One indexed
         // batch query for the whole candidate set; cheap on typical
@@ -584,6 +590,22 @@ class StationPlayback(
         scope.launch {
             advanceMutex.withLock {
                 queue?.removePriorityAt(index)
+                republishPriorityCount()
+            }
+        }
+    }
+
+    /**
+     * Reorder the priority buffer: move entry at [from] to [to].
+     * Used by the Up Next sheet's drag-to-reorder. Same mutex
+     * protection as the other queue mutators so it can't race with
+     * auto-advance or skipNext.
+     */
+    fun moveQueueItem(from: Int, to: Int) {
+        if (from == to) return
+        scope.launch {
+            advanceMutex.withLock {
+                queue?.movePriority(from, to)
                 republishPriorityCount()
             }
         }

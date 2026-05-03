@@ -104,6 +104,7 @@ import com.visorcraft.radioshed.audio.PlayerState
 import com.visorcraft.radioshed.audio.SleepTimer
 import com.visorcraft.radioshed.data.LibraryRepository
 import com.visorcraft.radioshed.data.RatingRepository
+import com.visorcraft.radioshed.ui.util.dragReorderItem
 import com.visorcraft.radioshed.data.SettingsStore
 import com.visorcraft.radioshed.domain.Track
 import com.visorcraft.radioshed.stations.StationPlayback
@@ -205,7 +206,24 @@ fun NowPlayingScreen(
             TopAppBar(
                 title = {
                     Column {
-                        Text("Now Playing", style = MaterialTheme.typography.titleSmall)
+                        // The TopAppBar title slot gets squeezed by
+                        // the many action icons (Lyrics / Shuffle /
+                        // Repeat / Queue / Sleep / MoreVert) on a
+                        // narrow phone. Without softWrap=false +
+                        // maxLines=1, the default Text wraps per-
+                        // character into "No w Pla yin g" rather
+                        // than ellipsizing. Hiding the title outright
+                        // on isNarrow would also be defensible since
+                        // the user knows they're on Now Playing — but
+                        // ellipsis keeps the affordance consistent
+                        // across breakpoints.
+                        Text(
+                            text = "Now Playing",
+                            style = MaterialTheme.typography.titleSmall,
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis,
+                        )
                         SleepTimerLabel(sleepState)
                     }
                 },
@@ -461,6 +479,20 @@ fun NowPlayingScreen(
                         upcoming = upcoming.drop(priorityCount)
                         priorityCount = 0
                         stationPlayback.clearQueue()
+                    }
+                },
+                onMoveQueueItem = { from, to ->
+                    // Optimistic local reorder of the displayed list,
+                    // then mutex-protected commit to the queue. Both
+                    // indices must be in priority range — rule-driven
+                    // peeks aren't reorderable (they regenerate every
+                    // peek anyway).
+                    if (from in 0 until priorityCount && to in 0 until priorityCount) {
+                        upcoming = upcoming.toMutableList().also {
+                            val item = it.removeAt(from)
+                            it.add(to, item)
+                        }
+                        stationPlayback.moveQueueItem(from, to)
                     }
                 },
             )
@@ -1511,8 +1543,27 @@ private fun TrackInfoDialog(
             TextButton(
                 onClick = {
                     if (t != null) {
-                        scope.launch { folderRevealer.revealParent(t.path) }
-                        onDismiss()
+                        scope.launch {
+                            // Don't dismiss until we know whether the
+                            // open succeeded — otherwise on a device
+                            // with no compatible file manager (some
+                            // Samsung / Xiaomi builds, certain
+                            // restricted enterprise profiles) the
+                            // dialog disappeared and nothing happened,
+                            // leaving the user with no feedback. Now
+                            // we surface a message via the existing
+                            // ringtoneStatus slot when the open fails
+                            // and keep the dialog open so they can
+                            // copy the path or share the file
+                            // instead.
+                            val opened = folderRevealer.revealParent(t.path)
+                            if (opened) {
+                                onDismiss()
+                            } else {
+                                ringtoneStatus = "No file manager could open this folder. " +
+                                    "Use Copy on the path below."
+                            }
+                        }
                     }
                 },
                 enabled = t != null,
@@ -1748,13 +1799,37 @@ private fun QueueBottomSheet(
     onJumpUpcoming: (Int) -> Unit,
     onRemoveQueueItem: (Int) -> Unit,
     onClearQueue: () -> Unit,
+    onMoveQueueItem: (from: Int, to: Int) -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    // Convert between LazyColumn-absolute indices (which the
+    // DragReorderState reasons over) and upcoming-list indices
+    // (0..upcoming.size). The header offset is the count of
+    // non-upcoming items rendered ABOVE the upcoming rows.
+    val headerOffset = remember(recent.size) {
+        if (recent.isEmpty()) 1 // "Up next" header
+        else 1 + recent.size + 1 + 1 + 1 + 1 // played header + recent + spacer + divider + spacer + "Up next"
+    }
+    val dragState = com.visorcraft.radioshed.ui.util.rememberDragReorderState(
+        lazyListState = listState,
+        onMove = { fromAbs, toAbs ->
+            val fromIdx = fromAbs - headerOffset
+            val toIdx = toAbs - headerOffset
+            // Both endpoints must be in priority range — rule-driven
+            // rows aren't reorderable since they regenerate every
+            // peek anyway.
+            if (fromIdx in 0 until priorityCount && toIdx in 0 until priorityCount) {
+                onMoveQueueItem(fromIdx, toIdx)
+            }
+        },
+    )
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
     ) {
         LazyColumn(
+            state = listState,
             modifier = Modifier.fillMaxWidth(),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(
                 horizontal = 16.dp, vertical = 8.dp,
@@ -1806,10 +1881,16 @@ private fun QueueBottomSheet(
                     upcoming, key = { idx, _ -> "u:$idx" },
                 ) { idx, track ->
                     // Only the first `priorityCount` rows are user-
-                    // queued items we can actually remove. Rule-
-                    // driven rows have no remove affordance — peeking
-                    // them again would just regenerate the same row.
+                    // queued items we can actually remove or
+                    // reorder. Rule-driven rows have no remove
+                    // affordance — peeking them again would just
+                    // regenerate the same row.
                     val canRemove = idx < priorityCount
+                    val rowModifier = if (canRemove) {
+                        Modifier.dragReorderItem(dragState, headerOffset + idx)
+                    } else {
+                        Modifier
+                    }
                     QueueTrackRow(
                         track = track,
                         dim = false,
@@ -1817,6 +1898,7 @@ private fun QueueBottomSheet(
                         onRemove = if (canRemove) {
                             { onRemoveQueueItem(idx) }
                         } else null,
+                        modifier = rowModifier,
                     )
                 }
             }
@@ -1842,11 +1924,12 @@ private fun QueueTrackRow(
     dim: Boolean,
     onTap: (() -> Unit)?,
     onRemove: (() -> Unit)?,
+    modifier: Modifier = Modifier,
 ) {
     val baseColor = if (dim) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
                     else MaterialTheme.colorScheme.onSurface
-    val rowMod = if (onTap != null) Modifier.fillMaxWidth().clickable(onClick = onTap)
-                 else Modifier.fillMaxWidth()
+    val rowMod = if (onTap != null) modifier.fillMaxWidth().clickable(onClick = onTap)
+                 else modifier.fillMaxWidth()
     Row(
         modifier = rowMod.padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
