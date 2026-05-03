@@ -177,6 +177,21 @@ class StationRepository(private val db: RadioShedDatabase) {
     }
 
     /**
+     * Wipe one station's history rows + reset its cached counters.
+     * Two writes in one transaction so a "Reset stats" UI can't
+     * leave the station in a half-cleared state where the history
+     * is gone but `play_count` still reads 47. Stats screens that
+     * read station.play_count and the History screen that reads
+     * station_history rows both go to zero atomically.
+     */
+    suspend fun resetStationStats(stationId: Long) = withContext(IODispatcher) {
+        db.stationsQueries.transaction {
+            db.stationsQueries.deleteHistoryByStation(stationId)
+            db.stationsQueries.resetStationStatsById(nowMillis(), stationId)
+        }
+    }
+
+    /**
      * Batched (trackId → playCount). Returns 0 for tracks that have
      * never appeared in `station_history` (i.e. ids absent from the
      * map should be treated as 0 by callers).

@@ -41,6 +41,7 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Star
@@ -216,6 +217,11 @@ fun StationsHomeScreen(
     // is currently visible; null when no sheet is open.
     var actionsForStationId by remember { mutableStateOf<Long?>(null) }
     var deleteConfirmStationId by remember { mutableStateOf<Long?>(null) }
+    // Per-station stats reset confirmation. Distinct from delete —
+    // this leaves the station configured and just zeroes its
+    // play_count / skip_rate / history rows. Useful when the user
+    // wants a clean slate on a preset that's accumulated bad data.
+    var resetStatsStationId by remember { mutableStateOf<Long?>(null) }
     // Pull-to-refresh-rescan: lets the user trigger a fresh library
     // scan from Stations Home without navigating to Library Settings.
     // Useful when the user just dropped new files into a folder and
@@ -504,12 +510,42 @@ fun StationsHomeScreen(
                 },
                 canMoveUp = stations.indexOfFirst { it.id == id } > 0,
                 canMoveDown = stations.indexOfFirst { it.id == id } in 0 until (stations.size - 1),
+                onResetStats = {
+                    actionsForStationId = null
+                    resetStatsStationId = id
+                },
                 onDelete = {
                     actionsForStationId = null
                     deleteConfirmStationId = id
                 },
             )
         }
+    }
+
+    resetStatsStationId?.let { id ->
+        val station = stations.firstOrNull { it.id == id }
+        AlertDialog(
+            onDismissRequest = { resetStatsStationId = null },
+            title = { Text("Reset stats?") },
+            text = {
+                Text(
+                    "Wipes \"${station?.name ?: ""}\"'s play count, skip rate, " +
+                        "listened time, and history rows. The station itself, " +
+                        "its source rules, and any liked / pinned tracks stay.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    resetStatsStationId = null
+                    scope.launch { stationRepo.resetStationStats(id) }
+                }) {
+                    Text("Reset")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { resetStatsStationId = null }) { Text("Cancel") }
+            },
+        )
     }
 
     deleteConfirmStationId?.let { id ->
@@ -570,6 +606,7 @@ private fun StationActionSheet(
     onMoveDown: () -> Unit,
     canMoveUp: Boolean,
     canMoveDown: Boolean,
+    onResetStats: () -> Unit,
     onDelete: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -616,6 +653,16 @@ private fun StationActionSheet(
                 label = "Move down",
                 onClick = onMoveDown,
                 enabled = canMoveDown,
+            )
+            // Reset stats: zero play_count / last_played_at / skip_rate
+            // and wipe this station's `station_history` rows. Survives
+            // built-in re-seeding so resetting a preset works even
+            // though the seeder also re-creates it on launch. Confirmed
+            // via a separate dialog so a misclick can't nuke history.
+            ActionRow(
+                icon = Icons.Filled.RestartAlt,
+                label = "Reset stats",
+                onClick = onResetStats,
             )
             // Built-ins are deletable too — the seeder will re-create them
             // on next launch, so deletion just resets that one. Surfaced

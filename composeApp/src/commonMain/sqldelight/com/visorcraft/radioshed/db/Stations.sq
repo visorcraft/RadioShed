@@ -112,6 +112,21 @@ UPDATE station SET
     skip_rate = 0.0,
     updated_at = ?;
 
+-- Per-station counterpart used by the "Reset stats" action on the
+-- station long-press sheet. Wipes the cached counters on a single
+-- station row without touching `station_history` — paired with
+-- `deleteHistoryByStation` (already exists) when the user wants
+-- the full reset, or applied alone when they just want to zero
+-- the visible play_count / skip_rate.
+resetStationStatsById:
+UPDATE station SET
+    play_count = 0,
+    last_played_at = NULL,
+    total_listen_ms = 0,
+    skip_rate = 0.0,
+    updated_at = ?
+WHERE id = ?;
+
 -- Batch (track_id → play_count) for the candidate set of a station.
 -- Used by PlaybackQueue's FavorUnderPlayed / FavorHigherRated
 -- weighting so it can bias the random pick without a per-pick lookup.
