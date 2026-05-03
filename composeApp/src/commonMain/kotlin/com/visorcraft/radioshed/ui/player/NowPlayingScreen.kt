@@ -1998,6 +1998,19 @@ private fun QueueTrackRow(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
         )
+        // Duration on the right edge so users can plan ahead — "is
+        // the next track a quick interlude or eight minutes?". Hidden
+        // on tracks with no duration metadata (some scanner sources
+        // skip it for very short / corrupted files).
+        if (track.durationMs > 0L) {
+            Spacer(Modifier.size(8.dp))
+            Text(
+                text = formatMs(track.durationMs),
+                style = MaterialTheme.typography.labelSmall,
+                color = baseColor.copy(alpha = 0.55f),
+                maxLines = 1,
+            )
+        }
         if (onRemove != null) {
             IconButton(
                 onClick = onRemove,
