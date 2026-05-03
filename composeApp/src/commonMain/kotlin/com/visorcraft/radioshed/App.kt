@@ -296,6 +296,14 @@ fun App(
                         PlaylistsScreen(
                             onBack = { current = AppScreen.AppSettings },
                             onOpenPlaylist = { id -> current = AppScreen.PlaylistDetail(id) },
+                            onOpenLikedSongs = { current = AppScreen.LikedSongs },
+                        )
+                    }
+
+                    AppScreen.LikedSongs -> {
+                        PlatformBackHandler { current = AppScreen.Playlists }
+                        com.visorcraft.radioshed.ui.playlists.LikedSongsScreen(
+                            onBack = { current = AppScreen.Playlists },
                         )
                     }
 

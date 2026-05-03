@@ -1,8 +1,11 @@
 package com.visorcraft.radioshed.data
 
+import app.cash.sqldelight.coroutines.asFlow
+import app.cash.sqldelight.coroutines.mapToOne
 import com.visorcraft.radioshed.db.RadioShedDatabase
 import com.visorcraft.radioshed.domain.Rating
 import com.visorcraft.radioshed.domain.Track
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
 
 /**
@@ -119,6 +122,36 @@ class RatingRepository(private val db: RadioShedDatabase) {
     suspend fun neverPlayedTracks(limit: Long = 100): List<Track> = withContext(IODispatcher) {
         db.ratingsQueries.selectNeverPlayedTracks(limit).executeAsList().map { it.toDomain() }
     }
+
+    // ---- Liked songs ----
+
+    suspend fun like(trackId: Long, likedAt: Long = nowMillis()) = withContext(IODispatcher) {
+        db.ratingsQueries.likeTrack(trackId, likedAt)
+    }
+
+    suspend fun unlike(trackId: Long) = withContext(IODispatcher) {
+        db.ratingsQueries.unlikeTrack(trackId)
+    }
+
+    suspend fun isLiked(trackId: Long): Boolean = withContext(IODispatcher) {
+        db.ratingsQueries.isTrackLiked(trackId).executeAsOne() > 0L
+    }
+
+    suspend fun likedTracks(): List<Track> = withContext(IODispatcher) {
+        db.ratingsQueries.selectLikedTracks().executeAsList().map { it.toDomain() }
+    }
+
+    suspend fun likedTrackIds(): List<Long> = withContext(IODispatcher) {
+        db.ratingsQueries.selectLikedTrackIds().executeAsList()
+    }
+
+    suspend fun likedCount(): Long = withContext(IODispatcher) {
+        db.ratingsQueries.countLikedTracks().executeAsOne()
+    }
+
+    /** Live count for the Liked Songs entry on the Playlists screen. */
+    fun observeLikedCount(): Flow<Long> =
+        db.ratingsQueries.observeLikedCount().asFlow().mapToOne(IODispatcher)
 
     // ---- Per-station dislikes ----
 

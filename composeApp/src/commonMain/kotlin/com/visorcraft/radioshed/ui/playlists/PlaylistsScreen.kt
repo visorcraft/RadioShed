@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -47,6 +48,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.visorcraft.radioshed.data.PlaylistRepository
+import com.visorcraft.radioshed.data.RatingRepository
 import com.visorcraft.radioshed.domain.Playlist
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
@@ -61,9 +63,12 @@ import org.koin.compose.koinInject
 fun PlaylistsScreen(
     onBack: () -> Unit,
     onOpenPlaylist: (Long) -> Unit,
+    onOpenLikedSongs: () -> Unit = {},
     repo: PlaylistRepository = koinInject(),
+    ratingRepo: RatingRepository = koinInject(),
 ) {
     val playlists by repo.observeAll().collectAsState(initial = emptyList())
+    val likedCount by ratingRepo.observeLikedCount().collectAsState(initial = 0L)
     var createOpen by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
@@ -94,22 +99,31 @@ fun PlaylistsScreen(
         },
         containerColor = MaterialTheme.colorScheme.background,
     ) { padding ->
-        if (playlists.isEmpty()) {
-            Box(
-                modifier = Modifier.fillMaxSize().padding(padding).padding(32.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    "No playlists yet — tap + to create one, then long-press any track to add it.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
-                )
+        // Liked Songs is always present, even before the user has any
+        // user-created playlists or has hearted anything yet — it
+        // doubles as a discovery affordance for the heart-toggle
+        // mechanic. Pinned to the top, never deletable from this view.
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(padding),
+            contentPadding = PaddingValues(vertical = 8.dp),
+        ) {
+            item(key = "liked-songs") {
+                LikedSongsRow(count = likedCount, onTap = onOpenLikedSongs)
             }
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(padding),
-                contentPadding = PaddingValues(vertical = 8.dp),
-            ) {
+            if (playlists.isEmpty()) {
+                item(key = "empty") {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().padding(top = 32.dp, start = 24.dp, end = 24.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            "No playlists yet — tap + to create one, then long-press any track to add it.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                        )
+                    }
+                }
+            } else {
                 items(playlists, key = { it.id }) { playlist ->
                     PlaylistRow(
                         playlist = playlist,
@@ -132,6 +146,57 @@ fun PlaylistsScreen(
                 createOpen = false
             },
         )
+    }
+}
+
+/**
+ * Pinned Liked Songs row at the top of the Playlists list. Visually
+ * distinct from regular playlists (heart icon, brand-amber tinted
+ * artwork tile) so the user reads it as a special always-on
+ * collection rather than another user playlist.
+ */
+@Composable
+private fun LikedSongsRow(count: Long, onTap: () -> Unit) {
+    Surface(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onTap),
+        color = Color.Transparent,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(MaterialTheme.colorScheme.primaryContainer),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Favorite,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+            }
+            Spacer(Modifier.size(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Liked songs",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = if (count == 0L) "Tap the heart on any track to start"
+                           else "$count track${if (count == 1L) "" else "s"} you love",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
     }
 }
 

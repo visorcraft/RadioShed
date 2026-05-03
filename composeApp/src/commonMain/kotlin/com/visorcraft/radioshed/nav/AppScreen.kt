@@ -93,4 +93,7 @@ sealed interface AppScreen {
 
     /** Single playlist detail — track list with play/shuffle/remove. */
     data class PlaylistDetail(val playlistId: Long) : AppScreen
+
+    /** Auto-populated Liked Songs view; not a regular playlist. */
+    data object LikedSongs : AppScreen
 }

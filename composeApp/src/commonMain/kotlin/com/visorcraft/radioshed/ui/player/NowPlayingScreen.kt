@@ -30,6 +30,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.Info
@@ -42,6 +43,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.RepeatOne
 import androidx.compose.material.icons.filled.Lyrics
+import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.automirrored.filled.StarHalf
@@ -156,8 +158,10 @@ fun NowPlayingScreen(
     }
 
     var rating by remember { mutableStateOf(0.0) }
+    var liked by remember { mutableStateOf(false) }
     LaunchedEffect(nowPlaying?.trackId) {
         rating = nowPlaying?.let { ratingRepo.getRating(it.trackId) } ?: 0.0
+        liked = nowPlaying?.let { ratingRepo.isLiked(it.trackId) } ?: false
     }
 
     // Read window width once at the screen root so both the topBar and
@@ -416,6 +420,18 @@ fun NowPlayingScreen(
                 reduceMotion = reduceMotion,
             )
 
+            // Heart toggle handler — flips local state immediately for
+            // snappy UI, then writes through to the repo. The optimistic
+            // flip is safe because the repo is idempotent on like/unlike.
+            val onToggleLike: () -> Unit = {
+                val target = !liked
+                liked = target
+                scope.launch {
+                    if (target) ratingRepo.like(playable.trackId)
+                    else ratingRepo.unlike(playable.trackId)
+                }
+            }
+
             if (isCompact) {
                 CompactLayout(
                     playable = playable,
@@ -423,6 +439,7 @@ fun NowPlayingScreen(
                     positionMs = position.currentMs,
                     durationMs = position.durationMs,
                     rating = rating,
+                    liked = liked,
                     accent = accent,
                     stationName = currentStation?.name,
                     onSeek = { audioEngine.seekTo(it) },
@@ -435,6 +452,7 @@ fun NowPlayingScreen(
                             rating = stars
                         }
                     },
+                    onToggleLike = onToggleLike,
                     onDislikeOnStation = {
                         val stationId = currentStation?.id ?: return@CompactLayout
                         scope.launch {
@@ -451,6 +469,7 @@ fun NowPlayingScreen(
                     positionMs = position.currentMs,
                     durationMs = position.durationMs,
                     rating = rating,
+                    liked = liked,
                     accent = accent,
                     stationName = currentStation?.name,
                     onSeek = { audioEngine.seekTo(it) },
@@ -463,6 +482,7 @@ fun NowPlayingScreen(
                             rating = stars
                         }
                     },
+                    onToggleLike = onToggleLike,
                     onDislikeOnStation = {
                         val stationId = currentStation?.id ?: return@TwoPaneLayout
                         scope.launch {
@@ -556,6 +576,7 @@ private fun CompactLayout(
     positionMs: Long,
     durationMs: Long,
     rating: Double,
+    liked: Boolean,
     accent: Color,
     stationName: String?,
     onSeek: (Long) -> Unit,
@@ -563,6 +584,7 @@ private fun CompactLayout(
     onPrev: () -> Unit,
     onNext: () -> Unit,
     onRate: (Double) -> Unit,
+    onToggleLike: () -> Unit,
     onDislikeOnStation: () -> Unit,
     driveMode: Boolean,
 ) {
@@ -592,7 +614,12 @@ private fun CompactLayout(
             driveMode = driveMode,
         )
         Spacer(Modifier.height(20.dp))
-        RatingRow(current = rating, onRate = onRate)
+        RatingRow(
+            current = rating,
+            liked = liked,
+            onRate = onRate,
+            onToggleLike = onToggleLike,
+        )
     }
 }
 
@@ -603,6 +630,7 @@ private fun TwoPaneLayout(
     positionMs: Long,
     durationMs: Long,
     rating: Double,
+    liked: Boolean,
     accent: Color,
     stationName: String?,
     onSeek: (Long) -> Unit,
@@ -610,6 +638,7 @@ private fun TwoPaneLayout(
     onPrev: () -> Unit,
     onNext: () -> Unit,
     onRate: (Double) -> Unit,
+    onToggleLike: () -> Unit,
     onDislikeOnStation: () -> Unit,
     driveMode: Boolean,
 ) {
@@ -658,7 +687,12 @@ private fun TwoPaneLayout(
                 driveMode = driveMode,
             )
             Spacer(Modifier.height(28.dp))
-            RatingRow(current = rating, onRate = onRate)
+            RatingRow(
+                current = rating,
+                liked = liked,
+                onRate = onRate,
+                onToggleLike = onToggleLike,
+            )
         }
     }
 }
@@ -946,7 +980,12 @@ private fun BigIconButton(
 }
 
 @Composable
-private fun RatingRow(current: Double, onRate: (Double) -> Unit) {
+private fun RatingRow(
+    current: Double,
+    liked: Boolean,
+    onRate: (Double) -> Unit,
+    onToggleLike: () -> Unit,
+) {
     // Half-star precision: each star is split into two 24dp-wide tap zones.
     // Tapping the LEFT half sets rating to (n - 0.5), RIGHT half sets to n.
     // Tapping the same value you've already given clears the rating.
@@ -954,11 +993,26 @@ private fun RatingRow(current: Double, onRate: (Double) -> Unit) {
     //   current >= n          → Filled
     //   current >= n - 0.5    → Half
     //   else                   → Outlined
+    //
+    // The heart sits leading, separate from the star rating — like and
+    // rating are independent (a 3★ can still be liked, an unliked
+    // track can still be 5★).
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        IconButton(onClick = onToggleLike, modifier = Modifier.size(48.dp)) {
+            Icon(
+                imageVector = if (liked) Icons.Filled.Favorite
+                              else Icons.Outlined.FavoriteBorder,
+                contentDescription = if (liked) "Unlike" else "Like",
+                modifier = Modifier.size(28.dp),
+                tint = if (liked) MaterialTheme.colorScheme.primary
+                       else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
+            )
+        }
+        Spacer(Modifier.width(4.dp))
         (1..5).forEach { n ->
             val nDouble = n.toDouble()
             val halfValue = nDouble - 0.5

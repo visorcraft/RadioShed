@@ -31,6 +31,18 @@ CREATE TABLE station_dislike (
     PRIMARY KEY (track_id, station_id)
 );
 
+-- Per-track Liked Songs marker. Modeled as a separate table rather
+-- than a column on track so we keep track-row writes hot-path-free
+-- and don't need a schema migration touching the indexed core
+-- columns. Liking a track is idempotent (INSERT OR REPLACE so
+-- re-liking just refreshes liked_at without growing duplicates).
+CREATE TABLE liked_track (
+    track_id INTEGER NOT NULL PRIMARY KEY REFERENCES track(id) ON DELETE CASCADE,
+    liked_at INTEGER NOT NULL
+);
+
+CREATE INDEX liked_track_liked_at_idx ON liked_track(liked_at);
+
 -- ==== Rating queries ====
 
 setRating:
@@ -129,6 +141,34 @@ SELECT track.* FROM track
 LEFT JOIN play_count pc ON pc.track_id = track.id
 WHERE track.is_available = 1 AND pc.track_id IS NULL
 ORDER BY track.title LIMIT ?;
+
+-- ==== Liked-tracks queries ====
+
+likeTrack:
+INSERT OR REPLACE INTO liked_track (track_id, liked_at) VALUES (?, ?);
+
+unlikeTrack:
+DELETE FROM liked_track WHERE track_id = ?;
+
+isTrackLiked:
+SELECT COUNT(*) FROM liked_track WHERE track_id = ?;
+
+selectLikedTracks:
+SELECT track.* FROM track
+JOIN liked_track lt ON lt.track_id = track.id
+WHERE track.is_available = 1
+ORDER BY lt.liked_at DESC;
+
+selectLikedTrackIds:
+SELECT track_id FROM liked_track ORDER BY liked_at DESC;
+
+countLikedTracks:
+SELECT COUNT(*) FROM liked_track;
+
+-- Live count for the Playlists list — observed via SQLDelight's
+-- coroutines extension to update the row instantly on like/unlike.
+observeLikedCount:
+SELECT COUNT(*) FROM liked_track;
 
 -- ==== Station-dislike queries ====
 

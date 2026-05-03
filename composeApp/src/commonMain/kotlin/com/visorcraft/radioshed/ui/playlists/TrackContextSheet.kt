@@ -16,7 +16,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -41,6 +43,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.visorcraft.radioshed.data.LibraryRepository
 import com.visorcraft.radioshed.data.PlaylistRepository
+import com.visorcraft.radioshed.data.RatingRepository
 import com.visorcraft.radioshed.domain.Track
 import com.visorcraft.radioshed.stations.StationPlayback
 import kotlinx.coroutines.launch
@@ -64,9 +67,12 @@ fun TrackContextSheet(
     onDismiss: () -> Unit,
     libraryRepo: LibraryRepository = koinInject(),
     stationPlayback: StationPlayback = koinInject(),
+    ratingRepo: RatingRepository = koinInject(),
 ) {
     val sheetState = rememberModalBottomSheetState()
     var track by remember { mutableStateOf<Track?>(null) }
+    var liked by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
     // Internal step machine — when the user picks "Add to playlist",
     // we replace the visible content of the SAME sheet rather than
     // opening a second ModalBottomSheet on top (which produces
@@ -75,6 +81,7 @@ fun TrackContextSheet(
 
     LaunchedEffect(trackId) {
         track = libraryRepo.getTrackById(trackId)
+        liked = ratingRepo.isLiked(trackId)
     }
 
     ModalBottomSheet(
@@ -84,6 +91,7 @@ fun TrackContextSheet(
         when (step) {
             Step.Main -> MainStep(
                 track = track,
+                liked = liked,
                 onPlayNext = {
                     track?.let { stationPlayback.playNext(it) }
                     onDismiss()
@@ -91,6 +99,13 @@ fun TrackContextSheet(
                 onAddToQueue = {
                     track?.let { stationPlayback.addToQueue(it) }
                     onDismiss()
+                },
+                onToggleLike = {
+                    val target = !liked
+                    liked = target
+                    scope.launch {
+                        if (target) ratingRepo.like(trackId) else ratingRepo.unlike(trackId)
+                    }
                 },
                 onAddToPlaylist = { step = Step.PlaylistPicker },
             )
@@ -108,8 +123,10 @@ private enum class Step { Main, PlaylistPicker }
 @Composable
 private fun MainStep(
     track: Track?,
+    liked: Boolean,
     onPlayNext: () -> Unit,
     onAddToQueue: () -> Unit,
+    onToggleLike: () -> Unit,
     onAddToPlaylist: () -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp)) {
@@ -124,6 +141,13 @@ private fun MainStep(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+        )
+        ContextActionRow(
+            icon = if (liked) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+            label = if (liked) "Remove from Liked songs" else "Add to Liked songs",
+            enabled = track != null,
+            onClick = onToggleLike,
+            iconTint = if (liked) MaterialTheme.colorScheme.primary else null,
         )
         ContextActionRow(
             icon = Icons.Filled.PlayArrow,
@@ -246,9 +270,10 @@ private fun ContextActionRow(
     label: String,
     enabled: Boolean,
     onClick: () -> Unit,
+    iconTint: androidx.compose.ui.graphics.Color? = null,
 ) {
-    val tint = if (enabled) MaterialTheme.colorScheme.onSurface
-               else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+    val baseTint = if (enabled) MaterialTheme.colorScheme.onSurface
+                   else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -260,13 +285,13 @@ private fun ContextActionRow(
         Icon(
             imageVector = icon,
             contentDescription = null,
-            tint = tint,
+            tint = iconTint ?: baseTint,
             modifier = Modifier.size(22.dp),
         )
         Text(
             text = label,
             style = MaterialTheme.typography.bodyLarge,
-            color = tint,
+            color = baseTint,
         )
     }
 }
