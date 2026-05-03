@@ -185,26 +185,29 @@ class Scanner(
         )
 
         // Pre-populate the lyrics cache from the file's embedded
-        // LYRICS tag (USLT for ID3v2, Vorbis comment for FLAC/Opus,
-        // `©lyr` atom for M4A). LyricsService picks these up on the
-        // next resolve via the existing cache hit path — saves an
+        // LYRICS / USLT / SYLT tag. LyricsService picks these up on
+        // the next resolve via the existing cache hit path — saves an
         // LRClib round-trip for the (very common) case where the
         // user already tagged their files.
         //
-        // Source flag = "embedded" so a future feature could
-        // distinguish "from the file" (always trustworthy) vs "from
-        // LRClib" (might be wrong for non-mainstream tracks). We
-        // skip caching when there's an existing entry from a more
-        // user-curated source — local sidecar wins, LRClib doesn't.
-        tags.embeddedLyrics?.takeIf { it.isNotBlank() }?.let { embedded ->
+        // Synced (SYLT) wins over plain (USLT) when both are present
+        // — the karaoke renderer needs timestamps. Source flag =
+        // "embedded" so a future feature could distinguish "from the
+        // file" (always trustworthy) vs "from LRClib" (might be wrong
+        // for non-mainstream tracks). We skip caching when there's an
+        // existing local-sidecar entry — sidecar wins, embedded
+        // doesn't clobber.
+        val embeddedSynced = tags.embeddedSyncedLrc?.takeIf { it.isNotBlank() }
+        val embeddedPlain = tags.embeddedLyrics?.takeIf { it.isNotBlank() }
+        if (embeddedSynced != null || embeddedPlain != null) {
             val existing = lyricsCache.get(trackId)
             val shouldOverwrite = existing == null ||
                 existing.source != "local"  // never clobber a sidecar
             if (shouldOverwrite) {
                 lyricsCache.put(
                     trackId = trackId,
-                    syncedLrc = null,
-                    plainText = embedded,
+                    syncedLrc = embeddedSynced,
+                    plainText = embeddedPlain,
                     source = "embedded",
                 )
             }

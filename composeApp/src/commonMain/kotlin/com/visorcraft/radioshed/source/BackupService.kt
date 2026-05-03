@@ -78,11 +78,22 @@ class BackupService(
             )
         }
 
+        // Liked tracks: serialize keyed by path so the restore can find
+        // the same file on disk after a fresh install / new device.
+        // liked_at metadata is preserved so the Liked Songs view's
+        // "most recently liked first" sort survives the round-trip.
+        val likedTracks = ratingRepo.likedTracksWithTimestamps()
+            .mapNotNull { (id, likedAt) ->
+                val track = libraryRepo.getTrackById(id) ?: return@mapNotNull null
+                BackupLikedTrack(trackPath = track.path, likedAt = likedAt)
+            }
+
         val bundle = BackupBundle(
             exportedAt = nowMillis(),
             stations = stations,
             playlists = playlists,
             ratings = ratings,
+            likedTracks = likedTracks,
         )
         val json = RadioShedJson.encodeToString(bundle)
         val filename = "radioshed-backup-${nowMillis()}.json"
@@ -113,6 +124,17 @@ class BackupService(
     suspend fun restore(fileUri: String): RestoreResult {
         val bytes = storage.read(fileUri)
             ?: return RestoreResult.Failed("Couldn't read backup file.")
+        return restoreFromBytes(bytes)
+    }
+
+    /**
+     * Restore from raw bundle bytes — used by the "Import…" path
+     * where the file lives outside our private backups dir (e.g. a
+     * `content://` URI from the system file picker, or a downloaded
+     * JSON shared from another device). Same parsing + import logic
+     * as [restore]; just skips the storage.read step.
+     */
+    suspend fun restoreFromBytes(bytes: ByteArray): RestoreResult {
         val bundle = runCatching {
             RadioShedJson.decodeFromString<BackupBundle>(bytes.decodeToString())
         }.getOrElse {
@@ -155,7 +177,7 @@ class BackupService(
             runCatching {
                 val playlistId = playlistRepo.insert(name = p.name, description = p.description)
                 p.trackPaths.forEachIndexed { idx, path ->
-                    val track = libraryRepo.getTrackByPath(path) ?: return@forEachIndexed
+                    val track = libraryRepo.getTrackByPathOrSuffix(path) ?: return@forEachIndexed
                     playlistRepo.addTrack(playlistId, track.id, position = idx)
                 }
                 playlistsAdded += 1
@@ -165,11 +187,22 @@ class BackupService(
         var ratingsApplied = 0
         var ratingsSkipped = 0
         bundle.ratings.forEach { r ->
-            val track = libraryRepo.getTrackByPath(r.trackPath)
+            val track = libraryRepo.getTrackByPathOrSuffix(r.trackPath)
             if (track == null) { ratingsSkipped += 1; return@forEach }
             runCatching {
                 ratingRepo.setRating(track.id, r.stars)
                 ratingsApplied += 1
+            }
+        }
+
+        var likedApplied = 0
+        var likedSkipped = 0
+        bundle.likedTracks.forEach { l ->
+            val track = libraryRepo.getTrackByPathOrSuffix(l.trackPath)
+            if (track == null) { likedSkipped += 1; return@forEach }
+            runCatching {
+                ratingRepo.like(track.id, l.likedAt)
+                likedApplied += 1
             }
         }
 
@@ -178,6 +211,8 @@ class BackupService(
             playlistsAdded = playlistsAdded,
             ratingsApplied = ratingsApplied,
             ratingsSkipped = ratingsSkipped,
+            likedApplied = likedApplied,
+            likedSkipped = likedSkipped,
         )
     }
 
@@ -199,6 +234,8 @@ class BackupService(
             val playlistsAdded: Int,
             val ratingsApplied: Int,
             val ratingsSkipped: Int,
+            val likedApplied: Int = 0,
+            val likedSkipped: Int = 0,
         ) : RestoreResult
         data class Failed(val reason: String) : RestoreResult
     }

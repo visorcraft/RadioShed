@@ -66,6 +66,12 @@ class LyricsService(
         val albumTitle = track.albumId?.let { libraryRepo.getAlbumById(it)?.title }
         val durationSec = (track.durationMs / 1000L).takeIf { it > 0 }
 
+        // User-supplied override wins over everything else. Set when
+        // the auto-fallback chain misses and the user manually
+        // corrects the search query from the Lyrics not-found
+        // screen. Stored per-track and persisted across app launches.
+        val override = cache.getOverride(trackId)
+
         // Try multiple (artist, title) candidate pairs. LRClib is strict
         // about exact matches, so a single attempt with messy tags
         // misses popular tracks whose stored title is "Song (Remastered
@@ -74,11 +80,16 @@ class LyricsService(
         // featured-artist suffixes, and falls back to filename parsing
         // when the metadata is missing entirely. We stop on the first
         // hit to keep network use bounded.
-        val candidates = lyricsQueryCandidates(
+        val baseCandidates = lyricsQueryCandidates(
             taggedArtist = taggedArtist,
             taggedTitle = taggedTitle,
             fileName = track.fileName,
         )
+        val candidates = if (override != null) {
+            listOf(LyricsQuery(override.first, override.second)) + baseCandidates
+        } else {
+            baseCandidates
+        }
 
         var raw: RawLyricsResponse? = null
         for (candidate in candidates) {

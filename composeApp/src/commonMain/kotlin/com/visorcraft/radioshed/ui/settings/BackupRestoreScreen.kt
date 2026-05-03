@@ -19,10 +19,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.FileOpen
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -99,28 +101,64 @@ fun BackupRestoreScreen(
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
             )
             Spacer(Modifier.height(12.dp))
-            Button(
-                onClick = {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = {
+                        scope.launch {
+                            working = true
+                            val result = backupService.export()
+                            status = when (result) {
+                                is BackupService.ExportResult.Saved ->
+                                    "Saved ${result.stationCount} stations, " +
+                                        "${result.playlistCount} playlists, " +
+                                        "${result.ratingCount} ratings."
+                                is BackupService.ExportResult.Failed -> "Export failed: ${result.reason}"
+                            }
+                            reload()
+                            working = false
+                        }
+                    },
+                    enabled = !working,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Icon(Icons.Filled.Backup, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.size(6.dp))
+                    Text("Create new")
+                }
+                // Import from system file picker — restores a backup
+                // shared from another device or downloaded from cloud.
+                // Reuses the same restore logic as in-app backups; the
+                // bytes are read from the picked content URI directly
+                // rather than via our private storage layer.
+                val pickFile = com.visorcraft.radioshed.ui.util.rememberFilePicker { bytes ->
                     scope.launch {
                         working = true
-                        val result = backupService.export()
+                        val result = backupService.restoreFromBytes(bytes)
                         status = when (result) {
-                            is BackupService.ExportResult.Saved ->
-                                "Saved ${result.stationCount} stations, " +
-                                    "${result.playlistCount} playlists, " +
-                                    "${result.ratingCount} ratings."
-                            is BackupService.ExportResult.Failed -> "Export failed: ${result.reason}"
+                            is BackupService.RestoreResult.Done -> buildString {
+                                append("Imported: ")
+                                append("${result.stationsAdded} stations, ")
+                                append("${result.playlistsAdded} playlists, ")
+                                append("${result.ratingsApplied} ratings")
+                                if (result.likedApplied > 0) append(", ${result.likedApplied} liked")
+                                val skipped = result.ratingsSkipped + result.likedSkipped
+                                if (skipped > 0) append(" ($skipped skipped — tracks not in library)")
+                            }
+                            is BackupService.RestoreResult.Failed -> "Import failed: ${result.reason}"
                         }
                         reload()
                         working = false
                     }
-                },
-                enabled = !working,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Icon(Icons.Filled.Backup, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.size(6.dp))
-                Text("Create new backup")
+                }
+                OutlinedButton(
+                    onClick = { pickFile("application/json") },
+                    enabled = !working,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Icon(Icons.Filled.FileOpen, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.size(6.dp))
+                    Text("Import…")
+                }
             }
 
             status?.let {
@@ -197,13 +235,19 @@ fun BackupRestoreScreen(
                         working = true
                         val result = backupService.restore(toRestore.uri)
                         status = when (result) {
-                            is BackupService.RestoreResult.Done ->
-                                "Restored: ${result.stationsAdded} stations, " +
-                                    "${result.playlistsAdded} playlists, " +
-                                    "${result.ratingsApplied} ratings " +
-                                    if (result.ratingsSkipped > 0)
-                                        "(${result.ratingsSkipped} ratings skipped — tracks not in library)"
-                                    else ""
+                            is BackupService.RestoreResult.Done -> buildString {
+                                append("Restored: ")
+                                append("${result.stationsAdded} stations, ")
+                                append("${result.playlistsAdded} playlists, ")
+                                append("${result.ratingsApplied} ratings")
+                                if (result.likedApplied > 0) {
+                                    append(", ${result.likedApplied} liked")
+                                }
+                                val totalSkipped = result.ratingsSkipped + result.likedSkipped
+                                if (totalSkipped > 0) {
+                                    append(" ($totalSkipped skipped — tracks not in library)")
+                                }
+                            }
                             is BackupService.RestoreResult.Failed -> "Restore failed: ${result.reason}"
                         }
                         working = false

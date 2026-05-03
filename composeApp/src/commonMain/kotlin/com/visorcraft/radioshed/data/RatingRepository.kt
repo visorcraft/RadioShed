@@ -145,6 +145,14 @@ class RatingRepository(private val db: RadioShedDatabase) {
         db.ratingsQueries.selectLikedTrackIds().executeAsList()
     }
 
+    /** (trackId → liked_at) so backups round-trip the original
+     *  timestamp instead of overwriting with the export time. */
+    suspend fun likedTracksWithTimestamps(): List<Pair<Long, Long>> =
+        withContext(IODispatcher) {
+            db.ratingsQueries.selectLikedTracksWithTimestamps().executeAsList()
+                .map { it.track_id to it.liked_at }
+        }
+
     suspend fun likedCount(): Long = withContext(IODispatcher) {
         db.ratingsQueries.countLikedTracks().executeAsOne()
     }

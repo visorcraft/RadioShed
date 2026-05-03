@@ -33,7 +33,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -69,6 +71,7 @@ fun MiniPlayer(
     val position by audioEngine.position.collectAsState()
 
     val playable = nowPlaying ?: return
+    var contextSheetOpen by remember { mutableStateOf(false) }
 
     Surface(
         // The MiniPlayer sits at the bottom of App.kt's outer Column, OUTSIDE
@@ -95,7 +98,15 @@ fun MiniPlayer(
             .fillMaxWidth()
             .windowInsetsPadding(WindowInsets.navigationBars)
             .pointerInput(Unit) {
-                detectTapGestures(onTap = { onExpand() })
+                detectTapGestures(
+                    onTap = { onExpand() },
+                    // Long-press surfaces the standard Track context
+                    // sheet (heart / play next / add to playlist / …)
+                    // so users don't have to expand to Now Playing
+                    // and dig into the overflow menu just to like
+                    // the current track.
+                    onLongPress = { contextSheetOpen = true },
+                )
             }
             .pointerInput(Unit) {
                 var accum = 0f
@@ -170,6 +181,13 @@ fun MiniPlayer(
                 )
             }
         }
+    }
+
+    if (contextSheetOpen) {
+        com.visorcraft.radioshed.ui.playlists.TrackContextSheet(
+            trackId = playable.trackId,
+            onDismiss = { contextSheetOpen = false },
+        )
     }
 }
 

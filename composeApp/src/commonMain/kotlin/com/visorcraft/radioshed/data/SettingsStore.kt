@@ -28,6 +28,18 @@ class SettingsStore(private val settings: Settings) {
     fun getMaterialYouEnabled(): Boolean = settings.getBoolean(KEY_MATERIAL_YOU, false)
     fun setMaterialYouEnabled(enabled: Boolean) = settings.putBoolean(KEY_MATERIAL_YOU, enabled)
 
+    /**
+     * In-app user volume scalar (0..1). Multiplies on top of any
+     * ReplayGain attenuation when a track is loaded — effective
+     * engine volume = userVolume * replayGain. Defaults to 1.0.
+     */
+    fun getUserVolume(): Float =
+        settings.getFloat(KEY_USER_VOLUME, 1f).coerceIn(0f, 1f)
+
+    fun setUserVolume(value: Float) {
+        settings.putFloat(KEY_USER_VOLUME, value.coerceIn(0f, 1f))
+    }
+
     fun getReduceMotion(): Boolean = settings.getBoolean(KEY_REDUCE_MOTION, false)
     fun setReduceMotion(enabled: Boolean) = settings.putBoolean(KEY_REDUCE_MOTION, enabled)
 
@@ -230,6 +242,7 @@ class SettingsStore(private val settings: Settings) {
     private companion object {
         const val KEY_THEME_MODE = "ui.themeMode"
         const val KEY_MATERIAL_YOU = "ui.materialYou"
+        const val KEY_USER_VOLUME = "audio.userVolume"
         const val KEY_REDUCE_MOTION = "ui.reduceMotion"
         const val KEY_CONNECTIVITY_POLICY = "online.connectivityPolicy"
         const val KEY_ONBOARDING_DONE = "onboarding.complete"

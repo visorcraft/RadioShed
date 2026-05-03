@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.DropdownMenu
@@ -153,10 +154,44 @@ fun LibraryBrowserScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Library") },
+                title = {
+                    // Subtitle line shows the live counts beneath the
+                    // header so users get a sense of library size at a
+                    // glance — and the count helps confirm that a fresh
+                    // scan picked things up.
+                    Column {
+                        Text("Library", style = MaterialTheme.typography.titleSmall)
+                        val countLabel = buildString {
+                            append("${allTracks.size} tracks")
+                            if (artists.isNotEmpty()) append(" · ${artists.size} artists")
+                            if (albums.isNotEmpty()) append(" · ${albums.size} albums")
+                        }
+                        Text(
+                            text = countLabel,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                        )
+                    }
+                },
                 navigationIcon = { TextButton(onClick = onBack) { Text("Back") } },
                 actions = {
-                    if (selectedTab == LibraryTab.Songs) {
+                    if (selectedTab == LibraryTab.Songs && allTracks.isNotEmpty()) {
+                        // Shuffle-all on the visible Songs view: kicks
+                        // off an ad-hoc queue from the entire current
+                        // (filtered + sorted) track list, randomized.
+                        // Distinct from the per-station SmartShuffle —
+                        // this is the "play everything I own, surprise
+                        // me" entry point that doesn't require building
+                        // a station first.
+                        IconButton(onClick = {
+                            val pool = allTracks.shuffled()
+                            stationPlayback.playTracks(pool, startIndex = 0)
+                        }) {
+                            Icon(
+                                imageVector = Icons.Filled.Shuffle,
+                                contentDescription = "Shuffle all",
+                            )
+                        }
                         Box {
                             IconButton(onClick = { sortMenuOpen = true }) {
                                 Text(

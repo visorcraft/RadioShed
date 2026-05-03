@@ -21,6 +21,8 @@ import com.visorcraft.radioshed.source.IosArtworkPersister
 import com.visorcraft.radioshed.source.IosFileBrowser
 import com.visorcraft.radioshed.source.IosFileEnumerator
 import com.visorcraft.radioshed.source.IosFolderRevealer
+import com.visorcraft.radioshed.source.IosRingtoneSetter
+import com.visorcraft.radioshed.source.RingtoneSetter
 import com.visorcraft.radioshed.source.IosTagReader
 import com.visorcraft.radioshed.source.BackupSharer
 import com.visorcraft.radioshed.source.BackupStorage
@@ -52,6 +54,7 @@ actual val platformModule: Module = module {
     single<BackupSharer> { NullBackupSharer() }
     single<FileBrowser> { IosFileBrowser() }
     single<FolderRevealer> { IosFolderRevealer() }
+    single<RingtoneSetter> { IosRingtoneSetter() }
     single { StoragePermissions() }
     single { StorageVolumes() }
 

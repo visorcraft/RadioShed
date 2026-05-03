@@ -68,6 +68,26 @@ class LyricsCacheRepository(private val db: RadioShedDatabase) {
     suspend fun delete(trackId: Long) = withContext(IODispatcher) {
         db.cachesQueries.deleteLyrics(trackId)
     }
+
+    /**
+     * User-supplied (artist, title) override for a track's lyrics
+     * search. When set, [LyricsService] uses it as the first
+     * candidate before falling through to tag-derived variations.
+     */
+    suspend fun setOverride(trackId: Long, artist: String, title: String) =
+        withContext(IODispatcher) {
+            db.cachesQueries.putLyricsOverride(trackId, artist, title, nowMillis())
+        }
+
+    suspend fun getOverride(trackId: Long): Pair<String, String>? = withContext(IODispatcher) {
+        db.cachesQueries.getLyricsOverride(trackId).executeAsOneOrNull()?.let {
+            it.artist to it.title
+        }
+    }
+
+    suspend fun clearOverride(trackId: Long) = withContext(IODispatcher) {
+        db.cachesQueries.deleteLyricsOverride(trackId)
+    }
 }
 
 class DjCacheRepository(private val db: RadioShedDatabase) {

@@ -101,6 +101,13 @@ enum class SmartQueryKind {
      * "most overdue for a replay".
      */
     ForgottenGemsByRating,
+    /**
+     * The user's Liked-Songs collection. Picks track-ids from
+     * [com.visorcraft.radioshed.data.RatingRepository.likedTracks]
+     * — order is most-recently-liked first inside the source rule
+     * evaluator, but the playback rule is free to shuffle.
+     */
+    LikedSongs,
 }
 
 @Serializable

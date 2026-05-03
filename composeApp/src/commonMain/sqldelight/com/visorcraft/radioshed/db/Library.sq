@@ -279,6 +279,14 @@ SELECT * FROM track WHERE album_id = ? ORDER BY disc_number, track_number;
 selectAvailableTracks:
 SELECT * FROM track WHERE is_available = 1 ORDER BY title LIMIT ? OFFSET ?;
 
+-- Path-suffix lookup for backup restore. Falls back to "any track
+-- whose path ends with this filename" so users who reorganized
+-- their music folder between export and import still recover
+-- ratings/likes/playlists. The repo layer prefers the longest
+-- match (most specific) when multiple tracks share a filename.
+selectTracksByPathSuffix:
+SELECT * FROM track WHERE path LIKE ? ESCAPE '\' LIMIT 50;
+
 selectNewestTracks:
 SELECT * FROM track WHERE is_available = 1 ORDER BY file_ctime DESC LIMIT ?;
 

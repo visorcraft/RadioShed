@@ -16,10 +16,12 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -39,6 +41,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.visorcraft.radioshed.audio.AudioEngine
+import com.visorcraft.radioshed.data.LyricsCacheRepository
 import com.visorcraft.radioshed.domain.LyricLine
 import com.visorcraft.radioshed.domain.Lyrics
 import com.visorcraft.radioshed.source.LyricsService
@@ -63,6 +66,7 @@ fun LyricsScreen(
     onBack: () -> Unit,
     audioEngine: AudioEngine = koinInject(),
     lyricsService: LyricsService = koinInject(),
+    lyricsCache: LyricsCacheRepository = koinInject(),
 ) {
     val nowPlaying by audioEngine.nowPlaying.collectAsState()
     val position by audioEngine.position.collectAsState()
@@ -71,6 +75,7 @@ fun LyricsScreen(
     var lyrics by remember { mutableStateOf<Lyrics?>(null) }
     var loading by remember { mutableStateOf(false) }
     var notFound by remember { mutableStateOf(false) }
+    var editSearchOpen by remember { mutableStateOf(false) }
 
     // Re-resolve whenever the active track changes. The service handles
     // caching internally, so this is cheap on cache hits.
@@ -104,9 +109,18 @@ fun LyricsScreen(
                             fontWeight = FontWeight.SemiBold,
                             maxLines = 1,
                         )
-                        nowPlaying?.artist?.let { artistName ->
+                        // Show source attribution when we have lyrics —
+                        // helps the user understand WHY they're seeing
+                        // the result (or none): "embedded" means the
+                        // file's tags carry it, "local" means a .lrc
+                        // sidecar, "lrclib" means the network fetch.
+                        val artistName = nowPlaying?.artist
+                        val sourceLabel = lyrics?.let { sourceLabelFor(it.source) }
+                        val subtitle = listOfNotNull(artistName, sourceLabel)
+                            .joinToString(" · ")
+                        if (subtitle.isNotBlank()) {
                             Text(
-                                artistName,
+                                subtitle,
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                                 maxLines = 1,
@@ -166,6 +180,7 @@ fun LyricsScreen(
             )
             notFound -> NotFoundState(
                 modifier = Modifier.fillMaxSize().padding(padding),
+                onEditSearch = { editSearchOpen = true },
             )
             else -> Box(
                 modifier = Modifier.fillMaxSize().padding(padding),
@@ -178,6 +193,92 @@ fun LyricsScreen(
             }
         }
     }
+
+    if (editSearchOpen) {
+        val track = nowPlaying ?: run {
+            editSearchOpen = false
+            return
+        }
+        EditLyricsSearchDialog(
+            initialArtist = track.artist.orEmpty(),
+            initialTitle = track.title,
+            onDismiss = { editSearchOpen = false },
+            onSubmit = { newArtist, newTitle ->
+                editSearchOpen = false
+                val id = track.trackId
+                scope.launch {
+                    loading = true
+                    notFound = false
+                    lyricsCache.setOverride(id, newArtist, newTitle)
+                    // Force a refresh so the override actually fires —
+                    // the existing cache row is a "miss" sentinel and
+                    // would short-circuit otherwise.
+                    lyricsService.forget(id)
+                    val resolved = lyricsService.resolve(id, forceRefresh = true)
+                    if (nowPlaying?.trackId == id) {
+                        lyrics = resolved
+                        notFound = resolved == null
+                        loading = false
+                    }
+                }
+            },
+        )
+    }
+}
+
+@Composable
+private fun EditLyricsSearchDialog(
+    initialArtist: String,
+    initialTitle: String,
+    onDismiss: () -> Unit,
+    onSubmit: (artist: String, title: String) -> Unit,
+) {
+    var artist by remember { mutableStateOf(initialArtist) }
+    var title by remember { mutableStateOf(initialTitle) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Edit search") },
+        text = {
+            Column {
+                Text(
+                    "Adjust the artist and title we send to the lyrics " +
+                        "service. We'll save your correction for this " +
+                        "track so future refreshes use it.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                )
+                Spacer(Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = artist,
+                    onValueChange = { artist = it },
+                    label = { Text("Artist") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    label = { Text("Title") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    val a = artist.trim()
+                    val t = title.trim()
+                    if (a.isNotBlank() && t.isNotBlank()) onSubmit(a, t)
+                },
+                enabled = artist.isNotBlank() && title.isNotBlank(),
+            ) { Text("Search") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        },
+    )
 }
 
 @Composable
@@ -284,8 +385,21 @@ private fun InstrumentalState(modifier: Modifier = Modifier) {
     }
 }
 
+/**
+ * Map the LyricsService internal source string to a user-readable
+ * label. Falls back to the raw value for anything we don't know
+ * about so future fetcher additions surface visibly.
+ */
+private fun sourceLabelFor(source: String): String? = when {
+    source.isBlank() -> null
+    source == "local" -> "from local .lrc"
+    source == "embedded" -> "from file tags"
+    source.startsWith("lrclib") -> "from LRClib"
+    else -> "from $source"
+}
+
 @Composable
-private fun NotFoundState(modifier: Modifier = Modifier) {
+private fun NotFoundState(modifier: Modifier = Modifier, onEditSearch: () -> Unit) {
     Box(modifier = modifier, contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
@@ -295,12 +409,15 @@ private fun NotFoundState(modifier: Modifier = Modifier) {
             )
             Spacer(Modifier.size(4.dp))
             Text(
-                "Try Refresh, or check the artist + title tags.",
+                "Tap Refresh to retry, or Edit search to fix the artist " +
+                    "and title we look up.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
                 textAlign = TextAlign.Center,
                 modifier = Modifier.padding(horizontal = 32.dp),
             )
+            Spacer(Modifier.size(12.dp))
+            OutlinedButton(onClick = onEditSearch) { Text("Edit search") }
         }
     }
 }

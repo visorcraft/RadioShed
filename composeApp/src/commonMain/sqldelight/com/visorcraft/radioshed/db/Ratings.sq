@@ -162,6 +162,11 @@ ORDER BY lt.liked_at DESC;
 selectLikedTrackIds:
 SELECT track_id FROM liked_track ORDER BY liked_at DESC;
 
+-- Used by backup: track_id + the original liked_at so the order
+-- and per-row metadata round-trip through an export/import cycle.
+selectLikedTracksWithTimestamps:
+SELECT track_id, liked_at FROM liked_track ORDER BY liked_at DESC;
+
 countLikedTracks:
 SELECT COUNT(*) FROM liked_track;
 

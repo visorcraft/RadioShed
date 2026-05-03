@@ -35,6 +35,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.visorcraft.radioshed.data.SearchRepository
@@ -125,12 +126,24 @@ fun SearchScreen(
                 .padding(horizontal = 16.dp),
         ) {
             Spacer(Modifier.height(8.dp))
+            // Auto-focus the field on first composition so the keyboard
+            // pops up immediately — saves the user a tap when they
+            // navigate here intentionally to type a query. We only
+            // request focus once (LaunchedEffect(Unit)) so re-entry
+            // from a stale-state recomposition doesn't grab focus
+            // back if they've moved away from the field.
+            val focusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
+            LaunchedEffect(Unit) {
+                runCatching { focusRequester.requestFocus() }
+            }
             OutlinedTextField(
                 value = query,
                 onValueChange = { query = it },
                 label = { Text("Title, artist, or album") },
                 singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(focusRequester),
             )
             Spacer(Modifier.height(8.dp))
             Row(

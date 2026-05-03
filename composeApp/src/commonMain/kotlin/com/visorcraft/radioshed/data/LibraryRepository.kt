@@ -298,6 +298,51 @@ class LibraryRepository(private val db: RadioShedDatabase) {
         db.libraryQueries.selectTrackByPath(path).executeAsOneOrNull()?.toDomain()
     }
 
+    /**
+     * Resilient path lookup for backup restore. Tries an exact match
+     * first; on miss, falls back to a path-suffix LIKE on the
+     * filename + parent directory ("…/parent/name.mp3"). When several
+     * tracks share that suffix (a duplicate-named file in two
+     * folders) we pick the one whose path is closest in length to
+     * the requested path — a reasonable tie-breaker for users who
+     * reorganized their library between export and import.
+     */
+    suspend fun getTrackByPathOrSuffix(path: String): Track? = withContext(IODispatcher) {
+        val exact = db.libraryQueries.selectTrackByPath(path).executeAsOneOrNull()
+        if (exact != null) return@withContext exact.toDomain()
+
+        val sep = if (path.contains('\\')) '\\' else '/'
+        val parts = path.split(sep).filter { it.isNotBlank() }
+        if (parts.isEmpty()) return@withContext null
+
+        // Try increasingly less specific suffixes:
+        //   1. last 2 segments ("/Music/Song.mp3")
+        //   2. just the filename ("Song.mp3")
+        // LIKE wildcard is %, escape any user-supplied % / _ in the
+        // path before composing.
+        val candidates = listOf(
+            if (parts.size >= 2) parts.takeLast(2).joinToString("/") else null,
+            parts.last(),
+        ).filterNotNull().distinct()
+
+        for (suffix in candidates) {
+            val escaped = suffix
+                .replace("\\", "\\\\")
+                .replace("%", "\\%")
+                .replace("_", "\\_")
+            val pattern = "%$escaped"
+            val matches = db.libraryQueries.selectTracksByPathSuffix(pattern).executeAsList()
+            if (matches.isEmpty()) continue
+            // Prefer the candidate whose path length is closest to
+            // the originally-requested path — same depth = same
+            // directory layout = most likely the moved-but-same
+            // file. Fall back to the first hit when lengths tie.
+            val best = matches.minByOrNull { kotlin.math.abs(it.path.length - path.length) }
+            if (best != null) return@withContext best.toDomain()
+        }
+        null
+    }
+
     suspend fun listTracksByFolder(folderId: Long): List<Track> = withContext(IODispatcher) {
         db.libraryQueries.selectTracksByFolder(folderId).executeAsList().map { it.toDomain() }
     }

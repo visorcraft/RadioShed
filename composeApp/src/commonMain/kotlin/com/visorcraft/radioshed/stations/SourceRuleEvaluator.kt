@@ -85,6 +85,8 @@ class SourceRuleEvaluator(
                     byRating = rule.kind == SmartQueryKind.ForgottenGemsByRating,
                 )
             }
+            SmartQueryKind.LikedSongs ->
+                ratingRepo.likedTracks().take(limit.toInt())
         }
     }
 

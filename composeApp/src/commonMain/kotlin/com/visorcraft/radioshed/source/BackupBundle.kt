@@ -24,9 +24,19 @@ data class BackupBundle(
     val stations: List<BackupStation>,
     val playlists: List<BackupPlaylist>,
     val ratings: List<BackupRating>,
+    /**
+     * Liked-song marks keyed by track path. Optional + defaulted for
+     * forward-compat: v1 bundles don't have it, importers fall through
+     * to an empty list and treat the absence as "no hearts to restore".
+     */
+    val likedTracks: List<BackupLikedTrack> = emptyList(),
 ) {
     companion object {
-        const val CURRENT_VERSION = 1
+        // v2: liked songs added. Older importers reading a v2 bundle
+        // see the field via Kotlinx Serialization's default fallthrough
+        // and ignore it gracefully — but we still bump so the version
+        // gate explicitly accepts it.
+        const val CURRENT_VERSION = 2
     }
 }
 
@@ -54,4 +64,10 @@ data class BackupRating(
     val trackPath: String,
     val stars: Double,
     val ratedAt: Long,
+)
+
+@Serializable
+data class BackupLikedTrack(
+    val trackPath: String,
+    val likedAt: Long,
 )

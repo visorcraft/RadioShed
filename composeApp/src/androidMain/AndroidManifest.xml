@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!-- Phase 3: library scanner needs broad file access. We're sideloaded
          (proprietary distribution), not Play Store, so MANAGE_EXTERNAL_STORAGE
@@ -13,6 +14,14 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- Required for the "Set as ringtone" Track Info action. WRITE_SETTINGS
+         is a special-permission grant the user toggles via the system
+         Settings activity (not a runtime dialog) — we only need to declare
+         it here. AndroidRingtoneSetter routes the user to the grant screen
+         when the permission is missing. -->
+    <uses-permission android:name="android.permission.WRITE_SETTINGS"
+        tools:ignore="ProtectedPermissions" />
 
     <application
         android:allowBackup="true"

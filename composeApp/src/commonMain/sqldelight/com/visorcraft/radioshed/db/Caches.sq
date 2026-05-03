@@ -17,6 +17,17 @@ CREATE TABLE lyrics_cache (
     fetched_at INTEGER NOT NULL
 );
 
+-- User-supplied (artist, title) override for lyrics lookups. Used
+-- when LRClib's auto-fallback chain misses but the user knows the
+-- correct metadata. Persisted per track so the next playback /
+-- forced refresh keeps using it without re-asking.
+CREATE TABLE lyrics_query_override (
+    track_id INTEGER NOT NULL PRIMARY KEY REFERENCES track(id) ON DELETE CASCADE,
+    artist TEXT NOT NULL,
+    title TEXT NOT NULL,
+    set_at INTEGER NOT NULL
+);
+
 CREATE TABLE dj_cache (
     cache_key TEXT NOT NULL PRIMARY KEY,
     blob_path TEXT NOT NULL,
@@ -59,6 +70,18 @@ SELECT * FROM lyrics_cache WHERE track_id = ?;
 
 deleteLyrics:
 DELETE FROM lyrics_cache WHERE track_id = ?;
+
+-- ==== Lyrics query override ====
+
+putLyricsOverride:
+INSERT OR REPLACE INTO lyrics_query_override (track_id, artist, title, set_at)
+VALUES (?, ?, ?, ?);
+
+getLyricsOverride:
+SELECT artist, title FROM lyrics_query_override WHERE track_id = ?;
+
+deleteLyricsOverride:
+DELETE FROM lyrics_query_override WHERE track_id = ?;
 
 -- ==== DJ TTS cache ====
 

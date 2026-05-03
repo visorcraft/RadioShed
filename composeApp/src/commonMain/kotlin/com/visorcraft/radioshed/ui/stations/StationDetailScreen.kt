@@ -30,6 +30,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -76,6 +77,7 @@ fun StationDetailScreen(
     ratingRepo: RatingRepository = koinInject(),
     sourceEvaluator: SourceRuleEvaluator = koinInject(),
     stationPlayback: StationPlayback = koinInject(),
+    audioEngine: com.visorcraft.radioshed.audio.AudioEngine = koinInject(),
 ) {
     var station by remember { mutableStateOf<Station?>(null) }
     var candidateCount by remember { mutableStateOf<Int?>(null) }
@@ -83,6 +85,8 @@ fun StationDetailScreen(
     var recent by remember { mutableStateOf<List<Track>>(emptyList()) }
     var top by remember { mutableStateOf<List<Pair<Track, Long>>>(emptyList()) }
     var refreshKey by remember { mutableStateOf(0) }
+    val nowPlaying by audioEngine.nowPlaying.collectAsState()
+    val currentTrackId = nowPlaying?.trackId
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(stationId, refreshKey) {
@@ -155,6 +159,7 @@ fun StationDetailScreen(
                 items(pinned, key = { "p:${it.id}" }) { track ->
                     TrackRow(
                         track = track,
+                        isCurrent = track.id == currentTrackId,
                         trailing = {
                             TextButton(
                                 onClick = {
@@ -179,6 +184,7 @@ fun StationDetailScreen(
                 items(top, key = { "t:${it.first.id}" }) { (track, plays) ->
                     TrackRow(
                         track = track,
+                        isCurrent = track.id == currentTrackId,
                         trailing = {
                             Text(
                                 text = "$plays play${if (plays == 1L) "" else "s"}",
@@ -200,6 +206,7 @@ fun StationDetailScreen(
                 items(recent, key = { "r:${it.id}" }) { track ->
                     TrackRow(
                         track = track,
+                        isCurrent = track.id == currentTrackId,
                         onTap = {
                             scope.launch {
                                 stationPlayback.playTracks(recent, startIndex = recent.indexOf(track))
@@ -284,6 +291,7 @@ private fun SectionHeader(label: String) {
 @Composable
 private fun TrackRow(
     track: Track,
+    isCurrent: Boolean = false,
     trailing: @Composable (() -> Unit)? = null,
     onTap: () -> Unit,
 ) {
@@ -297,12 +305,18 @@ private fun TrackRow(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = track.title.ifBlank { track.fileName },
-                    style = MaterialTheme.typography.bodyMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = track.title.ifBlank { track.fileName },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (isCurrent) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                    com.visorcraft.radioshed.ui.util.NowPlayingIndicator(isCurrent)
+                }
                 Text(
                     text = track.fileName,
                     style = MaterialTheme.typography.labelSmall,
@@ -330,6 +344,7 @@ private fun describeSource(rule: SourceRule): String = when (rule) {
         SmartQueryKind.AdaptiveMix -> "Adaptive mix"
         SmartQueryKind.ForgottenGems -> "Forgotten gems"
         SmartQueryKind.ForgottenGemsByRating -> "Forgotten gems (by rating)"
+        SmartQueryKind.LikedSongs -> "Liked songs"
     }
     is SourceRule.FolderSelector -> "${rule.folderIds.size} folder(s)"
     is SourceRule.PlaylistSelector -> "Playlist"

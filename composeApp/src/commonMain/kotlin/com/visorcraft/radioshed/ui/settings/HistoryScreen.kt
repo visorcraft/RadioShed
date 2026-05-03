@@ -35,6 +35,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -71,12 +72,15 @@ fun HistoryScreen(
     stationRepo: StationRepository = koinInject(),
     libraryRepo: LibraryRepository = koinInject(),
     stationPlayback: StationPlayback = koinInject(),
+    audioEngine: com.visorcraft.radioshed.audio.AudioEngine = koinInject(),
 ) {
     var entries by remember { mutableStateOf<List<HistoryEntryWithStation>>(emptyList()) }
     var trackById by remember { mutableStateOf<Map<Long, Track>>(emptyMap()) }
     var menuOpen by remember { mutableStateOf(false) }
     var clearConfirmOpen by remember { mutableStateOf(false) }
     var contextTrackId by remember { mutableStateOf<Long?>(null) }
+    val nowPlaying by audioEngine.nowPlaying.collectAsState()
+    val currentTrackId = nowPlaying?.trackId
     val scope = rememberCoroutineScope()
 
     suspend fun reload() {
@@ -142,6 +146,7 @@ fun HistoryScreen(
                     HistoryRow(
                         entry = entry,
                         track = trackById[entry.trackId],
+                        isCurrent = entry.trackId == currentTrackId,
                         onTap = {
                             // Build a parallel pair-list keyed by the
                             // history-row id, then find the index by
@@ -218,6 +223,7 @@ fun HistoryScreen(
 private fun HistoryRow(
     entry: HistoryEntryWithStation,
     track: Track?,
+    isCurrent: Boolean = false,
     onTap: () -> Unit,
     onLongPress: () -> Unit = {},
 ) {
@@ -247,16 +253,22 @@ private fun HistoryRow(
             }
             Spacer(Modifier.size(10.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = track?.title?.ifBlank { track.fileName } ?: "Removed track",
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium,
-                    color = if (track == null)
-                        MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
-                    else MaterialTheme.colorScheme.onBackground,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = track?.title?.ifBlank { track.fileName } ?: "Removed track",
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Medium,
+                        color = when {
+                            track == null -> MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
+                            isCurrent -> MaterialTheme.colorScheme.primary
+                            else -> MaterialTheme.colorScheme.onBackground
+                        },
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                    com.visorcraft.radioshed.ui.util.NowPlayingIndicator(isCurrent)
+                }
                 Text(
                     text = "${entry.stationName} · ${formatHistoryTimestamp(entry.playedAt)}",
                     style = MaterialTheme.typography.bodySmall,

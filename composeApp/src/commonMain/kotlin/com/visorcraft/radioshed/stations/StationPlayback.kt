@@ -16,8 +16,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -95,6 +98,95 @@ class StationPlayback(
         }
     }
 
+    /**
+     * Per-session shuffle override. When non-null, replaces the
+     * active station's PlayOrder when the queue is built. Cleared
+     * automatically on station change so the override doesn't
+     * silently bleed into a different station the user picks next.
+     *
+     * Toggling [shuffleSession] from the Now Playing UI rebuilds the
+     * current queue in place: candidates stay the same, only the
+     * pick policy changes.
+     */
+    private val _shuffleOverride = MutableStateFlow<PlayOrder?>(null)
+
+    /** Live "shuffle is on" flag for the Now Playing UI. Combines
+     *  override (if set) with the active station's natural order. */
+    val shuffleSession: StateFlow<Boolean> = run {
+        kotlinx.coroutines.flow.combine(_currentStation, _shuffleOverride) { station, override ->
+            val effective = override ?: station?.playback?.order
+            effective != null && effective != PlayOrder.Sequential
+        }.stateIn(
+            scope = scope,
+            started = kotlinx.coroutines.flow.SharingStarted.Eagerly,
+            initialValue = false,
+        )
+    }
+
+    fun toggleShuffle() {
+        // Flip between Sequential and SmartShuffle. The station's
+        // saved PlayOrder isn't touched — override stays in memory
+        // until the user changes station or app restart.
+        scope.launch {
+            advanceMutex.withLock {
+                val station = _currentStation.value ?: return@withLock
+                val currentEffective = _shuffleOverride.value ?: station.playback.order
+                val target = if (currentEffective == PlayOrder.Sequential) PlayOrder.SmartShuffle
+                             else PlayOrder.Sequential
+                _shuffleOverride.value = target
+                rebuildQueueForCurrentStation()
+            }
+        }
+    }
+
+    /**
+     * Rebuild the in-flight PlaybackQueue with the current station's
+     * candidates and the (possibly overridden) playback rule.
+     * Called when [toggleShuffle] flips the override mid-session.
+     * Caller already holds [advanceMutex].
+     */
+    private suspend fun rebuildQueueForCurrentStation() {
+        val station = _currentStation.value ?: return
+        val ruleCandidates = sourceEvaluator.evaluate(station.source)
+        val pinnedTracks = stationRepo.pinnedTracks(station.id)
+        val candidates = if (pinnedTracks.isEmpty()) ruleCandidates
+        else {
+            val ids = ruleCandidates.mapTo(mutableSetOf()) { it.id }
+            ruleCandidates + pinnedTracks.filter { it.id !in ids }
+        }
+        val disliked = ratingRepo.dislikedTrackIdsForStation(station.id).toSet()
+        val candidateIds = candidates.map { it.id }
+        val artistMap = libraryRepo.primaryArtistMap(candidateIds)
+        val effectivePlayback = effectivePlaybackFor(station)
+        val needsPlayCount = effectivePlayback.weighting ==
+            com.visorcraft.radioshed.domain.Weighting.FavorUnderPlayed
+        val needsRatings = effectivePlayback.weighting ==
+            com.visorcraft.radioshed.domain.Weighting.FavorHigherRated
+        val playCountMap = if (needsPlayCount) stationRepo.playCountForTracks(candidateIds)
+                           else emptyMap()
+        val ratingMap = if (needsRatings) ratingRepo.ratingsForTracks(candidateIds)
+                        else emptyMap()
+        queue = PlaybackQueue(
+            candidates = candidates,
+            rule = effectivePlayback,
+            dislikedIds = disliked,
+            artistByTrackId = artistMap,
+            playCountByTrackId = playCountMap,
+            ratingByTrackId = ratingMap,
+        )
+        _candidateCount.value = queue?.candidateCount ?: 0
+        // Don't re-trigger advanceToNext — the user wanted to keep
+        // listening to the current track and only change the
+        // upcoming pick policy. The next natural-end / skip will
+        // pull from the new queue.
+    }
+
+    /** Apply the per-session override on top of a station's saved rule. */
+    private fun effectivePlaybackFor(station: Station): PlaybackRule {
+        val override = _shuffleOverride.value ?: return station.playback
+        return station.playback.copy(order = override)
+    }
+
     private var queue: PlaybackQueue? = null
 
     /** The track currently loaded into the AudioEngine. Used to push to
@@ -164,6 +256,12 @@ class StationPlayback(
     /** Start (or restart) the given station. Replaces any current queue. */
     suspend fun playStation(stationId: Long) {
         val station = stationRepo.getById(stationId) ?: return
+
+        // Reset the per-session shuffle override on every station
+        // switch — it's intentional that toggling shuffle on Latest
+        // Hits doesn't persist when the user picks Forgotten Gems
+        // next. Cleared BEFORE we evaluate the new station's rules.
+        _shuffleOverride.value = null
 
         // Pre-build everything that depends on suspending I/O *before*
         // taking the mutex and mutating shared state. If the coroutine is
@@ -513,27 +611,52 @@ class StationPlayback(
     }
 
     /**
-     * Convert the track's ReplayGain dB value into a 0..1 volume
-     * fraction and push it to the engine. v1 only attenuates (clamped to
-     * ≤1.0) — boosting quiet tracks would require a session-wide pre-amp
-     * to avoid clipping and is deferred. When ReplayGain is disabled in
-     * settings (or the track has no gain value), volume is reset to 1.0
-     * so a previous quiet track doesn't bleed into the next one.
+     * Live in-app user volume scalar (0..1). Defaults to the
+     * persisted setting on init. Updates flow back to the engine
+     * via [applyEffectiveVolume].
      */
-    private fun applyReplayGain(track: Track) {
+    private val _userVolume = MutableStateFlow(settings.getUserVolume())
+    val userVolume: StateFlow<Float> = _userVolume.asStateFlow()
+
+    fun setUserVolume(value: Float) {
+        val clamped = value.coerceIn(0f, 1f)
+        _userVolume.value = clamped
+        settings.setUserVolume(clamped)
+        // Re-apply against the currently-loaded track so the change
+        // takes effect immediately instead of only on the next
+        // track. ReplayGain may scale this further depending on the
+        // track's tags.
+        currentTrack?.let { applyEffectiveVolume(it) }
+    }
+
+    /**
+     * Compute and push the engine volume = userVolume × replayGain
+     * attenuation. v1 only attenuates (clamped to ≤1.0) — boosting
+     * quiet tracks would require a session-wide pre-amp to avoid
+     * clipping and is deferred. When ReplayGain is disabled in
+     * settings (or the track has no gain value), the user volume
+     * stands alone.
+     */
+    private fun applyEffectiveVolume(track: Track) {
+        val user = _userVolume.value
         if (!settings.getReplayGainEnabled()) {
-            audioEngine.setVolume(1f)
+            audioEngine.setVolume(user)
             return
         }
         val gainDb = track.replayGainTrack ?: track.replayGainAlbum
         if (gainDb == null) {
-            audioEngine.setVolume(1f)
+            audioEngine.setVolume(user)
             return
         }
         val preamp = settings.getReplayGainPreampDb()
-        val raw = 10.0.pow((gainDb + preamp) / 20.0).toFloat()
-        audioEngine.setVolume(raw.coerceIn(0f, 1f))
+        val rg = 10.0.pow((gainDb + preamp) / 20.0).toFloat().coerceIn(0f, 1f)
+        audioEngine.setVolume((user * rg).coerceIn(0f, 1f))
     }
+
+    /** Backwards-compat alias for the call site that used to invoke
+     *  the old [applyReplayGain]. New code uses
+     *  [applyEffectiveVolume] directly. */
+    private fun applyReplayGain(track: Track) = applyEffectiveVolume(track)
 
     /**
      * Now-Playing repeat behaviour. Order is the cycle order:

@@ -60,10 +60,18 @@ data class ParsedTags(
     /**
      * Embedded lyrics text — USLT (Unsynchronised Lyrics) for ID3v2,
      * `LYRICS` Vorbis comment for FLAC/Opus/OGG, `©lyr` atom for M4A.
-     * jaudiotagger's `FieldKey.LYRICS` flattens all of these into one
-     * field. Plain text only — synced (SYLT) lyrics aren't surfaced
-     * by FieldKey.LYRICS and are deferred. Null when the file has no
-     * lyrics tag.
+     * The Android impl iterates all USLT frames (multi-language tags
+     * are common) and picks the most useful one rather than just
+     * grabbing the first via jaudiotagger's flattened `FieldKey.LYRICS`.
+     * Null when the file has no lyrics tag.
      */
     val embeddedLyrics: String? = null,
+    /**
+     * Embedded SYNCED lyrics in LRC string form. Pulled from ID3v2's
+     * SYLT frame on Android (when present). Null when there's no
+     * synced lyrics frame. The string is already in standard
+     * `[mm:ss.xx]` LRC syntax, ready to feed straight into
+     * [com.visorcraft.radioshed.source.LyricsService]'s parser.
+     */
+    val embeddedSyncedLrc: String? = null,
 )

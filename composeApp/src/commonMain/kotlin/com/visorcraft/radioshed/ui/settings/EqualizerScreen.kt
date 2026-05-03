@@ -96,8 +96,12 @@ fun EqualizerScreen(
                         fontWeight = FontWeight.SemiBold,
                     )
                     Text(
-                        if (available) "Active on this session"
-                        else "Start playback to activate",
+                        text = buildString {
+                            append(if (available) "Active on this session" else "Start playback to activate")
+                            if (available) {
+                                append(" · ${eq.numBands} bands")
+                            }
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
                     )

@@ -876,6 +876,7 @@ private fun SmartQueryKind.uiLabel(): String = when (this) {
     SmartQueryKind.AdaptiveMix -> "Adaptive mix (under-played + favorites)"
     SmartQueryKind.ForgottenGems -> "Forgotten gems — longest unheard"
     SmartQueryKind.ForgottenGemsByRating -> "Forgotten gems — highest rated"
+    SmartQueryKind.LikedSongs -> "Liked songs (hearted tracks)"
 }
 
 private fun String.toCsvList(): List<String> =

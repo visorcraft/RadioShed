@@ -42,6 +42,11 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.RepeatOne
+import androidx.compose.material.icons.filled.Shuffle
+import androidx.compose.material.icons.filled.ShuffleOn
+import androidx.compose.material.icons.automirrored.filled.VolumeDown
+import androidx.compose.material.icons.automirrored.filled.VolumeOff
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Lyrics
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
@@ -138,6 +143,8 @@ fun NowPlayingScreen(
     val position by audioEngine.position.collectAsState()
     val currentStation by stationPlayback.currentStation.collectAsState()
     val repeatMode by stationPlayback.repeatMode.collectAsState()
+    val shuffleSession by stationPlayback.shuffleSession.collectAsState()
+    val userVolume by stationPlayback.userVolume.collectAsState()
     val sleepState by sleepTimer.state.collectAsState()
     val scope = rememberCoroutineScope()
     var sleepMenuOpen by remember { mutableStateOf(false) }
@@ -199,6 +206,21 @@ fun NowPlayingScreen(
                             imageVector = Icons.Filled.Lyrics,
                             contentDescription = "Lyrics",
                             tint = MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
+                    // Shuffle session toggle. Doesn't persist to the
+                    // station — flips between Sequential and SmartShuffle
+                    // for the in-flight queue only, resets on station
+                    // change. The on-state glyph (ShuffleOn) carries a
+                    // dot indicator so colour-blind users can read it
+                    // without relying on the primary tint alone.
+                    IconButton(onClick = { stationPlayback.toggleShuffle() }) {
+                        Icon(
+                            imageVector = if (shuffleSession) Icons.Filled.ShuffleOn
+                                          else Icons.Filled.Shuffle,
+                            contentDescription = if (shuffleSession) "Shuffle on" else "Shuffle off",
+                            tint = if (shuffleSession) MaterialTheme.colorScheme.primary
+                                   else MaterialTheme.colorScheme.onSurface,
                         )
                     }
                     // Repeat-mode cycler. Off → All → One → Off. Visual
@@ -440,6 +462,7 @@ fun NowPlayingScreen(
                     durationMs = position.durationMs,
                     rating = rating,
                     liked = liked,
+                    volume = userVolume,
                     accent = accent,
                     stationName = currentStation?.name,
                     onSeek = { audioEngine.seekTo(it) },
@@ -453,6 +476,7 @@ fun NowPlayingScreen(
                         }
                     },
                     onToggleLike = onToggleLike,
+                    onVolume = { stationPlayback.setUserVolume(it) },
                     onDislikeOnStation = {
                         val stationId = currentStation?.id ?: return@CompactLayout
                         scope.launch {
@@ -470,6 +494,7 @@ fun NowPlayingScreen(
                     durationMs = position.durationMs,
                     rating = rating,
                     liked = liked,
+                    volume = userVolume,
                     accent = accent,
                     stationName = currentStation?.name,
                     onSeek = { audioEngine.seekTo(it) },
@@ -483,6 +508,7 @@ fun NowPlayingScreen(
                         }
                     },
                     onToggleLike = onToggleLike,
+                    onVolume = { stationPlayback.setUserVolume(it) },
                     onDislikeOnStation = {
                         val stationId = currentStation?.id ?: return@TwoPaneLayout
                         scope.launch {
@@ -577,6 +603,7 @@ private fun CompactLayout(
     durationMs: Long,
     rating: Double,
     liked: Boolean,
+    volume: Float,
     accent: Color,
     stationName: String?,
     onSeek: (Long) -> Unit,
@@ -585,6 +612,7 @@ private fun CompactLayout(
     onNext: () -> Unit,
     onRate: (Double) -> Unit,
     onToggleLike: () -> Unit,
+    onVolume: (Float) -> Unit,
     onDislikeOnStation: () -> Unit,
     driveMode: Boolean,
 ) {
@@ -620,6 +648,8 @@ private fun CompactLayout(
             onRate = onRate,
             onToggleLike = onToggleLike,
         )
+        Spacer(Modifier.height(8.dp))
+        VolumeRow(volume = volume, onVolume = onVolume)
     }
 }
 
@@ -631,6 +661,7 @@ private fun TwoPaneLayout(
     durationMs: Long,
     rating: Double,
     liked: Boolean,
+    volume: Float,
     accent: Color,
     stationName: String?,
     onSeek: (Long) -> Unit,
@@ -639,6 +670,7 @@ private fun TwoPaneLayout(
     onNext: () -> Unit,
     onRate: (Double) -> Unit,
     onToggleLike: () -> Unit,
+    onVolume: (Float) -> Unit,
     onDislikeOnStation: () -> Unit,
     driveMode: Boolean,
 ) {
@@ -693,6 +725,8 @@ private fun TwoPaneLayout(
                 onRate = onRate,
                 onToggleLike = onToggleLike,
             )
+            Spacer(Modifier.height(8.dp))
+            VolumeRow(volume = volume, onVolume = onVolume)
         }
     }
 }
@@ -1070,6 +1104,41 @@ private fun RatingRow(
     }
 }
 
+/**
+ * Slim in-app volume slider. Distinct from the hardware volume rocker
+ * (which controls the system music stream); this controls the engine's
+ * playback gain so users can fine-tune output without changing the
+ * system level. Multiplies with ReplayGain attenuation in
+ * StationPlayback.applyEffectiveVolume — a 50% slider on a track
+ * with -6 dB ReplayGain ends up at ~25% engine volume.
+ */
+@Composable
+private fun VolumeRow(volume: Float, onVolume: (Float) -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            imageVector = when {
+                volume < 0.02f -> Icons.AutoMirrored.Filled.VolumeOff
+                volume < 0.5f -> Icons.AutoMirrored.Filled.VolumeDown
+                else -> Icons.AutoMirrored.Filled.VolumeUp
+            },
+            contentDescription = "Volume",
+            modifier = Modifier.size(20.dp),
+            tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
+        )
+        Spacer(Modifier.width(8.dp))
+        Slider(
+            value = volume,
+            onValueChange = onVolume,
+            valueRange = 0f..1f,
+            modifier = Modifier.weight(1f),
+            colors = SliderDefaults.colors(),
+        )
+    }
+}
+
 private enum class StarState { Empty, Half, Full }
 
 private fun stationAccent(packedColor: Int?): Color {
@@ -1093,14 +1162,22 @@ private fun TrackInfoDialog(
 ) {
     val stationRepo: com.visorcraft.radioshed.data.StationRepository = koinInject()
     val folderRevealer: com.visorcraft.radioshed.source.FolderRevealer = koinInject()
+    val ringtoneSetter: com.visorcraft.radioshed.source.RingtoneSetter = koinInject()
     val scope = rememberCoroutineScope()
     var track by remember { mutableStateOf<Track?>(null) }
+    var ringtoneStatus by remember { mutableStateOf<String?>(null) }
     var stats by remember {
         mutableStateOf<com.visorcraft.radioshed.data.TrackHistoryStats?>(null)
     }
+    var genres by remember { mutableStateOf<List<String>>(emptyList()) }
     LaunchedEffect(playable.trackId) {
         track = libraryRepo.getTrackById(playable.trackId)
         stats = stationRepo.historyStatsForTrack(playable.trackId)
+        genres = libraryRepo.tagsForTrack(playable.trackId)
+            .filter { it.key.equals("GENRE", ignoreCase = true) }
+            .map { it.value }
+            .filter { it.isNotBlank() }
+            .distinct()
     }
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
@@ -1130,15 +1207,53 @@ private fun TrackInfoDialog(
                 Text("Loading…", style = MaterialTheme.typography.bodyMedium)
             } else {
                 Column(verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(4.dp)) {
+                    ringtoneStatus?.let { msg ->
+                        Text(
+                            text = msg,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(bottom = 4.dp),
+                        )
+                    }
+                    androidx.compose.material3.OutlinedButton(
+                        onClick = {
+                            scope.launch {
+                                ringtoneStatus = "Setting ringtone…"
+                                val result = ringtoneSetter.setAsRingtone(
+                                    absolutePath = t.path,
+                                    displayName = t.title.ifBlank { t.fileName },
+                                )
+                                ringtoneStatus = when (result) {
+                                    is com.visorcraft.radioshed.source.RingtoneSetter.Result.Ok ->
+                                        "Set as ringtone."
+                                    is com.visorcraft.radioshed.source.RingtoneSetter.Result.NeedsPermission ->
+                                        "Grant Modify system settings, then tap again."
+                                    is com.visorcraft.radioshed.source.RingtoneSetter.Result.NotSupported ->
+                                        "Not supported on this platform."
+                                    is com.visorcraft.radioshed.source.RingtoneSetter.Result.Failed ->
+                                        "Couldn't set: ${result.reason}"
+                                }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Set as ringtone")
+                    }
+                    Spacer(Modifier.height(4.dp))
                     InfoLine("Title", t.title)
                     playable.artist?.let { InfoLine("Artist", it) }
                     playable.album?.let { InfoLine("Album", it) }
+                    if (genres.isNotEmpty()) {
+                        InfoLine("Genre", genres.joinToString(", "))
+                    }
                     InfoLine("Format", t.format.uppercase())
                     InfoLine("Duration", formatMs(t.durationMs))
                     t.bitrateKbps?.let { InfoLine("Bitrate", "$it kbps") }
                     t.sampleRateHz?.let { InfoLine("Sample rate", "${it / 1000.0} kHz") }
                     t.channels?.let { InfoLine("Channels", "$it") }
                     t.bpm?.let { InfoLine("BPM", "%.1f".format(it)) }
+                    InfoLine("File size", formatFileSize(t.fileSize))
+                    InfoLine("Added", formatRelativeDate(t.addedAt))
                     t.replayGainTrack?.let { InfoLine("ReplayGain (track)", "%.2f dB".format(it)) }
                     t.replayGainAlbum?.let { InfoLine("ReplayGain (album)", "%.2f dB".format(it)) }
                     // Listening stats from station_history. Hidden
@@ -1157,6 +1272,32 @@ private fun TrackInfoDialog(
             }
         },
     )
+}
+
+/** Bytes → human-readable size: "12.3 MB" / "942 KB" / "8 B". */
+private fun formatFileSize(bytes: Long): String {
+    if (bytes <= 0L) return "—"
+    val mb = bytes / 1_048_576.0
+    if (mb >= 1.0) return "%.1f MB".format(mb)
+    val kb = bytes / 1024.0
+    if (kb >= 1.0) return "%.0f KB".format(kb)
+    return "$bytes B"
+}
+
+/** "2 days ago" / "3 weeks ago" / "Jan 14, 2024" — same vocabulary
+ *  as backups but without the "Just now" cutoff since added-at is
+ *  always in the past from when this dialog opens. */
+private fun formatRelativeDate(ms: Long): String {
+    val deltaMs = (com.visorcraft.radioshed.data.nowMillis() - ms).coerceAtLeast(0L)
+    val day = deltaMs / 86_400_000L
+    return when {
+        day < 1L -> "Today"
+        day < 2L -> "Yesterday"
+        day < 7L -> "${day} days ago"
+        day < 30L -> "${day / 7L} weeks ago"
+        day < 365L -> "${day / 30L} months ago"
+        else -> "${day / 365L} years ago"
+    }
 }
 
 /** "Xh Ym" / "Ym Zs" / "Zs" — same vocabulary as Stats. */
