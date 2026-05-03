@@ -170,8 +170,19 @@ fun PlaylistDetailScreen(
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.SemiBold,
             )
+            // Track count + total runtime so the user has a sense of
+            // how long the playlist will run before pressing Play.
+            // Hide the runtime half when empty since "0 tracks · 0
+            // min" is just clutter.
+            val trackCountLabel = "${tracks.size} track${if (tracks.size == 1) "" else "s"}"
+            val subtitleText = if (tracks.isEmpty()) {
+                trackCountLabel
+            } else {
+                val totalMs = tracks.sumOf { it.durationMs }
+                "$trackCountLabel · ${formatPlaylistRuntime(totalMs)}"
+            }
             Text(
-                "${tracks.size} track${if (tracks.size == 1) "" else "s"}",
+                subtitleText,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
             )
@@ -362,4 +373,18 @@ private fun PlaylistTrackRow(
             )
         }
     }
+}
+
+/**
+ * Playlist runtime formatter. Switches between "47 min" for short
+ * playlists and "1h 23m" / "12h 5m" for longer ones — same
+ * vocabulary the Album / Artist detail screens use, so users see
+ * one consistent format across the library surfaces.
+ */
+private fun formatPlaylistRuntime(totalMs: Long): String {
+    val totalMin = totalMs / 60_000L
+    if (totalMin < 60L) return "$totalMin min"
+    val hours = totalMin / 60L
+    val mins = totalMin % 60L
+    return if (mins == 0L) "${hours}h" else "${hours}h ${mins}m"
 }

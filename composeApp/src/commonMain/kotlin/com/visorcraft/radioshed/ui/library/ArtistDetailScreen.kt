@@ -79,12 +79,18 @@ fun ArtistDetailScreen(
     onBack: () -> Unit,
     onAlbumTap: (Long) -> Unit,
     libraryRepo: LibraryRepository = koinInject(),
+    stationRepo: com.visorcraft.radioshed.data.StationRepository = koinInject(),
     stationPlayback: StationPlayback = koinInject(),
     audioEngine: com.visorcraft.radioshed.audio.AudioEngine = koinInject(),
 ) {
     var artist by remember { mutableStateOf<Artist?>(null) }
     var albums by remember { mutableStateOf<List<Album>>(emptyList()) }
     var tracks by remember { mutableStateOf<List<Track>>(emptyList()) }
+    // Per-track play counts from station_history. Mirrors the Album
+    // detail "× N" badges so users have consistent listening
+    // visibility across both views. Populated in a follow-up effect
+    // so the track list renders immediately.
+    var playCounts by remember { mutableStateOf<Map<Long, Long>>(emptyMap()) }
     var contextTrackId by remember { mutableStateOf<Long?>(null) }
     var overflowOpen by remember { mutableStateOf(false) }
     val nowPlaying by audioEngine.nowPlaying.collectAsState()
@@ -94,6 +100,11 @@ fun ArtistDetailScreen(
         artist = libraryRepo.getArtistById(artistId)
         albums = libraryRepo.albumsForArtist(artistId)
         tracks = libraryRepo.tracksForArtist(artistId)
+    }
+    LaunchedEffect(tracks) {
+        if (tracks.isNotEmpty()) {
+            playCounts = stationRepo.playCountForTracks(tracks.map { it.id })
+        }
     }
 
     Scaffold(
@@ -241,6 +252,7 @@ fun ArtistDetailScreen(
                     ArtistTrackRow(
                         track = track,
                         isCurrent = track.id == currentTrackId,
+                        playCount = playCounts[track.id] ?: 0L,
                         onTap = {
                             val idx = tracks.indexOf(track).coerceAtLeast(0)
                             stationPlayback.playTracks(tracks, startIndex = idx)
@@ -313,6 +325,7 @@ private fun AlbumCard(album: Album, onTap: () -> Unit) {
 private fun ArtistTrackRow(
     track: Track,
     isCurrent: Boolean = false,
+    playCount: Long = 0L,
     onTap: () -> Unit,
     onLongPress: () -> Unit = {},
 ) {
@@ -353,6 +366,14 @@ private fun ArtistTrackRow(
                     modifier = Modifier.weight(1f, fill = false),
                 )
                 com.visorcraft.radioshed.ui.util.NowPlayingIndicator(isCurrent)
+            }
+            if (playCount > 0L) {
+                Text(
+                    text = "× $playCount",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
+                    modifier = Modifier.padding(horizontal = 8.dp),
+                )
             }
         }
     }

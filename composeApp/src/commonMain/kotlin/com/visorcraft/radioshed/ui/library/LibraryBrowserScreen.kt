@@ -167,8 +167,27 @@ fun LibraryBrowserScreen(
             runCatching { SongSort.valueOf(settings.getLibrarySongSort()) }.getOrDefault(SongSort.TitleAsc),
         )
     }
+    var artistSort by remember {
+        mutableStateOf(
+            runCatching { ArtistSort.valueOf(settings.getLibraryArtistSort()) }
+                .getOrDefault(ArtistSort.NameAsc),
+        )
+    }
+    // Per-artist play count map for the "Most played" sort. Only
+    // populated when that sort is active so we don't pay the query
+    // cost for users who stick with alphabetical. Long.MAX_VALUE
+    // limit is fine — selectTopPlayedArtists already runs an indexed
+    // GROUP BY and the result fits comfortably in memory.
+    var artistPlayCounts by remember { mutableStateOf<Map<Long, Long>>(emptyMap()) }
+    LaunchedEffect(artistSort) {
+        if (artistSort == ArtistSort.MostPlayed && artistPlayCounts.isEmpty()) {
+            artistPlayCounts = stationRepo.topPlayedArtists(Long.MAX_VALUE)
+                .associate { it.id to it.plays }
+        }
+    }
     LaunchedEffect(selectedTab) { settings.setLibraryTabIndex(selectedTab.ordinal) }
     LaunchedEffect(sortOrder) { settings.setLibrarySongSort(sortOrder.name) }
+    LaunchedEffect(artistSort) { settings.setLibraryArtistSort(artistSort.name) }
 
     Scaffold(
         topBar = {
@@ -215,6 +234,35 @@ fun LibraryBrowserScreen(
                                 imageVector = Icons.Filled.Casino,
                                 contentDescription = "Random album",
                             )
+                        }
+                    }
+                    if (selectedTab == LibraryTab.Artists && artists.isNotEmpty()) {
+                        // Mirror the Songs-tab sort dropdown for the
+                        // Artists list. Same chevron-style icon so
+                        // the affordance reads as "sort" without
+                        // having to add a label that competes with
+                        // the title row.
+                        Box {
+                            IconButton(onClick = { sortMenuOpen = true }) {
+                                Text(
+                                    text = "↕",
+                                    style = MaterialTheme.typography.titleMedium,
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = sortMenuOpen,
+                                onDismissRequest = { sortMenuOpen = false },
+                            ) {
+                                ArtistSort.entries.forEach { option ->
+                                    DropdownMenuItem(
+                                        text = { Text(option.label) },
+                                        onClick = {
+                                            artistSort = option
+                                            sortMenuOpen = false
+                                        },
+                                    )
+                                }
+                            }
                         }
                     }
                     if (selectedTab == LibraryTab.Songs && allTracks.isNotEmpty()) {
@@ -398,8 +446,20 @@ fun LibraryBrowserScreen(
                     // shows their albums + tracks with play / shuffle, which
                     // is what the user actually wants when they pick an
                     // artist's name from a list.
+                    val sortedArtists = remember(artists, artistSort, artistPlayCounts) {
+                        when (artistSort) {
+                            ArtistSort.NameAsc ->
+                                artists.sortedBy { it.name.lowercase() }
+                            ArtistSort.NameDesc ->
+                                artists.sortedByDescending { it.name.lowercase() }
+                            ArtistSort.MostPlayed ->
+                                artists.sortedByDescending {
+                                    artistPlayCounts[it.id] ?: 0L
+                                }
+                        }
+                    }
                     ArtistList(
-                        artists = artists,
+                        artists = sortedArtists,
                         onPick = { a -> onArtistTap(a.id) },
                         onLongPress = { a -> contextArtist = a },
                     )
@@ -463,6 +523,18 @@ private enum class SongSort(val label: String) {
     Duration("Duration"),
     MostPlayed("Most played"),
     TopRated("Top rated"),
+}
+
+/**
+ * Sort options for the Artists tab. Mirrors SongSort's options that
+ * are meaningful at artist granularity. "Most played" sums the per-
+ * track play counts across each artist's catalogue. Persisted via
+ * SettingsStore so the user's choice carries between sessions.
+ */
+private enum class ArtistSort(val label: String) {
+    NameAsc("Name — A to Z"),
+    NameDesc("Name — Z to A"),
+    MostPlayed("Most played"),
 }
 
 @Composable
