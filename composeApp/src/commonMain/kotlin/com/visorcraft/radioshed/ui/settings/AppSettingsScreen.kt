@@ -84,6 +84,7 @@ fun AppSettingsScreen(
     onOpenCrashLog: () -> Unit = {},
     settings: SettingsStore = koinInject(),
     artworkSync: MissingArtworkSync = koinInject(),
+    lyricsCache: com.visorcraft.radioshed.data.LyricsCacheRepository = koinInject(),
 ) {
     // Re-read settings on every recomposition into local state so they
     // re-render correctly when this screen is reopened (the user might
@@ -297,6 +298,22 @@ fun AppSettingsScreen(
                 },
             )
 
+            Spacer(Modifier.height(8.dp))
+            // Clear lyrics cache. Used when LRClib improves their
+            // database — the user gets a re-fetch on next track plays.
+            // Keeps user-supplied artist/title overrides intact since
+            // those represent manual corrections.
+            var lyricsCleared by remember { mutableStateOf(false) }
+            ClearLyricsCacheRow(
+                cleared = lyricsCleared,
+                onClick = {
+                    scope.launch {
+                        lyricsCache.deleteAll()
+                        lyricsCleared = true
+                    }
+                },
+            )
+
             Spacer(Modifier.height(24.dp))
 
             // ---- About ----
@@ -313,6 +330,37 @@ fun AppSettingsScreen(
             )
 
             Spacer(Modifier.height(16.dp))
+        }
+    }
+}
+
+@Composable
+private fun ClearLyricsCacheRow(cleared: Boolean, onClick: () -> Unit) {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    "Clear lyrics cache",
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium,
+                )
+                Text(
+                    text = if (cleared) "Cache cleared. Next plays will re-fetch."
+                           else "Re-fetches lyrics for every track on next play.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                )
+            }
+            TextButton(onClick = onClick, enabled = !cleared) {
+                Text(if (cleared) "Done" else "Clear")
+            }
         }
     }
 }

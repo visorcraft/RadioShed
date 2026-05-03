@@ -22,6 +22,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PlayArrow
@@ -122,6 +123,36 @@ fun AlbumDetailScreen(
                             onDismissRequest = { overflowOpen = false },
                         ) {
                             DropdownMenuItem(
+                                text = { Text("Play next") },
+                                leadingIcon = { Icon(Icons.Filled.PlayArrow, null) },
+                                enabled = tracks.isNotEmpty(),
+                                onClick = {
+                                    overflowOpen = false
+                                    // Reverse so the album plays in
+                                    // track order — each playNext
+                                    // pushes onto the head of the
+                                    // priority buffer, so without the
+                                    // reverse we'd queue track 1 last.
+                                    tracks.asReversed().forEach {
+                                        stationPlayback.playNext(it)
+                                    }
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Add to queue") },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.AutoMirrored.Filled.QueueMusic,
+                                        null,
+                                    )
+                                },
+                                enabled = tracks.isNotEmpty(),
+                                onClick = {
+                                    overflowOpen = false
+                                    tracks.forEach { stationPlayback.addToQueue(it) }
+                                },
+                            )
+                            DropdownMenuItem(
                                 text = { Text("Rate all 5 stars") },
                                 leadingIcon = { Icon(Icons.Filled.Star, null) },
                                 enabled = tracks.isNotEmpty(),
@@ -166,11 +197,15 @@ fun AlbumDetailScreen(
             Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
                 Spacer(Modifier.height(16.dp))
 
+                val totalRuntimeMs = remember(tracks) {
+                    tracks.sumOf { it.durationMs }
+                }
                 if (isCompact) {
                     AlbumHeaderCompact(
                         album = a,
                         artist = artist,
                         trackCount = tracks.size,
+                        totalRuntimeMs = totalRuntimeMs,
                         onArtistTap = onArtistTap,
                     )
                 } else {
@@ -178,6 +213,7 @@ fun AlbumDetailScreen(
                         album = a,
                         artist = artist,
                         trackCount = tracks.size,
+                        totalRuntimeMs = totalRuntimeMs,
                         onArtistTap = onArtistTap,
                     )
                 }
@@ -305,6 +341,7 @@ private fun AlbumHeaderCompact(
     album: Album,
     artist: Artist?,
     trackCount: Int,
+    totalRuntimeMs: Long,
     onArtistTap: (Long) -> Unit,
 ) {
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
@@ -316,7 +353,13 @@ private fun AlbumHeaderCompact(
                 .aspectRatio(1f),
         )
         Spacer(Modifier.height(12.dp))
-        AlbumMeta(album = album, artist = artist, trackCount = trackCount, onArtistTap = onArtistTap)
+        AlbumMeta(
+            album = album,
+            artist = artist,
+            trackCount = trackCount,
+            totalRuntimeMs = totalRuntimeMs,
+            onArtistTap = onArtistTap,
+        )
     }
 }
 
@@ -325,6 +368,7 @@ private fun AlbumHeaderWide(
     album: Album,
     artist: Artist?,
     trackCount: Int,
+    totalRuntimeMs: Long,
     onArtistTap: (Long) -> Unit,
 ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -336,7 +380,13 @@ private fun AlbumHeaderWide(
         )
         Spacer(Modifier.size(20.dp))
         Column(modifier = Modifier.weight(1f)) {
-            AlbumMeta(album = album, artist = artist, trackCount = trackCount, onArtistTap = onArtistTap)
+            AlbumMeta(
+                album = album,
+                artist = artist,
+                trackCount = trackCount,
+                totalRuntimeMs = totalRuntimeMs,
+                onArtistTap = onArtistTap,
+            )
         }
     }
 }
@@ -346,6 +396,7 @@ private fun AlbumMeta(
     album: Album,
     artist: Artist?,
     trackCount: Int,
+    totalRuntimeMs: Long,
     onArtistTap: (Long) -> Unit,
 ) {
     Text(
@@ -364,12 +415,34 @@ private fun AlbumMeta(
     val subtitle = buildString {
         album.year?.let { append(it).append(" · ") }
         append(trackCount).append(if (trackCount == 1) " track" else " tracks")
+        if (totalRuntimeMs > 0L) {
+            append(" · ").append(formatRuntime(totalRuntimeMs))
+        }
     }
     Text(
         text = subtitle,
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
     )
+}
+
+/**
+ * Album / artist runtime formatter. "47:32" for under an hour, "1h 12m"
+ * for ≥ 1h. The under-an-hour "mm:ss" matches what listeners see on the
+ * track scrubber, so the album line reads as "this is what plays end to
+ * end". Hours-format swaps to a friendlier "Xh Ym" since "1:12:34"
+ * mid-line in a metadata blob is hard to parse.
+ */
+private fun formatRuntime(totalMs: Long): String {
+    val totalSec = totalMs / 1000L
+    if (totalSec < 60L * 60L) {
+        val mm = totalSec / 60L
+        val ss = totalSec % 60L
+        return "$mm:${ss.toString().padStart(2, '0')}"
+    }
+    val hours = totalSec / 3600L
+    val mins = (totalSec % 3600L) / 60L
+    return "${hours}h ${mins}m"
 }
 
 @Composable

@@ -70,6 +70,16 @@ class LyricsCacheRepository(private val db: RadioShedDatabase) {
     }
 
     /**
+     * Wipes every cached lyrics row. Overrides (manual artist/title
+     * corrections) are preserved — those represent user input we
+     * don't want to lose. Next playback of any track will re-fetch
+     * from LRClib / re-extract from tags.
+     */
+    suspend fun deleteAll() = withContext(IODispatcher) {
+        db.cachesQueries.deleteAllLyrics()
+    }
+
+    /**
      * User-supplied (artist, title) override for a track's lyrics
      * search. When set, [LyricsService] uses it as the first
      * candidate before falling through to tag-derived variations.

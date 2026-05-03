@@ -22,14 +22,19 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Album
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -81,6 +86,7 @@ fun ArtistDetailScreen(
     var albums by remember { mutableStateOf<List<Album>>(emptyList()) }
     var tracks by remember { mutableStateOf<List<Track>>(emptyList()) }
     var contextTrackId by remember { mutableStateOf<Long?>(null) }
+    var overflowOpen by remember { mutableStateOf(false) }
     val nowPlaying by audioEngine.nowPlaying.collectAsState()
     val currentTrackId = nowPlaying?.trackId
 
@@ -95,6 +101,43 @@ fun ArtistDetailScreen(
             TopAppBar(
                 title = { Text(artist?.name ?: "Artist", maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 navigationIcon = { TextButton(onClick = onBack) { Text("Back") } },
+                actions = {
+                    Box {
+                        IconButton(onClick = { overflowOpen = true }) {
+                            Icon(Icons.Filled.MoreVert, contentDescription = "More")
+                        }
+                        DropdownMenu(
+                            expanded = overflowOpen,
+                            onDismissRequest = { overflowOpen = false },
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Play next") },
+                                leadingIcon = { Icon(Icons.Filled.PlayArrow, null) },
+                                enabled = tracks.isNotEmpty(),
+                                onClick = {
+                                    overflowOpen = false
+                                    tracks.asReversed().forEach {
+                                        stationPlayback.playNext(it)
+                                    }
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Add to queue") },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.AutoMirrored.Filled.QueueMusic,
+                                        null,
+                                    )
+                                },
+                                enabled = tracks.isNotEmpty(),
+                                onClick = {
+                                    overflowOpen = false
+                                    tracks.forEach { stationPlayback.addToQueue(it) }
+                                },
+                            )
+                        }
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface,
                 ),
@@ -120,9 +163,18 @@ fun ArtistDetailScreen(
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.SemiBold,
             )
+            val totalRuntimeMs = remember(tracks) {
+                tracks.sumOf { it.durationMs }
+            }
+            val subtitle = buildString {
+                append(albums.size).append(if (albums.size == 1) " album" else " albums")
+                append(" · ").append(tracks.size).append(if (tracks.size == 1) " track" else " tracks")
+                if (totalRuntimeMs > 0L) {
+                    append(" · ").append(formatArtistRuntime(totalRuntimeMs))
+                }
+            }
             Text(
-                text = "${albums.size} album${if (albums.size == 1) "" else "s"} · " +
-                    "${tracks.size} track${if (tracks.size == 1) "" else "s"}",
+                text = subtitle,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
             )
@@ -306,4 +358,17 @@ private fun ArtistTrackRow(
             }
         }
     }
+}
+
+/**
+ * Artist-scope runtime formatter. Always prefer hours since an
+ * artist's catalogue almost certainly exceeds an hour; if it doesn't
+ * we fall back to minutes for clarity. "1h 23m" / "47 min".
+ */
+private fun formatArtistRuntime(totalMs: Long): String {
+    val totalMin = totalMs / 60_000L
+    if (totalMin < 60L) return "$totalMin min"
+    val hours = totalMin / 60L
+    val mins = totalMin % 60L
+    return if (mins == 0L) "${hours}h" else "${hours}h ${mins}m"
 }

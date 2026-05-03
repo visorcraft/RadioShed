@@ -260,12 +260,30 @@ fun NowPlayingScreen(
                             else MaterialTheme.colorScheme.primary,
                         )
                     }
-                    IconButton(onClick = { queueSheetOpen = true }) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.QueueMusic,
-                            contentDescription = "Queue",
-                            tint = MaterialTheme.colorScheme.onSurface,
-                        )
+                    val priorityBadgeCount by stationPlayback.priorityCountFlow.collectAsState()
+                    androidx.compose.material3.BadgedBox(
+                        badge = {
+                            if (priorityBadgeCount > 0) {
+                                androidx.compose.material3.Badge {
+                                    Text(priorityBadgeCount.toString())
+                                }
+                            }
+                        },
+                        modifier = Modifier
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                                onClick = { queueSheetOpen = true },
+                            )
+                            .semantics { contentDescription = "Queue" },
+                    ) {
+                        IconButton(onClick = { queueSheetOpen = true }) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.QueueMusic,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurface,
+                            )
+                        }
                     }
                     Box {
                         IconButton(onClick = { sleepMenuOpen = true }) {
@@ -441,6 +459,8 @@ fun NowPlayingScreen(
                     playable = track,
                     libraryRepo = libraryRepo,
                     onDismiss = { trackInfoOpen = false },
+                    onOpenAlbum = onOpenAlbum,
+                    onOpenArtist = onOpenArtist,
                 )
             } else {
                 trackInfoOpen = false
@@ -1402,6 +1422,8 @@ private fun TrackInfoDialog(
     playable: com.visorcraft.radioshed.audio.Playable,
     libraryRepo: LibraryRepository,
     onDismiss: () -> Unit,
+    onOpenAlbum: (Long) -> Unit = {},
+    onOpenArtist: (Long) -> Unit = {},
 ) {
     val stationRepo: com.visorcraft.radioshed.data.StationRepository = koinInject()
     val folderRevealer: com.visorcraft.radioshed.source.FolderRevealer = koinInject()
@@ -1414,6 +1436,7 @@ private fun TrackInfoDialog(
         mutableStateOf<com.visorcraft.radioshed.data.TrackHistoryStats?>(null)
     }
     var genres by remember { mutableStateOf<List<String>>(emptyList()) }
+    var primaryArtistId by remember { mutableStateOf<Long?>(null) }
     LaunchedEffect(playable.trackId) {
         track = libraryRepo.getTrackById(playable.trackId)
         stats = stationRepo.historyStatsForTrack(playable.trackId)
@@ -1422,6 +1445,7 @@ private fun TrackInfoDialog(
             .map { it.value }
             .filter { it.isNotBlank() }
             .distinct()
+        primaryArtistId = libraryRepo.artistsForTrack(playable.trackId).firstOrNull()?.id
     }
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
@@ -1505,8 +1529,34 @@ private fun TrackInfoDialog(
                     }
                     Spacer(Modifier.height(4.dp))
                     InfoLine("Title", t.title)
-                    playable.artist?.let { InfoLine("Artist", it) }
-                    playable.album?.let { InfoLine("Album", it) }
+                    // Artist + Album rows: tappable when the host
+                    // installed nav handlers AND we have a target id
+                    // to navigate to. Without an id we still show the
+                    // text — just non-tappable, since the user
+                    // probably still wants to see WHO the artist is
+                    // even if drill-in isn't possible.
+                    playable.artist?.let { artistName ->
+                        val aid = primaryArtistId
+                        if (aid != null) {
+                            InfoLineTappable("Artist", artistName) {
+                                onDismiss()
+                                onOpenArtist(aid)
+                            }
+                        } else {
+                            InfoLine("Artist", artistName)
+                        }
+                    }
+                    playable.album?.let { albumName ->
+                        val aid = t.albumId
+                        if (aid != null) {
+                            InfoLineTappable("Album", albumName) {
+                                onDismiss()
+                                onOpenAlbum(aid)
+                            }
+                        } else {
+                            InfoLine("Album", albumName)
+                        }
+                    }
                     if (genres.isNotEmpty()) {
                         InfoLine("Genre", genres.joinToString(", "))
                     }
@@ -1612,6 +1662,25 @@ private fun InfoLine(label: String, value: String, monospace: Boolean = false) {
             style = MaterialTheme.typography.bodySmall,
             fontFamily = if (monospace) FontFamily.Monospace else FontFamily.Default,
             color = MaterialTheme.colorScheme.onSurface,
+        )
+    }
+}
+
+@Composable
+private fun InfoLineTappable(label: String, value: String, onClick: () -> Unit) {
+    Column(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodySmall,
+            // Primary tint flags this row as tappable so users notice
+            // the affordance — the dialog has many similar lines and
+            // a tappable one needs to stand out a bit.
+            color = MaterialTheme.colorScheme.primary,
         )
     }
 }

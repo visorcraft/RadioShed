@@ -71,6 +71,14 @@ SELECT * FROM lyrics_cache WHERE track_id = ?;
 deleteLyrics:
 DELETE FROM lyrics_cache WHERE track_id = ?;
 
+-- Wipes the entire lyrics_cache. User-facing action: "Clear lyrics
+-- cache" in settings, used when LRClib improves their database and
+-- the user wants a full re-fetch on next track plays. Overrides
+-- (lyrics_query_override) are preserved separately so manual
+-- corrections aren't lost.
+deleteAllLyrics:
+DELETE FROM lyrics_cache;
+
 -- ==== Lyrics query override ====
 
 putLyricsOverride:

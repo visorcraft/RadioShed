@@ -74,6 +74,18 @@ class StationPlayback(
     val candidateCount: StateFlow<Int> = _candidateCount.asStateFlow()
 
     /**
+     * Live count of user-queued (Play next + Add to queue) entries.
+     * Mirrors `queue.priority.size` so the Now Playing topbar can
+     * surface a numeric badge over the queue icon without polling.
+     * Updated on every mutation that touches the priority buffer.
+     */
+    private val _priorityCountFlow = MutableStateFlow(0)
+    val priorityCountFlow: StateFlow<Int> = _priorityCountFlow.asStateFlow()
+    private fun republishPriorityCount() {
+        _priorityCountFlow.value = queue?.prioritySnapshot()?.size ?: 0
+    }
+
+    /**
      * Repeat mode applied at track-transition time:
      *  - [RepeatMode.Off] / [RepeatMode.All]: natural advance via
      *    [advanceToNext]. The underlying [PlaybackQueue] already
@@ -360,6 +372,7 @@ class StationPlayback(
             _currentStation.value = station
             queue = newQueue
             _candidateCount.value = newQueue.candidateCount
+            _priorityCountFlow.value = 0
 
             // Switching stations clears history — the previous station's tracks
             // aren't a logical "back" target from the new station's playback.
@@ -434,6 +447,7 @@ class StationPlayback(
             return
         }
         q.enqueueNext(track)
+        republishPriorityCount()
     }
 
     /**
@@ -448,6 +462,7 @@ class StationPlayback(
             return
         }
         q.enqueueLast(track)
+        republishPriorityCount()
     }
 
     /**
@@ -458,6 +473,7 @@ class StationPlayback(
      */
     fun clearQueue() {
         queue?.clearPriority()
+        republishPriorityCount()
     }
 
     /**
@@ -466,6 +482,7 @@ class StationPlayback(
      */
     fun removeFromQueue(index: Int) {
         queue?.removePriorityAt(index)
+        republishPriorityCount()
     }
 
     /**
@@ -495,6 +512,7 @@ class StationPlayback(
                 )
                 queue = newQueue
                 _candidateCount.value = newQueue.candidateCount
+                _priorityCountFlow.value = 0
                 suppressAutoAdvance = true
                 scheduleClearSuppress()
                 advanceToNext()
@@ -549,6 +567,7 @@ class StationPlayback(
                 _currentStation.value = null
                 _candidateCount.value = 0
                 queue = null
+                _priorityCountFlow.value = 0
                 history.clear()
                 currentTrack = null
                 trackStartedAtMs = null

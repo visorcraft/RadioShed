@@ -66,6 +66,7 @@ fun SearchScreen(
     stationPlayback: StationPlayback = koinInject(),
     settings: SettingsStore = koinInject(),
     audioEngine: com.visorcraft.radioshed.audio.AudioEngine = koinInject(),
+    ratingRepo: com.visorcraft.radioshed.data.RatingRepository = koinInject(),
 ) {
     var query by remember { mutableStateOf("") }
     var results by remember { mutableStateOf(SearchResults(emptyList(), emptyList(), emptyList())) }
@@ -74,6 +75,23 @@ fun SearchScreen(
     val nowPlaying by audioEngine.nowPlaying.collectAsState()
     val currentTrackId = nowPlaying?.trackId
     var scope by remember { mutableStateOf(SearchScope.All) }
+    // Liked-only filter applied to the Tracks results only — albums
+    // and artists don't carry a liked flag. The set refreshes after
+    // each query lands AND when liked-count changes elsewhere
+    // (long-press → like, etc.) so the filter reflects current state
+    // without manual reload.
+    var likedOnly by remember { mutableStateOf(false) }
+    var likedSet by remember { mutableStateOf<Set<Long>>(emptySet()) }
+    val likedCount by ratingRepo.observeLikedCount().collectAsState(initial = 0L)
+    LaunchedEffect(likedCount, results) {
+        // Resolve liked ids only when the filter is on or about to
+        // turn on (we toggle the chip eagerly). For a tiny library
+        // this is cheap; for a large one it's still a single
+        // indexed query so we don't bother caching across queries.
+        if (results.tracks.isNotEmpty()) {
+            likedSet = ratingRepo.likedTrackIds().toSet()
+        }
+    }
     // Read once on entry; we maintain it in-state and only flush back
     // to settings when a query produces results (so abandoned typing
     // doesn't pollute the list).
@@ -175,6 +193,19 @@ fun SearchScreen(
                         ),
                     )
                 }
+                // Liked-only filter applies only to track results.
+                // Hidden when the user is in Artists or Albums scope
+                // since liked is a per-track flag and would be a no-op.
+                if (scope == SearchScope.All || scope == SearchScope.Tracks) {
+                    FilterChip(
+                        selected = likedOnly,
+                        onClick = { likedOnly = !likedOnly },
+                        label = { Text("Liked") },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                        ),
+                    )
+                }
             }
             Spacer(Modifier.height(8.dp))
 
@@ -202,11 +233,20 @@ fun SearchScreen(
                     modifier = Modifier.fillMaxSize(),
                 ) {
                     val showArtists = (scope == SearchScope.All || scope == SearchScope.Artists) &&
-                        results.artists.isNotEmpty()
+                        results.artists.isNotEmpty() && !likedOnly
                     val showAlbums = (scope == SearchScope.All || scope == SearchScope.Albums) &&
-                        results.albums.isNotEmpty()
+                        results.albums.isNotEmpty() && !likedOnly
+                    // Liked-only narrows the visible track list to
+                    // tracks in `likedSet`. We compute this lazily
+                    // each frame — for typical libraries it's cheap
+                    // (a few hundred items max).
+                    val visibleTracks = if (likedOnly) {
+                        results.tracks.filter { it.id in likedSet }
+                    } else {
+                        results.tracks
+                    }
                     val showTracks = (scope == SearchScope.All || scope == SearchScope.Tracks) &&
-                        results.tracks.isNotEmpty()
+                        visibleTracks.isNotEmpty()
 
                     if (showArtists) {
                         item { SectionHeader("Artists (${results.artists.size})") }
@@ -232,23 +272,23 @@ fun SearchScreen(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                SectionHeader("Tracks (${results.tracks.size})")
+                                SectionHeader("Tracks (${visibleTracks.size})")
                                 Spacer(Modifier.weight(1f))
                                 TextButton(onClick = {
                                     stationPlayback.playTracks(
-                                        results.tracks,
+                                        visibleTracks,
                                         startIndex = 0,
                                     )
                                 }) { Text("Play all") }
                                 TextButton(onClick = {
                                     stationPlayback.playTracks(
-                                        results.tracks.shuffled(),
+                                        visibleTracks.shuffled(),
                                         startIndex = 0,
                                     )
                                 }) { Text("Shuffle") }
                             }
                         }
-                        items(results.tracks, key = { "track:${it.id}" }) { track ->
+                        items(visibleTracks, key = { "track:${it.id}" }) { track ->
                             // Mirror the Library Browser: tap seeds an
                             // ad-hoc queue from the visible search hits so
                             // skip-next walks through the rest of the
@@ -258,8 +298,8 @@ fun SearchScreen(
                                 track = track,
                                 isCurrent = track.id == currentTrackId,
                                 onClick = {
-                                    val idx = results.tracks.indexOf(track).coerceAtLeast(0)
-                                    stationPlayback.playTracks(results.tracks, startIndex = idx)
+                                    val idx = visibleTracks.indexOf(track).coerceAtLeast(0)
+                                    stationPlayback.playTracks(visibleTracks, startIndex = idx)
                                 },
                                 onLongPress = { contextTrackId = track.id },
                             )
