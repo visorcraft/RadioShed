@@ -68,7 +68,7 @@ val sharedModule: Module = module {
     single { LyricsService(get(), get(), get(), get()) }
 
     // Backup & restore: JSON dumps of stations + playlists + ratings.
-    single { BackupService(get(), get(), get(), get(), get()) }
+    single { BackupService(get(), get(), get(), get(), get(), get()) }
 
     // Phase 5: stations engine. AudioEngine comes from platformModule.
     single { SourceRuleEvaluator(get(), get(), get()) }

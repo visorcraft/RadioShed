@@ -104,6 +104,9 @@ fun StationEditorScreen(
     var artworkUri by remember { mutableStateOf<String?>(null) }
     var playOrder by remember { mutableStateOf(PlayOrder.SmartShuffle) }
     var weighting by remember { mutableStateOf(Weighting.Uniform) }
+    var noRepeatDepth by remember { mutableStateOf(25) }
+    var artistSpacing by remember { mutableStateOf(5) }
+    var albumSpacing by remember { mutableStateOf(3) }
 
     // Source-rule state. We hold per-type fields ALL the time; switching
     // types just changes which set is read on save. The other slots
@@ -143,6 +146,9 @@ fun StationEditorScreen(
         artworkUri = station.artworkUri
         playOrder = station.playback.order
         weighting = station.playback.weighting
+        noRepeatDepth = station.playback.noRepeatDepth
+        artistSpacing = station.playback.artistSpacing
+        albumSpacing = station.playback.albumSpacing
         when (val src = station.source) {
             is SourceRule.FolderSelector -> {
                 sourceType = SourceType.Folders
@@ -327,6 +333,42 @@ fun StationEditorScreen(
                 labelOf = { it.uiLabel() },
                 enabled = !isBuiltIn,
             )
+            // Smart-shuffle policy sliders. These only matter for
+            // non-Sequential play orders; we keep them visible
+            // regardless so the user always sees the configured
+            // values (debuggable / discoverable).
+            Spacer(Modifier.height(12.dp))
+            ShufflePolicySlider(
+                label = "No-repeat memory",
+                description = "Don't replay the last N picked tracks. " +
+                    "Higher = more variety but smaller libraries can " +
+                    "exhaust the pool and the queue starts re-using.",
+                value = noRepeatDepth,
+                range = 0..50,
+                onChange = { noRepeatDepth = it },
+                enabled = !isBuiltIn,
+            )
+            Spacer(Modifier.height(8.dp))
+            ShufflePolicySlider(
+                label = "Album spacing",
+                description = "Skip same-album picks for this many tracks. " +
+                    "Larger spacing avoids album-stuffing on small libraries.",
+                value = albumSpacing,
+                range = 0..10,
+                onChange = { albumSpacing = it },
+                enabled = !isBuiltIn,
+            )
+            Spacer(Modifier.height(8.dp))
+            ShufflePolicySlider(
+                label = "Artist spacing",
+                description = "Skip same-artist picks for this many tracks. " +
+                    "Smaller window than album spacing because users " +
+                    "notice repeated artists faster.",
+                value = artistSpacing,
+                range = 0..15,
+                onChange = { artistSpacing = it },
+                enabled = !isBuiltIn,
+            )
 
             // ---- Save row ----
             Spacer(Modifier.height(20.dp))
@@ -386,6 +428,9 @@ fun StationEditorScreen(
                                     pathExcludes = pathExcludesText.toCsvList(),
                                     playOrder = playOrder,
                                     weighting = weighting,
+                                    noRepeatDepth = noRepeatDepth,
+                                    artistSpacing = artistSpacing,
+                                    albumSpacing = albumSpacing,
                                 )
                             }.onSuccess { onClose() }
                                 .onFailure { saveError = "Save failed: ${it.message}" }
@@ -455,6 +500,9 @@ private suspend fun saveStation(
     pathExcludes: List<String>,
     playOrder: PlayOrder,
     weighting: Weighting,
+    noRepeatDepth: Int,
+    artistSpacing: Int,
+    albumSpacing: Int,
 ) {
     val source: SourceRule = when {
         sourceLocked && existing != null -> existing.source
@@ -468,6 +516,9 @@ private suspend fun saveStation(
     val playback = (existing?.playback ?: PlaybackRule()).copy(
         order = playOrder,
         weighting = weighting,
+        noRepeatDepth = noRepeatDepth.coerceIn(0, 50),
+        artistSpacing = artistSpacing.coerceIn(0, 15),
+        albumSpacing = albumSpacing.coerceIn(0, 10),
     )
     if (existing == null) {
         // Insert path doesn't currently expose artworkUri; the upload
@@ -671,6 +722,50 @@ private fun PathPatternConfig(
         enabled = enabled,
         modifier = Modifier.fillMaxWidth(),
     )
+}
+
+/**
+ * Slim labelled slider for the smart-shuffle spacing knobs. Range
+ * supplied by the caller; the slider snaps to integers via the
+ * `steps` parameter so values are always whole numbers.
+ */
+@Composable
+private fun ShufflePolicySlider(
+    label: String,
+    description: String,
+    value: Int,
+    range: IntRange,
+    onChange: (Int) -> Unit,
+    enabled: Boolean = true,
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                text = if (value == 0) "Off" else "$value",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
+            )
+        }
+        Text(
+            text = description,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+        )
+        androidx.compose.material3.Slider(
+            value = value.toFloat(),
+            onValueChange = { onChange(it.toInt()) },
+            valueRange = range.first.toFloat()..range.last.toFloat(),
+            steps = (range.last - range.first - 1).coerceAtLeast(0),
+            enabled = enabled,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
 }
 
 @Composable

@@ -141,6 +141,8 @@ fun BackupRestoreScreen(
                                 append("${result.playlistsAdded} playlists, ")
                                 append("${result.ratingsApplied} ratings")
                                 if (result.likedApplied > 0) append(", ${result.likedApplied} liked")
+                                if (result.settingsApplied > 0) append(", ${result.settingsApplied} settings")
+                                if (result.eqPresetsApplied > 0) append(", ${result.eqPresetsApplied} EQ presets")
                                 val skipped = result.ratingsSkipped + result.likedSkipped
                                 if (skipped > 0) append(" ($skipped skipped — tracks not in library)")
                             }
@@ -242,6 +244,12 @@ fun BackupRestoreScreen(
                                 append("${result.ratingsApplied} ratings")
                                 if (result.likedApplied > 0) {
                                     append(", ${result.likedApplied} liked")
+                                }
+                                if (result.settingsApplied > 0) {
+                                    append(", ${result.settingsApplied} settings")
+                                }
+                                if (result.eqPresetsApplied > 0) {
+                                    append(", ${result.eqPresetsApplied} EQ presets")
                                 }
                                 val totalSkipped = result.ratingsSkipped + result.likedSkipped
                                 if (totalSkipped > 0) {

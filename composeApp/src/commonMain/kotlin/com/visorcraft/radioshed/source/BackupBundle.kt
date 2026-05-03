@@ -30,13 +30,26 @@ data class BackupBundle(
      * to an empty list and treat the absence as "no hearts to restore".
      */
     val likedTracks: List<BackupLikedTrack> = emptyList(),
+    /**
+     * App settings (theme, RG, drive mode, etc.) keyed by the same
+     * setting key strings used internally. Restored verbatim into the
+     * Settings store so a fresh install picks up the user's prefs.
+     * Empty/absent on v1/v2 bundles.
+     */
+    val settings: Map<String, BackupSettingValue> = emptyMap(),
+    /**
+     * Custom EQ presets the user saved. Built-in presets aren't
+     * dumped — they re-seed automatically.
+     */
+    val customEqPresets: List<BackupEqPreset> = emptyList(),
 ) {
     companion object {
-        // v2: liked songs added. Older importers reading a v2 bundle
-        // see the field via Kotlinx Serialization's default fallthrough
-        // and ignore it gracefully — but we still bump so the version
-        // gate explicitly accepts it.
-        const val CURRENT_VERSION = 2
+        // v3: settings + custom EQ presets added.
+        // v2: liked songs added.
+        // Older importers see new fields via Kotlinx default
+        // fallthrough; we bump so the explicit version gate
+        // accepts the new payload.
+        const val CURRENT_VERSION = 3
     }
 }
 
@@ -70,4 +83,30 @@ data class BackupRating(
 data class BackupLikedTrack(
     val trackPath: String,
     val likedAt: Long,
+)
+
+/**
+ * Tagged union for settings values — the multiplatform-settings store
+ * is type-aware (Boolean / String / Int / Long / Float), and we
+ * preserve types on round-trip to avoid coercion surprises (e.g.
+ * "false" string vs false boolean wouldn't round-trip cleanly).
+ */
+@Serializable
+sealed interface BackupSettingValue {
+    @Serializable @kotlinx.serialization.SerialName("bool")
+    data class Bool(val value: Boolean) : BackupSettingValue
+    @Serializable @kotlinx.serialization.SerialName("str")
+    data class Str(val value: String) : BackupSettingValue
+    @Serializable @kotlinx.serialization.SerialName("int")
+    data class IntValue(val value: Int) : BackupSettingValue
+    @Serializable @kotlinx.serialization.SerialName("long")
+    data class LongValue(val value: Long) : BackupSettingValue
+    @Serializable @kotlinx.serialization.SerialName("float")
+    data class FloatValue(val value: Float) : BackupSettingValue
+}
+
+@Serializable
+data class BackupEqPreset(
+    val name: String,
+    val gainsDb: List<Float>,
 )

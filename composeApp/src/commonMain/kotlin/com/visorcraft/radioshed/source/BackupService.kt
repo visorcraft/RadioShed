@@ -4,6 +4,7 @@ import com.visorcraft.radioshed.data.LibraryRepository
 import com.visorcraft.radioshed.data.PlaylistRepository
 import com.visorcraft.radioshed.data.RatingRepository
 import com.visorcraft.radioshed.data.RadioShedJson
+import com.visorcraft.radioshed.data.SettingsStore
 import com.visorcraft.radioshed.data.StationRepository
 import com.visorcraft.radioshed.data.nowMillis
 import kotlinx.serialization.encodeToString
@@ -34,6 +35,7 @@ class BackupService(
     private val playlistRepo: PlaylistRepository,
     private val ratingRepo: RatingRepository,
     private val libraryRepo: LibraryRepository,
+    private val settings: SettingsStore,
 ) {
 
     suspend fun listBackups(): List<BackupFile> = storage.list()
@@ -88,12 +90,24 @@ class BackupService(
                 BackupLikedTrack(trackPath = track.path, likedAt = likedAt)
             }
 
+        // Settings + custom EQ presets — round-tripped so a fresh
+        // install fully reconstructs the user's config, not just
+        // their station/playlist data. Per-device state (last
+        // station id, library tab index, etc.) is excluded inside
+        // SettingsStore.dumpForBackup.
+        val settingsDump = settings.dumpForBackup()
+        val customEqPresets = settings.getCustomEqPresets().map {
+            BackupEqPreset(name = it.name, gainsDb = it.gainsDb)
+        }
+
         val bundle = BackupBundle(
             exportedAt = nowMillis(),
             stations = stations,
             playlists = playlists,
             ratings = ratings,
             likedTracks = likedTracks,
+            settings = settingsDump,
+            customEqPresets = customEqPresets,
         )
         val json = RadioShedJson.encodeToString(bundle)
         val filename = "radioshed-backup-${nowMillis()}.json"
@@ -206,6 +220,29 @@ class BackupService(
             }
         }
 
+        // Settings + EQ presets — only present in v3+ bundles.
+        // SettingsStore.restoreFromBackup blocks per-device keys
+        // defensively even if the bundle's a tampered older one.
+        var settingsApplied = 0
+        if (bundle.settings.isNotEmpty()) {
+            runCatching {
+                settings.restoreFromBackup(bundle.settings)
+                settingsApplied = bundle.settings.size
+            }
+        }
+        var eqPresetsApplied = 0
+        bundle.customEqPresets.forEach { p ->
+            runCatching {
+                settings.saveCustomEqPreset(
+                    com.visorcraft.radioshed.data.CustomEqPreset(
+                        name = p.name,
+                        gainsDb = p.gainsDb,
+                    ),
+                )
+                eqPresetsApplied += 1
+            }
+        }
+
         return RestoreResult.Done(
             stationsAdded = stationsAdded,
             playlistsAdded = playlistsAdded,
@@ -213,6 +250,8 @@ class BackupService(
             ratingsSkipped = ratingsSkipped,
             likedApplied = likedApplied,
             likedSkipped = likedSkipped,
+            settingsApplied = settingsApplied,
+            eqPresetsApplied = eqPresetsApplied,
         )
     }
 
@@ -236,6 +275,8 @@ class BackupService(
             val ratingsSkipped: Int,
             val likedApplied: Int = 0,
             val likedSkipped: Int = 0,
+            val settingsApplied: Int = 0,
+            val eqPresetsApplied: Int = 0,
         ) : RestoreResult
         data class Failed(val reason: String) : RestoreResult
     }

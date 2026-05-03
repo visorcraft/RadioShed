@@ -275,6 +275,82 @@ class SettingsStore(private val settings: Settings) {
 
     fun clearRecentSearches() = settings.remove(KEY_SEARCH_HISTORY)
 
+    // ---- Backup integration ----
+
+    /**
+     * Snapshot of every user-portable setting, keyed by storage key.
+     * Per-device state (last station, auto-backup-last-at, library
+     * UX state, one-shot migration flags) is intentionally excluded
+     * — restoring those on a different device would be wrong.
+     */
+    fun dumpForBackup(): Map<String, com.visorcraft.radioshed.source.BackupSettingValue> {
+        val out = mutableMapOf<String, com.visorcraft.radioshed.source.BackupSettingValue>()
+        // Strings
+        listOf(KEY_THEME_MODE, KEY_CONNECTIVITY_POLICY).forEach { key ->
+            settings.getStringOrNull(key)?.let {
+                out[key] = com.visorcraft.radioshed.source.BackupSettingValue.Str(it)
+            }
+        }
+        // Booleans — only persist when user has actually toggled away
+        // from the default, so a fresh install with default settings
+        // produces a small bundle. We can't tell "default vs explicit"
+        // without a marker; check `hasKey` to detect any write.
+        listOf(
+            KEY_MATERIAL_YOU, KEY_REDUCE_MOTION, KEY_DRIVE_MODE,
+            KEY_REPLAY_GAIN, KEY_AUTO_RESUME_STATION, KEY_AUTO_BACKUP,
+            KEY_AUTO_RESCAN_ON_LAUNCH, KEY_EQ_ENABLED,
+        ).forEach { key ->
+            if (settings.hasKey(key)) {
+                out[key] = com.visorcraft.radioshed.source.BackupSettingValue.Bool(
+                    settings.getBoolean(key, false),
+                )
+            }
+        }
+        // Floats
+        listOf(KEY_USER_VOLUME, KEY_REPLAY_GAIN_PREAMP).forEach { key ->
+            if (settings.hasKey(key)) {
+                out[key] = com.visorcraft.radioshed.source.BackupSettingValue.FloatValue(
+                    settings.getFloat(key, 0f),
+                )
+            }
+        }
+        // Ints
+        listOf(KEY_END_FADE_SEC).forEach { key ->
+            if (settings.hasKey(key)) {
+                out[key] = com.visorcraft.radioshed.source.BackupSettingValue.IntValue(
+                    settings.getInt(key, 0),
+                )
+            }
+        }
+        return out
+    }
+
+    /**
+     * Restore settings from a backup. Unknown keys are silently
+     * ignored — keeps forward compatibility when an older app reads
+     * a newer bundle (it just doesn't apply the new keys).
+     */
+    fun restoreFromBackup(snapshot: Map<String, com.visorcraft.radioshed.source.BackupSettingValue>) {
+        for ((key, value) in snapshot) {
+            // Block per-device state from sneaking in via a
+            // tampered bundle — defence-in-depth even though we
+            // never write those keys to the dump.
+            if (key in BLOCKED_RESTORE_KEYS) continue
+            when (value) {
+                is com.visorcraft.radioshed.source.BackupSettingValue.Bool ->
+                    settings.putBoolean(key, value.value)
+                is com.visorcraft.radioshed.source.BackupSettingValue.Str ->
+                    settings.putString(key, value.value)
+                is com.visorcraft.radioshed.source.BackupSettingValue.IntValue ->
+                    settings.putInt(key, value.value)
+                is com.visorcraft.radioshed.source.BackupSettingValue.LongValue ->
+                    settings.putLong(key, value.value)
+                is com.visorcraft.radioshed.source.BackupSettingValue.FloatValue ->
+                    settings.putFloat(key, value.value)
+            }
+        }
+    }
+
     private companion object {
         const val KEY_THEME_MODE = "ui.themeMode"
         const val KEY_MATERIAL_YOU = "ui.materialYou"
@@ -304,5 +380,20 @@ class SettingsStore(private val settings: Settings) {
         const val AUTO_BACKUP_INTERVAL_MS = 7L * 24L * 60L * 60L * 1_000L
         const val KEY_SEARCH_HISTORY = "search.recentQueries"
         const val SEARCH_HISTORY_CAP = 10
+
+        /** Keys we never accept from a backup bundle, even if a
+         *  malformed import tries. Per-device state + one-shot
+         *  migration flags belong here. */
+        val BLOCKED_RESTORE_KEYS = setOf(
+            KEY_LAST_STATION_ID,
+            KEY_AUTO_BACKUP_LAST,
+            KEY_GENRES_CANON,
+            KEY_LIB_TAB,
+            KEY_LIB_SONG_SORT,
+            KEY_SEARCH_HISTORY,
+            KEY_EQ_CUSTOM_PRESETS,  // restored separately via the EQ presets list
+            KEY_ONBOARDING_DONE,    // user should re-grant permissions on a fresh install
+            KEY_FILE_MODE_BROWSER,
+        )
     }
 }
