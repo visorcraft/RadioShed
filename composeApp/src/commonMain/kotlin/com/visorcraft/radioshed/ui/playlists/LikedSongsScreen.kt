@@ -258,6 +258,29 @@ fun LikedSongsScreen(
                         onValueChange = { name = it },
                         label = { Text("Playlist name") },
                         singleLine = true,
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                            imeAction = androidx.compose.ui.text.input.ImeAction.Done,
+                        ),
+                        keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                            onDone = {
+                                if (name.isNotBlank()) {
+                                    val cleanName = name.trim()
+                                    val snapshot = tracks
+                                    saveAsPlaylistOpen = false
+                                    scope.launch {
+                                        val playlistId = playlistRepo.insert(name = cleanName)
+                                        snapshot.forEachIndexed { idx, track ->
+                                            playlistRepo.addTrack(
+                                                playlistId,
+                                                track.id,
+                                                position = idx,
+                                            )
+                                        }
+                                        savedPlaylistName = cleanName
+                                    }
+                                }
+                            },
+                        ),
                     )
                 }
             },

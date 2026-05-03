@@ -280,12 +280,19 @@ fun FolderBrowserScreen(
                                 // breadcrumb when active. Auto-focus
                                 // is handled by the field's own
                                 // FocusRequester pattern below.
+                                val keyboardController = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
                                 OutlinedTextField(
                                     value = searchQuery,
                                     onValueChange = { searchQuery = it },
                                     placeholder = { Text("Filter this folder…") },
                                     singleLine = true,
                                     modifier = Modifier.fillMaxWidth(),
+                                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                                        imeAction = androidx.compose.ui.text.input.ImeAction.Done,
+                                    ),
+                                    keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                                        onDone = { keyboardController?.hide() },
+                                    ),
                                 )
                             }
                             else -> {

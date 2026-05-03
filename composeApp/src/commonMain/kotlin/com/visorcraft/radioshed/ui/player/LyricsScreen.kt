@@ -285,6 +285,11 @@ private fun EditLyricsSearchDialog(
 ) {
     var artist by remember { mutableStateOf(initialArtist) }
     var title by remember { mutableStateOf(initialTitle) }
+    val confirmSearch: () -> Unit = {
+        val a = artist.trim()
+        val t = title.trim()
+        if (a.isNotBlank() && t.isNotBlank()) onSubmit(a, t)
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Edit search") },
@@ -304,6 +309,9 @@ private fun EditLyricsSearchDialog(
                     label = { Text("Artist") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        imeAction = androidx.compose.ui.text.input.ImeAction.Next,
+                    ),
                 )
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
@@ -312,16 +320,18 @@ private fun EditLyricsSearchDialog(
                     label = { Text("Title") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        imeAction = androidx.compose.ui.text.input.ImeAction.Search,
+                    ),
+                    keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                        onSearch = { confirmSearch() },
+                    ),
                 )
             }
         },
         confirmButton = {
             TextButton(
-                onClick = {
-                    val a = artist.trim()
-                    val t = title.trim()
-                    if (a.isNotBlank() && t.isNotBlank()) onSubmit(a, t)
-                },
+                onClick = confirmSearch,
                 enabled = artist.isNotBlank() && title.isNotBlank(),
             ) { Text("Search") }
         },

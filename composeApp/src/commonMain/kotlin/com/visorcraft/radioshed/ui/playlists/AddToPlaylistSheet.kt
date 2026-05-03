@@ -103,6 +103,17 @@ fun AddToPlaylistSheet(
 
     if (createOpen) {
         var newName by remember { mutableStateOf("") }
+        val confirmCreate: () -> Unit = {
+            val n = newName.trim()
+            if (n.isNotEmpty()) {
+                scope.launch {
+                    val id = repo.insert(name = n)
+                    repo.addTrack(id, trackId, position = 0)
+                    createOpen = false
+                    onDismiss()
+                }
+            }
+        }
         AlertDialog(
             onDismissRequest = { createOpen = false },
             title = { Text("New playlist") },
@@ -112,21 +123,17 @@ fun AddToPlaylistSheet(
                     onValueChange = { newName = it },
                     label = { Text("Name") },
                     singleLine = true,
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        imeAction = androidx.compose.ui.text.input.ImeAction.Done,
+                    ),
+                    keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                        onDone = { confirmCreate() },
+                    ),
                 )
             },
             confirmButton = {
                 TextButton(
-                    onClick = {
-                        val n = newName.trim()
-                        if (n.isNotEmpty()) {
-                            scope.launch {
-                                val id = repo.insert(name = n)
-                                repo.addTrack(id, trackId, position = 0)
-                                createOpen = false
-                                onDismiss()
-                            }
-                        }
-                    },
+                    onClick = confirmCreate,
                     enabled = newName.isNotBlank(),
                 ) { Text("Create + add") }
             },

@@ -282,6 +282,12 @@ private fun CreatePlaylistDialog(
                 onValueChange = { name = it },
                 label = { Text("Name") },
                 singleLine = true,
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                    imeAction = androidx.compose.ui.text.input.ImeAction.Done,
+                ),
+                keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                    onDone = { if (name.isNotBlank()) onCreate(name) },
+                ),
             )
         },
         confirmButton = {

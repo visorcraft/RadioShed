@@ -533,6 +533,9 @@ private fun AddFolderDialog(
                     label = { Text("Folder path (or use Browse above)") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        imeAction = androidx.compose.ui.text.input.ImeAction.Next,
+                    ),
                 )
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
@@ -541,6 +544,9 @@ private fun AddFolderDialog(
                     label = { Text("Display name (optional)") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        imeAction = androidx.compose.ui.text.input.ImeAction.Done,
+                    ),
                 )
             }
         },
@@ -617,11 +623,14 @@ private fun EditFolderDialog(
     onRename: (String) -> Unit,
 ) {
     var name by remember { mutableStateOf(folder.displayName) }
+    val confirmRename: () -> Unit = {
+        if (name.isNotBlank() && name != folder.displayName) onRename(name)
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
             Button(
-                onClick = { onRename(name) },
+                onClick = confirmRename,
                 enabled = name.isNotBlank() && name != folder.displayName,
             ) { Text("Save") }
         },
@@ -634,6 +643,12 @@ private fun EditFolderDialog(
                 label = { Text("Display name") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                    imeAction = androidx.compose.ui.text.input.ImeAction.Done,
+                ),
+                keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                    onDone = { confirmRename() },
+                ),
             )
         },
     )

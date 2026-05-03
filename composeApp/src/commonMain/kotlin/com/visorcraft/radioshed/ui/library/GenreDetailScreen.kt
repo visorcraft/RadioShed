@@ -171,20 +171,42 @@ fun GenreDetailScreen(
 
             Spacer(Modifier.height(8.dp))
 
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(vertical = 4.dp),
-            ) {
-                items(tracks, key = { it.id }) { track ->
-                    GenreTrackRow(
-                        track = track,
-                        isCurrent = track.id == currentTrackId,
-                        onTap = {
-                            val idx = tracks.indexOf(track).coerceAtLeast(0)
-                            stationPlayback.playTracks(tracks, startIndex = idx)
-                        },
-                        onLongPress = { contextTrackId = track.id },
+            if (tracks.isEmpty()) {
+                // Genre rows can persist after their tracks are
+                // un-tagged or removed — surface that state instead
+                // of rendering a silent empty list. The Play / Shuffle
+                // buttons above also disable themselves on
+                // tracks.isEmpty() so users can't end up here from a
+                // mis-tap.
+                Box(
+                    modifier = Modifier.fillMaxSize().padding(top = 40.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        "No tracks tagged with this genre — tags may have " +
+                            "changed since the last scan.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        modifier = Modifier.padding(horizontal = 24.dp),
                     )
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(vertical = 4.dp),
+                ) {
+                    items(tracks, key = { it.id }) { track ->
+                        GenreTrackRow(
+                            track = track,
+                            isCurrent = track.id == currentTrackId,
+                            onTap = {
+                                val idx = tracks.indexOf(track).coerceAtLeast(0)
+                                stationPlayback.playTracks(tracks, startIndex = idx)
+                            },
+                            onLongPress = { contextTrackId = track.id },
+                        )
+                    }
                 }
             }
         }

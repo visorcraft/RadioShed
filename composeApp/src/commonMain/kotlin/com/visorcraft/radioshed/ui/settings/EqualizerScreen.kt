@@ -224,6 +224,16 @@ fun EqualizerScreen(
 
     if (saveDialogOpen) {
         var nameText by remember { mutableStateOf("") }
+        val confirmSave: () -> Unit = {
+            val n = nameText.trim()
+            if (n.isNotBlank()) {
+                settings.saveCustomEqPreset(
+                    CustomEqPreset(name = n, gainsDb = gains.toList()),
+                )
+                customPresets = settings.getCustomEqPresets()
+                saveDialogOpen = false
+            }
+        }
         AlertDialog(
             onDismissRequest = { saveDialogOpen = false },
             title = { Text("Save EQ preset") },
@@ -241,21 +251,18 @@ fun EqualizerScreen(
                         onValueChange = { nameText = it },
                         label = { Text("Name") },
                         singleLine = true,
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                            imeAction = androidx.compose.ui.text.input.ImeAction.Done,
+                        ),
+                        keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                            onDone = { confirmSave() },
+                        ),
                     )
                 }
             },
             confirmButton = {
                 TextButton(
-                    onClick = {
-                        val n = nameText.trim()
-                        if (n.isNotBlank()) {
-                            settings.saveCustomEqPreset(
-                                CustomEqPreset(name = n, gainsDb = gains.toList()),
-                            )
-                            customPresets = settings.getCustomEqPresets()
-                            saveDialogOpen = false
-                        }
-                    },
+                    onClick = confirmSave,
                     enabled = nameText.isNotBlank(),
                 ) { Text("Save") }
             },

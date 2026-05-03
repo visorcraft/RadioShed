@@ -341,6 +341,28 @@ private fun CollectionPlaylistPicker(
 
     if (createOpen) {
         var newName by remember { mutableStateOf("") }
+        // Single submit path used by both the IME "Done" key and
+        // the dialog's confirm button — keeps behavior identical
+        // whether the user presses Enter or taps the button.
+        val confirmCreate: () -> Unit = {
+            val n = newName.trim()
+            if (n.isNotEmpty() && !inFlight) {
+                inFlight = true
+                scope.launch {
+                    try {
+                        val id = repo.insert(name = n)
+                        val tracks = resolveTracks()
+                        tracks.forEachIndexed { idx, t ->
+                            repo.addTrack(id, t.id, position = idx)
+                        }
+                        createOpen = false
+                        onDone()
+                    } finally {
+                        inFlight = false
+                    }
+                }
+            }
+        }
         AlertDialog(
             onDismissRequest = { createOpen = false },
             title = { Text("New playlist") },
@@ -350,29 +372,17 @@ private fun CollectionPlaylistPicker(
                     onValueChange = { newName = it },
                     label = { Text("Name") },
                     singleLine = true,
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        imeAction = androidx.compose.ui.text.input.ImeAction.Done,
+                    ),
+                    keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                        onDone = { confirmCreate() },
+                    ),
                 )
             },
             confirmButton = {
                 TextButton(
-                    onClick = {
-                        val n = newName.trim()
-                        if (n.isNotEmpty() && !inFlight) {
-                            inFlight = true
-                            scope.launch {
-                                try {
-                                    val id = repo.insert(name = n)
-                                    val tracks = resolveTracks()
-                                    tracks.forEachIndexed { idx, t ->
-                                        repo.addTrack(id, t.id, position = idx)
-                                    }
-                                    createOpen = false
-                                    onDone()
-                                } finally {
-                                    inFlight = false
-                                }
-                            }
-                        }
-                    },
+                    onClick = confirmCreate,
                     enabled = newName.isNotBlank(),
                 ) { Text("Create + add") }
             },
