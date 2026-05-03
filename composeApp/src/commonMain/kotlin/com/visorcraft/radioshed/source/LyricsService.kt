@@ -106,17 +106,33 @@ class LyricsService(
         }
 
         var raw: RawLyricsResponse? = null
+        // Track whether at least one candidate hit a transient error
+        // (rate-limit, 5xx, timeout). If so, we DON'T cache the miss
+        // — the user would otherwise be stuck with "not found" for
+        // 30 days because of a network blip.
+        var sawTransientError = false
         for (candidate in candidates) {
-            raw = fetcher.fetch(
-                artist = candidate.artist,
-                title = candidate.title,
-                album = albumTitle,
-                durationSeconds = durationSec,
-            )
+            raw = try {
+                fetcher.fetch(
+                    artist = candidate.artist,
+                    title = candidate.title,
+                    album = albumTitle,
+                    durationSeconds = durationSec,
+                )
+            } catch (e: TransientLyricsFetchException) {
+                sawTransientError = true
+                null
+            }
             if (raw != null) break
         }
 
         if (raw == null) {
+            if (sawTransientError) {
+                // Don't poison the cache with a miss when the network
+                // was the actual problem. Next resolve attempts the
+                // fetch fresh.
+                return null
+            }
             // Cache the miss so we don't keep hitting the network.
             cache.put(
                 trackId = trackId,

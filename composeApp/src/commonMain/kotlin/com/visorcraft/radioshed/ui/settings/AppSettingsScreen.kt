@@ -86,18 +86,34 @@ fun AppSettingsScreen(
     artworkSync: MissingArtworkSync = koinInject(),
     lyricsCache: com.visorcraft.radioshed.data.LyricsCacheRepository = koinInject(),
 ) {
-    // Re-read settings on every recomposition into local state so they
-    // re-render correctly when this screen is reopened (the user might
-    // have changed a value in another tab via a quick-tile or backup-
-    // restore). `remember(Unit)` would freeze them at first composition.
-    var reduceMotion by remember(settings) { mutableStateOf(settings.getReduceMotion()) }
-    var replayGain by remember(settings) { mutableStateOf(settings.getReplayGainEnabled()) }
-    var preampDb by remember(settings) { mutableStateOf(settings.getReplayGainPreampDb()) }
-    var autoResume by remember(settings) { mutableStateOf(settings.getAutoResumeLastStation()) }
-    var driveMode by remember(settings) { mutableStateOf(settings.getDriveMode()) }
-    var autoBackup by remember(settings) { mutableStateOf(settings.getAutoBackupEnabled()) }
-    var autoRescan by remember(settings) { mutableStateOf(settings.getAutoRescanOnLaunch()) }
-    var endFadeSec by remember(settings) { mutableStateOf(settings.getEndFadeSec()) }
+    // Hold each toggle as compose state. The previous comment said
+    // "Re-read settings on every recomposition" via `remember(settings)`,
+    // but settings is a Koin singleton — its reference never changes,
+    // so the state was actually frozen at first composition.
+    // Navigating to Backup, toggling auto-backup there, then back to
+    // here would show the OLD value. Now we explicitly re-load on
+    // every entry via the LaunchedEffect below.
+    var reduceMotion by remember { mutableStateOf(settings.getReduceMotion()) }
+    var replayGain by remember { mutableStateOf(settings.getReplayGainEnabled()) }
+    var preampDb by remember { mutableStateOf(settings.getReplayGainPreampDb()) }
+    var autoResume by remember { mutableStateOf(settings.getAutoResumeLastStation()) }
+    var driveMode by remember { mutableStateOf(settings.getDriveMode()) }
+    var autoBackup by remember { mutableStateOf(settings.getAutoBackupEnabled()) }
+    var autoRescan by remember { mutableStateOf(settings.getAutoRescanOnLaunch()) }
+    var endFadeSec by remember { mutableStateOf(settings.getEndFadeSec()) }
+    LaunchedEffect(Unit) {
+        // Re-read on each entry so values written from sibling
+        // screens (Backup, Equalizer, Library Manage, etc.) reflect
+        // here without requiring a manual toggle to "wake up".
+        reduceMotion = settings.getReduceMotion()
+        replayGain = settings.getReplayGainEnabled()
+        preampDb = settings.getReplayGainPreampDb()
+        autoResume = settings.getAutoResumeLastStation()
+        driveMode = settings.getDriveMode()
+        autoBackup = settings.getAutoBackupEnabled()
+        autoRescan = settings.getAutoRescanOnLaunch()
+        endFadeSec = settings.getEndFadeSec()
+    }
     var artworkState by remember { mutableStateOf<ArtworkSyncState>(ArtworkSyncState.Idle) }
     var artworkJob by remember { mutableStateOf<Job?>(null) }
     val scope = rememberCoroutineScope()

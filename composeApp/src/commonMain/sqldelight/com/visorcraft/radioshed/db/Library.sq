@@ -330,6 +330,20 @@ setTracksAvailableByFolder:
 UPDATE track SET is_available = ?, updated_at = ?
 WHERE id IN (SELECT track_id FROM track_folder WHERE folder_id = ?);
 
+-- Mark every track in a folder as unavailable EXCEPT those whose path
+-- is in the supplied set. Used by Scanner after a re-scan to flag
+-- files that have been deleted from disk since the last scan — without
+-- this step, deleted files keep showing up in stations and the user
+-- gets "could not load" errors mid-playback. The is_available flag
+-- preserves ratings, play counts, and playlist memberships in case
+-- the file later reappears at the same path.
+markFolderTracksUnavailableExcept:
+UPDATE track SET is_available = 0, updated_at = ?
+WHERE id IN (
+    SELECT track_id FROM track_folder WHERE folder_id = :folderId
+)
+AND path NOT IN :keptPaths;
+
 updateTrackReplayGain:
 UPDATE track SET replay_gain_track = ?, replay_gain_album = ?, replay_gain_track_peak = ?, updated_at = ? WHERE id = ?;
 

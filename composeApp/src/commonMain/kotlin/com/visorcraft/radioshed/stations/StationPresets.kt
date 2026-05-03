@@ -6,6 +6,7 @@ import com.visorcraft.radioshed.domain.PlayOrder
 import com.visorcraft.radioshed.domain.PlaybackRule
 import com.visorcraft.radioshed.domain.SmartQueryKind
 import com.visorcraft.radioshed.domain.SourceRule
+import kotlinx.coroutines.sync.withLock
 
 /**
  * Built-in station definitions seeded once after the user's first scan
@@ -98,13 +99,21 @@ class PresetSeeder(
     private val stationRepo: StationRepository,
     private val folderRepo: FolderRepository,
 ) {
+    /**
+     * Read-then-insert pattern needs a guard so concurrent callers
+     * (onboarding completion + auto-rescan-on-launch both fire seed
+     * paths in close sequence) don't both observe an empty
+     * existingNames set and double-insert. The mutex is process-wide
+     * because PresetSeeder is a Koin singleton.
+     */
+    private val seedMutex = kotlinx.coroutines.sync.Mutex()
 
-    suspend fun seedIfEmpty(): SeedResult {
-        if (folderRepo.count() == 0L) return SeedResult.NoLibraryYet
+    suspend fun seedIfEmpty(): SeedResult = seedMutex.withLock {
+        if (folderRepo.count() == 0L) return@withLock SeedResult.NoLibraryYet
 
         val existingNames = stationRepo.list().map { it.name }.toSet()
         val missing = DefaultPresets.filter { it.name !in existingNames }
-        if (missing.isEmpty()) return SeedResult.AlreadyHasStations
+        if (missing.isEmpty()) return@withLock SeedResult.AlreadyHasStations
 
         var inserted = 0
         for (preset in missing) {
@@ -119,7 +128,7 @@ class PresetSeeder(
             )
             inserted += 1
         }
-        return SeedResult.Seeded(inserted)
+        SeedResult.Seeded(inserted)
     }
 
     sealed interface SeedResult {

@@ -321,8 +321,31 @@ class StationPlayback(
         }
     }
 
-    /** Start (or restart) the given station. Replaces any current queue. */
-    suspend fun playStation(stationId: Long) {
+    /**
+     * In-flight station-load job. Each call to [playStation] cancels
+     * the previous one before launching its own pre-build. Without
+     * this, two rapid taps on different stations would each pre-build
+     * concurrently (both reading source-rule candidates, both pre-
+     * resolving the artist map, both reading play counts), serialise
+     * at the mutex, and the second tap's queue would clobber the
+     * first — but the first's audio engine load would still race
+     * against the swap. The audio listener would briefly see the
+     * first station's tracks before the second's queue takes over.
+     */
+    @Volatile private var stationLoadJob: kotlinx.coroutines.Job? = null
+
+    /**
+     * Start (or restart) the given station. Replaces any current
+     * queue. Fire-and-forget: cancels any previous in-flight station
+     * load so a rapid tap on a second station tile doesn't race with
+     * the first.
+     */
+    fun playStation(stationId: Long) {
+        stationLoadJob?.cancel()
+        stationLoadJob = scope.launch { playStationInternal(stationId) }
+    }
+
+    private suspend fun playStationInternal(stationId: Long) {
         val station = stationRepo.getById(stationId) ?: return
 
         // Reset the per-session shuffle override on every station

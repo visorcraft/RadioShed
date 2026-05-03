@@ -51,6 +51,15 @@ class NowPlayingWidget : AppWidgetProvider() {
 
     companion object {
         /**
+         * Target dimension for widget artwork decoding. The persister
+         * stores at ~500 px; the widget cell is ~128 dp at most.
+         * Decoding to 256 px is more than enough headroom for any
+         * scaled-up cell on a 3-4x density display, and ~16x cheaper
+         * memory than the full-size source.
+         */
+        private const val ARTWORK_TARGET_PX = 256
+
+        /**
          * Force a one-shot update on every existing widget instance.
          * Called from [RadioShedMediaSessionService] whenever the
          * now-playing track or play/pause state changes.
@@ -98,19 +107,37 @@ class NowPlayingWidget : AppWidgetProvider() {
             )
 
             // Artwork: load from file:// URI to a Bitmap if present;
-            // fall back to the launcher icon. Loading from URI is a
-            // synchronous file read here — the file lives under our
-            // private filesDir/artwork (content-addressed), so it's
-            // small and on the local filesystem. No network calls.
+            // fall back to the launcher icon. Decoded at widget-cell
+            // size (~128 px) rather than the persister's full ~500 px
+            // — RemoteViews serialises the Bitmap into a Parcel for
+            // IPC, so a 1MB full-size bitmap on every state tick is
+            // wasteful and on low-memory devices can OOM the widget
+            // host.
             val artworkBitmap = artworkUri?.let { uri ->
                 runCatching {
                     val parsed = Uri.parse(uri)
-                    val path = parsed.path
-                    if (path != null) BitmapFactory.decodeFile(path) else null
+                    val path = parsed.path ?: return@runCatching null
+                    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    BitmapFactory.decodeFile(path, bounds)
+                    val targetPx = ARTWORK_TARGET_PX
+                    var sample = 1
+                    while ((bounds.outWidth / sample) > targetPx ||
+                        (bounds.outHeight / sample) > targetPx) {
+                        sample *= 2
+                    }
+                    val decode = BitmapFactory.Options().apply { inSampleSize = sample }
+                    BitmapFactory.decodeFile(path, decode)
                 }.getOrNull()
             }
             if (artworkBitmap != null) {
                 views.setImageViewBitmap(R.id.widget_artwork, artworkBitmap)
+                // RemoteViews serialises the bitmap into a Parcel for
+                // IPC, so the host process gets its own copy. We can
+                // drop our reference here — without the recycle, a
+                // burst of pushUpdate calls (bluetooth reconnect, rapid
+                // skip-next) leaves the widget process leaking ~100KB
+                // of bitmap heap per call until GC catches up.
+                artworkBitmap.recycle()
             } else {
                 views.setImageViewResource(
                     R.id.widget_artwork,

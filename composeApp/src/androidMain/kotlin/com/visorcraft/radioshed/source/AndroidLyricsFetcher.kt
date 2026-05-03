@@ -52,30 +52,48 @@ class AndroidLyricsFetcher : LyricsFetcher {
             }
         }
         val url = URL("$LRCLIB_BASE/api/get?$params")
-        runCatching {
-            val conn = (url.openConnection() as HttpURLConnection).apply {
-                requestMethod = "GET"
-                instanceFollowRedirects = true
-                connectTimeout = CONNECT_TIMEOUT_MS
-                readTimeout = READ_TIMEOUT_MS
-                setRequestProperty("User-Agent", USER_AGENT)
-                setRequestProperty("Accept", "application/json")
+        val conn = (url.openConnection() as HttpURLConnection).apply {
+            requestMethod = "GET"
+            instanceFollowRedirects = true
+            connectTimeout = CONNECT_TIMEOUT_MS
+            readTimeout = READ_TIMEOUT_MS
+            setRequestProperty("User-Agent", USER_AGENT)
+            setRequestProperty("Accept", "application/json")
+        }
+        try {
+            val code = conn.responseCode
+            // 404 = real "not in database"; cacheable as a miss.
+            if (code == 404) return@withContext null
+            // Transient errors: rate-limit, server overload, gateway
+            // timeout. Treat distinctly from miss so the caller
+            // (LyricsService) doesn't write a long-TTL miss entry
+            // for what's actually a temporary network state.
+            if (code == 429 || code in 500..599) {
+                throw TransientLyricsFetchException("LRClib returned HTTP $code")
             }
-            try {
-                if (conn.responseCode == 404) return@runCatching null
-                if (conn.responseCode !in 200..299) return@runCatching null
-                val body = conn.inputStream.use { it.readBytes() }.decodeToString()
-                val parsed = json.decodeFromString(LrclibResponse.serializer(), body)
-                RawLyricsResponse(
-                    plainLyrics = parsed.plainLyrics?.takeIf { it.isNotBlank() },
-                    syncedLrc = parsed.syncedLyrics?.takeIf { it.isNotBlank() },
-                    instrumental = parsed.instrumental == true,
-                    source = "lrclib",
-                )
-            } finally {
-                conn.disconnect()
-            }
-        }.getOrNull()
+            if (code !in 200..299) return@withContext null
+            val body = conn.inputStream.use { it.readBytes() }.decodeToString()
+            val parsed = runCatching {
+                json.decodeFromString(LrclibResponse.serializer(), body)
+            }.getOrNull() ?: return@withContext null
+            RawLyricsResponse(
+                plainLyrics = parsed.plainLyrics?.takeIf { it.isNotBlank() },
+                syncedLrc = parsed.syncedLyrics?.takeIf { it.isNotBlank() },
+                instrumental = parsed.instrumental == true,
+                source = "lrclib",
+            )
+        } catch (e: TransientLyricsFetchException) {
+            throw e
+        } catch (e: java.net.SocketTimeoutException) {
+            throw TransientLyricsFetchException("LRClib timed out: ${e.message}")
+        } catch (e: java.io.IOException) {
+            // Connection refused, DNS failure, etc. — same class as
+            // server errors from the user's perspective. Don't cache
+            // as "not found"; let the next attempt try again.
+            throw TransientLyricsFetchException("LRClib unreachable: ${e.message}")
+        } finally {
+            conn.disconnect()
+        }
     }
 
     @Serializable

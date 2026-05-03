@@ -115,6 +115,18 @@ object SearchDsl {
     private fun parseYearTerm(raw: String): SearchTerm? {
         val v = raw.trim()
         if (v.isEmpty()) return null
+        // Operator-only inputs like `>`, `<`, `>=`, `<=` carry user
+        // intent ("filter on year") but no operand. Returning null
+        // would let the caller fall back to free text and the user's
+        // `year:>` query would match every track. Return an
+        // impossible-range YearRange instead so the SQL builder
+        // produces "no match", which is what the user expected.
+        val isOperatorOnly = v == ">" || v == "<" || v == ">=" || v == "<=" ||
+            v == "-" || v.startsWith(">") && v.removePrefix(">=").removePrefix(">").trim().isEmpty() ||
+            v.startsWith("<") && v.removePrefix("<=").removePrefix("<").trim().isEmpty()
+        if (isOperatorOnly) {
+            return SearchTerm.YearRange(min = Int.MAX_VALUE, max = Int.MIN_VALUE)
+        }
         // Range: 1968-1970
         val dash = v.indexOf('-', startIndex = 1)
         if (dash > 0 && dash < v.length - 1 && !v.startsWith(">") && !v.startsWith("<")) {

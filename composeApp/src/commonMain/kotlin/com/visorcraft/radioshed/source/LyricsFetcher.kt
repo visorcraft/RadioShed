@@ -24,6 +24,17 @@ interface LyricsFetcher {
 }
 
 /**
+ * Thrown by [LyricsFetcher] implementations when the provider
+ * returned a transient error (429 rate-limited, 5xx server error,
+ * timeout). The orchestrator catches this distinctly from a clean
+ * null-return and skips writing a "miss" entry — without that
+ * distinction, a brief network blip during a track that the user
+ * keeps replaying could cache "not found" for the negative TTL
+ * (30 days) on a track that LRClib actually has.
+ */
+class TransientLyricsFetchException(message: String) : RuntimeException(message)
+
+/**
  * Provider-agnostic response shape — what every fetcher returns. The
  * orchestrator parses [syncedLrc] into [com.visorcraft.radioshed.domain.LyricLine]s
  * once and persists both forms via the cache.

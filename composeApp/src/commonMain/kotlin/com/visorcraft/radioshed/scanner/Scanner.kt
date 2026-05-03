@@ -53,11 +53,19 @@ class Scanner(
         // its own art, we'd flicker between covers as the scan progresses.
         // First-seen wins.
         val albumsWithArtwork = mutableSetOf<Long>()
+        // Paths surfaced by the enumerator this scan. After the walk
+        // completes, anything in this folder NOT in the set has been
+        // deleted from disk since the last scan and gets flagged
+        // is_available=0 so stations stop trying to play it. Without
+        // this diff, deleted tracks remain in the candidate pool
+        // forever and surface as "could not load" mid-playback.
+        val scannedPaths = mutableSetOf<String>()
         val source = LocalFileSource(folder = folder, enumerator = fileEnumerator)
 
         source.listTracks().collect { discovered ->
             try {
                 persistTrack(folder, discovered, albumsWithArtwork)
+                scannedPaths += discovered.uri
                 processed += 1
                 if (processed % PROGRESS_BATCH == 0) {
                     emit(ScanProgress.Progress(folderId, processed, discovered.fileName))
@@ -70,6 +78,19 @@ class Scanner(
                     ),
                 )
             }
+        }
+
+        // Removed-files diff: anything in the folder that wasn't
+        // surfaced this scan gets marked unavailable.
+        runCatching {
+            libraryRepo.markFolderTracksUnavailableExcept(folderId, scannedPaths)
+        }.onFailure {
+            emit(
+                ScanProgress.Warning(
+                    folderId = folderId,
+                    message = "Couldn't update removed-files state: ${it.message ?: "unknown"}",
+                ),
+            )
         }
 
         folderRepo.updateScanResult(

@@ -366,6 +366,38 @@ class LibraryRepository(private val db: RadioShedDatabase) {
             db.libraryQueries.setTracksAvailableByFolder(if (available) 1L else 0L, nowMillis(), folderId)
         }
 
+    /**
+     * Mark every track in [folderId] as `is_available = 0` EXCEPT
+     * those whose path is in [keptPaths]. Used by Scanner after a
+     * re-scan: tracks the enumerator emitted go into `keptPaths`,
+     * everything else is presumed deleted from disk and gets hidden
+     * from queries that filter on `is_available = 1` (every station,
+     * smart-shuffle pool, library list).
+     *
+     * The row stays in the DB so ratings, play counts, and playlist
+     * memberships survive — if the file shows up again at the same
+     * path, the next scan's upsert flips `is_available = 1` and
+     * everything is restored. No-op for empty [keptPaths] except
+     * to avoid an SQL `IN ()` syntax error.
+     */
+    suspend fun markFolderTracksUnavailableExcept(
+        folderId: Long,
+        keptPaths: Collection<String>,
+    ) = withContext(IODispatcher) {
+        if (keptPaths.isEmpty()) {
+            // Empty kept set means every track in the folder is gone.
+            // Use the bulk update query rather than IN () which is a
+            // syntax error in SQLite.
+            db.libraryQueries.setTracksAvailableByFolder(0L, nowMillis(), folderId)
+        } else {
+            db.libraryQueries.markFolderTracksUnavailableExcept(
+                updated_at = nowMillis(),
+                folderId = folderId,
+                keptPaths = keptPaths,
+            )
+        }
+    }
+
     suspend fun deleteTrack(id: Long) = withContext(IODispatcher) {
         db.libraryQueries.deleteTrackById(id)
     }

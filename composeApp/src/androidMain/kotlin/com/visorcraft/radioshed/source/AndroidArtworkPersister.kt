@@ -36,17 +36,26 @@ class AndroidArtworkPersister(private val context: Context) : ArtworkPersister {
                 // file readable if the process dies mid-write (unlikely on a
                 // ~50KB image, but cheap to do right).
                 val tmp = File(artworkDir, "$hash.tmp")
-                tmp.writeBytes(bytes)
-                if (!tmp.renameTo(target)) {
-                    // renameTo can fail across filesystems or when the
-                    // target was created by a concurrent persist of the
-                    // same bytes. Clean up the tmp and fall through to
-                    // verifying that the (already-existing) target is
-                    // valid — its sha256 matches by construction.
-                    tmp.delete()
-                    if (!target.exists() || target.length().toInt() != bytes.size) {
-                        return@runCatching null
+                try {
+                    tmp.writeBytes(bytes)
+                    if (!tmp.renameTo(target)) {
+                        // renameTo can fail across filesystems or when the
+                        // target was created by a concurrent persist of the
+                        // same bytes. Fall through to verify the (already-
+                        // existing) target — its sha256 matches by
+                        // construction.
+                        if (!target.exists() || target.length().toInt() != bytes.size) {
+                            return@runCatching null
+                        }
                     }
+                } finally {
+                    // Always clean up the tmp file: writeBytes can throw
+                    // mid-write on disk-full, leaving a partial .tmp on
+                    // disk. Without this finally, a series of disk-full
+                    // attempts would accumulate orphan .tmp files in
+                    // filesDir/artwork/, making the disk-full condition
+                    // self-reinforcing.
+                    if (tmp.exists()) tmp.delete()
                 }
             }
             "file://${target.absolutePath}"
