@@ -1,10 +1,15 @@
 # RadioShed — Product Specification
 
-> Status: draft v2 · Target platforms: **Android 13+ (primary)** and **iOS 16+**
+> Status: draft v3 · Target platforms: **Android 13+ (primary)** and **iOS 16+**
 >
 > This document is the source of truth for what RadioShed is and how it
 > should behave. It is platform-neutral by default; sections that diverge
 > per platform are explicitly marked **(Android only)** or **(iOS only)**.
+>
+> The phased build plan in §20 was last reconciled against the live
+> Android codebase in a full audit (see §20 Phase 19 for the full
+> "shipped post-Phase-18" log). The accuracy of every checkbox below
+> reflects that audit.
 >
 > License: **proprietary**. Not for redistribution, resale, public sharing,
 > or mirroring. See `LICENSE` for full terms.
@@ -1086,7 +1091,7 @@ Goal: a single-screen app from this repo builds and runs on Android emulator and
 - [x] Create `iosApp/` Xcode project (SwiftUI shell hosting CMP `UIViewController`)
 - [ ] Configure shared framework export: SPM (preferred) or CocoaPods (fallback) *(wizard chose direct framework; bump to SPM later)*
 - [x] Wire up Koin DI scaffolding in `commonMain` *(Modules.kt + per-platform PlatformModule; RadioShedApp.kt on Android, doInitKoin from iOSApp.swift)*
-- [ ] Implement responsive `WindowSizeClass`-aware shared layout scaffolding *(LandingScreen uses `BoxWithConstraints`; full WindowSizeClass scaffolding pending Stations Home in Phase 6)*
+- [~] Implement responsive `WindowSizeClass`-aware shared layout scaffolding — `BoxWithConstraints` drives the breakpoint logic across Stations Home (compact vs medium+ tile grid), Now Playing (single-pane vs two-pane, plus the `<360dp` overflow-as-bottom-sheet fallback), Onboarding's TwoPaneStep, and the Library Browser top bar. A formal `WindowSizeClass` accessor is still preferable for future XLarge-screen work but isn't blocking v1.
 - [x] Implement one shared Compose screen rendering on both platforms *(branded RadioShed shell — `App.kt` → `RadioShedTheme` → `LandingScreen`)*
 - [x] CI: Android `assembleDebug` succeeds on Linux runner
 - [ ] CI: iOS framework builds + `xcodebuild` builds `iosApp` on macOS runner *(verifying after destination fix)*
@@ -1129,10 +1134,10 @@ Goal: user can pick folders, app scans and indexes them, search works.
 - [x] Cue-file parser in `commonMain` (+ 9 unit tests covering quoted/unquoted strings, multi-FILE cues, INDEX 00 pregap, malformed lines, frame-to-ms conversion)
 - [x] Scanner coordinator: queue, batching, progress reporting via `ScanProgress` flow (Started/Progress/Warning/Completed/Failed)
 - [x] Folder management UI (add/rename/recursive-toggle/delete) — `ui/library/LibrarySettingsScreen.kt`. Excludes/include globs UI deferred to a later pass.
-- [ ] Optional file-mode browser (power-user toggle, off by default) *(still deferred)*
+- [x] Optional file-mode browser (power-user toggle, off by default) *(shipped as a full in-app file manager — `ui/library/FolderBrowserScreen.kt`. Reached from Track Info → "Open folder". Greatly expanded post-v1: breadcrumb, sort, in-page filter, multi-select, custom user bookmarks, audio-duration overlay — see Phase 19 for the full feature set.)*
 - [x] Onboarding steps 1–5 — `ui/onboarding/OnboardingScreen.kt`: Welcome → Permissions → Folder → Scan → Done
 - [x] Search UI — `ui/search/SearchScreen.kt`. *Backing is `LIKE` not FTS5: SQLDelight 2.1's parser crashes on FTS5 `MATCH` queries (and on virtual-table compound `name { ... }` blocks). Acceptable for libraries up to ~10k tracks. Revisit when SQLDelight 3.x lands or we evaluate alternatives.*
-- [ ] Search DSL parser (`artist:Hendrix year:>1968 genre:rock`) *(deferred — plain full-text first)*
+- [x] Search DSL parser (`artist:Hendrix year:>1968 genre:rock`) — `commonMain/data/SearchDsl.kt` ships the full grammar (tokenizer + field dispatch + year-range with `>`, `>=`, `<`, `<=`, `a-b`, plus quote handling and unknown-field fallthrough to free text).
 - [ ] Stress test: index 50k synthetic tracks within 5 min on mid-tier hardware *(deferred to Phase 4+ verification)*
 
 Also added in Phase 3 part 2:
@@ -1176,13 +1181,13 @@ Goal: user can create stations; engine plays tracks per source + playback rules.
 - [x] Weighting policies: `Uniform`, `FavorRecent` *(others fall back to Uniform in v1; need richer per-track stats — Phase 5 part 2)*
 - [ ] Adaptive Mix smart query (learns from listening history) *(falls back to LeastPlayed for v1)*
 - [ ] Auto-rotate refresh job for SmartQueries (e.g. Latest Hits re-eval daily) *(deferred)*
-- [x] Built-in presets registry — 5 v1 presets seeded automatically: Latest Hits, All Music, Discover, Top Rated, Recently Added. Forgotten Gems / Workshop / per-decade / per-genre stations land in part 2 with the editor.
-- [ ] Station editor UI: identity, source builder, playback rules *(Phase 5 part 2)*
-- [ ] Drag-to-reorder station list *(part 2)*
-- [ ] Station duplicate / delete / rename *(part 2)*
-- [ ] Auto-collage station artwork (4-album-cover grid) *(part 2)*
-- [ ] Custom artwork upload per station *(part 2)*
-- [ ] Onboarding steps 5–6 (taste setup + first custom station) *(part 2)*
+- [x] Built-in presets registry — `PresetSeeder` seeds Latest Hits / All Music / Discover / Top Rated / Recently Added / Forgotten Gems / Liked Songs. Per-decade and per-genre auto-stations are still deferred.
+- [x] Station editor UI: identity, source builder, playback rules — `ui/stations/StationEditorScreen.kt` covers identity, color, every `SourceRule` selector + set-operator combiner, and every `PlaybackRule` knob.
+- [x] Drag-to-reorder station list — `ui/stations/ReorderStationsScreen.kt` via the shared `ui/util/DragReorder.kt` utility. The Stations Home long-press sheet also offers per-row Move up / Move down for one-step nudges without entering reorder mode.
+- [~] Station duplicate / delete / rename — `StationActionSheet` (defined in `StationsHomeScreen.kt`) ships Open / Edit / Pin / Move up / Move down / Delete; rename happens in the editor. **Duplicate is the one missing action** and is still deferred.
+- [x] Auto-collage station artwork (4-album-cover grid) — generated from the station's first 4 distinct album covers when no custom artwork is set.
+- [x] Custom artwork upload per station — `ui/util/ImagePicker` (with `supportsImagePicker()` + `rememberImagePicker { bytes -> … }`) round-trips an image picked from the system file picker into the station's artwork bytes column.
+- [~] Onboarding steps 5–6 (taste setup + first custom station) — superseded by the linear 5-step flow shipped in current `OnboardingScreen.kt`. The "Done" step shows a 3-card mini-tour (Stations / Drive Mode / AI DJ teaser) instead of dedicated taste-setup screens. Re-evaluate post-v1 if user testing flags the simpler flow as missing context.
 
 Phase 5 part 1 also added:
 
@@ -1200,20 +1205,20 @@ Goal: app feels like a music app, not a tech demo. Looks great on every form fac
 
 - [x] Stations Home: responsive grid (1 col compact, adaptive ≥240dp tiles for medium+) *(Phase 6 part 1 — sort/group/list-toggle deferred)*
 - [ ] Stations Home: list/grid view toggle, sort menus, tile size XS–L preference
-- [ ] Long-press tile → quick actions (play, edit, duplicate, delete, pin, add to widget)
-- [x] Now Playing screen: full-screen art, scrubber, controls *(Phase 6 part 1 — placeholder gradient art until Cover Art Archive)*
-- [x] Now Playing: layout variants for compact (stacked) and medium+ (two-pane) *(Phase 6 part 1 — three-pane queue/lyrics deferred)*
+- [~] Long-press tile → quick actions — `StationActionSheet` (in `StationsHomeScreen.kt`) ships Open station / Edit / Pin to top / Move up / Move down / Delete. **Duplicate, "Add to Drive Mode quick-list", and "Add to Widget" are still deferred** — the latter two pair with the Drive Mode overlay (Phase 8) and the widget-config UI (Phase 13).
+- [x] Now Playing screen: full-screen art, scrubber, controls — Coil-driven `AsyncImage` artwork, full transport, blurred backdrop (`BlurredBackdrop`), tap-to-expand fullscreen lightbox.
+- [x] Now Playing: layout variants for compact (stacked) and medium+ (two-pane) *(Phase 6 part 1 — three-pane queue/lyrics deferred to large-tablet pass)*
 - [ ] Album-art aspect-ratio handling (square crop + blurred letterbox fill) *(needs real artwork — Phase 10)*
-- [ ] Gesture handling: swipe, pinch, long-press *(long-press skip-menu landed; swipe/pinch deferred)*
-- [ ] Lyrics view: synced LRC karaoke + plain text fallback
-- [x] Star rating UI (1–5) + tap-same-star-to-clear *(Phase 6 part 1 — half-stars deferred to part 2)*
-- [ ] Skip tracking instrumentation
-- [x] "Don't play on this station again" dislike menu *(Phase 6 part 1 — long-press skip-next)*
-- [ ] Onboarding steps 7–9 (in-car preview, AI DJ intro, done)
-- [ ] Theme system: light, dark, AMOLED-black, accent color
-- [ ] Material You dynamic color (Android 12+) opt-in
-- [ ] Font scaling (XS–XXL)
-- [ ] Reduce-motion mode
+- [~] Gesture handling: swipe, pinch, long-press — long-press skip-menu, MiniPlayer swipe-up to expand, MiniPlayer horizontal swipe-to-skip (left = next, right = previous). Pinch-to-lyrics still deferred.
+- [x] Lyrics view: synced LRC karaoke + plain text fallback — LRClib + sidecar `.lrc` + embedded USLT/SYLT, tap-to-seek, copy to clipboard, A−/A+ font scale (persisted), source attribution badge, manual artist/title override on miss, cooperative auto-scroll (drag suppresses for ~5s) + "Jump to current line" FAB when active line scrolls off-screen.
+- [x] Star rating UI (1–5) + tap-same-star-to-clear — half-star precision shipped (`SettingsStore.useHalfStarRatings`).
+- [x] Skip tracking instrumentation — feeds the Stats screen's most-skipped tracks card and per-station skip rate.
+- [x] "Don't play on this station again" dislike menu *(Phase 6 part 1 — long-press skip-next)*; global "Don't play on any station" override also available.
+- [x] Onboarding steps 7–9 (in-car preview, AI DJ intro, done) — superseded by the linear 5-step flow with a 3-card "Done" mini-tour. Live-file ticker + filename basename rendered during the scan step. See Phase 19 for ticker polish.
+- [~] Theme system: light, dark, AMOLED-black, accent color — light/dark/system shipped (`ThemeMode`); accent color follows Material You when enabled. AMOLED-black variant still deferred.
+- [x] Material You dynamic color (Android 12+) opt-in — `SettingsStore.getMaterialYouEnabled()`, applied via `RadioShedTheme`.
+- [ ] Font scaling (XS–XXL) — only Lyrics has a font-size adjuster today; app-wide scale still deferred.
+- [x] Reduce-motion mode — `SettingsStore.getReduceMotion()` honored across animated transitions and the blurred backdrop.
 - [ ] Accessibility audit: TalkBack on Android, VoiceOver on iOS
 - [ ] CI snapshot-test pass across §1.1 form factor matrix
 
@@ -1221,24 +1226,24 @@ Goal: app feels like a music app, not a tech demo. Looks great on every form fac
 
 Goal: power-user audio features work and sound right on both platforms.
 
-- [ ] Crossfade impl on both engines (equal-power, linear, S-curve, custom)
-- [ ] **Smart Fades** content-aware crossfade (silence/fade-out detection)
-- [ ] Gapless playback verified sample-accurate
-- [ ] ReplayGain reading from tags (MP3 ID3v2 `TXXX`, FLAC Vorbis, Opus header)
-- [ ] ReplayGain pre-gain application + pre-amp setting
-- [ ] Background LUFS scan job for tag-less files
-- [ ] **Graphic EQ: 10 / 15 / 31-band selectable** on both engines
-- [ ] **Parametric EQ** peaks/notches on both engines
-- [ ] **AutoEQ profile import** (1000+ headphone presets bundled or user-importable)
-- [ ] **Equalizer APO `.txt` config import**
-- [ ] **Per-output-device EQ profiles** (auto-switch on route change)
-- [ ] EQ preset manager UI + JSON import/export
-- [ ] Output normalization limiter (LUFS target, soft-knee)
-- [ ] Channel balance + mono summing
-- [ ] Audio buffer + sample-rate matching settings
-- [ ] DSP order configuration
-- [ ] Sleep timer with optional fade-out
-- [ ] Cross-platform parity test: golden-file outputs match within tolerance
+- [ ] Crossfade impl on both engines (equal-power, linear, S-curve, custom) *(deferred — needs dual-ExoPlayer pipeline. End-of-track fade-out shipped as the lighter single-player alternative.)*
+- [ ] **Smart Fades** content-aware crossfade (silence/fade-out detection) *(deferred with crossfade)*
+- [ ] Gapless playback verified sample-accurate *(deferred with crossfade)*
+- [x] ReplayGain reading from tags — Scanner reads MP3 ID3v2 `TXXX`, FLAC Vorbis comments, Opus header gain into `Track.replayGainTrack` / `replayGainAlbum` / `replayGainTrackPeak`.
+- [x] ReplayGain pre-gain application + pre-amp setting — applied on each track load via `AudioEngineAndroid.applyReplayGain()`; user-tunable pre-amp slider in Settings → Audio.
+- [ ] Background LUFS scan job for tag-less files *(deferred)*
+- [ ] **Graphic EQ: 10 / 15 / 31-band selectable** on both engines *(deferred — needs custom DSP via biquad cascade. 5-band shipped today via Android system Equalizer.)*
+- [ ] **Parametric EQ** peaks/notches on both engines *(deferred with band-count work)*
+- [ ] **AutoEQ profile import** (1000+ headphone presets bundled or user-importable) *(deferred with band-count work)*
+- [ ] **Equalizer APO `.txt` config import** *(deferred with band-count work)*
+- [ ] **Per-output-device EQ profiles** (auto-switch on route change) *(deferred — needs route-change observer + per-route preset binding)*
+- [x] EQ preset manager UI + JSON import/export — `ui/settings/EqualizerScreen.kt` with built-in presets (Flat / Bass Boost / Vocal / Treble), user "Save current…" custom presets, long-press chip to delete, and JSON import / export round-trip via `EqPresetIO`. Bypass switch + persisted band gains.
+- [ ] Output normalization limiter (LUFS target, soft-knee) *(deferred)*
+- [ ] Channel balance + mono summing *(deferred)*
+- [ ] Audio buffer + sample-rate matching settings *(deferred)*
+- [ ] DSP order configuration *(deferred — depends on per-output EQ profiles + limiter)*
+- [x] Sleep timer with optional fade-out — `audio/SleepTimer.kt` with idle / running / end-of-track states, +15-min extend, optional fade-out on the final ramp. MiniPlayer surfaces a live countdown badge. End-of-track mode races safely with auto-advance (mutex-coordinated).
+- [ ] Cross-platform parity test: golden-file outputs match within tolerance *(deferred — pairs with iOS engine impl)*
 
 ### Phase 8 — In-car experiences (~2 weeks, parallel work streams)
 
@@ -1246,14 +1251,14 @@ Goal: RadioShed is usable while driving on both platforms.
 
 #### Android — Drive Mode
 
-- [ ] Drive Mode trigger registry (BT MAC, speed, schedule, headlight, manual)
-- [ ] Big-button overlay UI, fluid scaling across console aspect ratios (1024×600, 1280×720, 1920×720, 1920×1080)
-- [ ] Configurable button selection (4–6 from available actions)
-- [ ] Big-button station picker (6-tile grid, configurable contents)
-- [ ] Voice command engine (offline STT) + wake word ("Hey RadioShed" / custom / off)
-- [ ] Steering-wheel key capture-and-bind UI
-- [ ] Auto-exit conditions (BT disconnect, speed threshold, manual)
-- [ ] Integration test on AutoLinkR Elite hardware
+- [ ] Drive Mode trigger registry (BT MAC, speed, schedule, headlight, manual) *(not started — requires `BluetoothManager` + `LocationManager` plumbing)*
+- [~] Big-button overlay UI — a manual Drive Mode toggle (`SettingsStore.getDriveMode()`) re-skins Now Playing's transport row with oversized hit targets and hides Replay-10/Forward-10 to keep the surface scannable. The full overlay scaling for non-standard console aspect ratios (1024×600, 1280×720, 1920×720, 1920×1080) is still deferred.
+- [ ] Configurable button selection (4–6 from available actions) *(deferred with overlay)*
+- [ ] Big-button station picker (6-tile grid, configurable contents) *(deferred with overlay)*
+- [~] Voice command engine — RecognizerIntent voice search (`ui/util/VoiceInput.kt`) ships in the Search field. The full offline-STT engine + wake word ("Hey RadioShed" / custom / off) is still deferred.
+- [ ] Steering-wheel key capture-and-bind UI *(deferred — needs `KeyEvent` capture flow)*
+- [ ] Auto-exit conditions (BT disconnect, speed threshold, manual) *(deferred with trigger registry)*
+- [ ] Integration test on AutoLinkR Elite hardware *(deferred — pairs with overlay)*
 
 #### iOS — CarPlay
 
@@ -1288,18 +1293,18 @@ Goal: optional radio-style voice between tracks, configurable per station.
 
 Goal: power users with connectivity get richer art, lyrics, scrobbling, recs.
 
-- [ ] Connectivity policy enforcement (Always / WiFi-only / Never / Manual)
-- [ ] Ktor HTTP client with persistent disk cache + rate-limit handling
-- [ ] Cover Art Archive client (album art fetch on missing embedded art)
-- [ ] **fanart.tv client** (HQ artist images)
-- [ ] MusicBrainz client (track ID + metadata fix)
-- [ ] LRCLib client (synced + plain lyrics)
-- [ ] Last.fm OAuth flow + scrobbling client
-- [ ] ListenBrainz token-based scrobbling client
-- [ ] AcoustID + Chromaprint fingerprinting
-- [ ] Open-Meteo client (weather variable for DJ templates)
-- [ ] Wikipedia/Wikidata client (artist bio)
-- [ ] Per-service toggle UI in Settings → Online & Sync
+- [x] Connectivity policy enforcement (Always / WiFi-only / Never / Manual) — `ConnectivityPolicy` enum in `domain/Settings.kt`, persisted via `SettingsStore.getConnectivityPolicy()`, checked at the call site of every online fetcher (Cover Art, LRClib) before the request goes out.
+- [~] Ktor HTTP client with persistent disk cache + rate-limit handling — Cover Art Archive (`AndroidCoverArtFetcher`) and LRClib (`AndroidLyricsFetcher`) use Ktor with on-disk caches keyed by trackId / album MBID; transient HTTP errors no longer fall through as "not found". Rate-limit backoff + a unified Ktor `HttpClient` factory still deferred.
+- [x] Cover Art Archive client — direct MBID fetch + release-group fallback, missing-artwork sync sweeps the library on demand (`MissingArtworkSync`).
+- [ ] **fanart.tv client** (HQ artist images) *(deferred)*
+- [ ] MusicBrainz client (track ID + metadata fix) *(deferred — Cover Art Archive uses cached MBIDs only)*
+- [x] LRCLib client (synced + plain lyrics) — `AndroidLyricsFetcher` resolves via title/artist with multiple query candidates (`LyricsQueryCandidates`), persists to `lyrics_cache` with TTL, falls back to local `.lrc` sidecar (`LocalLyricsLoader`) and embedded USLT/SYLT (`Scanner` extracts at scan), and accepts manual artist/title overrides for stubborn matches.
+- [ ] Last.fm OAuth flow + scrobbling client *(deferred)*
+- [ ] ListenBrainz token-based scrobbling client *(deferred)*
+- [ ] AcoustID + Chromaprint fingerprinting *(deferred)*
+- [ ] Open-Meteo client (weather variable for DJ templates) *(deferred — paired with AI DJ)*
+- [ ] Wikipedia/Wikidata client (artist bio) *(deferred)*
+- [ ] Per-service toggle UI in Settings → Online & Sync *(deferred — `ConnectivityPolicy` is a single global gate today)*
 
 ### Phase 11 — Cast & multi-room output (~1–2 weeks)
 
@@ -1324,48 +1329,48 @@ Goal: send audio to networked devices instead of local speakers.
 
 Goal: user can move their setup between devices and platforms.
 
-- [ ] kotlinx.serialization JSON serializers for all user data
-- [ ] Custom artwork bundling
-- [ ] DJ template + EQ preset + per-output binding bundling
-- [ ] Zip archive writer/reader (cross-platform)
-- [ ] AES-256-GCM passphrase encryption
-- [ ] Auto-backup scheduler (off / daily / weekly)
-- [ ] Restore wizard UI (preview contents, conflict resolution)
-- [ ] Cross-platform restore: Android backup → iOS restore (and vice versa)
+- [x] kotlinx.serialization JSON serializers for all user data — `source/BackupBundle.kt` covers stations, playlists, ratings, liked songs, listening history, custom EQ presets, and a settings round-trip.
+- [ ] Custom artwork bundling *(deferred — pairs with zip writer)*
+- [~] DJ template + EQ preset + per-output binding bundling — custom EQ presets ship in the bundle (`BackupBundle` v3). DJ templates and per-output bindings are not yet built upstream.
+- [ ] Zip archive writer/reader (cross-platform) *(deferred — current bundle is plain JSON, which keeps things human-readable but rules out artwork blobs)*
+- [ ] AES-256-GCM passphrase encryption *(deferred with zip)*
+- [x] Auto-backup scheduler — `BackupService` runs weekly via `WorkManager` when enabled; `SettingsStore.getAutoBackupEnabled()` toggles it. Auto-prune to last N keeps the directory tidy.
+- [~] Restore wizard UI — Settings → Backup & Restore lists every bundle with relative timestamps, supports import via the system file picker (#206), runs a per-key type-validating restore (`SettingsStore.restoreFromBackup`), and matches moved tracks via path-suffix fallback (#212). A pre-restore preview / conflict-resolution modal is still deferred.
+- [ ] Cross-platform restore: Android backup → iOS restore (and vice versa) *(deferred — pairs with iOS implementation pass)*
 
 ### Phase 13 — Widgets (~1 week)
 
 Goal: home-screen presence on both platforms.
 
-- [ ] **(Android)** Glance widget infrastructure
-- [ ] **(Android)** Now-Playing widget (small / medium / large variants)
-- [ ] **(Android)** Station-launcher widget (1 / 4 / 6 / 12 tiles)
-- [ ] **(Android)** Library-stats widget
-- [ ] **(iOS)** WidgetKit extension target
-- [ ] **(iOS)** Now-Playing widget (small / medium / large / extra-large / Lock-screen)
-- [ ] **(iOS)** Station-launcher widget (small / medium / large)
-- [ ] **(iOS)** Library-stats widget
-- [ ] **(iOS)** Live Activity (Lock Screen + Dynamic Island Now Playing)
-- [ ] Widget config UI in Settings → Widgets
-- [ ] App Group set up for widget data sharing (iOS)
+- [~] **(Android)** Glance widget infrastructure — shipped via classic `RemoteViews` + `AppWidgetProvider` (`androidMain/widget/NowPlayingWidget.kt`) rather than Jetpack Glance. Functionally equivalent for the Now-Playing widget; revisit Glance when more widget variants land.
+- [x] **(Android)** Now-Playing widget — small + medium + large `RemoteViews` layouts with art thumb (decoded at widget-target size, recycled on re-render to avoid the OOM bug we hit pre-#290), title / artist, and `PendingIntent` transport buttons routed through `RadioShedMediaSessionService`.
+- [ ] **(Android)** Station-launcher widget (1 / 4 / 6 / 12 tiles) *(deferred — pairs with widget config UI)*
+- [ ] **(Android)** Library-stats widget *(deferred)*
+- [ ] **(iOS)** WidgetKit extension target *(deferred — needs Mac)*
+- [ ] **(iOS)** Now-Playing widget (small / medium / large / extra-large / Lock-screen) *(deferred — needs Mac)*
+- [ ] **(iOS)** Station-launcher widget (small / medium / large) *(deferred — needs Mac)*
+- [ ] **(iOS)** Library-stats widget *(deferred — needs Mac)*
+- [ ] **(iOS)** Live Activity (Lock Screen + Dynamic Island Now Playing) *(deferred — needs Mac)*
+- [ ] Widget config UI in Settings → Widgets *(deferred — only the Now-Playing widget exists today)*
+- [ ] App Group set up for widget data sharing (iOS) *(deferred — needs Mac)*
 
 ### Phase 14 — Power tools & advanced settings (~1–2 weeks)
 
 Goal: every "Advanced" setting from §7.5 is implemented and works.
 
-- [ ] All Settings groups fully implemented (16 sections per §7.5)
-- [ ] Tag editor (single-track + batch)
-- [ ] Multi-value tag editor with separator preview
-- [ ] File rename templates
-- [ ] DB browser UI (read-only)
-- [ ] Raw SQL console (developer panel)
-- [ ] Log export
-- [ ] Force re-scan, clear caches, DB vacuum
-- [ ] DJ template scripting hooks (sandboxed)
-- [ ] Custom voice model upload
-- [ ] Path-glob exclude tester ("show me what this rule would skip")
-- [ ] Duplicate detection UI (by hash + by tag fuzz)
-- [ ] AutoEQ profile bundled library + import wizard
+- [~] All Settings groups fully implemented (16 sections per §7.5) — Library, Stations defaults via station editor, Audio (EQ + ReplayGain + sleep timer), Playback rules per station, Online (single connectivity policy gate), UI/Theme (light/dark/Material You + reduce-motion), Backup & Restore, Privacy (history retention via clear-history), and About all ship. AI DJ, Cast & output, In-Car (beyond toggle), Hardware, Tags & Metadata, Widgets, and the Advanced developer panel are still deferred / partial.
+- [ ] Tag editor (single-track + batch) *(deferred — only the lyrics-search artist/title override exists today)*
+- [ ] Multi-value tag editor with separator preview *(deferred)*
+- [ ] File rename templates *(deferred)*
+- [ ] DB browser UI (read-only) *(deferred)*
+- [ ] Raw SQL console (developer panel) *(deferred)*
+- [~] Log export — Settings → Crash Logs (`CrashLogScreen`) lists per-process exit reasons with expandable stack traces and a Share button per entry. A general "export full log" action across non-crash logs is not yet built.
+- [~] Force re-scan, clear caches, DB vacuum — "Rescan all folders" (#156), "Clear lyrics cache" (#257), and force-rescan-on-folder-change (#217) all ship. DB vacuum and a unified "clear all caches" sweep are still deferred.
+- [ ] DJ template scripting hooks (sandboxed) *(deferred — pairs with AI DJ)*
+- [ ] Custom voice model upload *(deferred — pairs with AI DJ)*
+- [ ] Path-glob exclude tester ("show me what this rule would skip") *(deferred)*
+- [ ] Duplicate detection UI (by hash + by tag fuzz) *(deferred)*
+- [ ] AutoEQ profile bundled library + import wizard *(deferred — pairs with band-count work in Phase 7)*
 
 ### Phase 15 — Hardening, beta, launch (~2–3 weeks)
 
@@ -1373,8 +1378,8 @@ Goal: shipped on both platforms.
 
 - [ ] 50k-track stress test on AutoLinkR Elite + on iPhone
 - [ ] Battery profiling (Android Battery Historian, iOS Energy Log)
-- [ ] Memory profiling (heap dump analysis, leak detection)
-- [ ] Local crash handler (crash → log file → user-export menu)
+- [ ] Memory profiling (heap dump analysis, leak detection) *(NowPlayingWidget bitmap recycle bug #290 was caught and fixed without a formal pass)*
+- [x] Local crash handler — `crash/CrashLogReader` reads `getHistoricalProcessExitReasons()` on Android; the Settings → Crash Logs screen surfaces them with per-entry Share so users can export a stack trace without ADB. iOS is a Null stub (TestFlight handles iOS crashes natively).
 - [ ] User documentation: `USER_GUIDE.md`
 - [ ] FAQ
 - [ ] App Store assets: screenshots (matrix of form factors), video preview, descriptions, keywords
@@ -1468,10 +1473,11 @@ iOS deferred; `[ ]` = still deferred.
   bitmap reuse. Explicit `remember(artworkUri)`-keyed pre-render not
   added; would help further on devices below Android 12 where
   `Modifier.blur` is a no-op and the work falls to software.
-- [ ] **SQLDelight `verifyMigrations` enabled** — currently disabled.
-  `composeApp/build.gradle.kts` has the comment explaining why. Turn on
-  the moment we add migration #1 so the harness catches schema drift in
-  CI.
+- [x] **SQLDelight `verifyMigrations` enabled** — turned on alongside
+  the first real migration (`6.sqm` — backfills the
+  `station_pinned_track` table that was added to the baseline schema
+  without a migration and crashed `playStation` on existing DBs). The
+  harness now catches schema drift in CI on every Android build.
 - [ ] **Media3 1.7+ bump** — clears the `CommandButton.Builder()`
   deprecation warnings. Holds until 1.7 is stable and the Media3 release
   notes are reviewed for breaking changes on `MediaSession`. Pinned at
@@ -1555,6 +1561,178 @@ experience:
 - Track Info dialog: copy file path, tappable artist/album rows,
   enriched stats (plays, skips, ReplayGain, BPM, etc.)
 - Settings: Clear lyrics cache button (preserves manual overrides)
+
+### Phase 19 — Post-Phase-18 polish (shipped after the audit)
+
+A continuous polish stream that lands after the Phase 18 audit. None of
+these were originally scoped in the phased plan; they ship because the
+v1 surface keeps revealing rough edges as the build matures. Grouped by
+surface so future maintainers can scan them quickly.
+
+#### File Manager v2 (replaces the original "Open folder" stub)
+
+The Track Info → "Open folder" button used to launch a system intent
+that several Samsung file managers silently dropped (#298). RadioShed
+now ships its own in-app browser at `ui/library/FolderBrowserScreen.kt`
+with `MANAGE_EXTERNAL_STORAGE` driving filesystem access, and the
+following capabilities — every one of them was a separate ship:
+
+- [x] Breadcrumb top bar — each segment tappable for one-tap-up nav
+- [x] Folder header with stats (folder count / audio count / total
+  bytes) + Play All / Shuffle All
+- [x] Folder long-press context — Open / Play all music here
+  (recursive) / Shuffle all music here / Add as music folder
+  (idempotent — re-scans if already registered) / Pin to bookmarks /
+  Copy path
+- [x] File long-press context — Play / Play next / Add to queue / Add
+  to playlist / Copy path / Show full path / Share file
+- [x] Sort options (Name A→Z, Name Z→A, Recently modified, Largest
+  first), persisted via `SettingsStore.getFileBrowserSort()`
+- [x] In-page search filter (toggleable; resets on directory change)
+- [x] Quick-jump bookmarks bar — preset chips (Storage / Internal /
+  Music / Downloads, only rendered when the path actually exists) +
+  user-pinned custom folders (long-press a Star chip to remove)
+- [x] Audio-duration overlay — for files whose Track row exists in the
+  library, the row subtitle shows duration alongside file size
+- [x] Multi-select mode — long-press an audio file to enter; the top
+  bar swaps to "X selected" + Close + Select-all-audio; the bottom
+  action bar offers Play / Shuffle / Play next / Add to queue.
+  Selection persists across folders so users can build a queue from
+  multiple directories.
+
+#### Listening Stats charts
+
+`ui/settings/StatsScreen.kt` already had top-N rankings; this round
+adds three time-aware visualizations powered by `station_history`
+aggregations on `StationRepository`:
+
+- [x] 30-day daily activity bar chart — one bar per day with a
+  square-root-ish height curve so a single play stays visible against
+  a peak of 50; "today" sits on the right
+- [x] Hour-of-day histogram (24 bars) — peak-hour label ("Peak around
+  7pm") and gridline labels at 12am / 6am / noon / 6pm / 12am
+- [x] Completion-rate tiles — "Completion rate" % and "Finished" raw
+  ratio, hidden when `total = 0` to avoid divide-by-zero ugliness
+
+Backed by new SQL — `selectPlaysPerDayWindow`,
+`selectPlaysPerHourWindow`, `selectCompletionStats` — that share a
+common `nowMs` / `sinceMs` envelope so all three views stay in sync.
+
+#### MiniPlayer enhancements
+
+- [x] Horizontal swipe-to-skip — left = next, right = previous; lives
+  in its own `pointerInput` so Compose's gesture-resolution arbitrates
+  with the existing vertical swipe-up-to-expand. Drag-end commit (no
+  accidental skips from a small horizontal twitch while tapping).
+- [x] Sleep-timer countdown badge — when `SleepTimer.state` is
+  `Running`, a compact bedtime-icon chip with `42s` / `23m` /
+  `1:04h` / `EOT` countdown sits between the title column and the
+  transport buttons. Hidden when idle.
+
+#### Lyrics polish
+
+- [x] Cooperative auto-scroll — synced lyrics no longer yank the user
+  back to the active line while they read ahead. Drags are detected
+  via `LazyListState.interactionSource.collectIsDraggedAsState()`;
+  auto-scroll is suppressed while dragging plus a 5-second idle grace
+  window. Active line off-screen surfaces a "Jump to current line"
+  FAB that returns the user and re-arms auto-scroll.
+
+#### Library / Album / Artist / Playlist / Genre / History detail polish
+
+- [x] Album detail — per-track `× N` play-count badge (subtle trailing
+  text, only rendered when count > 0). Also surfaces never-played
+  tracks as "what haven't I tried on this album?".
+- [x] Artist detail — same `× N` play-count badges on track rows for
+  visual consistency with Album detail.
+- [x] Playlist detail — header subtitle now reads `"12 tracks · 47
+  min"` instead of the raw count; runtime formatter shared with
+  Album / Artist detail.
+- [x] Library Artists tab — sort dropdown (Name A→Z / Z→A / Most
+  played) with persistence via `SettingsStore.getLibraryArtistSort()`.
+  "Most played" lazy-loads `topPlayedArtists(Long.MAX_VALUE)` only
+  when the user picks that sort.
+- [x] Genre detail — empty state when zero tracks (catches the
+  stale-tag case where a Genre row exists but its tracks were
+  retagged or removed)
+- [x] History screen — date-bucket section headers ("Today",
+  "Yesterday", "Earlier this week", "Earlier this month", "Older")
+  computed once per visible-list change
+
+#### Search polish
+
+- [x] IME `ImeAction.Search` on the query field — magnifier key on
+  the IME, dismisses the keyboard on press so results are immediately
+  visible. Debounced search keeps running as before.
+
+#### Onboarding polish
+
+- [x] Live-file scan ticker — replaces the single-line "127 tracks ·
+  /storage/emulated/0/Music/Some Album/Long Track Name.flac" (which
+  wrapped/clipped on narrow screens) with a clean two-line layout:
+  count headline ("127 tracks scanned") above a smaller subline
+  showing just the basename. Both lines ellipsize. Empty / started /
+  done / failed states handled separately.
+
+#### Up Next sheet polish
+
+- [x] Album-art thumbnails on every queued / recently-played row (32dp,
+  falls back to the music-note icon when art is missing). The
+  artwork map is built lazily when the sheet opens and dropped when
+  it closes, so we don't pay the album lookup cost outside the
+  transient sheet view.
+
+#### IME action audit across all text-input dialogs
+
+Pressing Enter / Done / Search on the IME now actually submits across
+every single-field confirmation dialog in the app — previously the IME
+defaulted to "Done" with no action wired. Touched: Liked Songs → Save
+as playlist, Playlists → New playlist, CollectionContextSheets → New
+playlist, TrackContextSheet → New playlist, AddToPlaylistSheet → New
+playlist, EqualizerScreen → Save preset, LyricsScreen → Edit search
+(Artist→Next, Title→Search), LibrarySettingsScreen → Add folder
+(path→Next, name→Done) and Rename folder, FolderBrowserScreen →
+Filter folder. Each touched dialog also factors a single
+`confirmXxx: () -> Unit` lambda so the IME path and the button path
+share submit behavior.
+
+#### Crash safety pass (post-audit fix sweep)
+
+Concurrency fixes in the playback pipeline that were caught by code
+review rather than user reports — none of them triggered a visible
+bug, but each had a defensible "this could race" footprint:
+
+- [x] `PlaybackQueue.removePriorityAt` race with `advanceToNext`
+- [x] `StationPlayback.skipPrevious` history race
+- [x] `QueueBottomSheet` rapid X-tap remove (off-by-one when stale
+  pre-removal indices were addressed twice)
+- [x] `republishPriorityCount` called outside mutex — race with
+  advance
+- [x] `skipPrevious` `userSkipPending` flag set before mutex acquired
+- [x] `SleepTimer.extend` reading stale `remainingMs` from the
+  StateFlow; now driven off the monotonic `startedMark`
+- [x] `SleepTimer` end-of-track racing the auto-advance path
+- [x] `Onboarding` folder insert UNIQUE-constraint crash on
+  back-then-forward navigation
+- [x] `AndroidPlaylistExporter` same-millisecond filename collision +
+  cache-dir cleanup
+- [x] `BackupService` prune list including the just-written file
+- [x] `Scanner` doesn't mark removed files unavailable on rescan
+- [x] `AndroidArtworkPersister` leaves `.tmp` files on disk-full
+- [x] `AppSettings` showing stale toggle state on re-entry
+- [x] `Stations Home` double-tap race on station load
+- [x] `SearchDsl` `year:>` with empty operand fell through to free
+  text instead of erroring
+- [x] `PresetSeeder` concurrent `seedIfEmpty` could double-seed
+- [x] `AndroidLyricsFetcher` swallowing transient HTTP errors as
+  "not found" (cached as a miss; broke retry)
+- [x] Now Playing title wrapping per-character on narrow screens —
+  fixed via `softWrap = false, maxLines = 1, overflow = Ellipsis`
+- [x] `VolumeRow`, `PreampSlider`, `EndFadeSlider`,
+  `FolderColorRow` all writing prefs every drag frame; debounced or
+  conditional now
+- [x] `restoreFromBackup` per-key type validation (only writes a key
+  if the bundle's type matches what the app currently stores there)
 
 ---
 
