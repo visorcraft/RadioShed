@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -70,6 +71,7 @@ fun AlbumContextSheet(
     album: Album,
     onDismiss: () -> Unit,
     onGoToAlbum: () -> Unit,
+    onCreateStation: () -> Unit = {},
     libraryRepo: LibraryRepository = koinInject(),
     stationPlayback: StationPlayback = koinInject(),
 ) {
@@ -152,6 +154,11 @@ fun AlbumContextSheet(
                     onClick = { step = CollectionStep.PlaylistPicker },
                 )
                 CollectionActionRow(
+                    icon = Icons.Filled.Radio,
+                    label = "Create station from this album",
+                    onClick = onCreateStation,
+                )
+                CollectionActionRow(
                     icon = Icons.AutoMirrored.Filled.OpenInNew,
                     label = "Go to album",
                     onClick = onGoToAlbum,
@@ -182,6 +189,7 @@ fun ArtistContextSheet(
     artist: Artist,
     onDismiss: () -> Unit,
     onGoToArtist: () -> Unit,
+    onCreateStation: () -> Unit = {},
     libraryRepo: LibraryRepository = koinInject(),
     stationPlayback: StationPlayback = koinInject(),
 ) {
@@ -243,6 +251,11 @@ fun ArtistContextSheet(
                     icon = Icons.AutoMirrored.Filled.PlaylistAdd,
                     label = "Add artist to playlist…",
                     onClick = { step = CollectionStep.PlaylistPicker },
+                )
+                CollectionActionRow(
+                    icon = Icons.Filled.Radio,
+                    label = "Create station from this artist",
+                    onClick = onCreateStation,
                 )
                 CollectionActionRow(
                     icon = Icons.AutoMirrored.Filled.OpenInNew,

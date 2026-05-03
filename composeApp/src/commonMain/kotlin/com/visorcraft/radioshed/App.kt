@@ -270,6 +270,7 @@ fun App(
                             onArtistTap = { id -> current = AppScreen.ArtistDetail(id) },
                             onAlbumTap = { id -> current = AppScreen.AlbumDetail(id) },
                             onGenreTap = { g -> current = AppScreen.GenreDetail(g) },
+                            onEditStation = { id -> current = AppScreen.EditStation(id) },
                         )
                     }
 

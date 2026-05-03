@@ -161,7 +161,14 @@ fun SearchScreen(
                 runCatching { focusRequester.requestFocus() }
             }
             val voicePicker = com.visorcraft.radioshed.ui.util.rememberVoiceInput { spoken ->
-                query = spoken
+                // Strip natural-language verb prefixes the user
+                // habitually says ("play X", "find X", "search for X")
+                // so the actual search runs against the meaningful
+                // part. Falls through to the raw transcript when no
+                // known prefix matches — the search is still
+                // forgiving (LIKE substring) so an extra preposition
+                // rarely tanks results.
+                query = stripVoicePrefix(spoken)
             }
             val keyboardController = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
             OutlinedTextField(
@@ -490,4 +497,42 @@ private fun TrackRow(
             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
         )
     }
+}
+
+/**
+ * Strip the natural-language verb prefix users habitually say when
+ * voice-searching ("play X", "find X", "search for X", etc.) so the
+ * actual search runs against just the meaningful tail. Returns the
+ * input unchanged when no known prefix matches — the LIKE substring
+ * matcher is forgiving enough that an extra preposition rarely
+ * tanks results, so we fall through gracefully rather than guessing.
+ *
+ * Order matters: longer prefixes are checked before their shorter
+ * substrings ("search for" before "search") so we don't strip too
+ * little.
+ */
+internal fun stripVoicePrefix(spoken: String): String {
+    val trimmed = spoken.trim()
+    if (trimmed.isEmpty()) return trimmed
+    val lower = trimmed.lowercase()
+    val prefixes = listOf(
+        "search for ",
+        "look for ",
+        "find me ",
+        "play me ",
+        "play the song ",
+        "play song ",
+        "play track ",
+        "play album ",
+        "play artist ",
+        "play ",
+        "find ",
+        "search ",
+    )
+    for (p in prefixes) {
+        if (lower.startsWith(p) && trimmed.length > p.length) {
+            return trimmed.substring(p.length).trim()
+        }
+    }
+    return trimmed
 }

@@ -1067,9 +1067,9 @@ Goal: repo exists, decisions documented, CI skeleton green.
 - [x] Create **private** GitHub repository with branch protection on `master`
 - [x] Draft proprietary `LICENSE` file: no redistribution, no resale, no public sharing, no mirroring; reserve all rights; private use of authorized binaries only (lawyer review still pending before public release)
 - [x] Add `.editorconfig`, `.gitignore`, `.gitattributes`
-- [ ] Add `CONTRIBUTING.md` (private team contribution guide)
+- [x] Add `CONTRIBUTING.md` (private team contribution guide) — covers working environment, build/install loop, branching/commits, code style, testing, SPEC update conventions, and license posture.
 - [x] Create `docs/decisions/` with ADR template (`0000-template.md`)
-- [ ] Document iOS build host strategy in `docs/decisions/0001-ios-build-host.md` (cloud / self-hosted Mac / buy Mac mini)
+- [x] Document iOS build host strategy in `docs/decisions/0001-ios-build-host.md` — accepts a phased approach: Phase 1 (now) uses GitHub Actions `macos-latest` for release-tagged + weekly verification only (private-repo macOS minutes are 10× cost); Phase 2 trigger is "iOS commits multiple times a week" → switch to a self-hosted Mac mini runner.
 - [x] Create `gradle/libs.versions.toml` with curated dependency versions (KMP wizard generated; customize as needed)
 - [x] Create `version.properties` (single app-version source)
 - [ ] Add ktlint, detekt, swiftformat, swiftlint configs (deferred until Kotlin/Swift code exists)
@@ -1209,7 +1209,7 @@ Goal: app feels like a music app, not a tech demo. Looks great on every form fac
 - [x] Now Playing screen: full-screen art, scrubber, controls — Coil-driven `AsyncImage` artwork, full transport, blurred backdrop (`BlurredBackdrop`), tap-to-expand fullscreen lightbox.
 - [x] Now Playing: layout variants for compact (stacked) and medium+ (two-pane) *(Phase 6 part 1 — three-pane queue/lyrics deferred to large-tablet pass)*
 - [x] Album-art aspect-ratio handling (square crop + blurred letterbox fill) — `AlbumArtPlaceholder` renders a two-layer composition: a `Modifier.blur(28.dp)`-cropped backdrop of the same image plus a `ContentScale.Fit` foreground. Square art reads as a single image (the layers are pixel-identical inside the frame); non-square art shows the full image with its own blurred halo filling the letterbox instead of edge-clipping.
-- [~] Gesture handling: swipe, pinch, long-press — long-press skip-menu, MiniPlayer swipe-up to expand, MiniPlayer horizontal swipe-to-skip (left = next, right = previous). Pinch-to-lyrics still deferred.
+- [x] Gesture handling: swipe, pinch, long-press — long-press skip-menu, MiniPlayer swipe-up to expand, MiniPlayer horizontal swipe-to-skip (left = next, right = previous), and **Now Playing artwork pinch-to-lyrics** (zoom factor > 1.15× jumps to the lyrics screen, mirroring the gestural pattern of "zoom in to see more"). Implemented in `AlbumArtPlaceholder` via `detectTransformGestures(panZoomLock = true)`.
 - [x] Lyrics view: synced LRC karaoke + plain text fallback — LRClib + sidecar `.lrc` + embedded USLT/SYLT, tap-to-seek, copy to clipboard, A−/A+ font scale (persisted), source attribution badge, manual artist/title override on miss, cooperative auto-scroll (drag suppresses for ~5s) + "Jump to current line" FAB when active line scrolls off-screen.
 - [x] Star rating UI (1–5) + tap-same-star-to-clear — half-star precision shipped (`SettingsStore.useHalfStarRatings`).
 - [x] Skip tracking instrumentation — feeds the Stats screen's most-skipped tracks card and per-station skip rate.
@@ -1545,7 +1545,7 @@ experience:
   source attribution badge
 - Liked Songs: dedicated screen, "Save as playlist…" action, preset
   station, full backup/restore round-trip
-- Voice search via RecognizerIntent
+- Voice search via RecognizerIntent — strips natural-language verb prefixes ("play X", "find X", "search for X", "play me X", "play song X", "play track X", "play album X", "play artist X") via `stripVoicePrefix()` so the actual search runs against the meaningful tail rather than echoing the spoken verb.
 - Playlist export to .m3u via share sheet
 - Volume slider on Now Playing (separate from system volume)
 - Backup bundle v3: settings round-trip + custom EQ presets +
@@ -1658,6 +1658,14 @@ common `nowMs` / `sinceMs` envelope so all three views stay in sync.
 - [x] History screen — date-bucket section headers ("Today",
   "Yesterday", "Earlier this week", "Earlier this month", "Older")
   computed once per visible-list change
+- [x] Album / Artist context sheet — "Create station from this album"
+  / "Create station from this artist" actions. Inserts a new user
+  station seeded with `AlbumSelector` / `ArtistSelector` source +
+  sensible default name (album title / artist name) + Sequential
+  play order for albums, then drops the user straight into the
+  StationEditor on the new row. The canonical SPEC §7.1
+  "Create station from this artist / from this album" CTA, finally
+  wired through.
 
 #### Search polish
 

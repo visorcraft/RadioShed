@@ -98,6 +98,7 @@ fun LibraryBrowserScreen(
     onArtistTap: (Long) -> Unit = {},
     onAlbumTap: (Long) -> Unit = {},
     onGenreTap: (String) -> Unit = {},
+    onEditStation: (Long) -> Unit = {},
     libraryRepo: LibraryRepository = koinInject(),
     audioEngine: AudioEngine = koinInject(),
     stationPlayback: StationPlayback = koinInject(),
@@ -495,6 +496,29 @@ fun LibraryBrowserScreen(
                 contextAlbum = null
                 onAlbumTap(album.id)
             },
+            onCreateStation = {
+                contextAlbum = null
+                scope.launch {
+                    // Create a new user-station seeded with this
+                    // album's selector + a sensible default name,
+                    // then drop the user straight into the editor
+                    // so they can tweak playback rules. The freshly
+                    // created station is appended at the bottom of
+                    // sort order.
+                    val maxSort = stationRepo.list().maxOfOrNull { it.sortPosition } ?: 0
+                    val newId = stationRepo.insert(
+                        name = album.title,
+                        source = com.visorcraft.radioshed.domain.SourceRule.AlbumSelector(
+                            albumIds = listOf(album.id),
+                        ),
+                        playback = com.visorcraft.radioshed.domain.PlaybackRule(
+                            order = com.visorcraft.radioshed.domain.PlayOrder.Sequential,
+                        ),
+                        sortPosition = maxSort + 1,
+                    )
+                    onEditStation(newId)
+                }
+            },
         )
     }
     contextArtist?.let { artist ->
@@ -504,6 +528,20 @@ fun LibraryBrowserScreen(
             onGoToArtist = {
                 contextArtist = null
                 onArtistTap(artist.id)
+            },
+            onCreateStation = {
+                contextArtist = null
+                scope.launch {
+                    val maxSort = stationRepo.list().maxOfOrNull { it.sortPosition } ?: 0
+                    val newId = stationRepo.insert(
+                        name = artist.name,
+                        source = com.visorcraft.radioshed.domain.SourceRule.ArtistSelector(
+                            artistIds = listOf(artist.id),
+                        ),
+                        sortPosition = maxSort + 1,
+                    )
+                    onEditStation(newId)
+                }
             },
         )
     }

@@ -3,6 +3,8 @@ package com.visorcraft.radioshed.ui.player
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -614,6 +616,7 @@ fun NowPlayingScreen(
                         }
                     },
                     onTapArtwork = { artworkLightboxOpen = true },
+                    onPinchOpenLyrics = onOpenLyrics,
                     onTapArtist = {
                         scope.launch {
                             libraryRepo.artistsForTrack(playable.trackId)
@@ -660,6 +663,7 @@ fun NowPlayingScreen(
                         }
                     },
                     onTapArtwork = { artworkLightboxOpen = true },
+                    onPinchOpenLyrics = onOpenLyrics,
                     onTapArtist = {
                         scope.launch {
                             libraryRepo.artistsForTrack(playable.trackId)
@@ -787,6 +791,7 @@ private fun CompactLayout(
     onVolumeCommit: (Float) -> Unit,
     onDislikeOnStation: () -> Unit,
     onTapArtwork: () -> Unit,
+    onPinchOpenLyrics: () -> Unit,
     onTapArtist: () -> Unit,
     onTapAlbum: () -> Unit,
     driveMode: Boolean,
@@ -803,6 +808,7 @@ private fun CompactLayout(
                 .fillMaxWidth()
                 .aspectRatio(1f),
             onTap = onTapArtwork,
+            onPinchOpen = onPinchOpenLyrics,
         )
         Spacer(Modifier.height(24.dp))
         TrackInfo(
@@ -865,6 +871,7 @@ private fun TwoPaneLayout(
     onVolumeCommit: (Float) -> Unit,
     onDislikeOnStation: () -> Unit,
     onTapArtwork: () -> Unit,
+    onPinchOpenLyrics: () -> Unit,
     onTapArtist: () -> Unit,
     onTapAlbum: () -> Unit,
     driveMode: Boolean,
@@ -895,6 +902,7 @@ private fun TwoPaneLayout(
                     .widthIn(max = 560.dp)
                     .aspectRatio(1f),
                 onTap = onTapArtwork,
+                onPinchOpen = onPinchOpenLyrics,
             )
         }
         Spacer(Modifier.width(32.dp))
@@ -1044,6 +1052,7 @@ private fun AlbumArtPlaceholder(
     artworkUri: String?,
     modifier: Modifier = Modifier,
     onTap: () -> Unit = {},
+    onPinchOpen: () -> Unit = {},
 ) {
     Box(
         modifier = modifier
@@ -1053,7 +1062,18 @@ private fun AlbumArtPlaceholder(
                     colors = listOf(accent, accent.copy(alpha = 0.55f)),
                 ),
             )
-            .clickable(onClick = onTap),
+            .clickable(onClick = onTap)
+            // Pinch-to-lyrics gesture: a quick outward pinch on the
+            // artwork jumps to the lyrics screen, mirroring the
+            // gestural pattern of "zoom in to see more". Threshold
+            // of 1.15× zoom factor avoids accidental triggers from
+            // small two-finger jitter while the user's setting up
+            // a different gesture.
+            .pointerInput(Unit) {
+                detectTransformGestures(panZoomLock = true) { _, _, zoom, _ ->
+                    if (zoom > 1.15f) onPinchOpen()
+                }
+            },
         contentAlignment = Alignment.Center,
     ) {
         if (artworkUri != null) {
