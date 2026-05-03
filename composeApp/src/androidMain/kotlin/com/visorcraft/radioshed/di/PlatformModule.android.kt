@@ -30,8 +30,10 @@ import com.visorcraft.radioshed.source.CoverArtFetcher
 import com.visorcraft.radioshed.source.FileBrowser
 import com.visorcraft.radioshed.source.FileEnumerator
 import com.visorcraft.radioshed.source.AndroidRingtoneSetter
+import com.visorcraft.radioshed.source.AndroidTrackSharer
 import com.visorcraft.radioshed.source.FolderRevealer
 import com.visorcraft.radioshed.source.RingtoneSetter
+import com.visorcraft.radioshed.source.TrackSharer
 import com.visorcraft.radioshed.source.LocalLyricsLoader
 import com.visorcraft.radioshed.source.LyricsFetcher
 import com.visorcraft.radioshed.source.StorageVolumes
@@ -60,6 +62,7 @@ actual val platformModule: Module = module {
     single<FileBrowser> { AndroidFileBrowser() }
     single<FolderRevealer> { AndroidFolderRevealer(androidContext()) }
     single<RingtoneSetter> { AndroidRingtoneSetter(androidContext()) }
+    single<TrackSharer> { AndroidTrackSharer(androidContext()) }
     single { StoragePermissions(androidContext()) }
     single { StorageVolumes(androidContext()) }
 

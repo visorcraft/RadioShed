@@ -10,4 +10,13 @@
     <files-path
         name="backups"
         path="backups/" />
+    <!-- Track sharing: expose the user's primary external storage so
+         the Track Info "Share" action can hand audio files to other
+         apps via content:// URIs. /storage/emulated/0 is the canonical
+         user-storage root on Android; non-primary volumes (SD cards)
+         aren't covered here — Android disallows FileProvider exports
+         from removable storage anyway. -->
+    <external-path
+        name="external"
+        path="." />
 </paths>

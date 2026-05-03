@@ -27,7 +27,9 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -62,6 +64,7 @@ fun EqualizerScreen(
     onBack: () -> Unit,
     eq: EqualizerController = koinInject(),
     settings: SettingsStore = koinInject(),
+    sharer: com.visorcraft.radioshed.crash.CrashLogSharer = koinInject(),
 ) {
     val gains by eq.bandGains.collectAsState()
     val enabled by eq.enabled.collectAsState()
@@ -69,6 +72,22 @@ fun EqualizerScreen(
     var customPresets by remember { mutableStateOf(settings.getCustomEqPresets()) }
     var saveDialogOpen by remember { mutableStateOf(false) }
     var deleteCandidate by remember { mutableStateOf<CustomEqPreset?>(null) }
+    var importStatus by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+    val pickFile = com.visorcraft.radioshed.ui.util.rememberFilePicker { bytes ->
+        scope.launch {
+            val parsed = com.visorcraft.radioshed.data.EqPresetIO.fromJson(bytes.decodeToString())
+            if (parsed == null) {
+                importStatus = "Couldn't parse preset file."
+                return@launch
+            }
+            // Merge — overwrites by name, preserves other custom presets.
+            parsed.presets.forEach { settings.saveCustomEqPreset(it) }
+            customPresets = settings.getCustomEqPresets()
+            importStatus = "Imported ${parsed.presets.size} preset" +
+                if (parsed.presets.size == 1) "." else "s."
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -122,10 +141,31 @@ fun EqualizerScreen(
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f),
                 )
-                TextButton(
-                    onClick = { saveDialogOpen = true },
-                    enabled = gains.isNotEmpty(),
-                ) { Text("Save current…") }
+                Row {
+                    TextButton(onClick = { pickFile("application/json") }) { Text("Import…") }
+                    TextButton(
+                        onClick = {
+                            scope.launch {
+                                val json = com.visorcraft.radioshed.data.EqPresetIO.toJson(customPresets)
+                                val ok = sharer.share("RadioShed EQ presets", json)
+                                if (!ok) importStatus = "Couldn't share presets."
+                            }
+                        },
+                        enabled = customPresets.isNotEmpty(),
+                    ) { Text("Export") }
+                    TextButton(
+                        onClick = { saveDialogOpen = true },
+                        enabled = gains.isNotEmpty(),
+                    ) { Text("Save current…") }
+                }
+            }
+            importStatus?.let { msg ->
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    msg,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
             }
             Spacer(Modifier.height(6.dp))
             // Horizontal-scroll chip row holds both built-in + custom

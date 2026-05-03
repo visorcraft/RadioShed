@@ -95,6 +95,7 @@ fun AppSettingsScreen(
     var autoResume by remember(settings) { mutableStateOf(settings.getAutoResumeLastStation()) }
     var driveMode by remember(settings) { mutableStateOf(settings.getDriveMode()) }
     var autoBackup by remember(settings) { mutableStateOf(settings.getAutoBackupEnabled()) }
+    var autoRescan by remember(settings) { mutableStateOf(settings.getAutoRescanOnLaunch()) }
     var artworkState by remember { mutableStateOf<ArtworkSyncState>(ArtworkSyncState.Idle) }
     var artworkJob by remember { mutableStateOf<Job?>(null) }
     val scope = rememberCoroutineScope()
@@ -259,6 +260,20 @@ fun AppSettingsScreen(
 
             // ---- Library maintenance ----
             SectionHeader("Library")
+            ToggleRow(
+                title = "Rescan folders on launch",
+                subtitle = "Walks every registered folder every time RadioShed " +
+                    "starts cold, picking up files added externally (USB " +
+                    "drag-and-drop, ripping a CD, etc). Scanner is idempotent " +
+                    "so this is safe to leave on, but it adds a few seconds " +
+                    "to the first-frame on libraries that change often.",
+                checked = autoRescan,
+                onCheckedChange = { v ->
+                    autoRescan = v
+                    settings.setAutoRescanOnLaunch(v)
+                },
+            )
+            Spacer(Modifier.height(8.dp))
             ArtworkSyncCard(
                 state = artworkState,
                 onStart = {

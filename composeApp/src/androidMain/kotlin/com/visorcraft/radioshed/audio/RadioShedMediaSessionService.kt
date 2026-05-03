@@ -321,11 +321,13 @@ class RadioShedMediaSessionService : MediaLibraryService() {
             // user can rate / dislike without taking eyes off the road.
             val starCommand = SessionCommand(ACTION_TOGGLE_STAR, Bundle.EMPTY)
             val dislikeCommand = SessionCommand(ACTION_DISLIKE_ON_STATION, Bundle.EMPTY)
+            val heartCommand = SessionCommand(ACTION_TOGGLE_LIKE, Bundle.EMPTY)
 
             val sessionCommands = MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS
                 .buildUpon()
                 .add(starCommand)
                 .add(dislikeCommand)
+                .add(heartCommand)
                 .build()
 
             val starButton = CommandButton.Builder()
@@ -338,11 +340,16 @@ class RadioShedMediaSessionService : MediaLibraryService() {
                 .setDisplayName("Dislike")
                 .setIconResId(R.drawable.ic_radioshed_thumb_down)
                 .build()
+            val heartButton = CommandButton.Builder()
+                .setSessionCommand(heartCommand)
+                .setDisplayName("Like")
+                .setIconResId(R.drawable.ic_radioshed_heart)
+                .build()
 
             return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
                 .setAvailablePlayerCommands(playerCommands)
                 .setAvailableSessionCommands(sessionCommands)
-                .setCustomLayout(ImmutableList.of(starButton, dislikeButton))
+                .setCustomLayout(ImmutableList.of(heartButton, starButton, dislikeButton))
                 .build()
         }
 
@@ -386,6 +393,23 @@ class RadioShedMediaSessionService : MediaLibraryService() {
                                 ratingRepo.dislikeForStation(trackId, stationId)
                             }
                             playback.skipNext()
+                        }
+                    }
+                    Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+                }
+                ACTION_TOGGLE_LIKE -> {
+                    // Heart toggle from notification / Auto. Idempotent
+                    // — re-tapping unlikes, matching the in-app heart
+                    // button's behaviour. No skip; the user explicitly
+                    // wants to keep listening.
+                    scope.launch {
+                        runCatching {
+                            val ratingRepo = GlobalContext.get().get<RatingRepository>()
+                            if (ratingRepo.isLiked(trackId)) {
+                                ratingRepo.unlike(trackId)
+                            } else {
+                                ratingRepo.like(trackId)
+                            }
                         }
                     }
                     Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
@@ -553,6 +577,7 @@ class RadioShedMediaSessionService : MediaLibraryService() {
         // arbitrary but must round-trip exactly through SessionCommand.
         const val ACTION_TOGGLE_STAR = "com.visorcraft.radioshed.RATE_STAR"
         const val ACTION_DISLIKE_ON_STATION = "com.visorcraft.radioshed.DISLIKE"
+        const val ACTION_TOGGLE_LIKE = "com.visorcraft.radioshed.LIKE"
 
         // Notification config for the foreground media-playback service.
         // Channel id is referenced from the manifest's auto-created

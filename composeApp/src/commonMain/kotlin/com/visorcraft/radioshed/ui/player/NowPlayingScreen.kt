@@ -1163,6 +1163,7 @@ private fun TrackInfoDialog(
     val stationRepo: com.visorcraft.radioshed.data.StationRepository = koinInject()
     val folderRevealer: com.visorcraft.radioshed.source.FolderRevealer = koinInject()
     val ringtoneSetter: com.visorcraft.radioshed.source.RingtoneSetter = koinInject()
+    val trackSharer: com.visorcraft.radioshed.source.TrackSharer = koinInject()
     val scope = rememberCoroutineScope()
     var track by remember { mutableStateOf<Track?>(null) }
     var ringtoneStatus by remember { mutableStateOf<String?>(null) }
@@ -1215,29 +1216,49 @@ private fun TrackInfoDialog(
                             modifier = Modifier.padding(bottom = 4.dp),
                         )
                     }
-                    androidx.compose.material3.OutlinedButton(
-                        onClick = {
-                            scope.launch {
-                                ringtoneStatus = "Setting ringtone…"
-                                val result = ringtoneSetter.setAsRingtone(
-                                    absolutePath = t.path,
-                                    displayName = t.title.ifBlank { t.fileName },
-                                )
-                                ringtoneStatus = when (result) {
-                                    is com.visorcraft.radioshed.source.RingtoneSetter.Result.Ok ->
-                                        "Set as ringtone."
-                                    is com.visorcraft.radioshed.source.RingtoneSetter.Result.NeedsPermission ->
-                                        "Grant Modify system settings, then tap again."
-                                    is com.visorcraft.radioshed.source.RingtoneSetter.Result.NotSupported ->
-                                        "Not supported on this platform."
-                                    is com.visorcraft.radioshed.source.RingtoneSetter.Result.Failed ->
-                                        "Couldn't set: ${result.reason}"
-                                }
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
+                    Row(
+                        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
                     ) {
-                        Text("Set as ringtone")
+                        androidx.compose.material3.OutlinedButton(
+                            onClick = {
+                                scope.launch {
+                                    ringtoneStatus = "Setting ringtone…"
+                                    val result = ringtoneSetter.setAsRingtone(
+                                        absolutePath = t.path,
+                                        displayName = t.title.ifBlank { t.fileName },
+                                    )
+                                    ringtoneStatus = when (result) {
+                                        is com.visorcraft.radioshed.source.RingtoneSetter.Result.Ok ->
+                                            "Set as ringtone."
+                                        is com.visorcraft.radioshed.source.RingtoneSetter.Result.NeedsPermission ->
+                                            "Grant Modify system settings, then tap again."
+                                        is com.visorcraft.radioshed.source.RingtoneSetter.Result.NotSupported ->
+                                            "Not supported on this platform."
+                                        is com.visorcraft.radioshed.source.RingtoneSetter.Result.Failed ->
+                                            "Couldn't set: ${result.reason}"
+                                    }
+                                }
+                            },
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Text("Ringtone")
+                        }
+                        androidx.compose.material3.OutlinedButton(
+                            onClick = {
+                                scope.launch {
+                                    val ok = trackSharer.share(
+                                        absolutePath = t.path,
+                                        displayName = t.title.ifBlank { t.fileName },
+                                    )
+                                    if (!ok) {
+                                        ringtoneStatus = "Couldn't open share sheet."
+                                    }
+                                }
+                            },
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Text("Share")
+                        }
                     }
                     Spacer(Modifier.height(4.dp))
                     InfoLine("Title", t.title)

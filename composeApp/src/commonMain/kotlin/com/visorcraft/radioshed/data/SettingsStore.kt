@@ -10,7 +10,22 @@ import com.visorcraft.radioshed.ui.theme.ThemeMode
  * values fall back to defaults rather than throwing.
  */
 /** A user-named EQ preset captured from the current band gain values. */
+@kotlinx.serialization.Serializable
 data class CustomEqPreset(val name: String, val gainsDb: List<Float>)
+
+/**
+ * Versioned envelope for the EQ preset import/export JSON. Bumped
+ * whenever the format breaks compatibility — readers reject any
+ * version they don't know how to interpret rather than silently
+ * dropping fields.
+ */
+@kotlinx.serialization.Serializable
+data class EqPresetBundle(
+    val version: Int = CURRENT_VERSION,
+    val presets: List<CustomEqPreset>,
+) {
+    companion object { const val CURRENT_VERSION = 1 }
+}
 
 class SettingsStore(private val settings: Settings) {
 
@@ -109,6 +124,14 @@ class SettingsStore(private val settings: Settings) {
      */
     fun getAutoBackupEnabled(): Boolean = settings.getBoolean(KEY_AUTO_BACKUP, false)
     fun setAutoBackupEnabled(enabled: Boolean) = settings.putBoolean(KEY_AUTO_BACKUP, enabled)
+
+    /** When on, App.kt rescans folders whose filesystem mtime
+     *  changed since the last scan. Off by default — keeps cold
+     *  launches snappy on libraries that don't get edited often. */
+    fun getAutoRescanOnLaunch(): Boolean =
+        settings.getBoolean(KEY_AUTO_RESCAN_ON_LAUNCH, false)
+    fun setAutoRescanOnLaunch(enabled: Boolean) =
+        settings.putBoolean(KEY_AUTO_RESCAN_ON_LAUNCH, enabled)
 
     fun getLastAutoBackupAt(): Long = settings.getLong(KEY_AUTO_BACKUP_LAST, 0L)
     fun setLastAutoBackupAt(ts: Long) = settings.putLong(KEY_AUTO_BACKUP_LAST, ts)
@@ -259,6 +282,7 @@ class SettingsStore(private val settings: Settings) {
         const val KEY_AUTO_RESUME_STATION = "playback.autoResumeLastStation"
         const val KEY_AUTO_BACKUP = "backup.autoEnabled"
         const val KEY_AUTO_BACKUP_LAST = "backup.autoLastAt"
+        const val KEY_AUTO_RESCAN_ON_LAUNCH = "library.autoRescanOnLaunch"
         const val KEY_DRIVE_MODE = "ui.driveMode"
         /** Cadence for the auto-backup background export. 7 days = once
          *  per week, which matches typical user back-up cadence

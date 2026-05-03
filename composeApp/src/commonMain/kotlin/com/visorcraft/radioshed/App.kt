@@ -61,6 +61,22 @@ fun App(
             if (settings.isOnboardingComplete()) AppScreen.Home else AppScreen.Onboarding
         }
         var current by remember { mutableStateOf<AppScreen>(startScreen) }
+
+        // Composition-local nav handles for deep widgets (Track context
+        // sheet, MiniPlayer overflow, etc.) that don't have a clean
+        // ancestor route to plumb explicit callbacks through. The
+        // Album / Artist / NowPlaying jumps work from anywhere because
+        // these are single-target navigations; complex flows still go
+        // through the explicit `current = ...` assignments below.
+        androidx.compose.runtime.CompositionLocalProvider(
+            com.visorcraft.radioshed.nav.LocalNavigateToAlbum provides { id ->
+                current = AppScreen.AlbumDetail(id)
+            },
+            com.visorcraft.radioshed.nav.LocalNavigateToArtist provides { id ->
+                current = AppScreen.ArtistDetail(id)
+            },
+            com.visorcraft.radioshed.nav.LocalNavInstalled provides true,
+        ) {
         // Track the screen the user came from when they opened
         // NowPlaying so Close / Back can return there instead of
         // unconditionally collapsing to Stations. Reset to null any
@@ -102,6 +118,28 @@ fun App(
             }
         }
 
+        // Auto-rescan-on-launch safety net. Opt-in; for users who
+        // edit their Music folder outside RadioShed (added new
+        // albums via USB, ripped a CD, etc.) and don't want to
+        // remember to rescan manually. Walks every registered folder
+        // unconditionally — Scanner is idempotent (upsertTrack by
+        // path) so re-scanning unchanged folders is harmless. A
+        // future optimisation would compare folder mtime against
+        // `lastScannedAt` to skip unchanged folders, but that needs
+        // platform-specific filesystem access we don't have a clean
+        // abstraction for in commonMain yet.
+        val folderRepo: com.visorcraft.radioshed.data.FolderRepository = koinInject()
+        val scanner: com.visorcraft.radioshed.scanner.Scanner = koinInject()
+        LaunchedEffect(Unit) {
+            if (settings.isOnboardingComplete() && settings.getAutoRescanOnLaunch()) {
+                runCatching {
+                    folderRepo.list().forEach { folder ->
+                        runCatching { scanner.scanFolder(folder.id).collect { } }
+                    }
+                }
+            }
+        }
+
         // Auto-backup safety net. Opt-in; when enabled, fires a
         // BackupService.export() at most once per 7 days. Failures
         // are silent — the user already has a manual export path in
@@ -136,7 +174,7 @@ fun App(
                     current = AppScreen.Home
                 },
             )
-            return@RadioShedTheme
+            return@CompositionLocalProvider
         }
 
         // NowPlaying is full-bleed — it intentionally bypasses the MiniPlayer
@@ -159,14 +197,14 @@ fun App(
                 onOpenAlbum = { id -> current = AppScreen.AlbumDetail(id) },
                 onOpenArtist = { id -> current = AppScreen.ArtistDetail(id) },
             )
-            return@RadioShedTheme
+            return@CompositionLocalProvider
         }
 
         // Lyrics — full-bleed, opened from Now Playing.
         if (current == AppScreen.Lyrics) {
             PlatformBackHandler { current = AppScreen.NowPlaying }
             LyricsScreen(onBack = { current = AppScreen.NowPlaying })
-            return@RadioShedTheme
+            return@CompositionLocalProvider
         }
 
         // Station Editor is also full-bleed — full-form scrolling page,
@@ -182,7 +220,7 @@ fun App(
                 stationId = editingId,
                 onClose = { current = AppScreen.Stations },
             )
-            return@RadioShedTheme
+            return@CompositionLocalProvider
         }
 
         // Post-onboarding screens are stacked in a Column so the MiniPlayer
@@ -371,5 +409,6 @@ fun App(
             }
             MiniPlayer(onExpand = { navTo(AppScreen.NowPlaying) })
         }
+        }  // CompositionLocalProvider
     }
 }

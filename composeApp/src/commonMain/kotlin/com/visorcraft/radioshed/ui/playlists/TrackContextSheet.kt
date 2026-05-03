@@ -16,7 +16,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.AlertDialog
@@ -72,7 +74,11 @@ fun TrackContextSheet(
     val sheetState = rememberModalBottomSheetState()
     var track by remember { mutableStateOf<Track?>(null) }
     var liked by remember { mutableStateOf(false) }
+    var primaryArtistId by remember { mutableStateOf<Long?>(null) }
     val scope = rememberCoroutineScope()
+    val navInstalled = com.visorcraft.radioshed.nav.LocalNavInstalled.current
+    val navToAlbum = com.visorcraft.radioshed.nav.LocalNavigateToAlbum.current
+    val navToArtist = com.visorcraft.radioshed.nav.LocalNavigateToArtist.current
     // Internal step machine — when the user picks "Add to playlist",
     // we replace the visible content of the SAME sheet rather than
     // opening a second ModalBottomSheet on top (which produces
@@ -82,6 +88,12 @@ fun TrackContextSheet(
     LaunchedEffect(trackId) {
         track = libraryRepo.getTrackById(trackId)
         liked = ratingRepo.isLiked(trackId)
+        // Resolve the primary artist's id once so we can navigate
+        // straight from this sheet without an extra DB hit at click
+        // time. Tracks with multiple artist links pick the first
+        // primary (matches what the rest of the app does — top
+        // artist stats, etc.).
+        primaryArtistId = libraryRepo.artistsForTrack(trackId).firstOrNull()?.id
     }
 
     ModalBottomSheet(
@@ -92,6 +104,8 @@ fun TrackContextSheet(
             Step.Main -> MainStep(
                 track = track,
                 liked = liked,
+                navInstalled = navInstalled,
+                primaryArtistId = primaryArtistId,
                 onPlayNext = {
                     track?.let { stationPlayback.playNext(it) }
                     onDismiss()
@@ -108,6 +122,14 @@ fun TrackContextSheet(
                     }
                 },
                 onAddToPlaylist = { step = Step.PlaylistPicker },
+                onGoToAlbum = { id ->
+                    onDismiss()
+                    navToAlbum(id)
+                },
+                onGoToArtist = { id ->
+                    onDismiss()
+                    navToArtist(id)
+                },
             )
             Step.PlaylistPicker -> AddToPlaylistInline(
                 trackId = trackId,
@@ -124,10 +146,14 @@ private enum class Step { Main, PlaylistPicker }
 private fun MainStep(
     track: Track?,
     liked: Boolean,
+    navInstalled: Boolean,
+    primaryArtistId: Long?,
     onPlayNext: () -> Unit,
     onAddToQueue: () -> Unit,
     onToggleLike: () -> Unit,
     onAddToPlaylist: () -> Unit,
+    onGoToAlbum: (Long) -> Unit,
+    onGoToArtist: (Long) -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp)) {
         // Track title header — gives the user a moment of confirmation
@@ -167,6 +193,29 @@ private fun MainStep(
             enabled = track != null,
             onClick = onAddToPlaylist,
         )
+        // Nav actions only when the host installed handlers (App.kt
+        // does; tests / previews don't). Album row hidden for tracks
+        // with no albumId; artist row hidden when we couldn't resolve
+        // a primary artist link — silent rather than disabled, since
+        // a greyed-out action that does nothing reads as broken.
+        if (navInstalled) {
+            track?.albumId?.let { aid ->
+                ContextActionRow(
+                    icon = Icons.Filled.Album,
+                    label = "Go to album",
+                    enabled = true,
+                    onClick = { onGoToAlbum(aid) },
+                )
+            }
+            primaryArtistId?.let { aid ->
+                ContextActionRow(
+                    icon = Icons.Filled.Person,
+                    label = "Go to artist",
+                    enabled = true,
+                    onClick = { onGoToArtist(aid) },
+                )
+            }
+        }
         Spacer(Modifier.height(8.dp))
     }
 }
