@@ -1293,7 +1293,7 @@ Goal: optional radio-style voice between tracks, configurable per station.
 
 Goal: power users with connectivity get richer art, lyrics, scrobbling, recs.
 
-- [x] Connectivity policy enforcement (Always / WiFi-only / Never / Manual) — `ConnectivityPolicy` enum in `domain/Settings.kt`, persisted via `SettingsStore.getConnectivityPolicy()`, checked at the call site of every online fetcher (Cover Art, LRClib) before the request goes out.
+- [x] Connectivity policy enforcement (Always / WiFi-only / Never / Manual) — `ConnectivityPolicy` enum in `domain/Settings.kt`, persisted via `SettingsStore.getConnectivityPolicy()`, gated through `NetworkPolicyGate` (commonMain) backed by an expect/actual `ConnectivityChecker` (Android: `ConnectivityManager.NetworkCapabilities`; iOS: stub). LyricsService and MissingArtworkSync both consult the gate before reaching the fetcher; Manual permits user-initiated retries but blocks automatic ones, WiFi-only checks `NET_CAPABILITY_NOT_METERED || TRANSPORT_WIFI || TRANSPORT_ETHERNET`, Never blocks both.
 - [~] Ktor HTTP client with persistent disk cache + rate-limit handling — Cover Art Archive (`AndroidCoverArtFetcher`) and LRClib (`AndroidLyricsFetcher`) use Ktor with on-disk caches keyed by trackId / album MBID; transient HTTP errors no longer fall through as "not found". Rate-limit backoff + a unified Ktor `HttpClient` factory still deferred.
 - [x] Cover Art Archive client — direct MBID fetch + release-group fallback, missing-artwork sync sweeps the library on demand (`MissingArtworkSync`).
 - [ ] **fanart.tv client** (HQ artist images) *(deferred)*
@@ -1770,6 +1770,140 @@ bug, but each had a defensible "this could race" footprint:
   conditional now
 - [x] `restoreFromBackup` per-key type validation (only writes a key
   if the bundle's type matches what the app currently stores there)
+
+#### Phase 19 audit follow-up (peer code review fix sweep)
+
+A second pass after the parallel-agent peer review uncovered a batch
+of correctness bugs in the polish stream itself. None of these were
+user-reported, but each was wrong on inspection and shipped only
+because the original review had focused on the wider codebase rather
+than the v2 polish:
+
+- [x] **Connectivity policy was decorative.** The Settings →
+  Connectivity picker (Always / WiFi-only / Never / Manual) was read
+  for display but never consulted by `LyricsService` or
+  `MissingArtworkSync`, so a user on Wi-Fi-only still hit the
+  network on cellular. New `NetworkPolicyGate` (commonMain) +
+  `ConnectivityChecker` expect/actual (Android consults
+  `ConnectivityManager.NetworkCapabilities`; iOS stub returns
+  permissive defaults). LyricsService gates per-fetch on
+  `allowAutomaticFetch` (passive resolves) or
+  `allowUserInitiatedFetch` (the manual force-refresh button —
+  Manual policy permits user-driven calls). MissingArtworkSync
+  emits a new `Progress.PolicyBlocked` state when the sweep is
+  refused, surfaced as a distinct red message in the
+  `ArtworkSyncCard`.
+- [x] **`StationRepository.duplicate()` was not atomic.** Two
+  concurrent Duplicate taps could read the same `MAX(sort_position)`
+  and insert two stations with identical sort positions. Now wrapped
+  in a SQLDelight transaction with a new `selectMaxStationSort`
+  query inside the transaction. While here, also added
+  `bumpCopySuffix()` so duplicating "Foo" → "Foo (copy)" → "Foo
+  (copy 2)" instead of "Foo (copy) (copy)".
+- [x] **Station up/down swap could leave duplicate sort_position
+  rows.** Two `reorder()` calls outside any transaction could be
+  observed mid-pair by `selectAllStations` Flow consumers, or leave
+  the DB with a duplicate position if the process was killed
+  between writes. New `StationRepository.swapSortPositions()` runs
+  both UPDATEs inside a single transaction.
+- [x] **Genre auto-station generator was N+1.** Per-genre
+  `tracksByTag(GENRE, value).size` issued a full row fetch just to
+  read `.size`, stalling cold-start on libraries with dozens of
+  distinct genres. New `selectTagValueTrackCounts` SQL does a single
+  COUNT(*) GROUP BY pass; `LibraryRepository.tagValueTrackCounts()`
+  returns the (value → count) map directly.
+- [x] **Genre & decade auto-stations weren't truly idempotent.** If
+  the user renamed an auto-generated "Genre: Rock" → "Rock Mix", a
+  re-run created a duplicate "Genre: Rock". Now match by source rule
+  rather than name: genre matches `TagFilter("GENRE", [name])`
+  (case-insensitive); decade matches existing `AlbumSelector` whose
+  ID set has ≥80% overlap with the candidate decade's albums.
+- [x] **Decade auto-stations had a hardcoded `nowYear = 2030`.**
+  Replaced with a runtime `currentYear()` expect/actual (Android
+  uses `java.util.Calendar`, iOS uses `NSCalendar`) plus a derived
+  `currentDecadeEnd` so the bucket list extends past 2030 when the
+  current calendar year is in a later decade.
+- [x] **`dailyActivity()` lost boundary-day plays.** A history row
+  whose `played_at` landed exactly on `now − windowDays * DAY_MS`
+  was bucketed as `days_ago == windowDays`, which the
+  `(windowDays-1 downTo 0)` renderer skipped. Adjusted `sinceMs`
+  by +1 ms so all included rows fit the 0..windowDays-1 range.
+- [x] **`selectCompletionStats` returned nullable `completed`.** The
+  `SUM(CASE …)` over zero rows was nullable, so callers had to
+  `?: 0L`. Wrapped in `IFNULL(..., 0)` so the column is now non-null
+  and the contract leak is fixed.
+- [x] **`LibraryBrowserScreen` Songs tab quick filter reset on tab
+  switch.** State was declared inside the `LibraryTab.Songs ->`
+  branch; switching tabs and back re-`remember`-ed an empty filter.
+  Hoisted to function scope alongside `selectedTab`.
+- [x] **`albumPlayCounts` / `artistPlayCounts` were frozen at first
+  load.** `LaunchedEffect(sort)` had a `.isEmpty()` guard that
+  prevented re-fetching when the user switched away from MostPlayed
+  and back. Removed the guard so subsequent activations refresh the
+  snapshot.
+- [x] **MiniPlayer's three sibling `pointerInput` blocks couldn't
+  arbitrate gestures.** detectVerticalDragGestures and
+  detectHorizontalDragGestures each got the raw event stream
+  independently, so a diagonal swipe could fire both `onExpand()`
+  and `skipNext()`. Drag handling is now a single `awaitEachGesture`
+  with manual axis lock at the first slop crossing — the first
+  axis-dominant move locks the gesture, and only the matching
+  channel (vertical → expand, horizontal → skip) accumulates after
+  that. Tap stays in its own pointerInput (taps don't cross slop so
+  they don't conflict). Skip-haptic switched from
+  `HapticFeedbackType.LongPress` (heavy buzz) to `TextHandleMove`
+  (light tick) for everyday skip use.
+- [x] **MiniPlayer sleep-timer countdown formatter was wrong for
+  >1h durations.** Rendered as `"1:30h"` (number of hours, then
+  minutes, then suffix `h`) which read as "1:30 hours". Now
+  `"1h 30m"`.
+- [x] **Lyrics auto-scroll grace window armed unreliably across KMP
+  targets.** `LazyListState.interactionSource.collectIsDraggedAsState()`
+  is a documented API but its `DragInteraction` emission isn't
+  guaranteed on every Compose-multiplatform target. Replaced with
+  `listState.isScrollInProgress` gated by a
+  `animatingProgrammatically` flag we set around our own
+  `animateScrollToItem` calls — when scrolling-and-not-our-animate,
+  it's the user. Works the same on Android and is reliable
+  cross-platform.
+- [x] **Pinch-to-lyrics fired the navigation per-event, not per-
+  gesture.** `detectTransformGestures`'s callback runs on every
+  pointer-move while two fingers are down, so a fast pinch could
+  push the Lyrics screen multiple times. Replaced with a manual
+  `awaitEachGesture` + cumulative-zoom accumulator + `fired` flag
+  so `onPinchOpen()` runs at most once per gesture; threshold
+  bumped from 1.15× to 1.20× cumulative zoom.
+- [x] **FolderBrowser duration loop was O(n²).** Each per-file DB
+  hit triggered `durationsMs = acc.toMap()` — a fresh map copy on
+  every iteration, plus a recomposition of the entire LazyColumn.
+  Now batches the publish every 25 hits with a final flush so the
+  UI still updates incrementally without the quadratic copying.
+- [x] **`BackupRestoreScreen` Restore button enabled while preview
+  was loading or had failed to parse.** The "Reading backup
+  contents…" placeholder also rendered an enabled "Restore" button.
+  Now `enabled = previewLoaded` so the action is gated on a
+  successful (or failed) parse.
+- [x] **`BackupRestoreScreen` preview state could persist across
+  dialog dismiss/reopen.** `var preview by remember(file.uri)` keyed
+  the state on URI; opening the same backup twice in a row could
+  return cached `previewLoaded = false` from the first try if the
+  initial load was cancelled. Removed the key so the let block's
+  enter/exit naturally drops state, and the LaunchedEffect re-runs.
+- [x] **`SettingsStore.pinFileBrowserFolder` corrupted on tab/
+  newline in name.** Folders displayed via the file system can
+  occasionally contain `\t` or `\n`, which corrupts the
+  `name\tpath\nname2\tpath2` blob. `name` and `path` are now both
+  sanitized at write time.
+- [x] **`LibrarySummaryCard` showed stale counts.** Loaded once via
+  `LaunchedEffect(Unit)`; if the user added a folder and scanned
+  while AppSettings was on the back stack, the card never
+  refreshed. Now subscribes to `observeTrackCount()` Flow as a
+  "library changed" trigger and re-fetches the others on every
+  emission.
+- [x] **`EditFolderDialog` glob editor split on `,` corrupted brace
+  patterns.** Comma split would break `**/{Rock,Pop}/**` into two
+  invalid patterns. Switched to one-pattern-per-line input
+  (placeholder shows the new format).
 
 ---
 

@@ -635,18 +635,19 @@ private fun EditFolderDialog(
     ) -> Unit,
 ) {
     var name by remember { mutableStateOf(folder.displayName) }
-    // Globs are stored as a `List<String>`; the editor presents them
-    // as comma-separated text for ergonomics (matches the
-    // StationEditor's tag-values + path-pattern flows). Empty
-    // entries are filtered out on save.
+    // Globs are stored as a `List<String>`; the editor presents
+    // them as one pattern per line. Newline-separated rather than
+    // comma-separated because brace-expansion patterns like
+    // `**/{Rock,Pop}/**` would otherwise get split mid-pattern by
+    // a comma parser. Blank lines are filtered out on save.
     var includeText by remember {
-        mutableStateOf(folder.includeGlobs.joinToString(", "))
+        mutableStateOf(folder.includeGlobs.joinToString("\n"))
     }
     var excludeText by remember {
-        mutableStateOf(folder.excludeGlobs.joinToString(", "))
+        mutableStateOf(folder.excludeGlobs.joinToString("\n"))
     }
     val parseGlobs: (String) -> List<String> = { raw ->
-        raw.split(',').map { it.trim() }.filter { it.isNotEmpty() }
+        raw.split('\n').map { it.trim() }.filter { it.isNotEmpty() }
     }
     val nameClean = name.trim()
     val newIncludes = parseGlobs(includeText)
@@ -679,13 +680,15 @@ private fun EditFolderDialog(
                     ),
                 )
                 Spacer(Modifier.height(12.dp))
-                // Glob include / exclude. Comma-separated patterns
-                // matched against each track's path during the scan
+                // Glob include / exclude. One pattern per line, matched
+                // against each track's path during the scan
                 // (FileEnumerator side). Common cases: `**/Spoken
                 // Word/**` to exclude an audiobook tree, `*.flac` to
-                // include only lossless. Empty = no filter.
+                // include only lossless. Empty = no filter. Newline
+                // separator avoids splitting brace-expansion patterns
+                // like `**/{Rock,Pop}/**` mid-pattern.
                 Text(
-                    "Path filters (comma-separated globs)",
+                    "Path filters (one glob per line)",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                 )
@@ -694,9 +697,9 @@ private fun EditFolderDialog(
                     value = includeText,
                     onValueChange = { includeText = it },
                     label = { Text("Include patterns") },
-                    placeholder = { Text("*.flac, **/Music/**") },
+                    placeholder = { Text("*.flac\n**/Music/**") },
                     singleLine = false,
-                    maxLines = 2,
+                    maxLines = 4,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Spacer(Modifier.height(8.dp))
@@ -704,9 +707,9 @@ private fun EditFolderDialog(
                     value = excludeText,
                     onValueChange = { excludeText = it },
                     label = { Text("Exclude patterns") },
-                    placeholder = { Text("**/Spoken Word/**, *.m4b") },
+                    placeholder = { Text("**/Spoken Word/**\n*.m4b") },
                     singleLine = false,
-                    maxLines = 2,
+                    maxLines = 4,
                     modifier = Modifier.fillMaxWidth(),
                 )
             }

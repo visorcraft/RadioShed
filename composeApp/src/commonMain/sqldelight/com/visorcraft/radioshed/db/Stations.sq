@@ -274,12 +274,21 @@ ORDER BY hour;
 
 -- Completion-rate aggregates over all of station_history. Two
 -- counts in one query is cheaper than two scans even on a tiny
--- index; SQLite does it in one pass.
+-- index; SQLite does it in one pass. IFNULL keeps SUM non-null
+-- on cold-start (zero rows) so callers don't need a `?: 0L`.
 selectCompletionStats:
 SELECT
-    SUM(CASE WHEN completed = 1 THEN 1 ELSE 0 END) AS completed,
+    IFNULL(SUM(CASE WHEN completed = 1 THEN 1 ELSE 0 END), 0) AS completed,
     COUNT(*) AS total
 FROM station_history;
+
+-- Atomic next-sort-position lookup used inside the duplicate-station
+-- transaction. IFNULL handles the empty-table case so callers don't
+-- need a coalesce. Wrapped in a transaction with the subsequent
+-- INSERT so two concurrent duplicates can't compute the same sort
+-- position.
+selectMaxStationSort:
+SELECT IFNULL(MAX(sort_position), 0) AS max_sort FROM station;
 
 -- Top artists by play count, joining through track_artist (primary
 -- role only — features / album-artist links would over-count). Returns

@@ -3,7 +3,9 @@ package com.visorcraft.radioshed.ui.player
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -1065,13 +1067,27 @@ private fun AlbumArtPlaceholder(
             .clickable(onClick = onTap)
             // Pinch-to-lyrics gesture: a quick outward pinch on the
             // artwork jumps to the lyrics screen, mirroring the
-            // gestural pattern of "zoom in to see more". Threshold
-            // of 1.15× zoom factor avoids accidental triggers from
-            // small two-finger jitter while the user's setting up
-            // a different gesture.
+            // gestural pattern of "zoom in to see more". Cumulative
+            // zoom threshold of 1.20× avoids accidental triggers and
+            // a `fired` flag inside awaitEachGesture ensures the
+            // navigation only fires once per gesture even though
+            // detectTransformGestures' callback is called per move
+            // event (it would otherwise push Lyrics multiple times
+            // onto the back stack on a fast continuous pinch).
             .pointerInput(Unit) {
-                detectTransformGestures(panZoomLock = true) { _, _, zoom, _ ->
-                    if (zoom > 1.15f) onPinchOpen()
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false)
+                    var cumulativeZoom = 1f
+                    var fired = false
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        cumulativeZoom *= event.calculateZoom()
+                        if (!fired && cumulativeZoom > 1.20f) {
+                            fired = true
+                            onPinchOpen()
+                        }
+                        if (event.changes.none { it.pressed }) break
+                    }
                 }
             },
         contentAlignment = Alignment.Center,

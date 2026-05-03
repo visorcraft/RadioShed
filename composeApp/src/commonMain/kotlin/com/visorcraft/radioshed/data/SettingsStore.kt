@@ -354,11 +354,19 @@ class SettingsStore(private val settings: Settings) {
 
     fun pinFileBrowserFolder(name: String, path: String) {
         if (path.isBlank()) return
+        // Sanitize the delimiter chars out of the display name so a
+        // folder whose name happens to contain `\t` or `\n` (rare on
+        // Android but possible on cross-mounted volumes from POSIX
+        // filesystems) doesn't corrupt the stored blob. Path is
+        // platform-canonical and won't contain newlines, but we
+        // strip tabs there too as belt-and-suspenders.
+        val safeName = name.replace('\t', ' ').replace('\n', ' ')
+        val safePath = path.replace('\t', ' ').replace('\n', ' ')
         // Dedupe by path so re-pinning the same folder doesn't grow
         // the list. Newest-first so a freshly-pinned folder appears
         // immediately after the preset chips on the bookmarks row.
-        val current = getFileBrowserPinnedFolders().filterNot { it.second == path }
-        val updated = (listOf(name to path) + current).take(FILE_BROWSER_PIN_CAP)
+        val current = getFileBrowserPinnedFolders().filterNot { it.second == safePath }
+        val updated = (listOf(safeName to safePath) + current).take(FILE_BROWSER_PIN_CAP)
         settings.putString(
             KEY_FILE_BROWSER_PINS,
             updated.joinToString("\n") { "${it.first}\t${it.second}" },

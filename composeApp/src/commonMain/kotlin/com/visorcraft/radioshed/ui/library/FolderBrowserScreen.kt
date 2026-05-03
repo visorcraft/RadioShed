@@ -200,20 +200,29 @@ fun FolderBrowserScreen(
         // unrelated audio files in the new directory.
         durationsMs = emptyMap()
     }
-    // Fan-out per-file duration lookups. Sequential to avoid hammering
-    // the DB on directories with hundreds of audio files; the visible
-    // list still updates incrementally as each query completes.
+    // Per-file duration lookups. Previous version published the
+    // accumulator via toMap() on every hit — O(n²) copying for
+    // folders with hundreds of audio files. Now we batch the
+    // publishes: incremental updates every BATCH_SIZE hits keep the
+    // UI feeling live, plus a final publish on completion.
     LaunchedEffect(entries) {
         val audioPaths = entries.filter { it.isAudio }.map { it.path }
         if (audioPaths.isEmpty()) return@LaunchedEffect
+        val batchSize = 25
         val acc = mutableMapOf<String, Long>()
+        var sinceLastFlush = 0
         for (p in audioPaths) {
             val track = libraryRepo.getTrackByPath(p) ?: continue
             if (track.durationMs > 0L) {
                 acc[p] = track.durationMs
-                durationsMs = acc.toMap()
+                sinceLastFlush += 1
+                if (sinceLastFlush >= batchSize) {
+                    durationsMs = acc.toMap()
+                    sinceLastFlush = 0
+                }
             }
         }
+        if (acc.isNotEmpty()) durationsMs = acc.toMap()
     }
     LaunchedEffect(Unit) {
         presetBookmarks = fileBrowser.commonLocations()

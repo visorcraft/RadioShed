@@ -220,14 +220,13 @@ fun BackupRestoreScreen(
     restoreConfirm?.let { file ->
         // Pre-restore preview: parse the bundle on dialog open and
         // surface the contained counts so the user knows what
-        // they're about to merge before committing. Falls back to
-        // the original generic warning if the parse fails — the
-        // restore action itself will then report a more specific
-        // error when the user proceeds.
-        var preview by remember(file.uri) {
-            mutableStateOf<BackupService.BundlePreview?>(null)
-        }
-        var previewLoaded by remember(file.uri) { mutableStateOf(false) }
+        // they're about to merge before committing. State has no
+        // remember-key — it resets every time the let block leaves
+        // composition (i.e. when restoreConfirm clears), so a quick
+        // dismiss-and-reopen always re-runs the preview load
+        // instead of getting stuck on a stale "Reading…" snapshot.
+        var preview by remember { mutableStateOf<BackupService.BundlePreview?>(null) }
+        var previewLoaded by remember { mutableStateOf(false) }
         LaunchedEffect(file.uri) {
             preview = backupService.preview(file.uri)
             previewLoaded = true
@@ -284,7 +283,9 @@ fun BackupRestoreScreen(
                 }
             },
             confirmButton = {
-                TextButton(onClick = {
+                TextButton(
+                    enabled = previewLoaded,
+                    onClick = {
                     val toRestore = file
                     restoreConfirm = null
                     scope.launch {
@@ -321,6 +322,7 @@ fun BackupRestoreScreen(
             },
         )
     }
+
 
     deleteConfirm?.let { file ->
         AlertDialog(

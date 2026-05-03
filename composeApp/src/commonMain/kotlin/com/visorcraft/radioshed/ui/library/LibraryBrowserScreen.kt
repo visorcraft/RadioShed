@@ -175,14 +175,16 @@ fun LibraryBrowserScreen(
                 .getOrDefault(ArtistSort.NameAsc),
         )
     }
-    // Per-artist play count map for the "Most played" sort. Only
-    // populated when that sort is active so we don't pay the query
-    // cost for users who stick with alphabetical. Long.MAX_VALUE
-    // limit is fine — selectTopPlayedArtists already runs an indexed
-    // GROUP BY and the result fits comfortably in memory.
+    // Per-artist play count map for the "Most played" sort. Refetched
+    // every time MostPlayed becomes active so a user who plays new
+    // tracks while the browser is open and then switches back to the
+    // sort sees fresh counts (not the snapshot from first activation).
+    // Long.MAX_VALUE limit is fine — selectTopPlayedArtists already
+    // runs an indexed GROUP BY and the result fits comfortably in
+    // memory.
     var artistPlayCounts by remember { mutableStateOf<Map<Long, Long>>(emptyMap()) }
     LaunchedEffect(artistSort) {
-        if (artistSort == ArtistSort.MostPlayed && artistPlayCounts.isEmpty()) {
+        if (artistSort == ArtistSort.MostPlayed) {
             artistPlayCounts = stationRepo.topPlayedArtists(Long.MAX_VALUE)
                 .associate { it.id to it.plays }
         }
@@ -199,14 +201,21 @@ fun LibraryBrowserScreen(
                 .getOrDefault(GenreSort.NameAsc),
         )
     }
-    // Per-album play count map for the "Most played" sort.
+    // Per-album play count map for the "Most played" sort. Refetched
+    // every time MostPlayed becomes active so the snapshot is fresh
+    // when the user switches sorts and switches back.
     var albumPlayCounts by remember { mutableStateOf<Map<Long, Long>>(emptyMap()) }
     LaunchedEffect(albumSort) {
-        if (albumSort == AlbumSort.MostPlayed && albumPlayCounts.isEmpty()) {
+        if (albumSort == AlbumSort.MostPlayed) {
             albumPlayCounts = stationRepo.topPlayedAlbums(Long.MAX_VALUE)
                 .associate { it.id to it.plays }
         }
     }
+    // Songs tab quick filter — hoisted to function scope so the value
+    // survives a tab switch (was previously declared inside the
+    // `LibraryTab.Songs ->` branch and silently reset every time the
+    // user navigated away and back).
+    var songsFilter by remember { mutableStateOf("") }
     LaunchedEffect(selectedTab) { settings.setLibraryTabIndex(selectedTab.ordinal) }
     LaunchedEffect(sortOrder) { settings.setLibrarySongSort(sortOrder.name) }
     LaunchedEffect(artistSort) { settings.setLibraryArtistSort(artistSort.name) }
@@ -461,8 +470,9 @@ fun LibraryBrowserScreen(
                     // match against title or filename, case-insensitive.
                     // Composes with sort + artist/album filters; gives users
                     // a "find that song" affordance without leaving the
-                    // browser for the global Search screen.
-                    var songsFilter by remember { mutableStateOf("") }
+                    // browser for the global Search screen. State hoisted
+                    // to the function scope so the filter survives a tab
+                    // switch.
                     androidx.compose.material3.OutlinedTextField(
                         value = songsFilter,
                         onValueChange = { songsFilter = it },

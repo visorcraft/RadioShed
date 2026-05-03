@@ -452,6 +452,18 @@ WHERE tt.key = ? AND tt.value = ? AND track.is_available = 1;
 distinctTagValues:
 SELECT DISTINCT value FROM track_tag WHERE key = ? ORDER BY value;
 
+-- Bulk (value → COUNT(track)) for a tag key, restricted to available
+-- tracks. Replaces an N+1 pattern in the genre auto-station generator
+-- where each `tracksByTag(GENRE, v).size` round-tripped a full row
+-- fetch just to read .size.
+selectTagValueTrackCounts:
+SELECT tt.value AS value, COUNT(*) AS track_count
+FROM track_tag tt
+JOIN track ON track.id = tt.track_id
+WHERE tt.key = ? AND track.is_available = 1
+GROUP BY tt.value
+ORDER BY track_count DESC;
+
 deleteAllTagsForTrack:
 DELETE FROM track_tag WHERE track_id = ?;
 

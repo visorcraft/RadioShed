@@ -1,9 +1,11 @@
 package com.visorcraft.radioshed.ui.player
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitTouchSlopOrCancellation
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.horizontalDrag
+import androidx.compose.foundation.gestures.verticalDrag
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -39,6 +41,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -90,20 +94,15 @@ fun MiniPlayer(
         // padding the transport buttons render BEHIND the system 3-button
         // navigation strip on phones that use it (Galaxy Z Fold 7, etc.).
         //
-        // Tap + swipe-up are handled in a SINGLE pointerInput so they
-        // can coexist. The previous combo of `.draggable + .clickable`
-        // had a known Compose interaction issue: a slow deliberate tap
-        // that crossed touchSlop got consumed by `draggable` and the
-        // clickable never fired. detectTapGestures and
-        // detectVerticalDragGestures inside one pointerInput cooperate
-        // through the gesture-resolution algorithm — taps fire on
-        // up-event without exceeding touchSlop, drags fire when slop
-        // is crossed.
-        //
-        // Note: the Surface still gets ripple via the underlying
-        // Material container; we lose the per-press ripple animation
-        // here for the tap-to-expand. That's an acceptable tradeoff —
-        // the transport buttons inside still get their own ripples.
+        // Gesture handling: tap + long-press live in their own
+        // pointerInput (detectTapGestures only fires when no touch
+        // slop is crossed, so drags don't conflict). The drag
+        // pointerInput uses a single awaitEachGesture with manual axis
+        // lock — Compose's gesture system can't arbitrate between two
+        // sibling detectVertical/detectHorizontal blocks reliably (they
+        // each receive the raw stream independently and can both fire
+        // on a diagonal swipe), so we resolve axis at the first slop
+        // crossing and only feed events to the matching channel.
         modifier = Modifier
             .fillMaxWidth()
             .windowInsetsPadding(WindowInsets.navigationBars)
@@ -119,51 +118,51 @@ fun MiniPlayer(
                 )
             }
             .pointerInput(Unit) {
-                var accum = 0f
-                detectVerticalDragGestures(
-                    onDragStart = { accum = 0f },
-                    onDragEnd = {
-                        // Negative accum = upward swipe. ~20dp threshold
-                        // matches Spotify / Apple Music swipe-up feel.
-                        if (accum < -SWIPE_THRESHOLD_PX) onExpand()
-                        accum = 0f
-                    },
-                    onDragCancel = { accum = 0f },
-                    onVerticalDrag = { _, dy -> accum += dy },
-                )
-            }
-            // Horizontal swipe: left = next track, right = previous.
-            // Lives in its own pointerInput so Compose's gesture-
-            // resolution can arbitrate between this and the vertical
-            // swipe — whichever axis exceeds touch-slop first wins,
-            // and the other is cancelled. Both fire only on drag-end
-            // so the user has to commit to the gesture (no
-            // accidental skips from a small horizontal twitch while
-            // tapping).
-            .pointerInput(Unit) {
-                var accum = 0f
-                detectHorizontalDragGestures(
-                    onDragStart = { accum = 0f },
-                    onDragEnd = {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    var horizontal = false
+                    var vertical = false
+                    // First slop crossing decides the axis. The drag
+                    // delta is set on the consumed change so subsequent
+                    // horizontalDrag/verticalDrag accumulators see it.
+                    val slopChange = awaitTouchSlopOrCancellation(down.id) { change, over ->
+                        val absX = kotlin.math.abs(over.x)
+                        val absY = kotlin.math.abs(over.y)
+                        if (absX > absY) horizontal = true else vertical = true
+                        change.consume()
+                    } ?: return@awaitEachGesture
+                    var accum = 0f
+                    if (horizontal) {
+                        accum += slopChange.positionChange().x
+                        horizontalDrag(slopChange.id) { change ->
+                            accum += change.positionChange().x
+                            change.consume()
+                        }
                         when {
                             accum < -SWIPE_THRESHOLD_PX -> {
                                 stationPlayback.skipNext()
                                 haptics.performHapticFeedback(
-                                    androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress,
+                                    androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove,
                                 )
                             }
                             accum > SWIPE_THRESHOLD_PX -> {
                                 stationPlayback.skipPrevious()
                                 haptics.performHapticFeedback(
-                                    androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress,
+                                    androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove,
                                 )
                             }
                         }
-                        accum = 0f
-                    },
-                    onDragCancel = { accum = 0f },
-                    onHorizontalDrag = { _, dx -> accum += dx },
-                )
+                    } else if (vertical) {
+                        accum += slopChange.positionChange().y
+                        verticalDrag(slopChange.id) { change ->
+                            accum += change.positionChange().y
+                            change.consume()
+                        }
+                        // Negative accum = upward swipe. ~20dp threshold
+                        // matches Spotify / Apple Music swipe-up feel.
+                        if (accum < -SWIPE_THRESHOLD_PX) onExpand()
+                    }
+                }
             },
         color = MaterialTheme.colorScheme.surface,
         tonalElevation = 6.dp,
@@ -301,12 +300,16 @@ private fun SleepTimerBadge(state: SleepTimer.State) {
     }
 }
 
-/** "5m" / "23m" / "1:04" / "12s" — compact enough for the MiniPlayer. */
+/** Compact countdown for the MiniPlayer badge: "12s" / "23m" / "1h 04m". */
 private fun formatSleepCountdown(ms: Long): String {
     if (ms <= 0L) return "0s"
     val totalSec = ms / 1000L
     return when {
-        totalSec >= 3600L -> "${totalSec / 3600L}:${((totalSec % 3600L) / 60L).toString().padStart(2, '0')}h"
+        totalSec >= 3600L -> {
+            val hours = totalSec / 3600L
+            val mins = (totalSec % 3600L) / 60L
+            "${hours}h ${mins.toString().padStart(2, '0')}m"
+        }
         totalSec >= 60L -> "${totalSec / 60L}m"
         else -> "${totalSec}s"
     }

@@ -37,6 +37,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -396,25 +397,33 @@ fun AppSettingsScreen(
 
 /**
  * "Stations summary" card from §7.5 About — track / album / artist
- * counts plus total library runtime. Loaded once per composition;
- * updates when the user navigates back to Settings after a rescan.
+ * counts plus total library runtime. Reactive: subscribes to the
+ * track-count Flow and re-fetches the rest whenever it ticks, so a
+ * scan that finishes while AppSettings is still on the back stack
+ * surfaces fresh counts as soon as the user navigates back here.
  */
 @Composable
 private fun LibrarySummaryCard(
     libraryRepo: com.visorcraft.radioshed.data.LibraryRepository = koinInject(),
     stationRepo: com.visorcraft.radioshed.data.StationRepository = koinInject(),
 ) {
-    var trackCount by remember { mutableStateOf<Long?>(null) }
+    val trackCount by libraryRepo.observeTrackCount()
+        .collectAsState(initial = null)
     var albumCount by remember { mutableStateOf<Long?>(null) }
     var artistCount by remember { mutableStateOf<Long?>(null) }
     var stationCount by remember { mutableStateOf<Long?>(null) }
     var totalRuntimeMs by remember { mutableStateOf<Long?>(null) }
-    LaunchedEffect(Unit) {
-        trackCount = libraryRepo.countTracks()
-        albumCount = libraryRepo.countAlbums()
-        artistCount = libraryRepo.countArtists()
-        stationCount = stationRepo.list().size.toLong()
-        totalRuntimeMs = libraryRepo.totalLibraryDurationMs()
+    LaunchedEffect(trackCount) {
+        // trackCount Flow emits on every track-row insert / update /
+        // delete, which is the scanner's primary write path. Use it
+        // as the "library changed" trigger to refresh the other
+        // counters that don't have their own Flow yet.
+        if (trackCount != null) {
+            albumCount = libraryRepo.countAlbums()
+            artistCount = libraryRepo.countArtists()
+            stationCount = stationRepo.list().size.toLong()
+            totalRuntimeMs = libraryRepo.totalLibraryDurationMs()
+        }
     }
     Surface(
         shape = RoundedCornerShape(12.dp),
@@ -801,6 +810,7 @@ private sealed interface ArtworkSyncState {
     object Idle : ArtworkSyncState
     data class Running(val index: Int, val total: Int, val found: Int) : ArtworkSyncState
     data class Done(val found: Int, val missing: Int, val failed: Int) : ArtworkSyncState
+    object Blocked : ArtworkSyncState
 }
 
 private fun ArtworkSyncState.advance(p: MissingArtworkSync.Progress): ArtworkSyncState = when (p) {
@@ -817,6 +827,7 @@ private fun ArtworkSyncState.advance(p: MissingArtworkSync.Progress): ArtworkSyn
     is MissingArtworkSync.Progress.Failed -> this
     is MissingArtworkSync.Progress.Completed ->
         ArtworkSyncState.Done(found = p.found, missing = p.missing, failed = p.failed)
+    is MissingArtworkSync.Progress.PolicyBlocked -> ArtworkSyncState.Blocked
 }
 
 @Composable
@@ -896,6 +907,14 @@ private fun ArtworkSyncCard(
                     Button(onClick = onStart, modifier = Modifier.fillMaxWidth()) {
                         Text("Sweep again")
                     }
+                }
+                is ArtworkSyncState.Blocked -> {
+                    Text(
+                        "Connectivity policy blocks the sweep. Set Settings → " +
+                            "Connectivity to Always or Wi-Fi only and try again.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
                 }
             }
         }
@@ -1114,12 +1133,13 @@ private fun GenerateGenreStationsRow(
                     status = "Counting genres…"
                     scope.launch {
                         try {
-                            val genres = libraryRepo.distinctTagValues("GENRE")
-                            val counts = genres.associateWith {
-                                libraryRepo.tracksByTag("GENRE", it).size
-                            }
+                            // Single COUNT(*) GROUP BY query replaces the
+                            // previous N-fetches-per-genre pattern that
+                            // stalled cold-start on libraries with many
+                            // distinct genres.
+                            val counts = libraryRepo.tagValueTrackCounts("GENRE")
                             val topGenres = counts.entries
-                                .filter { it.value >= 20 }
+                                .filter { it.value >= 20L }
                                 .sortedByDescending { it.value }
                                 .take(10)
                                 .map { it.key }
@@ -1129,16 +1149,28 @@ private fun GenerateGenreStationsRow(
                                 return@launch
                             }
                             val existing = stationRepo.list()
-                            val existingNames = existing.map { it.name }.toSet()
+                            // Idempotency by source rule, not just name:
+                            // matches whether the station has the exact
+                            // TagFilter(GENRE, [name]) source so a user
+                            // renaming "Genre: Rock" to "Rock Mix"
+                            // doesn't cause a re-run to spawn a duplicate.
+                            val existingGenres = existing.mapNotNullTo(mutableSetOf()) { st ->
+                                (st.source as? com.visorcraft.radioshed.domain
+                                    .SourceRule.TagFilter)
+                                    ?.takeIf { it.key.equals("GENRE", ignoreCase = true) }
+                                    ?.values
+                                    ?.singleOrNull()
+                                    ?.lowercase()
+                            }
                             val maxSort = existing.maxOfOrNull { it.sortPosition } ?: 0
                             var inserted = 0
                             var skipped = 0
                             topGenres.forEachIndexed { idx, genre ->
-                                val name = "Genre: $genre"
-                                if (name in existingNames) {
+                                if (genre.lowercase() in existingGenres) {
                                     skipped += 1
                                     return@forEachIndexed
                                 }
+                                val name = "Genre: $genre"
                                 stationRepo.insert(
                                     name = name,
                                     source = com.visorcraft.radioshed.domain
@@ -1230,20 +1262,42 @@ private fun GenerateDecadeStationsRow(
                     status = "Bucketing albums by decade…"
                     scope.launch {
                         try {
-                            val nowYear = 2030 // safe upper-cap; covers 2020s
-                            val buckets = listOf(
-                                "Pre-50s" to (1900 to 1949),
-                                "50s" to (1950 to 1959),
-                                "60s" to (1960 to 1969),
-                                "70s" to (1970 to 1979),
-                                "80s" to (1980 to 1989),
-                                "90s" to (1990 to 1999),
-                                "2000s" to (2000 to 2009),
-                                "2010s" to (2010 to 2019),
-                                "2020s" to (2020 to nowYear),
-                            )
+                            // Use the runtime current year (capped at the
+                            // end of the current decade) so a 2031 album
+                            // released after this code shipped still
+                            // lands in the current decade bucket. Was
+                            // previously hardcoded to 2030 — wrong from
+                            // the moment a 2031 album appeared.
+                            val nowYear = com.visorcraft.radioshed.data.currentYear()
+                            val currentDecadeEnd = ((nowYear / 10) * 10) + 9
+                            val buckets = buildList {
+                                add("Pre-50s" to (1900 to 1949))
+                                add("50s" to (1950 to 1959))
+                                add("60s" to (1960 to 1969))
+                                add("70s" to (1970 to 1979))
+                                add("80s" to (1980 to 1989))
+                                add("90s" to (1990 to 1999))
+                                add("2000s" to (2000 to 2009))
+                                add("2010s" to (2010 to 2019))
+                                add("2020s" to (2020 to maxOf(2029, currentDecadeEnd)))
+                                if (currentDecadeEnd >= 2039) {
+                                    add("2030s" to (2030 to maxOf(2039, currentDecadeEnd)))
+                                }
+                            }
                             val existing = stationRepo.list()
-                            val existingNames = existing.map { it.name }.toSet()
+                            // Idempotency by source rule: if a station's
+                            // AlbumSelector already covers a decade's
+                            // album-id set, treat it as already-existing
+                            // even if the user has renamed it. Compare on
+                            // the (min, max) year range encoded in the
+                            // station's customSubtitle would be flaky;
+                            // instead match by overlap of selected
+                            // album IDs vs the decade's album IDs.
+                            val existingAlbumSelectors = existing
+                                .mapNotNull { st ->
+                                    (st.source as? com.visorcraft.radioshed.domain
+                                        .SourceRule.AlbumSelector)?.albumIds?.toSet()
+                                }
                             val maxSort = existing.maxOfOrNull { it.sortPosition } ?: 0
                             var inserted = 0
                             var skipped = 0
@@ -1251,11 +1305,20 @@ private fun GenerateDecadeStationsRow(
                                 val (minYr, maxYr) = range
                                 val albumIds = libraryRepo.albumIdsByYearRange(minYr, maxYr)
                                 if (albumIds.size < 3) return@forEachIndexed
-                                val name = "Decade: $label"
-                                if (name in existingNames) {
+                                val albumSet = albumIds.toSet()
+                                // Skip if any existing AlbumSelector
+                                // station already covers ≥80% of this
+                                // decade — that's almost certainly
+                                // a renamed prior auto-generated one.
+                                val isDuplicate = existingAlbumSelectors.any { existingSet ->
+                                    val overlap = existingSet.count { it in albumSet }
+                                    overlap >= (albumSet.size * 0.8)
+                                }
+                                if (isDuplicate) {
                                     skipped += 1
                                     return@forEachIndexed
                                 }
+                                val name = "Decade: $label"
                                 stationRepo.insert(
                                     name = name,
                                     source = com.visorcraft.radioshed.domain

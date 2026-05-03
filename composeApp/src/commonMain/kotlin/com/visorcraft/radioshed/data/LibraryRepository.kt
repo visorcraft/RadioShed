@@ -544,6 +544,18 @@ class LibraryRepository(private val db: RadioShedDatabase) {
     }
 
     /**
+     * Single-query (tag value → track count) for a tag key. Used by
+     * the genre auto-station generator to threshold candidates by
+     * track count without re-fetching every track per genre (the
+     * previous N+1 pattern stalled cold-start on libraries with
+     * dozens of distinct genres).
+     */
+    suspend fun tagValueTrackCounts(key: String): Map<String, Long> = withContext(IODispatcher) {
+        db.libraryQueries.selectTagValueTrackCounts(key).executeAsList()
+            .associate { it.value_ to it.track_count }
+    }
+
+    /**
      * One-shot pass that consolidates GENRE tag values that differ
      * only in case. For each lower-cased group, picks the most-
      * frequent variant as the canonical (or title-cases the lower

@@ -26,6 +26,7 @@ class MissingArtworkSync(
     private val libraryRepo: LibraryRepository,
     private val coverArtFetcher: CoverArtFetcher,
     private val artworkPersister: ArtworkPersister,
+    private val networkGate: NetworkPolicyGate,
 ) {
 
     sealed interface Progress {
@@ -35,6 +36,13 @@ class MissingArtworkSync(
         data class Missing(val albumId: Long) : Progress
         data class Failed(val albumId: Long, val reason: String) : Progress
         data class Completed(val found: Int, val missing: Int, val failed: Int) : Progress
+        /**
+         * The connectivity policy doesn't permit a sweep right now
+         * (Never, Manual, or WiFi-only on a metered network). The
+         * UI surfaces this distinct from a normal Completed so the
+         * "0 found, 0 missing" outcome isn't confused with success.
+         */
+        data object PolicyBlocked : Progress
     }
 
     private companion object {
@@ -43,6 +51,14 @@ class MissingArtworkSync(
     }
 
     fun sweep(): Flow<Progress> = flow {
+        // Honour the user's connectivity policy before kicking off a
+        // sweep. The user explicitly tapped "Sync missing artwork",
+        // so this counts as user-initiated — Manual policy permits
+        // it; Never and WiFi-only-on-metered still block.
+        if (!networkGate.allowUserInitiatedFetch()) {
+            emit(Progress.PolicyBlocked)
+            return@flow
+        }
         val targets = libraryRepo.albumsMissingArtwork()
         emit(Progress.Started(total = targets.size))
         if (targets.isEmpty()) {

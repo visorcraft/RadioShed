@@ -30,6 +30,8 @@ import com.visorcraft.radioshed.source.TrackSharer
 import com.visorcraft.radioshed.source.IosTagReader
 import com.visorcraft.radioshed.source.BackupSharer
 import com.visorcraft.radioshed.source.BackupStorage
+import com.visorcraft.radioshed.source.ConnectivityChecker
+import com.visorcraft.radioshed.source.IosConnectivityChecker
 import com.visorcraft.radioshed.source.LocalLyricsLoader
 import com.visorcraft.radioshed.source.LyricsFetcher
 import com.visorcraft.radioshed.source.NullBackupSharer
@@ -52,6 +54,7 @@ actual val platformModule: Module = module {
     single<TagReader> { IosTagReader() }
     single<ArtworkPersister> { IosArtworkPersister() }
     single<CoverArtFetcher> { NullCoverArtFetcher() }
+    single<ConnectivityChecker> { IosConnectivityChecker() }
     single<LyricsFetcher> { NullLyricsFetcher() }
     single<LocalLyricsLoader> { NullLocalLyricsLoader() }
     single<BackupStorage> { NullBackupStorage() }

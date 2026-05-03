@@ -576,8 +576,9 @@ fun StationsHomeScreen(
 
 /**
  * Swap [stationId]'s sort_position with the neighbor in [direction]
- * (-1 = up, +1 = down). Position is rewritten on both rows so the
- * change persists across observed re-emissions.
+ * (-1 = up, +1 = down) inside a single SQLDelight transaction so a
+ * Flow observer firing mid-pair (or a process kill) can't leave both
+ * stations sharing the same sort_position.
  */
 private suspend fun swapStationPosition(
     repo: com.visorcraft.radioshed.data.StationRepository,
@@ -590,8 +591,7 @@ private suspend fun swapStationPosition(
     if (targetIdx !in stations.indices) return
     val a = stations[idx]
     val b = stations[targetIdx]
-    repo.reorder(a.id, sortPosition = b.sortPosition)
-    repo.reorder(b.id, sortPosition = a.sortPosition)
+    repo.swapSortPositions(a.id, a.sortPosition, b.id, b.sortPosition)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

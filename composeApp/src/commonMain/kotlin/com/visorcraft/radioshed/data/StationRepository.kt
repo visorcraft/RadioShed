@@ -100,25 +100,51 @@ class StationRepository(private val db: RadioShedDatabase) {
      * append at the bottom of sort order so it doesn't shove existing
      * stations around. Returns the new station id.
      *
-     * Lets users clone "Latest Hits" to make "Latest Hits — Metal
-     * Only" without rebuilding the whole rule chain — the most-asked
-     * Stations Home action that the app didn't ship with.
+     * The MAX(sort_position) lookup and INSERT run in a single
+     * SQLDelight transaction so two concurrent Duplicate taps can't
+     * resolve the same sort_position and corrupt the visible order.
+     *
+     * Name collision: if the source already ends in `(copy)` or
+     * `(copy N)`, increment to `(copy N+1)` so a second duplicate of
+     * "Foo (copy)" yields "Foo (copy 2)" rather than the awkward
+     * "Foo (copy) (copy)".
      */
     suspend fun duplicate(stationId: Long): Long? = withContext(IODispatcher) {
         val src = getById(stationId) ?: return@withContext null
-        val maxSort = list().maxOfOrNull { it.sortPosition } ?: 0
-        insert(
-            name = "${src.name} (copy)",
-            source = src.source,
-            playback = src.playback,
-            color = src.color,
-            icon = src.icon,
-            artworkUri = src.artworkUri,
-            sortPosition = maxSort + 1,
-            customSubtitle = src.customSubtitle,
-            isBuiltIn = false,
-        )
+        val now = nowMillis()
+        db.stationsQueries.transactionWithResult {
+            val maxSort = db.stationsQueries.selectMaxStationSort().executeAsOne()
+            db.stationsQueries.insertStation(
+                name = bumpCopySuffix(src.name),
+                color = src.color.toLong(),
+                icon = src.icon,
+                artwork_uri = src.artworkUri,
+                sort_position = maxSort + 1L,
+                custom_subtitle = src.customSubtitle,
+                source_json = encodeSource(src.source),
+                playback_json = encodePlayback(src.playback),
+                is_built_in = 0L,
+                created_at = now,
+                updated_at = now,
+            ).executeAsOne()
+        }
     }
+
+    /**
+     * Atomic-pair reorder: swap two stations' sort positions inside
+     * one transaction so a process kill (or a Flow observer firing
+     * mid-pair) can't leave the list with two stations sharing the
+     * same sort_position. Used by the up/down buttons in the long-
+     * press sheet.
+     */
+    suspend fun swapSortPositions(idA: Long, posA: Int, idB: Long, posB: Int) =
+        withContext(IODispatcher) {
+            val now = nowMillis()
+            db.stationsQueries.transaction {
+                db.stationsQueries.reorderStation(posB.toLong(), now, idA)
+                db.stationsQueries.reorderStation(posA.toLong(), now, idB)
+            }
+        }
 
     suspend fun update(
         id: Long,
@@ -421,7 +447,12 @@ class StationRepository(private val db: RadioShedDatabase) {
     suspend fun dailyActivity(windowDays: Int = 30): List<DailyActivity> =
         withContext(IODispatcher) {
             val now = nowMillis()
-            val sinceMs = now - windowDays.toLong() * DAY_MS
+            // +1 ms epsilon so a row exactly at the boundary doesn't
+            // get bucketed as days_ago == windowDays (which the
+            // (windowDays-1 downTo 0) renderer below skips). Without
+            // this, the oldest day's plays silently disappear when
+            // they happen to land on the boundary millisecond.
+            val sinceMs = now - windowDays.toLong() * DAY_MS + 1L
             val rows = db.stationsQueries.selectPlaysPerDayWindow(
                 nowMs = now,
                 sinceMs = sinceMs,
@@ -464,10 +495,11 @@ class StationRepository(private val db: RadioShedDatabase) {
      * Returned as (completedPlays, totalPlays) so the caller can
      * decide how to format (percentage, ratio, etc.). The cold-start
      * case returns 0 / 0; UI must guard against divide-by-zero.
+     * Both columns are non-null thanks to IFNULL/COUNT in the SQL.
      */
     suspend fun completionStats(): Pair<Long, Long> = withContext(IODispatcher) {
         val row = db.stationsQueries.selectCompletionStats().executeAsOne()
-        (row.completed ?: 0L) to row.total
+        row.completed to row.total
     }
 
     /** Top artists by play count. Returned as (artistId, artistName, plays). */
@@ -530,6 +562,27 @@ class StationRepository(private val db: RadioShedDatabase) {
 
     private fun decodePlayback(json: String): PlaybackRule =
         RadioShedJson.decodeFromString(PlaybackRule.serializer(), json)
+}
+
+/**
+ * Bumps a `(copy)` / `(copy N)` suffix on a duplicate-target name so a
+ * second duplicate of "Foo (copy)" reads "Foo (copy 2)" rather than
+ * "Foo (copy) (copy)". Plain names just get " (copy)" appended.
+ */
+internal fun bumpCopySuffix(name: String): String {
+    val numberedRegex = Regex("""^(.*) \(copy (\d+)\)$""")
+    val plainSuffix = " (copy)"
+    val numberedMatch = numberedRegex.matchEntire(name)
+    if (numberedMatch != null) {
+        val base = numberedMatch.groupValues[1]
+        val n = numberedMatch.groupValues[2].toIntOrNull() ?: 1
+        return "$base (copy ${n + 1})"
+    }
+    if (name.endsWith(plainSuffix)) {
+        val base = name.removeSuffix(plainSuffix)
+        return "$base (copy 2)"
+    }
+    return name + plainSuffix
 }
 
 data class HistoryEntry(

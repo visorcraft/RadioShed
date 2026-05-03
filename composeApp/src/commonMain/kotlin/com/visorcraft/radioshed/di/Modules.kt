@@ -22,6 +22,7 @@ import com.visorcraft.radioshed.scanner.Scanner
 import com.visorcraft.radioshed.source.BackupService
 import com.visorcraft.radioshed.source.LyricsService
 import com.visorcraft.radioshed.source.MissingArtworkSync
+import com.visorcraft.radioshed.source.NetworkPolicyGate
 import com.visorcraft.radioshed.stations.PresetSeeder
 import com.visorcraft.radioshed.stations.SourceRuleEvaluator
 import com.visorcraft.radioshed.stations.StationPlayback
@@ -57,15 +58,19 @@ val sharedModule: Module = module {
     // Phase 3: scanner. FileEnumerator + TagReader come from platformModule.
     single { Scanner(get(), get(), get(), get(), get(), get()) }
 
+    // Connectivity policy gate — read by every online fetcher to honour
+    // the user's Always / Wi-Fi only / Never / Manual preference.
+    single { NetworkPolicyGate(get(), get()) }
+
     // Cover Art Archive sweep. CoverArtFetcher is platform-specific
     // (Android uses HttpURLConnection; iOS is a Null stub for now).
-    single { MissingArtworkSync(get(), get(), get()) }
+    single { MissingArtworkSync(get(), get(), get(), get()) }
 
     // Sleep timer — singleton so multiple UI surfaces observe the same state.
     single { SleepTimer(get()) }
 
     // Lyrics: cache + fetcher + local sidecar loader, orchestrated by LyricsService.
-    single { LyricsService(get(), get(), get(), get()) }
+    single { LyricsService(get(), get(), get(), get(), get()) }
 
     // Backup & restore: JSON dumps of stations + playlists + ratings.
     single { BackupService(get(), get(), get(), get(), get(), get()) }

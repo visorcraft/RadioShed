@@ -27,6 +27,7 @@ class LyricsService(
     private val cache: LyricsCacheRepository,
     private val fetcher: LyricsFetcher,
     private val localLoader: LocalLyricsLoader,
+    private val networkGate: NetworkPolicyGate,
 ) {
 
     suspend fun resolve(trackId: Long, forceRefresh: Boolean = false): Lyrics? {
@@ -103,6 +104,25 @@ class LyricsService(
             listOf(LyricsQuery(override.first, override.second)) + baseCandidates
         } else {
             baseCandidates
+        }
+
+        // Honour the user's connectivity policy. forceRefresh is the
+        // manual retry path (user pressed "search again" in Lyrics
+        // view) so it counts as user-initiated; the silent-on-play
+        // path is automatic. Manual policy permits user-initiated
+        // requests but blocks automatic ones; Never blocks both;
+        // WiFiOnly blocks both unless on an unmetered transport.
+        val networkAllowed = if (forceRefresh) {
+            networkGate.allowUserInitiatedFetch()
+        } else {
+            networkGate.allowAutomaticFetch()
+        }
+        if (!networkAllowed) {
+            // Don't poison the cache with a miss — the user might be
+            // offline temporarily, or might flip the policy back to
+            // Always later. Returning null lets the UI show the
+            // not-found state without committing a 30-day TTL miss.
+            return null
         }
 
         var raw: RawLyricsResponse? = null

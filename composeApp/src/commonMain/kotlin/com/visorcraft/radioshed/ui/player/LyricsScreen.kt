@@ -1,7 +1,6 @@
 package com.visorcraft.radioshed.ui.player
 
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.foundation.layout.Arrangement
@@ -361,13 +360,17 @@ private fun SyncedLyrics(
     }
 
     val listState = rememberLazyListState()
-    // True only while the user's finger is actively dragging the
-    // list. Distinguishes user-driven scrolls from
-    // animateScrollToItem (which sets isScrollInProgress but isn't
-    // a drag). When this flips to true we record the time so we can
-    // hold off auto-scroll for an idle grace period afterward.
-    val isUserDragging by listState.interactionSource
-        .collectIsDraggedAsState()
+    // Distinguishes user-driven scrolls from our own
+    // animateScrollToItem. We can't rely on
+    // listState.interactionSource.collectIsDraggedAsState alone —
+    // its DragInteraction emission isn't guaranteed on every Compose
+    // KMP target — so we additionally gate on a flag we set around
+    // the programmatic animate call. If the list is scrolling and
+    // we didn't start it, it's the user.
+    var animatingProgrammatically by remember { mutableStateOf(false) }
+    val isUserDragging by remember {
+        derivedStateOf { listState.isScrollInProgress && !animatingProgrammatically }
+    }
     var lastUserScrollAt by remember { mutableStateOf(0L) }
     LaunchedEffect(isUserDragging) {
         if (isUserDragging) lastUserScrollAt = nowMillis()
@@ -397,8 +400,15 @@ private fun SyncedLyrics(
         if (lastUserScrollAt != 0L && sinceUser < USER_OVERRIDE_MS) return@LaunchedEffect
         // Scroll the active line near the top-third of the viewport.
         // animateScrollToItem keeps the motion smooth as lines tick by.
-        runCatching {
-            listState.animateScrollToItem(activeIndex.coerceAtLeast(0), -120)
+        // The programmatic flag is set so the user-scroll detector
+        // doesn't misread our own animate call as a manual interaction.
+        animatingProgrammatically = true
+        try {
+            runCatching {
+                listState.animateScrollToItem(activeIndex.coerceAtLeast(0), -120)
+            }
+        } finally {
+            animatingProgrammatically = false
         }
     }
 
