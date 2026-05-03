@@ -18,6 +18,7 @@ import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Lyrics
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.FavoriteBorder
@@ -79,6 +80,7 @@ fun TrackContextSheet(
     val navInstalled = com.visorcraft.radioshed.nav.LocalNavInstalled.current
     val navToAlbum = com.visorcraft.radioshed.nav.LocalNavigateToAlbum.current
     val navToArtist = com.visorcraft.radioshed.nav.LocalNavigateToArtist.current
+    val navToLyrics = com.visorcraft.radioshed.nav.LocalNavigateToLyrics.current
     // Internal step machine — when the user picks "Add to playlist",
     // we replace the visible content of the SAME sheet rather than
     // opening a second ModalBottomSheet on top (which produces
@@ -130,6 +132,10 @@ fun TrackContextSheet(
                     onDismiss()
                     navToArtist(id)
                 },
+                onViewLyrics = {
+                    onDismiss()
+                    navToLyrics(trackId)
+                },
             )
             Step.PlaylistPicker -> AddToPlaylistInline(
                 trackId = trackId,
@@ -154,6 +160,7 @@ private fun MainStep(
     onAddToPlaylist: () -> Unit,
     onGoToAlbum: (Long) -> Unit,
     onGoToArtist: (Long) -> Unit,
+    onViewLyrics: () -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp)) {
         // Track title header — gives the user a moment of confirmation
@@ -199,6 +206,12 @@ private fun MainStep(
         // a primary artist link — silent rather than disabled, since
         // a greyed-out action that does nothing reads as broken.
         if (navInstalled) {
+            ContextActionRow(
+                icon = Icons.Filled.Lyrics,
+                label = "View lyrics",
+                enabled = track != null,
+                onClick = onViewLyrics,
+            )
             track?.albumId?.let { aid ->
                 ContextActionRow(
                     icon = Icons.Filled.Album,

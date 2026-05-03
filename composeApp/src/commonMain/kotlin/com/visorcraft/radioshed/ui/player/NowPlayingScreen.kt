@@ -165,9 +165,20 @@ fun NowPlayingScreen(
     // moment without having to subscribe to a live flow we don't have.
     var upcoming by remember { mutableStateOf<List<Track>>(emptyList()) }
     var recent by remember { mutableStateOf<List<Track>>(emptyList()) }
-    LaunchedEffect(queueSheetOpen, nowPlaying?.trackId) {
+    // How many of `upcoming` are user-queued (Play next / Add to
+    // queue) vs. coming from the rule pipeline. Used by the Up Next
+    // sheet to decide where to render the X (only on user-queued
+    // entries since removing a rule-driven row would just regenerate
+    // the same track on next peek).
+    var priorityCount by remember { mutableStateOf(0) }
+    // Bumped every time we mutate the priority buffer so the
+    // LaunchedEffect re-collects upcoming + priorityCount without
+    // having to wait for a track transition.
+    var queueRefreshTick by remember { mutableStateOf(0) }
+    LaunchedEffect(queueSheetOpen, nowPlaying?.trackId, queueRefreshTick) {
         if (queueSheetOpen) {
             upcoming = stationPlayback.upcoming(count = 20)
+            priorityCount = stationPlayback.priorityCount()
             recent = stationPlayback.recentSnapshot().reversed()  // newest first
         }
     }
@@ -397,6 +408,7 @@ fun NowPlayingScreen(
             QueueBottomSheet(
                 upcoming = upcoming,
                 recent = recent,
+                priorityCount = priorityCount,
                 isShuffleMode = currentStation?.playback?.order != com.visorcraft.radioshed.domain.PlayOrder.Sequential
                     && currentStation != null,
                 onDismiss = { queueSheetOpen = false },
@@ -405,6 +417,14 @@ fun NowPlayingScreen(
                         stationPlayback.playTracks(upcoming, startIndex = idx)
                         queueSheetOpen = false
                     }
+                },
+                onRemoveQueueItem = { idx ->
+                    stationPlayback.removeFromQueue(idx)
+                    queueRefreshTick += 1
+                },
+                onClearQueue = {
+                    stationPlayback.clearQueue()
+                    queueRefreshTick += 1
                 },
             )
         }
@@ -1511,7 +1531,28 @@ private fun TrackInfoDialog(
                         )
                         InfoLine("Listened", formatStatDuration(s.listenedMs))
                     }
-                    InfoLine("Path", t.path, monospace = true)
+                    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                clipboard.setText(
+                                    androidx.compose.ui.text.AnnotatedString(t.path),
+                                )
+                                ringtoneStatus = "Path copied to clipboard."
+                            },
+                    ) {
+                        Box(modifier = Modifier.weight(1f)) {
+                            InfoLine("Path", t.path, monospace = true)
+                        }
+                        Text(
+                            text = "Copy",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(start = 8.dp),
+                        )
+                    }
                 }
             }
         },
@@ -1580,9 +1621,12 @@ private fun InfoLine(label: String, value: String, monospace: Boolean = false) {
 private fun QueueBottomSheet(
     upcoming: List<Track>,
     recent: List<Track>,
+    priorityCount: Int,
     isShuffleMode: Boolean,
     onDismiss: () -> Unit,
     onJumpUpcoming: (Int) -> Unit,
+    onRemoveQueueItem: (Int) -> Unit,
+    onClearQueue: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ModalBottomSheet(
@@ -1598,16 +1642,30 @@ private fun QueueBottomSheet(
             if (recent.isNotEmpty()) {
                 item { QueueSectionHeader("Just played") }
                 items(recent, key = { "r:${it.id}" }) { track ->
-                    QueueTrackRow(track = track, dim = true, onTap = null)
+                    QueueTrackRow(
+                        track = track,
+                        dim = true,
+                        onTap = null,
+                        onRemove = null,
+                    )
                 }
                 item { Spacer(Modifier.height(8.dp)) }
                 item { HorizontalDivider() }
                 item { Spacer(Modifier.height(8.dp)) }
             }
             item {
-                QueueSectionHeader(
-                    if (isShuffleMode) "Up next (shuffle pool)" else "Up next",
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    QueueSectionHeader(
+                        if (isShuffleMode) "Up next (shuffle pool)" else "Up next",
+                    )
+                    Spacer(Modifier.weight(1f))
+                    if (priorityCount > 0) {
+                        TextButton(onClick = onClearQueue) { Text("Clear") }
+                    }
+                }
             }
             if (upcoming.isEmpty()) {
                 item {
@@ -1622,10 +1680,18 @@ private fun QueueBottomSheet(
                 itemsIndexed(
                     upcoming, key = { _, t -> "u:${t.id}" },
                 ) { idx, track ->
+                    // Only the first `priorityCount` rows are user-
+                    // queued items we can actually remove. Rule-
+                    // driven rows have no remove affordance — peeking
+                    // them again would just regenerate the same row.
+                    val canRemove = idx < priorityCount
                     QueueTrackRow(
                         track = track,
                         dim = false,
                         onTap = { onJumpUpcoming(idx) },
+                        onRemove = if (canRemove) {
+                            { onRemoveQueueItem(idx) }
+                        } else null,
                     )
                 }
             }
@@ -1650,6 +1716,7 @@ private fun QueueTrackRow(
     track: Track,
     dim: Boolean,
     onTap: (() -> Unit)?,
+    onRemove: (() -> Unit)?,
 ) {
     val baseColor = if (dim) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
                     else MaterialTheme.colorScheme.onSurface
@@ -1672,7 +1739,21 @@ private fun QueueTrackRow(
             color = baseColor,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
         )
+        if (onRemove != null) {
+            IconButton(
+                onClick = onRemove,
+                modifier = Modifier.size(36.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Close,
+                    contentDescription = "Remove from queue",
+                    modifier = Modifier.size(18.dp),
+                    tint = baseColor.copy(alpha = 0.6f),
+                )
+            }
+        }
     }
 }
 

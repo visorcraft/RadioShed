@@ -140,6 +140,21 @@ class SettingsStore(private val settings: Settings) {
      * just a fade-out so abrupt cuts don't jar. Real crossfade
      * needs dual-ExoPlayer architecture and is tracked separately.
      */
+    /**
+     * Lyrics font-size multiplier. 1.0 is the Material baseline; the
+     * UI lets the user step it between 0.7 and 1.6 in 0.1 increments.
+     * Persisted so the user's chosen size carries across sessions —
+     * users with vision needs shouldn't have to re-pick on every
+     * launch. Coerced on read so a corrupted value can't blow up
+     * Compose's text-rendering math.
+     */
+    fun getLyricsScale(): Float =
+        settings.getFloat(KEY_LYRICS_SCALE, 1f).coerceIn(0.7f, 1.6f)
+
+    fun setLyricsScale(value: Float) {
+        settings.putFloat(KEY_LYRICS_SCALE, value.coerceIn(0.7f, 1.6f))
+    }
+
     fun getEndFadeSec(): Int =
         settings.getInt(KEY_END_FADE_SEC, 0).coerceIn(0, 10)
     fun setEndFadeSec(seconds: Int) {
@@ -373,6 +388,7 @@ class SettingsStore(private val settings: Settings) {
         const val KEY_AUTO_BACKUP_LAST = "backup.autoLastAt"
         const val KEY_AUTO_RESCAN_ON_LAUNCH = "library.autoRescanOnLaunch"
         const val KEY_END_FADE_SEC = "audio.endFadeSec"
+        const val KEY_LYRICS_SCALE = "ui.lyricsScale"
         const val KEY_DRIVE_MODE = "ui.driveMode"
         /** Cadence for the auto-backup background export. 7 days = once
          *  per week, which matches typical user back-up cadence

@@ -8,6 +8,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
@@ -68,12 +70,24 @@ fun App(
         // Album / Artist / NowPlaying jumps work from anywhere because
         // these are single-target navigations; complex flows still go
         // through the explicit `current = ...` assignments below.
+        val rootScope = rememberCoroutineScope()
         androidx.compose.runtime.CompositionLocalProvider(
             com.visorcraft.radioshed.nav.LocalNavigateToAlbum provides { id ->
                 current = AppScreen.AlbumDetail(id)
             },
             com.visorcraft.radioshed.nav.LocalNavigateToArtist provides { id ->
                 current = AppScreen.ArtistDetail(id)
+            },
+            // View-lyrics nav: play the track first, then jump to
+            // Lyrics. Without the playback step Lyrics would render
+            // the previously-playing track (it follows
+            // audioEngine.nowPlaying), which would feel broken.
+            com.visorcraft.radioshed.nav.LocalNavigateToLyrics provides { id ->
+                rootScope.launch {
+                    val track = libraryRepo.getTrackById(id) ?: return@launch
+                    stationPlayback.playTracks(listOf(track), startIndex = 0)
+                    current = AppScreen.Lyrics
+                }
             },
             com.visorcraft.radioshed.nav.LocalNavInstalled provides true,
         ) {

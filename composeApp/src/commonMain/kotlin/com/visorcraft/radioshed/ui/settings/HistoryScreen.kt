@@ -79,6 +79,11 @@ fun HistoryScreen(
     var menuOpen by remember { mutableStateOf(false) }
     var clearConfirmOpen by remember { mutableStateOf(false) }
     var contextTrackId by remember { mutableStateOf<Long?>(null) }
+    // Station filter: null means "show all stations". Reset back to
+    // null on each entries-reload because the station the user
+    // filtered on may have just been deleted, and a stale id would
+    // produce an empty list with no obvious cause.
+    var selectedStationId by remember { mutableStateOf<Long?>(null) }
     val nowPlaying by audioEngine.nowPlaying.collectAsState()
     val currentTrackId = nowPlaying?.trackId
     val scope = rememberCoroutineScope()
@@ -138,44 +143,78 @@ fun HistoryScreen(
                 )
             }
         } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(padding),
-                contentPadding = PaddingValues(vertical = 4.dp),
-            ) {
-                items(entries, key = { it.id }) { entry ->
-                    HistoryRow(
-                        entry = entry,
-                        track = trackById[entry.trackId],
-                        isCurrent = entry.trackId == currentTrackId,
-                        onTap = {
-                            // Build a parallel pair-list keyed by the
-                            // history-row id, then find the index by
-                            // entry.id rather than Track-object
-                            // identity. Using indexOf(track) was wrong
-                            // because the same track plays multiple
-                            // times resolve to the SAME Track instance,
-                            // so every tap on any occurrence of that
-                            // track jumped to the position of the
-                            // first-seen play in the resolved list.
-                            val pairs = entries.mapNotNull { e ->
-                                trackById[e.trackId]?.let { e.id to it }
-                            }
-                            val idx = pairs.indexOfFirst { it.first == entry.id }
-                            if (idx < 0) return@HistoryRow
-                            stationPlayback.playTracks(
-                                pairs.map { it.second },
-                                startIndex = idx,
+            // Station filter chips: distinct (id, name) pairs in the
+            // visible history, in their first-seen order. The
+            // distinctBy({id}) keeps each station once even when it
+            // appears in many rows, while preserving the natural
+            // "most-recently-played stations first" order.
+            val stationOptions = remember(entries) {
+                entries
+                    .distinctBy { it.stationId }
+                    .map { it.stationId to it.stationName }
+            }
+            val visibleEntries = remember(entries, selectedStationId) {
+                if (selectedStationId == null) entries
+                else entries.filter { it.stationId == selectedStationId }
+            }
+            Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+                if (stationOptions.size > 1) {
+                    androidx.compose.foundation.lazy.LazyRow(
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        item {
+                            androidx.compose.material3.FilterChip(
+                                selected = selectedStationId == null,
+                                onClick = { selectedStationId = null },
+                                label = { Text("All") },
                             )
-                        },
-                        onLongPress = {
-                            // Skip rows whose track has been deleted
-                            // — the context sheet would just show
-                            // an empty title with no actionable info.
-                            trackById[entry.trackId]?.let {
-                                contextTrackId = entry.trackId
-                            }
-                        },
-                    )
+                        }
+                        items(stationOptions, key = { (id, _) -> "f:$id" }) { (id, name) ->
+                            androidx.compose.material3.FilterChip(
+                                selected = selectedStationId == id,
+                                onClick = {
+                                    selectedStationId = if (selectedStationId == id) null else id
+                                },
+                                label = { Text(name) },
+                            )
+                        }
+                    }
+                }
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(vertical = 4.dp),
+                ) {
+                    items(visibleEntries, key = { it.id }) { entry ->
+                        HistoryRow(
+                            entry = entry,
+                            track = trackById[entry.trackId],
+                            isCurrent = entry.trackId == currentTrackId,
+                            onTap = {
+                                // Same indexing logic as before but
+                                // operates on the filtered list so
+                                // skip-next walks through the visible
+                                // results, not hidden ones.
+                                val pairs = visibleEntries.mapNotNull { e ->
+                                    trackById[e.trackId]?.let { e.id to it }
+                                }
+                                val idx = pairs.indexOfFirst { it.first == entry.id }
+                                if (idx < 0) return@HistoryRow
+                                stationPlayback.playTracks(
+                                    pairs.map { it.second },
+                                    startIndex = idx,
+                                )
+                            },
+                            onLongPress = {
+                                // Skip rows whose track has been deleted
+                                // — the context sheet would just show
+                                // an empty title with no actionable info.
+                                trackById[entry.trackId]?.let {
+                                    contextTrackId = entry.trackId
+                                }
+                            },
+                        )
+                    }
                 }
             }
         }

@@ -221,7 +221,33 @@ fun SearchScreen(
                         }
                     }
                     if (showTracks) {
-                        item { SectionHeader("Tracks (${results.tracks.size})") }
+                        item {
+                            // Section header lives on a Row with the
+                            // play / shuffle actions so the user can
+                            // seed an ad-hoc queue from EVERY matching
+                            // track without having to tap into one of
+                            // them. Mirrors the Library Browser
+                            // Songs-tab Shuffle-all affordance.
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                SectionHeader("Tracks (${results.tracks.size})")
+                                Spacer(Modifier.weight(1f))
+                                TextButton(onClick = {
+                                    stationPlayback.playTracks(
+                                        results.tracks,
+                                        startIndex = 0,
+                                    )
+                                }) { Text("Play all") }
+                                TextButton(onClick = {
+                                    stationPlayback.playTracks(
+                                        results.tracks.shuffled(),
+                                        startIndex = 0,
+                                    )
+                                }) { Text("Shuffle") }
+                            }
+                        }
                         items(results.tracks, key = { "track:${it.id}" }) { track ->
                             // Mirror the Library Browser: tap seeds an
                             // ad-hoc queue from the visible search hits so

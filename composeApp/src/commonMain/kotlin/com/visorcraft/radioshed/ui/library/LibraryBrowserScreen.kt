@@ -355,6 +355,15 @@ fun LibraryBrowserScreen(
                     // user is browsing (and skip-previous walks back through
                     // history). Without this, tap-to-play would play just one
                     // track and the next skip would do nothing.
+                    // Album-id → name map built once from the loaded
+                    // album list. Used by SongRow's subtitle so each
+                    // row can show its album without re-querying the
+                    // DB. derivedStateOf would re-run on every album
+                    // emission; remember(albums) is enough since the
+                    // observe flow only re-emits when the set changes.
+                    val albumNameById = remember(albums) {
+                        albums.associate { it.id to it.title }
+                    }
                     if (artistFilter != null) {
                         var artistTracks by remember(artistFilter) { mutableStateOf<List<Track>>(emptyList()) }
                         LaunchedEffect(artistFilter) {
@@ -368,6 +377,7 @@ fun LibraryBrowserScreen(
                                 stationPlayback.playTracks(artistTracks, startIndex = idx)
                             },
                             onLongPress = { track -> contextTrackId = track.id },
+                            albumNameById = albumNameById,
                         )
                     } else {
                         SongList(
@@ -378,6 +388,7 @@ fun LibraryBrowserScreen(
                                 stationPlayback.playTracks(sorted, startIndex = idx)
                             },
                             onLongPress = { track -> contextTrackId = track.id },
+                            albumNameById = albumNameById,
                         )
                     }
                 }
@@ -460,6 +471,7 @@ private fun SongList(
     currentTrackId: Long? = null,
     onPlay: (Track) -> Unit,
     onLongPress: (Track) -> Unit = {},
+    albumNameById: Map<Long, String> = emptyMap(),
 ) {
     if (tracks.isEmpty()) {
         EmptyHint("No songs match this view.")
@@ -475,6 +487,7 @@ private fun SongList(
                 isCurrent = track.id == currentTrackId,
                 onTap = { onPlay(track) },
                 onLongPress = { onLongPress(track) },
+                albumName = track.albumId?.let { albumNameById[it] },
             )
         }
     }
@@ -487,6 +500,7 @@ private fun SongRow(
     isCurrent: Boolean = false,
     onTap: () -> Unit,
     onLongPress: () -> Unit = {},
+    albumName: String? = null,
 ) {
     Surface(
         modifier = Modifier
@@ -527,10 +541,21 @@ private fun SongRow(
                     )
                     NowPlayingIndicator(isCurrent)
                 }
+                // Subtitle: album · duration. Album omitted when the
+                // track has no album link or the name lookup misses
+                // (track scanned with album_id, then row deleted),
+                // so we don't render a leading bullet that floats
+                // alone. Artist isn't included here because Track
+                // doesn't carry it directly — it'd require a per-row
+                // artistsForTrack call.
+                val subtitle = listOfNotNull(albumName, formatDuration(track.durationMs))
+                    .joinToString(" · ")
                 Text(
-                    text = formatDuration(track.durationMs),
+                    text = subtitle,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }

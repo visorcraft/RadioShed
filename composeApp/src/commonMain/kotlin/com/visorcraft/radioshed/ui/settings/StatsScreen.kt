@@ -75,6 +75,7 @@ fun StatsScreen(
     stationRepo: StationRepository = koinInject(),
     libraryRepo: LibraryRepository = koinInject(),
     stationPlayback: StationPlayback = koinInject(),
+    ratingRepo: com.visorcraft.radioshed.data.RatingRepository = koinInject(),
 ) {
     var totalMs by remember { mutableStateOf(0L) }
     var totalPlays by remember { mutableStateOf(0L) }
@@ -84,6 +85,13 @@ fun StatsScreen(
     var topArtists by remember { mutableStateOf<List<TopArtistEntry>>(emptyList()) }
     var topAlbums by remember { mutableStateOf<List<TopAlbumEntry>>(emptyList()) }
     var topStations by remember { mutableStateOf<List<Station>>(emptyList()) }
+    // Tracks the user skips most often. Surfaced to invite a "you
+    // don't seem to like this" decision — long-press to dislike on
+    // station, etc. Capped at 10 because a long Most-skipped list
+    // becomes psychological clutter.
+    var mostSkipped by remember {
+        mutableStateOf<List<Pair<Track, Long>>>(emptyList())
+    }
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
@@ -105,6 +113,7 @@ fun StatsScreen(
             .filter { it.stats.playCount > 0 }
             .sortedByDescending { it.stats.playCount }
             .take(5)
+        mostSkipped = ratingRepo.mostSkippedTracks(limit = 10L)
     }
 
     Scaffold(
@@ -147,7 +156,8 @@ fun StatsScreen(
                 topTracks.isEmpty() &&
                 topArtists.isEmpty() &&
                 topAlbums.isEmpty() &&
-                topStations.isEmpty()
+                topStations.isEmpty() &&
+                mostSkipped.isEmpty()
             ) {
                 item {
                     Text(
@@ -209,6 +219,27 @@ fun StatsScreen(
                             // from the top list itself, mirroring how
                             // Library Browser tap-to-play works.
                             val list = topTracks.map { it.first }
+                            val idx = list.indexOf(track).coerceAtLeast(0)
+                            stationPlayback.playTracks(list, startIndex = idx)
+                        },
+                    )
+                }
+                item { Spacer(Modifier.height(16.dp)) }
+            }
+
+            if (mostSkipped.isNotEmpty()) {
+                item { SectionHeader("Most skipped") }
+                items(mostSkipped, key = { (t, _) -> "sk:${t.id}" }) { (track, skips) ->
+                    TopTrackRow(
+                        track = track,
+                        plays = skips,
+                        rank = mostSkipped.indexOfFirst { it.first.id == track.id } + 1,
+                        playsLabel = "skip",
+                        onTap = {
+                            // Tap-to-play seeds the same list — useful
+                            // for "let me actually listen and decide
+                            // whether I should dislike this".
+                            val list = mostSkipped.map { it.first }
                             val idx = list.indexOf(track).coerceAtLeast(0)
                             stationPlayback.playTracks(list, startIndex = idx)
                         },
@@ -414,7 +445,13 @@ private fun StatTile(label: String, value: String, modifier: Modifier = Modifier
 }
 
 @Composable
-private fun TopTrackRow(track: Track, plays: Long, rank: Int, onTap: () -> Unit) {
+private fun TopTrackRow(
+    track: Track,
+    plays: Long,
+    rank: Int,
+    onTap: () -> Unit,
+    playsLabel: String = "play",
+) {
     Surface(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onTap),
         color = Color.Transparent,
@@ -455,7 +492,7 @@ private fun TopTrackRow(track: Track, plays: Long, rank: Int, onTap: () -> Unit)
                 )
             }
             Text(
-                text = "$plays play${if (plays == 1L) "" else "s"}",
+                text = "$plays $playsLabel${if (plays == 1L) "" else "s"}",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
             )

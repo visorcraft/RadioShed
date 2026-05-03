@@ -51,7 +51,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material.icons.filled.MoreVert
 import com.visorcraft.radioshed.audio.AudioEngine
+import com.visorcraft.radioshed.data.PlaylistRepository
 import com.visorcraft.radioshed.data.RatingRepository
 import com.visorcraft.radioshed.domain.Track
 import com.visorcraft.radioshed.stations.StationPlayback
@@ -74,9 +80,13 @@ fun LikedSongsScreen(
     ratingRepo: RatingRepository = koinInject(),
     stationPlayback: StationPlayback = koinInject(),
     audioEngine: AudioEngine = koinInject(),
+    playlistRepo: PlaylistRepository = koinInject(),
 ) {
     var tracks by remember { mutableStateOf<List<Track>>(emptyList()) }
     var contextTrackId by remember { mutableStateOf<Long?>(null) }
+    var menuOpen by remember { mutableStateOf(false) }
+    var saveAsPlaylistOpen by remember { mutableStateOf(false) }
+    var savedPlaylistName by remember { mutableStateOf<String?>(null) }
     val likedCount by ratingRepo.observeLikedCount().collectAsState(initial = 0L)
     val nowPlaying by audioEngine.nowPlaying.collectAsState()
     val currentTrackId = nowPlaying?.trackId
@@ -95,6 +105,26 @@ fun LikedSongsScreen(
             TopAppBar(
                 title = { Text("Liked songs") },
                 navigationIcon = { TextButton(onClick = onBack) { Text("Back") } },
+                actions = {
+                    Box {
+                        IconButton(onClick = { menuOpen = true }) {
+                            Icon(Icons.Filled.MoreVert, contentDescription = "More")
+                        }
+                        DropdownMenu(
+                            expanded = menuOpen,
+                            onDismissRequest = { menuOpen = false },
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Save as playlist…") },
+                                enabled = tracks.isNotEmpty(),
+                                onClick = {
+                                    menuOpen = false
+                                    saveAsPlaylistOpen = true
+                                },
+                            )
+                        }
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface,
                 ),
@@ -205,6 +235,62 @@ fun LikedSongsScreen(
         TrackContextSheet(
             trackId = id,
             onDismiss = { contextTrackId = null },
+        )
+    }
+
+    if (saveAsPlaylistOpen) {
+        var name by remember { mutableStateOf("Liked songs") }
+        AlertDialog(
+            onDismissRequest = { saveAsPlaylistOpen = false },
+            title = { Text("Save Liked songs as playlist") },
+            text = {
+                Column {
+                    Text(
+                        "Creates a regular playlist with the same tracks. " +
+                            "Future changes to Liked songs won't affect the " +
+                            "playlist — it's a one-time snapshot.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = name,
+                        onValueChange = { name = it },
+                        label = { Text("Playlist name") },
+                        singleLine = true,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = name.isNotBlank(),
+                    onClick = {
+                        val cleanName = name.trim()
+                        val snapshot = tracks
+                        saveAsPlaylistOpen = false
+                        scope.launch {
+                            val playlistId = playlistRepo.insert(name = cleanName)
+                            snapshot.forEachIndexed { idx, track ->
+                                playlistRepo.addTrack(playlistId, track.id, position = idx)
+                            }
+                            savedPlaylistName = cleanName
+                        }
+                    },
+                ) { Text("Save") }
+            },
+            dismissButton = {
+                TextButton(onClick = { saveAsPlaylistOpen = false }) { Text("Cancel") }
+            },
+        )
+    }
+    savedPlaylistName?.let { name ->
+        AlertDialog(
+            onDismissRequest = { savedPlaylistName = null },
+            confirmButton = {
+                TextButton(onClick = { savedPlaylistName = null }) { Text("OK") }
+            },
+            title = { Text("Saved") },
+            text = { Text("\"$name\" is in your Playlists tab.") },
         )
     }
 }

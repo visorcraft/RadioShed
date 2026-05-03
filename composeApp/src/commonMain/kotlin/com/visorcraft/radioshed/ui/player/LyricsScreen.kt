@@ -37,6 +37,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -67,10 +69,16 @@ fun LyricsScreen(
     audioEngine: AudioEngine = koinInject(),
     lyricsService: LyricsService = koinInject(),
     lyricsCache: LyricsCacheRepository = koinInject(),
+    settings: com.visorcraft.radioshed.data.SettingsStore = koinInject(),
 ) {
     val nowPlaying by audioEngine.nowPlaying.collectAsState()
     val position by audioEngine.position.collectAsState()
     val scope = rememberCoroutineScope()
+    // Lyrics font scale, persisted via SettingsStore so the
+    // user's chosen size carries across sessions. A− and A+
+    // buttons in the topbar step it in 0.1 increments inside
+    // the SettingsStore-clamped range.
+    var fontScale by remember { mutableStateOf(settings.getLyricsScale()) }
 
     var lyrics by remember { mutableStateOf<Lyrics?>(null) }
     var loading by remember { mutableStateOf(false) }
@@ -132,6 +140,41 @@ fun LyricsScreen(
                     TextButton(onClick = onBack) { Text("Back") }
                 },
                 actions = {
+                    // Font-size +/- buttons. Hidden when there's no
+                    // text to size — instrumental / not-found states
+                    // don't need them and they'd look like dead UI.
+                    val l0 = lyrics
+                    val hasReadableLyrics = l0 != null && l0.hasContent && !l0.instrumental
+                    if (hasReadableLyrics) {
+                        TextButton(onClick = {
+                            val next = (fontScale - 0.1f).coerceAtLeast(0.7f)
+                            fontScale = next
+                            settings.setLyricsScale(next)
+                        }) { Text("A−") }
+                        TextButton(onClick = {
+                            val next = (fontScale + 0.1f).coerceAtMost(1.6f)
+                            fontScale = next
+                            settings.setLyricsScale(next)
+                        }) { Text("A+") }
+                    }
+                    val clipboard = LocalClipboardManager.current
+                    val l = lyrics
+                    if (l != null && l.hasContent && !l.instrumental) {
+                        TextButton(onClick = {
+                            // Synced lines reduce to plain text — most
+                            // users want the words, not the timestamps.
+                            // If both formats are missing it's an
+                            // instrumental and we already returned above.
+                            val text = l.plain
+                                ?: l.synced
+                                    ?.joinToString("\n") { it.text }
+                                    ?.takeIf { it.isNotBlank() }
+                                ?: ""
+                            if (text.isNotBlank()) {
+                                clipboard.setText(AnnotatedString(text))
+                            }
+                        }) { Text("Copy") }
+                    }
                     nowPlaying?.trackId?.let { id ->
                         if (!loading) {
                             TextButton(onClick = {
@@ -172,10 +215,12 @@ fun LyricsScreen(
                 lines = l.synced,
                 positionMs = position.currentMs,
                 onSeek = { ms -> audioEngine.seekTo(ms) },
+                fontScale = fontScale,
                 modifier = Modifier.fillMaxSize().padding(padding),
             )
             l != null && !l.plain.isNullOrBlank() -> PlainLyrics(
                 text = l.plain,
+                fontScale = fontScale,
                 modifier = Modifier.fillMaxSize().padding(padding),
             )
             notFound -> NotFoundState(
@@ -286,6 +331,7 @@ private fun SyncedLyrics(
     lines: List<LyricLine>,
     positionMs: Long,
     onSeek: (Long) -> Unit,
+    fontScale: Float,
     modifier: Modifier = Modifier,
 ) {
     // Find the active line: the last line whose timeMs <= positionMs.
@@ -324,10 +370,11 @@ private fun SyncedLyrics(
             // people instinctively tap a lyric line they want to
             // start from. Lines with no text (instrumental gaps in
             // the LRC) still seek; that's the right behavior.
+            val baseStyle = if (isActive) MaterialTheme.typography.headlineSmall
+                            else MaterialTheme.typography.titleMedium
             Text(
                 text = line.text.ifBlank { " " },  // preserve breath gaps
-                style = if (isActive) MaterialTheme.typography.headlineSmall
-                        else MaterialTheme.typography.titleMedium,
+                style = baseStyle.copy(fontSize = baseStyle.fontSize * fontScale),
                 fontWeight = if (isActive) FontWeight.Bold else FontWeight.Medium,
                 color = when {
                     isActive -> MaterialTheme.colorScheme.primary
@@ -345,15 +392,16 @@ private fun SyncedLyrics(
 }
 
 @Composable
-private fun PlainLyrics(text: String, modifier: Modifier = Modifier) {
+private fun PlainLyrics(text: String, fontScale: Float, modifier: Modifier = Modifier) {
     Column(
         modifier = modifier
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 24.dp, vertical = 24.dp),
     ) {
+        val base = MaterialTheme.typography.bodyLarge
         Text(
             text = text,
-            style = MaterialTheme.typography.bodyLarge,
+            style = base.copy(fontSize = base.fontSize * fontScale),
             color = MaterialTheme.colorScheme.onBackground,
         )
         Spacer(Modifier.height(40.dp))

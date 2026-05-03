@@ -143,6 +143,25 @@ class PlaybackQueue(
     /** Snapshot of the priority buffer for the UI (Up Next sheet). */
     fun prioritySnapshot(): List<Track> = priority.toList()
 
+    /** Drop everything the user queued via Play next / Add to queue. */
+    fun clearPriority() {
+        priority.clear()
+    }
+
+    /**
+     * Remove the track at [index] from the priority buffer. No-op when
+     * the index is out of range — the UI may race the queue if the
+     * current track transitions while the user is mid-tap.
+     */
+    fun removePriorityAt(index: Int) {
+        if (index in priority.indices) {
+            val list = priority.toMutableList()
+            list.removeAt(index)
+            priority.clear()
+            priority.addAll(list)
+        }
+    }
+
     private fun nextSequential(pool: List<Track>): Track {
         val track = pool[sequentialCursor.coerceIn(0, pool.size - 1)]
         sequentialCursor = (sequentialCursor + 1) % pool.size

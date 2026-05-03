@@ -93,6 +93,45 @@ class RatingRepository(private val db: RadioShedDatabase) {
         db.ratingsQueries.trimSkipsOlderThan(threshold)
     }
 
+    /**
+     * Top-N tracks by total skip count across all stations. Pairs the
+     * track row with its skip count so the UI can render "skipped 12
+     * times" alongside the title without a second query per row.
+     */
+    suspend fun mostSkippedTracks(limit: Long = 25): List<Pair<Track, Long>> =
+        withContext(IODispatcher) {
+            db.ratingsQueries.selectMostSkippedTracks(limit).executeAsList().map { row ->
+                Track(
+                    id = row.id,
+                    path = row.path,
+                    fileName = row.file_name,
+                    fileSize = row.file_size,
+                    fileCtime = row.file_ctime,
+                    fileMtime = row.file_mtime,
+                    title = row.title,
+                    albumId = row.album_id,
+                    trackNumber = row.track_number?.toInt(),
+                    discNumber = row.disc_number?.toInt(),
+                    durationMs = row.duration_ms,
+                    bitrateKbps = row.bitrate_kbps?.toInt(),
+                    sampleRateHz = row.sample_rate_hz?.toInt(),
+                    channels = row.channels?.toInt(),
+                    format = row.format,
+                    replayGainTrack = row.replay_gain_track,
+                    replayGainAlbum = row.replay_gain_album,
+                    replayGainTrackPeak = row.replay_gain_track_peak,
+                    bpm = row.bpm,
+                    musicbrainzId = row.musicbrainz_id,
+                    acoustidFingerprint = row.acoustid_fingerprint,
+                    cueOffsetStartMs = row.cue_offset_start_ms,
+                    cueOffsetEndMs = row.cue_offset_end_ms,
+                    isAvailable = row.is_available == 1L,
+                    addedAt = row.added_at,
+                    updatedAt = row.updated_at,
+                ) to row.skip_count
+            }
+        }
+
     // ---- Play counts ----
 
     suspend fun recordPlay(trackId: Long, listenedMs: Long, playedAt: Long = nowMillis()) =

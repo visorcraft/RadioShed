@@ -16,6 +16,14 @@ import androidx.compose.runtime.compositionLocalOf
 val LocalNavigateToAlbum = compositionLocalOf<(Long) -> Unit> { {} }
 val LocalNavigateToArtist = compositionLocalOf<(Long) -> Unit> { {} }
 
+/**
+ * Navigate to the Lyrics screen for the given track. Hosts wire this
+ * to "play the track first, then navigate to lyrics" — the Lyrics
+ * screen displays lyrics for whatever is currently playing, so the
+ * caller has to drive playback to get meaningful results.
+ */
+val LocalNavigateToLyrics = compositionLocalOf<(Long) -> Unit> { {} }
+
 /** Whether the host has actually installed handlers. The
  *  TrackContextSheet hides the Go-to-album/artist rows when no
  *  navigator is wired so users don't see disabled actions that

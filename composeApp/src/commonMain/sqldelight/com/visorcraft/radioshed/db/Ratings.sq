@@ -108,6 +108,18 @@ SELECT COUNT(*) FROM skip_log WHERE track_id = ?;
 selectRecentSkipsForStation:
 SELECT * FROM skip_log WHERE station_id = ? ORDER BY skipped_at DESC LIMIT ?;
 
+-- Most-skipped tracks across all stations. Returned as
+-- (track row, total skip count). Tracks that no longer exist on
+-- disk are filtered via is_available so we don't surface ghosts.
+selectMostSkippedTracks:
+SELECT track.*, COUNT(skip_log.track_id) AS skip_count
+FROM track
+JOIN skip_log ON skip_log.track_id = track.id
+WHERE track.is_available = 1
+GROUP BY track.id
+ORDER BY skip_count DESC
+LIMIT ?;
+
 trimSkipsOlderThan:
 DELETE FROM skip_log WHERE skipped_at < ?;
 

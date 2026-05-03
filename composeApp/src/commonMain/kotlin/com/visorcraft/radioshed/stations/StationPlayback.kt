@@ -451,6 +451,24 @@ class StationPlayback(
     }
 
     /**
+     * Drop everything the user queued via Play next / Add to queue. The
+     * underlying station / sequential cursor is untouched — the next
+     * track will come from the rule pipeline as usual. Safe to call
+     * with no active queue.
+     */
+    fun clearQueue() {
+        queue?.clearPriority()
+    }
+
+    /**
+     * Remove a single entry from the priority buffer at the visible
+     * Up-Next index. Bounds-checked inside the queue.
+     */
+    fun removeFromQueue(index: Int) {
+        queue?.removePriorityAt(index)
+    }
+
+    /**
      * Ad-hoc playback: play [tracks] sequentially starting at [startIndex].
      * Used by the Library Browser when the user taps a track — the rest of
      * the visible list becomes the queue, so skip-next walks through it
@@ -597,6 +615,9 @@ class StationPlayback(
      * pool (see [PlaybackQueue.peekUpcoming]).
      */
     fun upcoming(count: Int = 12): List<Track> = queue?.peekUpcoming(count).orEmpty()
+
+    /** How many of [upcoming] are user-queued (Play next / Add to queue). */
+    fun priorityCount(): Int = queue?.prioritySnapshot()?.size ?: 0
 
     /**
      * Recently-played tracks, oldest first → newest at the END. Used by
