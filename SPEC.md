@@ -1181,7 +1181,7 @@ Goal: user can create stations; engine plays tracks per source + playback rules.
 - [x] Weighting policies: `Uniform`, `FavorRecent` *(others fall back to Uniform in v1; need richer per-track stats — Phase 5 part 2)*
 - [ ] Adaptive Mix smart query (learns from listening history) *(falls back to LeastPlayed for v1)*
 - [ ] Auto-rotate refresh job for SmartQueries (e.g. Latest Hits re-eval daily) *(deferred)*
-- [x] Built-in presets registry — `PresetSeeder` seeds Latest Hits / All Music / Discover / Top Rated / Recently Added / Forgotten Gems / Liked Songs. Per-decade and per-genre auto-stations are still deferred.
+- [~] Built-in presets registry — `PresetSeeder` seeds Latest Hits / All Music / Discover / Top Rated / Recently Added / Forgotten Gems / Liked Songs at first-scan completion. **Genre auto-stations** ship as a one-tap "Generate genre stations" card in Settings → Library: picks top-N genre tags by track count (≥20 tracks), creates `Genre: X` stations seeded with `TagFilter("GENRE", [name])` + Smart Shuffle, idempotent (skips names that already exist). **Per-decade auto-stations** are still deferred — track-level year metadata isn't currently indexed as a tag, so a `YearRange` `SourceRule` would have to be added first.
 - [x] Station editor UI: identity, source builder, playback rules — `ui/stations/StationEditorScreen.kt` covers identity, color, every `SourceRule` selector + set-operator combiner, and every `PlaybackRule` knob.
 - [x] Drag-to-reorder station list — `ui/stations/ReorderStationsScreen.kt` via the shared `ui/util/DragReorder.kt` utility. The Stations Home long-press sheet also offers per-row Move up / Move down for one-step nudges without entering reorder mode.
 - [x] Station duplicate / delete / rename — `StationActionSheet` ships Open / Edit / **Duplicate** / Pin / Move up / Move down / Delete. Duplicate clones source + playback + cosmetics into a new user-row with a `(copy)` name suffix, then drops the user straight into the editor on the copy (the canonical "tweak this rule chain" workflow).
@@ -1473,11 +1473,16 @@ iOS deferred; `[ ]` = still deferred.
   bitmap reuse. Explicit `remember(artworkUri)`-keyed pre-render not
   added; would help further on devices below Android 12 where
   `Modifier.blur` is a no-op and the work falls to software.
-- [x] **SQLDelight `verifyMigrations` enabled** — turned on alongside
-  the first real migration (`6.sqm` — backfills the
-  `station_pinned_track` table that was added to the baseline schema
-  without a migration and crashed `playStation` on existing DBs). The
-  harness now catches schema drift in CI on every Android build.
+- [~] **SQLDelight `verifyMigrations` enabled** — flag stays **off**
+  in `composeApp/build.gradle.kts` because the `.sqm` files use
+  ALTER TABLE / CREATE TABLE against `station(id)` / `track(id)`
+  references the verifier can't resolve in an isolated parse
+  (every FK fails with "No column found with name id"). Turning
+  it on cleanly needs each migration's prior schema re-stated at
+  the top — a meaningful refactor still pending. Migration `6.sqm`
+  is in place (backfills `station_pinned_track` for users with
+  pre-existing DBs that crashed on `playStation`); we just don't
+  have the harness validating it yet.
 - [ ] **Media3 1.7+ bump** — clears the `CommandButton.Builder()`
   deprecation warnings. Holds until 1.7 is stable and the Media3 release
   notes are reviewed for breaking changes on `MediaSession`. Pinned at

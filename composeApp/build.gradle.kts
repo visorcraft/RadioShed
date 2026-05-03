@@ -143,12 +143,16 @@ sqldelight {
         create("RadioShedDatabase") {
             packageName.set("com.visorcraft.radioshed.db")
             dialect(libs.sqldelight.dialectSqlite338)
-            // verifyMigrations stays off: the existing 1.sqm / 2.sqm
-            // files use ALTER TABLE against tables defined in the .sq
-            // baseline, which the verifier doesn't see in an isolated
-            // parse. Turning this on requires re-stating the prior
-            // schema at the top of each .sqm — a meaningful refactor
-            // tracked in SPEC Phase 18.
+            // verifyMigrations stays off: the existing 1.sqm /
+            // 2.sqm / 6.sqm files use ALTER TABLE / CREATE TABLE
+            // against tables defined in the .sq baseline, which
+            // the verifier doesn't see in an isolated parse —
+            // every FK reference fails with "No column found with
+            // name id" because `station(id)` and `track(id)` aren't
+            // visible in the migration's own view. Turning this on
+            // requires re-stating the prior schema at the top of
+            // each .sqm — meaningful refactor tracked in SPEC
+            // Phase 18.
         }
     }
 }

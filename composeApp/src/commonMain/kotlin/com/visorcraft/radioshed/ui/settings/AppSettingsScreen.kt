@@ -343,6 +343,14 @@ fun AppSettingsScreen(
             )
 
             Spacer(Modifier.height(8.dp))
+            // One-tap "create stations from your tag-genre histogram"
+            // — closes SPEC §5 "Genre auto-stations" without forcing
+            // users to create them by hand. Idempotent: stations
+            // named `Genre: X` are skipped on re-run, so the button
+            // can be tapped repeatedly after the library grows
+            // without producing duplicates.
+            GenerateGenreStationsRow()
+            Spacer(Modifier.height(8.dp))
             // Clear lyrics cache. Used when LRClib improves their
             // database — the user gets a re-fetch on next track plays.
             // Keeps user-supplied artist/title overrides intact since
@@ -1042,6 +1050,119 @@ private fun FontScaleRow(value: Float, onChange: (Float) -> Unit) {
                     )
                 }
             }
+        }
+    }
+}
+
+/**
+ * One-tap "Generate genre stations" — picks the top-N genre tags
+ * by track count, creates a `Genre: X` station per genre seeded
+ * with `TagFilter("GENRE", listOf(genreName))` and Smart Shuffle
+ * playback. Idempotent — stations whose name already exists are
+ * skipped, so the user can hit the button again after their
+ * library grows without producing duplicates. Threshold of 20
+ * tracks per genre keeps the resulting list tidy.
+ */
+@Composable
+private fun GenerateGenreStationsRow(
+    libraryRepo: com.visorcraft.radioshed.data.LibraryRepository = koinInject(),
+    stationRepo: com.visorcraft.radioshed.data.StationRepository = koinInject(),
+) {
+    val scope = rememberCoroutineScope()
+    var status by remember { mutableStateOf<String?>(null) }
+    var working by remember { mutableStateOf(false) }
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+            Text(
+                "Generate genre stations",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Creates one station per top genre tag, named \"Genre: X\". " +
+                    "Skips genres with fewer than 20 tracks and skips " +
+                    "stations that already exist — safe to tap again as " +
+                    "the library grows.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+            )
+            Spacer(Modifier.height(8.dp))
+            status?.let { msg ->
+                Text(
+                    text = msg,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Spacer(Modifier.height(6.dp))
+            }
+            androidx.compose.material3.OutlinedButton(
+                onClick = {
+                    if (working) return@OutlinedButton
+                    working = true
+                    status = "Counting genres…"
+                    scope.launch {
+                        try {
+                            val genres = libraryRepo.distinctTagValues("GENRE")
+                            val counts = genres.associateWith {
+                                libraryRepo.tracksByTag("GENRE", it).size
+                            }
+                            val topGenres = counts.entries
+                                .filter { it.value >= 20 }
+                                .sortedByDescending { it.value }
+                                .take(10)
+                                .map { it.key }
+                            if (topGenres.isEmpty()) {
+                                status = "No genres with at least 20 tracks. " +
+                                    "Tag your tracks with a `GENRE` field, then re-run."
+                                return@launch
+                            }
+                            val existing = stationRepo.list()
+                            val existingNames = existing.map { it.name }.toSet()
+                            val maxSort = existing.maxOfOrNull { it.sortPosition } ?: 0
+                            var inserted = 0
+                            var skipped = 0
+                            topGenres.forEachIndexed { idx, genre ->
+                                val name = "Genre: $genre"
+                                if (name in existingNames) {
+                                    skipped += 1
+                                    return@forEachIndexed
+                                }
+                                stationRepo.insert(
+                                    name = name,
+                                    source = com.visorcraft.radioshed.domain
+                                        .SourceRule.TagFilter(
+                                            key = "GENRE",
+                                            values = listOf(genre),
+                                        ),
+                                    playback = com.visorcraft.radioshed.domain
+                                        .PlaybackRule(
+                                            order = com.visorcraft.radioshed.domain
+                                                .PlayOrder.SmartShuffle,
+                                        ),
+                                    sortPosition = maxSort + 1 + idx,
+                                    customSubtitle = "Tag-driven · ${counts[genre] ?: 0} tracks",
+                                )
+                                inserted += 1
+                            }
+                            status = buildString {
+                                append("Created $inserted station")
+                                if (inserted != 1) append("s")
+                                if (skipped > 0) append(" ($skipped already existed)")
+                                append(".")
+                            }
+                        } finally {
+                            working = false
+                        }
+                    }
+                },
+                enabled = !working,
+            ) { Text(if (working) "Working…" else "Generate") }
         }
     }
 }
