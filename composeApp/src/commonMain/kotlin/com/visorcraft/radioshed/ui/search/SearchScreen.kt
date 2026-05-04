@@ -6,6 +6,8 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.AssistChip
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
@@ -258,18 +260,24 @@ fun SearchScreen(
             Spacer(Modifier.height(8.dp))
 
             when {
-                query.isBlank() -> RecentSearchesBlock(
-                    queries = recentQueries,
-                    onPick = { q -> query = q },
-                    onClear = {
-                        settings.clearRecentSearches()
-                        recentQueries = emptyList()
-                    },
-                    onRemoveOne = { q ->
-                        settings.removeRecentSearch(q)
-                        recentQueries = settings.getRecentSearches()
-                    },
-                )
+                query.isBlank() -> Column(
+                    modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+                ) {
+                    RecentSearchesBlock(
+                        queries = recentQueries,
+                        onPick = { q -> query = q },
+                        onClear = {
+                            settings.clearRecentSearches()
+                            recentQueries = emptyList()
+                        },
+                        onRemoveOne = { q ->
+                            settings.removeRecentSearch(q)
+                            recentQueries = settings.getRecentSearches()
+                        },
+                    )
+                    Spacer(Modifier.height(20.dp))
+                    DslTipsBlock(onPick = { snippet -> query = snippet })
+                }
                 isSearching && results.isEmpty -> Text(
                     "Searching…",
                     style = MaterialTheme.typography.bodyMedium,
@@ -458,6 +466,60 @@ private fun RecentSearchesBlock(
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+/**
+ * Compact reference card for the search DSL. Shows the four most
+ * common shorthand operators with one-tap chips that prefill the
+ * query field — saves the user from memorising syntax and gives the
+ * empty-state surface something useful to do beyond "type something".
+ * Kept short on purpose; the full grammar lives in the DSL parser
+ * and isn't worth surfacing in the UI.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DslTipsBlock(onPick: (String) -> Unit) {
+    val tips = listOf(
+        "year:>2010" to "Released after 2010",
+        "year:1995" to "Released in 1995",
+        "artist:portishead" to "By artist",
+        "album:dummy" to "From album",
+        "rating:>=4" to "Rated 4 stars or more",
+    )
+    Column {
+        Text(
+            "Search tips",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f),
+        )
+        Spacer(Modifier.height(2.dp))
+        Text(
+            "Tap a token to prefill the query.",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+        )
+        Spacer(Modifier.height(6.dp))
+        tips.forEach { (snippet, hint) ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                AssistChip(
+                    onClick = { onPick(snippet) },
+                    label = { Text(snippet) },
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    hint,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
+                )
             }
         }
     }

@@ -67,7 +67,7 @@ val sharedModule: Module = module {
     single { MissingArtworkSync(get(), get(), get(), get()) }
 
     // Sleep timer — singleton so multiple UI surfaces observe the same state.
-    single { SleepTimer(get()) }
+    single { SleepTimer(get(), get()) }
 
     // Lyrics: cache + fetcher + local sidecar loader, orchestrated by LyricsService.
     single { LyricsService(get(), get(), get(), get(), get()) }

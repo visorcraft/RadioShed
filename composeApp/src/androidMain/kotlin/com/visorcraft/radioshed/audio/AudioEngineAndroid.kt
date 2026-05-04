@@ -234,6 +234,15 @@ class AudioEngineAndroid(private val appContext: Context) : AudioEngine {
         _volume.value = clamped
     }
 
+    override fun setPlaybackSpeed(speed: Float) {
+        // Media3 accepts any positive Float; we clamp to 0.5..2.0 to
+        // keep the user out of stutter / chipmunk territory. The
+        // controller might be null briefly during service hand-off,
+        // so guard with runCatching the same way setVolume does.
+        val clamped = speed.coerceIn(0.5f, 2.0f)
+        runCatching { controller?.setPlaybackSpeed(clamped) }
+    }
+
     /** Call from process/app shutdown if you want the controller to release cleanly. */
     fun release() {
         positionJob?.cancel()

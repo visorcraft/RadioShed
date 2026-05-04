@@ -220,6 +220,36 @@ fun StatsScreen(
                         )
                     }
                 }
+                if (totalPlays > 0 && windowDays > 0) {
+                    // Avg tracks/day uses the user's chosen window. Two
+                    // decimals when below 10 so a fledgling habit
+                    // (~0.45/day) still shows a meaningful figure;
+                    // integer at higher counts to keep tiles tidy.
+                    Spacer(Modifier.height(12.dp))
+                    val rawAvg = totalPlays.toDouble() / windowDays.toDouble()
+                    val avgLabel = when {
+                        rawAvg >= 10.0 -> rawAvg.toInt().toString()
+                        else -> {
+                            val rounded = (rawAvg * 100.0).toInt() / 100.0
+                            rounded.toString()
+                        }
+                    }
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        StatTile(
+                            label = "Avg tracks/day",
+                            value = avgLabel,
+                            modifier = Modifier.weight(1f),
+                        )
+                        StatTile(
+                            label = "Window",
+                            value = "$windowDays day${if (windowDays == 1) "" else "s"}",
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
                 if (streaks.second > 0) {
                     Spacer(Modifier.height(12.dp))
                     Row(

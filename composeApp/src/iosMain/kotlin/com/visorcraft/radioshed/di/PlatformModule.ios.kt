@@ -22,8 +22,10 @@ import com.visorcraft.radioshed.source.IosFileBrowser
 import com.visorcraft.radioshed.source.IosFileEnumerator
 import com.visorcraft.radioshed.source.IosFolderRevealer
 import com.visorcraft.radioshed.source.IosRingtoneSetter
+import com.visorcraft.radioshed.source.IosHistoryExporter
 import com.visorcraft.radioshed.source.IosPlaylistExporter
 import com.visorcraft.radioshed.source.IosTrackSharer
+import com.visorcraft.radioshed.source.HistoryExporter
 import com.visorcraft.radioshed.source.PlaylistExporter
 import com.visorcraft.radioshed.source.RingtoneSetter
 import com.visorcraft.radioshed.source.TrackSharer
@@ -64,6 +66,7 @@ actual val platformModule: Module = module {
     single<RingtoneSetter> { IosRingtoneSetter() }
     single<TrackSharer> { IosTrackSharer() }
     single<PlaylistExporter> { IosPlaylistExporter() }
+    single<HistoryExporter> { IosHistoryExporter() }
     single { StoragePermissions() }
     single { StorageVolumes() }
 

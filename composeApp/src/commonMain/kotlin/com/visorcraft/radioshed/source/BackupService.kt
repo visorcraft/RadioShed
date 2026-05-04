@@ -45,9 +45,11 @@ class BackupService(
      * succeeds we prune anything older than the most-recent N. This
      * keeps `filesDir/backups/` bounded — without it, a user who
      * makes a backup before each car drive would accumulate hundreds
-     * of files. Surface as a setting later if this becomes a complaint.
+     * of files. Read live from `SettingsStore.getBackupRetention()`
+     * so the user can dial it up or down without restarting the app.
      */
-    private val maxBackupsToRetain: Int = 10
+    private val maxBackupsToRetain: Int
+        get() = settings.getBackupRetention()
 
     suspend fun export(): ExportResult {
         val stations = stationRepo.list().filter { !it.isBuiltIn }.map { s ->

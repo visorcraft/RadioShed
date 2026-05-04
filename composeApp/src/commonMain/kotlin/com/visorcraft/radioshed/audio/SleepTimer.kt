@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import com.visorcraft.radioshed.data.SettingsStore
 import kotlin.time.TimeSource
 
 /**
@@ -18,9 +19,11 @@ import kotlin.time.TimeSource
  * eventual quick-tile, and Auto's overflow can all observe the same
  * state.
  *
- * Why pause and not stop: the user almost always wants to wake up at
+ * Why pause is the default: the user almost always wants to wake up at
  * the same spot in the queue. Pausing keeps `nowPlaying` populated and
- * the queue intact; resuming is one tap away.
+ * the queue intact; resuming is one tap away. Power users who want the
+ * MediaSession off the lock screen can opt in to "Stop on expire" via
+ * Settings → Audio.
  *
  * Why a separate class instead of inlining into AudioEngine: the sleep
  * timer is fundamentally policy (when do we stop?), while AudioEngine
@@ -28,7 +31,10 @@ import kotlin.time.TimeSource
  * platform impls (Android Media3, iOS AVAudioEngine) to a feature
  * neither needs to know about.
  */
-class SleepTimer(private val audioEngine: AudioEngine) {
+class SleepTimer(
+    private val audioEngine: AudioEngine,
+    private val settings: SettingsStore,
+) {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -90,7 +96,7 @@ class SleepTimer(private val audioEngine: AudioEngine) {
                 // when `remaining <= 0` on the next loop iteration.
                 delay(TICK_INTERVAL_MS.coerceAtMost(remaining))
             }
-            audioEngine.pause()
+            if (settings.getSleepStopOnExpire()) audioEngine.stop() else audioEngine.pause()
             // Restore so a future resume isn't silent, and the next
             // track's RG re-application starts from a normal baseline.
             audioEngine.setVolume(startVolume)

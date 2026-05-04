@@ -146,6 +146,32 @@ class StationRepository(private val db: RadioShedDatabase) {
             }
         }
 
+    /**
+     * Move [stationId] to the very top or bottom of the station order.
+     * Renumbers every row in a single transaction so the resulting
+     * sort_position values are dense (0..N-1) — keeps swap-pair
+     * reorders from later inheriting wide gaps when the user has been
+     * shuffling things around. The station list passed in must be the
+     * already-sorted view the user is looking at; we trust its order
+     * rather than re-querying so the move matches what they see.
+     */
+    suspend fun moveStationToEnd(
+        stationId: Long,
+        currentOrder: List<Long>,
+        toTop: Boolean,
+    ) = withContext(IODispatcher) {
+        if (currentOrder.size < 2) return@withContext
+        if (stationId !in currentOrder) return@withContext
+        val without = currentOrder.filter { it != stationId }
+        val newOrder = if (toTop) listOf(stationId) + without else without + stationId
+        val now = nowMillis()
+        db.stationsQueries.transaction {
+            newOrder.forEachIndexed { index, id ->
+                db.stationsQueries.reorderStation(index.toLong(), now, id)
+            }
+        }
+    }
+
     suspend fun update(
         id: Long,
         name: String,

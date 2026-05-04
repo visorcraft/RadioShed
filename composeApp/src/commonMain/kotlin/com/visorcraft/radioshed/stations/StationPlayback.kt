@@ -278,7 +278,8 @@ class StationPlayback(
                         // first decided whether the pause landed on
                         // the intended track or the next one.
                         if (sleepTimer.consumeEndOfTrackPause()) {
-                            audioEngine.pause()
+                            if (settings.getSleepStopOnExpire()) audioEngine.stop()
+                            else audioEngine.pause()
                             return@withLock
                         }
                         if (_repeatMode.value == RepeatMode.One) {

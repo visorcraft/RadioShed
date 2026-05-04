@@ -17,3 +17,14 @@ internal actual fun formatShortDate(epochMs: Long): String {
     fmt.timeZone = java.util.TimeZone.getDefault()
     return fmt.format(java.util.Date(epochMs))
 }
+
+internal actual fun formatIsoUtc(epochMs: Long): String {
+    // Locale.ROOT prevents the formatter from substituting localized
+    // digits (Arabic, Bengali, etc.) — RFC-3339 requires ASCII.
+    val fmt = java.text.SimpleDateFormat(
+        "yyyy-MM-dd'T'HH:mm:ss'Z'",
+        java.util.Locale.ROOT,
+    )
+    fmt.timeZone = java.util.TimeZone.getTimeZone("UTC")
+    return fmt.format(java.util.Date(epochMs))
+}

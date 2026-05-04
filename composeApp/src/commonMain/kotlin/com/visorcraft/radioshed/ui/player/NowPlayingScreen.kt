@@ -72,6 +72,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -163,6 +166,18 @@ fun NowPlayingScreen(
     var overflowMenuOpen by remember { mutableStateOf(false) }
     var addToPlaylistTrackId by remember { mutableStateOf<Long?>(null) }
     var trackInfoOpen by remember { mutableStateOf(false) }
+    // Playback-speed selector. The chosen rate is persisted in
+    // SettingsStore so it survives restarts and gets re-applied on
+    // every track load. The bottom sheet renders chips for 0.75 / 1 /
+    // 1.25 / 1.5 / 2× — the common spread for podcasts / audiobooks.
+    var playbackSpeed by remember { mutableStateOf(settings.getPlaybackSpeed()) }
+    var speedSheetOpen by remember { mutableStateOf(false) }
+    // Re-apply the saved speed whenever a new track loads (Media3
+    // resets `setPlaybackSpeed` per item by default), and once on
+    // first composition so the very first track honours the pref.
+    LaunchedEffect(nowPlaying?.trackId) {
+        if (playbackSpeed != 1f) audioEngine.setPlaybackSpeed(playbackSpeed)
+    }
     // Snapshot dialog: saves the current Up Next list as a new
     // playlist. We keep the candidate tracks alongside the open
     // flag so closing/reopening the queue sheet doesn't lose the
@@ -439,6 +454,19 @@ fun NowPlayingScreen(
                                         trackInfoOpen = true
                                     },
                                 )
+                                DropdownMenuItem(
+                                    text = {
+                                        val s = playbackSpeed
+                                        val label = if (s == 1f) "Speed (1×)"
+                                                    else "Speed (${formatSpeed(s)}×)"
+                                        Text(label)
+                                    },
+                                    leadingIcon = { Icon(Icons.Filled.Speed, null) },
+                                    onClick = {
+                                        overflowMenuOpen = false
+                                        speedSheetOpen = true
+                                    },
+                                )
                             }
                         }
                     }
@@ -564,6 +592,18 @@ fun NowPlayingScreen(
             } else {
                 trackInfoOpen = false
             }
+        }
+        if (speedSheetOpen) {
+            PlaybackSpeedSheet(
+                current = playbackSpeed,
+                onPick = { v ->
+                    playbackSpeed = v
+                    settings.setPlaybackSpeed(v)
+                    audioEngine.setPlaybackSpeed(v)
+                    speedSheetOpen = false
+                },
+                onDismiss = { speedSheetOpen = false },
+            )
         }
         if (isNarrow && overflowMenuOpen) {
             OverflowSheet(
@@ -2430,3 +2470,59 @@ private fun SaveQueueAsPlaylistDialog(
         },
     )
 }
+
+/**
+ * Renders a slim "0.75 / 1 / 1.25 / 1.5 / 2×" chip row in a bottom
+ * sheet. Picking a chip persists the value via [onPick] (which also
+ * routes through to AudioEngine.setPlaybackSpeed at the call site)
+ * and dismisses the sheet — the user almost always knows what they
+ * want, so a confirm step would just be friction.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PlaybackSpeedSheet(
+    current: Float,
+    onPick: (Float) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val options = listOf(0.75f, 1f, 1.25f, 1.5f, 2f)
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+            Text(
+                "Playback speed",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
+            )
+            Text(
+                "Pitch is preserved — vocals stay listenable at faster rates. " +
+                    "The chosen rate persists across track changes and app launches.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                modifier = Modifier.padding(horizontal = 8.dp),
+            )
+            Spacer(Modifier.height(12.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                options.forEach { rate ->
+                    androidx.compose.material3.FilterChip(
+                        selected = current == rate,
+                        onClick = { onPick(rate) },
+                        label = { Text("${formatSpeed(rate)}×") },
+                    )
+                }
+            }
+            Spacer(Modifier.height(16.dp))
+        }
+    }
+}
+
+private fun formatSpeed(value: Float): String =
+    if (value == value.toInt().toFloat()) value.toInt().toString()
+    else value.toString().trimEnd('0').trimEnd('.')

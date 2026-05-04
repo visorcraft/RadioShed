@@ -42,4 +42,5 @@ class AudioEngineIos : AudioEngine {
     override fun skipPrevious() = Unit
     override fun stop() = Unit
     override fun setVolume(fraction: Float) = Unit
+    override fun setPlaybackSpeed(speed: Float) = Unit
 }

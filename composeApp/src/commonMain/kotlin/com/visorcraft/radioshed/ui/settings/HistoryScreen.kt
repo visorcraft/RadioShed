@@ -54,6 +54,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import com.visorcraft.radioshed.data.HistoryEntryWithStation
 import com.visorcraft.radioshed.data.LibraryRepository
 import com.visorcraft.radioshed.data.StationRepository
+import com.visorcraft.radioshed.data.formatIsoUtc
 import com.visorcraft.radioshed.data.nowMillis
 import com.visorcraft.radioshed.domain.Track
 import com.visorcraft.radioshed.stations.StationPlayback
@@ -75,6 +76,7 @@ fun HistoryScreen(
     libraryRepo: LibraryRepository = koinInject(),
     stationPlayback: StationPlayback = koinInject(),
     audioEngine: com.visorcraft.radioshed.audio.AudioEngine = koinInject(),
+    historyExporter: com.visorcraft.radioshed.source.HistoryExporter = koinInject(),
 ) {
     var entries by remember { mutableStateOf<List<HistoryEntryWithStation>>(emptyList()) }
     var trackById by remember { mutableStateOf<Map<Long, Track>>(emptyMap()) }
@@ -157,6 +159,41 @@ fun HistoryScreen(
                                 onClick = {
                                     menuOpen = false
                                     clearConfirmOpen = true
+                                },
+                            )
+                            androidx.compose.material3.HorizontalDivider()
+                            // CSV export — drops the visible-history rows
+                            // into a spreadsheet-friendly file via the
+                            // share sheet. Disabled when there's nothing
+                            // to write so the menu doesn't promise an
+                            // empty share.
+                            DropdownMenuItem(
+                                text = { Text("Export as CSV…") },
+                                enabled = entries.isNotEmpty(),
+                                onClick = {
+                                    menuOpen = false
+                                    scope.launch {
+                                        val rows = entries.map { e ->
+                                            val track = trackById[e.trackId]
+                                            val albumTitle = track?.albumId?.let {
+                                                libraryRepo.getAlbumById(it)?.title
+                                            }
+                                            val artistName = track?.id?.let {
+                                                libraryRepo.artistsForTrack(it)
+                                                    .firstOrNull()?.name
+                                            }
+                                            com.visorcraft.radioshed.source.HistoryCsvRow(
+                                                playedAtIso = formatIsoUtc(e.playedAt),
+                                                title = track?.title ?: "(missing)",
+                                                artist = artistName,
+                                                album = albumTitle,
+                                                stationName = e.stationName,
+                                                listenedMs = e.listenedMs,
+                                                completed = e.completed,
+                                            )
+                                        }
+                                        historyExporter.exportCsv(rows)
+                                    }
                                 },
                             )
                         }

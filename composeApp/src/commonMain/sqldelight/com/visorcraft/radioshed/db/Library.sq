@@ -305,6 +305,15 @@ SELECT * FROM track WHERE path LIKE ? ESCAPE '\' LIMIT 50;
 selectNewestTracks:
 SELECT * FROM track WHERE is_available = 1 ORDER BY file_ctime DESC LIMIT ?;
 
+-- Single random available track. RANDOM() in SQLite is computed per-
+-- row, so ORDER BY RANDOM() LIMIT 1 is the canonical "give me one
+-- arbitrary row" pattern. Cheap on a library of any realistic size
+-- because LIMIT 1 short-circuits as soon as the first row is picked.
+-- Used by the Stations Home "Play random track" / "Surprise me"
+-- shortcut to seed playback without committing to a station.
+selectRandomTrack:
+SELECT * FROM track WHERE is_available = 1 ORDER BY RANDOM() LIMIT 1;
+
 selectTracksByFormat:
 SELECT * FROM track WHERE format = ? AND is_available = 1 ORDER BY title;
 

@@ -121,11 +121,34 @@ fun EqualizerScreen(
         }
     }
 
+    val copyToClipboard = com.visorcraft.radioshed.ui.util.rememberCopyToClipboard()
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Equalizer") },
                 navigationIcon = { TextButton(onClick = onBack) { Text("Back") } },
+                actions = {
+                    // Quick clipboard dump of the live gain vector.
+                    // Useful for sharing a tuning in a chat / paste
+                    // bin without going through the full preset
+                    // export flow. JSON array form (`[1.5, -2, 0,
+                    // 0.5, ...]`) so a future "Paste gains from
+                    // clipboard" reverse action can re-parse it
+                    // without a wrapper schema. Disabled until the
+                    // EQ surface has activated (i.e. there are
+                    // bands to copy).
+                    TextButton(
+                        enabled = available && gains.isNotEmpty(),
+                        onClick = {
+                            val text = gains.joinToString(
+                                separator = ", ",
+                                prefix = "[",
+                                postfix = "]",
+                            ) { dbFormatForCopy(it) }
+                            copyToClipboard(text)
+                        },
+                    ) { Text("Copy gains") }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface,
                 ),
@@ -473,4 +496,15 @@ private fun formatHz(hz: Int): String = when {
     hz <= 0 -> "—"
     hz >= 1000 -> "${hz / 1000}k"
     else -> "$hz"
+}
+
+/**
+ * Render a single band gain for clipboard JSON. Drops trailing
+ * zeros (1.5 → "1.5", 2.0 → "2", 0.0 → "0") so the copied string
+ * stays compact while still being a valid JSON number.
+ */
+private fun dbFormatForCopy(value: Float): String {
+    if (value == value.toInt().toFloat()) return value.toInt().toString()
+    val rounded = (value * 100f).toInt() / 100f
+    return rounded.toString().trimEnd('0').trimEnd('.')
 }

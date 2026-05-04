@@ -145,6 +145,73 @@ class SettingsStore(private val settings: Settings) {
     }
 
     /**
+     * How many backup files BackupService keeps before pruning.
+     * Default 10 matches the prior hardcoded cap. Range 3..30 — past
+     * 30 the user is better off using the system file manager to
+     * archive specific snapshots manually. Re-read on every export
+     * via the BackupService.maxBackupsToRetain getter so a slider
+     * tweak takes effect immediately.
+     */
+    fun getBackupRetention(): Int =
+        settings.getInt(KEY_BACKUP_RETENTION, 10).coerceIn(3, 30)
+
+    fun setBackupRetention(value: Int) {
+        settings.putInt(KEY_BACKUP_RETENTION, value.coerceIn(3, 30))
+    }
+
+    /**
+     * Playback rate multiplier. Persisted across sessions so audiobook
+     * / podcast users don't have to reset to their preferred speed
+     * after every relaunch. Range 0.5..2.0; UI exposes 0.75 / 1.0 /
+     * 1.25 / 1.5 / 2.0 as common stops. Default 1.0 (normal speed).
+     */
+    fun getPlaybackSpeed(): Float =
+        settings.getFloat(KEY_PLAYBACK_SPEED, 1f).coerceIn(0.5f, 2f)
+
+    fun setPlaybackSpeed(value: Float) {
+        settings.putFloat(KEY_PLAYBACK_SPEED, value.coerceIn(0.5f, 2f))
+    }
+
+    /**
+     * When the sleep timer expires, should the engine pause (default,
+     * holds the queue exactly where it is) or stop (clears the
+     * playable from the engine, taking the MediaSession off the
+     * lock screen)? Pause is friendlier for "I want to keep listening
+     * tomorrow"; stop is friendlier for "I want my phone fully quiet".
+     */
+    fun getSleepStopOnExpire(): Boolean =
+        settings.getBoolean(KEY_SLEEP_STOP_ON_EXPIRE, false)
+
+    fun setSleepStopOnExpire(value: Boolean) {
+        settings.putBoolean(KEY_SLEEP_STOP_ON_EXPIRE, value)
+    }
+
+    /**
+     * Wipe every user-portable preference key — used by the Settings
+     * → "Reset settings to defaults" action. Library, ratings,
+     * playlists, station definitions, listening history, custom EQ
+     * presets, and onboarding state are NOT touched (those aren't
+     * "settings" in the user's mental model). Per-device flags + the
+     * search history are also preserved.
+     */
+    fun resetAllUserSettings() {
+        listOf(
+            KEY_THEME_MODE, KEY_MATERIAL_YOU, KEY_USER_VOLUME,
+            KEY_REDUCE_MOTION, KEY_FONT_SCALE, KEY_STATIONS_TILE_SIZE,
+            KEY_STATIONS_HIDE_BUILTINS, KEY_CONNECTIVITY_POLICY,
+            KEY_LIB_TAB, KEY_LIB_SONG_SORT, KEY_LIB_ARTIST_SORT,
+            KEY_LIB_ALBUM_SORT, KEY_LIB_GENRE_SORT, KEY_FILE_BROWSER_SORT,
+            KEY_EQ_ENABLED, KEY_REPLAY_GAIN, KEY_REPLAY_GAIN_PREAMP,
+            KEY_AUTO_RESUME_STATION, KEY_AUTO_BACKUP,
+            KEY_AUTO_RESCAN_ON_LAUNCH, KEY_END_FADE_SEC, KEY_LYRICS_SCALE,
+            KEY_DRIVE_MODE, KEY_ALBUM_TRACK_SORT, KEY_ARTIST_TRACK_SORT,
+            KEY_GENRE_TRACK_SORT, KEY_LYRICS_SYNC_OFFSET,
+            KEY_STATS_WINDOW_DAYS, KEY_BACKUP_RETENTION,
+            KEY_SLEEP_STOP_ON_EXPIRE, KEY_PLAYBACK_SPEED,
+        ).forEach { settings.remove(it) }
+    }
+
+    /**
      * Drive Mode bumps transport / rating tap targets to be safer
      * to hit while driving. Off by default; users opt in once and
      * the setting follows them across sessions.
@@ -493,6 +560,7 @@ class SettingsStore(private val settings: Settings) {
             KEY_THEME_MODE, KEY_CONNECTIVITY_POLICY,
             KEY_LIB_ARTIST_SORT, KEY_LIB_ALBUM_SORT, KEY_LIB_GENRE_SORT,
             KEY_FILE_BROWSER_SORT,
+            KEY_ALBUM_TRACK_SORT, KEY_ARTIST_TRACK_SORT, KEY_GENRE_TRACK_SORT,
         ).forEach { key ->
             settings.getStringOrNull(key)?.let {
                 out[key] = com.visorcraft.radioshed.source.BackupSettingValue.Str(it)
@@ -506,7 +574,7 @@ class SettingsStore(private val settings: Settings) {
             KEY_MATERIAL_YOU, KEY_REDUCE_MOTION, KEY_DRIVE_MODE,
             KEY_REPLAY_GAIN, KEY_AUTO_RESUME_STATION, KEY_AUTO_BACKUP,
             KEY_AUTO_RESCAN_ON_LAUNCH, KEY_EQ_ENABLED,
-            KEY_STATIONS_HIDE_BUILTINS,
+            KEY_STATIONS_HIDE_BUILTINS, KEY_SLEEP_STOP_ON_EXPIRE,
         ).forEach { key ->
             if (settings.hasKey(key)) {
                 out[key] = com.visorcraft.radioshed.source.BackupSettingValue.Bool(
@@ -518,6 +586,7 @@ class SettingsStore(private val settings: Settings) {
         listOf(
             KEY_USER_VOLUME, KEY_REPLAY_GAIN_PREAMP,
             KEY_FONT_SCALE, KEY_LYRICS_SCALE,
+            KEY_PLAYBACK_SPEED,
         ).forEach { key ->
             if (settings.hasKey(key)) {
                 out[key] = com.visorcraft.radioshed.source.BackupSettingValue.FloatValue(
@@ -526,7 +595,11 @@ class SettingsStore(private val settings: Settings) {
             }
         }
         // Ints
-        listOf(KEY_END_FADE_SEC, KEY_STATIONS_TILE_SIZE).forEach { key ->
+        listOf(
+            KEY_END_FADE_SEC, KEY_STATIONS_TILE_SIZE,
+            KEY_LYRICS_SYNC_OFFSET, KEY_STATS_WINDOW_DAYS,
+            KEY_BACKUP_RETENTION,
+        ).forEach { key ->
             if (settings.hasKey(key)) {
                 out[key] = com.visorcraft.radioshed.source.BackupSettingValue.IntValue(
                     settings.getInt(key, 0),
@@ -598,14 +671,17 @@ class SettingsStore(private val settings: Settings) {
     private fun expectedTypeForKey(key: String): SettingType? = when (key) {
         KEY_THEME_MODE, KEY_CONNECTIVITY_POLICY,
         KEY_LIB_ARTIST_SORT, KEY_LIB_ALBUM_SORT, KEY_LIB_GENRE_SORT,
-        KEY_FILE_BROWSER_SORT -> SettingType.STR
+        KEY_FILE_BROWSER_SORT,
+        KEY_ALBUM_TRACK_SORT, KEY_ARTIST_TRACK_SORT, KEY_GENRE_TRACK_SORT -> SettingType.STR
         KEY_MATERIAL_YOU, KEY_REDUCE_MOTION, KEY_DRIVE_MODE,
         KEY_REPLAY_GAIN, KEY_AUTO_RESUME_STATION, KEY_AUTO_BACKUP,
         KEY_AUTO_RESCAN_ON_LAUNCH, KEY_EQ_ENABLED,
-        KEY_STATIONS_HIDE_BUILTINS -> SettingType.BOOL
+        KEY_STATIONS_HIDE_BUILTINS, KEY_SLEEP_STOP_ON_EXPIRE -> SettingType.BOOL
         KEY_USER_VOLUME, KEY_REPLAY_GAIN_PREAMP,
-        KEY_FONT_SCALE, KEY_LYRICS_SCALE -> SettingType.FLOAT
-        KEY_END_FADE_SEC, KEY_STATIONS_TILE_SIZE -> SettingType.INT
+        KEY_FONT_SCALE, KEY_LYRICS_SCALE, KEY_PLAYBACK_SPEED -> SettingType.FLOAT
+        KEY_END_FADE_SEC, KEY_STATIONS_TILE_SIZE,
+        KEY_LYRICS_SYNC_OFFSET, KEY_STATS_WINDOW_DAYS,
+        KEY_BACKUP_RETENTION -> SettingType.INT
         else -> null
     }
 
@@ -622,6 +698,9 @@ class SettingsStore(private val settings: Settings) {
         const val KEY_GENRE_TRACK_SORT = "ui.genre.trackSort"
         const val KEY_LYRICS_SYNC_OFFSET = "ui.lyrics.syncOffsetMs"
         const val KEY_STATS_WINDOW_DAYS = "ui.stats.windowDays"
+        const val KEY_BACKUP_RETENTION = "backup.retentionCount"
+        const val KEY_SLEEP_STOP_ON_EXPIRE = "audio.sleep.stopOnExpire"
+        const val KEY_PLAYBACK_SPEED = "audio.playbackSpeed"
         const val KEY_CONNECTIVITY_POLICY = "online.connectivityPolicy"
         const val KEY_ONBOARDING_DONE = "onboarding.complete"
         const val KEY_LAST_STATION_ID = "playback.lastStationId"

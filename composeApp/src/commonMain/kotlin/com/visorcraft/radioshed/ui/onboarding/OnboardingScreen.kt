@@ -235,6 +235,27 @@ fun OnboardingScreen(
                         OnboardingStep.Folder -> {
                             { step = OnboardingStep.Done }
                         }
+                        // Welcome: returning users (re-installs, fresh
+                        // device) usually don't want a re-tour — Skip
+                        // tour drops them straight into the app. Library
+                        // Manage covers the folder add later.
+                        OnboardingStep.Welcome -> {
+                            { onComplete() }
+                        }
+                        // Scan: for users who tapped Scan now and then
+                        // realised they don't want to wait. Cancels the
+                        // in-flight scan and exits onboarding —
+                        // partial progress is harmless because the
+                        // folder row is already inserted; a future
+                        // Library Manage rescan picks up where this
+                        // one left off.
+                        OnboardingStep.Scan -> {
+                            {
+                                scanJob?.cancel()
+                                scanJob = null
+                                onComplete()
+                            }
+                        }
                         else -> null
                     },
                 )
@@ -895,7 +916,13 @@ private fun NavButtons(
             Spacer(Modifier.widthIn(min = 1.dp))
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            onSkip?.let { TextButton(onClick = it) { Text("Skip") } }
+            onSkip?.let {
+                val label = when (step) {
+                    OnboardingStep.Welcome, OnboardingStep.Scan -> "Skip tour"
+                    else -> "Skip"
+                }
+                TextButton(onClick = it) { Text(label) }
+            }
             Button(onClick = onNext, enabled = canProceed) {
                 Text(
                     when (step) {

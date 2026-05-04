@@ -12,3 +12,10 @@ internal expect fun currentYear(): Int
  *  for the listening-stats date-range header. Falls back to ISO
  *  "MM-DD" on platforms that don't expose a locale formatter. */
 internal expect fun formatShortDate(epochMs: Long): String
+
+/**
+ * RFC-3339 / ISO-8601 timestamp at UTC, e.g. "2026-05-03T19:24:11Z".
+ * Used by exporters that need a parser-friendly date column —
+ * spreadsheet apps reliably sniff this format as a date.
+ */
+internal expect fun formatIsoUtc(epochMs: Long): String

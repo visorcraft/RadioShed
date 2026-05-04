@@ -30,6 +30,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.VerticalAlignBottom
+import androidx.compose.material.icons.filled.VerticalAlignTop
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -48,6 +50,7 @@ import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.SwapVert
+import androidx.compose.material.icons.filled.Casino
 import androidx.compose.material.icons.filled.Whatshot
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material3.AlertDialog
@@ -384,6 +387,18 @@ fun StationsHomeScreen(
                         isCompact = isCompact,
                         onAddStation = onAddStation,
                         onReorder = onReorderStations,
+                        onSurpriseMe = {
+                            // Pick one available track at random and
+                            // play it as a single-item queue. Keeps the
+                            // "Stations Home" mental model intact —
+                            // user-driven discovery without committing
+                            // to a station's rules.
+                            scope.launch {
+                                val track = libraryRepo.randomAvailableTrack() ?: return@launch
+                                stationPlayback.playTracks(listOf(track), startIndex = 0)
+                                onOpenNowPlaying()
+                            }
+                        },
                     )
                 }
 
@@ -626,6 +641,18 @@ fun StationsHomeScreen(
                     actionsForStationId = null
                     scope.launch { swapStationPosition(stationRepo, stations, id, direction = +1) }
                 },
+                onMoveToTop = {
+                    actionsForStationId = null
+                    scope.launch {
+                        stationRepo.moveStationToEnd(id, stations.map { it.id }, toTop = true)
+                    }
+                },
+                onMoveToBottom = {
+                    actionsForStationId = null
+                    scope.launch {
+                        stationRepo.moveStationToEnd(id, stations.map { it.id }, toTop = false)
+                    }
+                },
                 canMoveUp = stations.indexOfFirst { it.id == id } > 0,
                 canMoveDown = stations.indexOfFirst { it.id == id } in 0 until (stations.size - 1),
                 onResetStats = {
@@ -722,6 +749,8 @@ private fun StationActionSheet(
     onTogglePin: () -> Unit,
     onMoveUp: () -> Unit,
     onMoveDown: () -> Unit,
+    onMoveToTop: () -> Unit,
+    onMoveToBottom: () -> Unit,
     canMoveUp: Boolean,
     canMoveDown: Boolean,
     onResetStats: () -> Unit,
@@ -770,6 +799,23 @@ private fun StationActionSheet(
                 icon = Icons.Filled.ArrowDownward,
                 label = "Move down",
                 onClick = onMoveDown,
+                enabled = canMoveDown,
+            )
+            // One-shot reorders to the extremes — handy when a station
+            // has drifted twenty rows down and the user wants it back
+            // on the first screen without tapping Move up nineteen
+            // times. Greys out at the boundary the move would be a
+            // no-op, mirroring Move up / Move down's enabled logic.
+            ActionRow(
+                icon = Icons.Filled.VerticalAlignTop,
+                label = "Move to top",
+                onClick = onMoveToTop,
+                enabled = canMoveUp,
+            )
+            ActionRow(
+                icon = Icons.Filled.VerticalAlignBottom,
+                label = "Move to bottom",
+                onClick = onMoveToBottom,
                 enabled = canMoveDown,
             )
             // Reset stats: zero play_count / last_played_at / skip_rate
@@ -835,6 +881,7 @@ private fun StationsPageHeader(
     isCompact: Boolean,
     onAddStation: () -> Unit,
     onReorder: () -> Unit = {},
+    onSurpriseMe: () -> Unit = {},
 ) {
     val customCount = stationCount - builtInCount
     // When the user has toggled "Hide built-ins" on, the grid only
@@ -872,6 +919,23 @@ private fun StationsPageHeader(
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
             )
         }
+        // Surprise-me chip — picks one available track at random and
+        // plays it. Only renders when there's a library to draw from
+        // (>= one station implies there's been at least a folder
+        // scan); the underlying repo call still null-guards against
+        // an empty result so a fresh-install user with no scanned
+        // music doesn't crash on tap.
+        androidx.compose.material3.OutlinedIconButton(
+            onClick = onSurpriseMe,
+            modifier = Modifier.size(40.dp),
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Casino,
+                contentDescription = "Play random track",
+                modifier = Modifier.size(20.dp),
+            )
+        }
+        Spacer(Modifier.size(8.dp))
         // Reorder is only useful when there's more than one station;
         // hide the affordance entirely on tiny libraries.
         if (stationCount > 1) {

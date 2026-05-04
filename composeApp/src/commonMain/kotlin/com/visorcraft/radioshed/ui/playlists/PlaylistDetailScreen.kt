@@ -196,6 +196,30 @@ fun PlaylistDetailScreen(
                                     }
                                 },
                             )
+                            // Remove duplicates: keep the first occurrence
+                            // of each trackId, drop the rest. Preserves the
+                            // user's chosen order — only the duplicates get
+                            // pruned. Disabled when there's nothing to
+                            // remove so the menu item doesn't lie about
+                            // having work to do.
+                            val hasDupes = remember(tracks) {
+                                tracks.map { it.id }.let { it.size != it.toSet().size }
+                            }
+                            DropdownMenuItem(
+                                text = { Text("Remove duplicates") },
+                                enabled = hasDupes,
+                                onClick = {
+                                    menuOpen = false
+                                    val seen = mutableSetOf<Long>()
+                                    val ordered = tracks.mapNotNull { t ->
+                                        if (seen.add(t.id)) t.id else null
+                                    }
+                                    scope.launch {
+                                        repo.setTrackOrder(playlistId, ordered)
+                                        reload()
+                                    }
+                                },
+                            )
                             androidx.compose.material3.HorizontalDivider()
                             DropdownMenuItem(
                                 text = { Text("Delete playlist") },

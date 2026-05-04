@@ -55,6 +55,16 @@ interface AudioEngine {
      * unattenuated output.
      */
     fun setVolume(fraction: Float)
+
+    /**
+     * Playback rate multiplier — 1.0 = normal speed, 1.5 = 50% faster,
+     * 0.75 = 25% slower. Pitch correction is on (Media3's default for
+     * `setPlaybackParameters`), so vocals stay listenable at non-1.0
+     * speeds. Out-of-range values are clamped to a safe band by the
+     * implementation; common UI targets are 0.75 / 1.0 / 1.25 / 1.5 /
+     * 2.0. iOS stub is a no-op for now.
+     */
+    fun setPlaybackSpeed(speed: Float)
 }
 
 /**

@@ -2291,6 +2291,147 @@ found a dozen issues. All fixed in this round:
   "Imported N tracks · M not in library." until the user
   navigates away.
 
+#### Phase 19 polish (continued, batch 10)
+
+- [x] **Configurable auto-backup retention.** New
+  `KEY_BACKUP_RETENTION` int pref (range 3..30, default 10) plus
+  `getBackupRetention()` / `setBackupRetention()` accessors on
+  `SettingsStore`. `BackupService.maxBackupsToRetain` is now a
+  computed property reading from settings on every prune pass, so
+  a slider tweak takes effect on the next export without an app
+  restart. The pref also round-trips through `dumpForBackup()` /
+  `restoreFromBackup()` (Int type entry) so a user's preferred
+  retention follows them across devices. UI is a new
+  `BackupRetentionSlider` row in App Settings's Audio/Backup
+  block, mirroring the EndFadeSlider lift-up-state pattern so
+  prefs writes only fire on release.
+- [x] **Sleep timer — pause vs stop on expire.** New
+  `KEY_SLEEP_STOP_ON_EXPIRE` boolean pref (default false). When
+  enabled, `SleepTimer.start()`'s expire branch and
+  `StationPlayback`'s end-of-track-pause consumer call
+  `audioEngine.stop()` instead of `pause()`, clearing the playable
+  from the engine and the MediaSession off the lock screen.
+  Surfaced as a ToggleRow in App Settings → Audio with a subtitle
+  explaining the trade-off (stop = fully quiet vs pause = one-tap
+  resume). `SleepTimer` constructor now also takes `SettingsStore`
+  via Koin so the toggle can be read at expire time.
+- [x] **Stations Home — Move to top / Move to bottom.** New
+  `StationRepository.moveStationToEnd()` renumbers every row in a
+  single `db.stationsQueries.transaction { … }` so the resulting
+  sort positions are dense (0..N-1), avoiding the wide gaps that
+  swap-pair reorders used to leave behind. Hooked into
+  `StationActionSheet` as two new ActionRows (icons:
+  `VerticalAlignTop` / `VerticalAlignBottom`), greyed at the
+  boundary the move would be a no-op.
+- [x] **Lyrics — long-press to copy a line.** Synced lines now
+  use `combinedClickable` with `onLongClick = onCopyLine(text)`;
+  `PlainLyrics` was rewritten to split its body on `\n` so each
+  line is an individually long-pressable Text. Both call sites
+  share a single `rememberCopyToClipboard()` lambda hoisted
+  above the Scaffold so the existing top-bar Copy button and the
+  new per-line gesture write through the same clipboard hook.
+- [x] **Search — empty-state DSL tips.** Below the recent
+  searches block (and visible even when there are no recent
+  searches), a new `DslTipsBlock` lists five common shorthand
+  tokens (`year:>2010`, `year:1995`, `artist:foo`, `album:bar`,
+  `rating:>=4`) as one-tap AssistChips that prefill the query
+  field. Wraps the empty-state in a Column with
+  `verticalScroll(rememberScrollState())` so smaller screens can
+  scroll between recent searches and the tips card.
+- [x] **Stats — Avg tracks/day tile.** Below the existing
+  Completion/Finished pair, when totalPlays > 0, a new tile
+  reports `totalPlays / windowDays` paired with a Window tile
+  showing the active days span. Two-decimal formatting under 10
+  preserves meaningful precision for low-volume habits, integer
+  formatting otherwise keeps the layout tidy.
+- [x] **Settings — Reset settings to defaults.** New
+  `SettingsStore.resetAllUserSettings()` removes every user-
+  portable preference key (theme, font scale, audio/RG/EQ enable,
+  sort orders, sleep behavior, backup retention, etc.) but
+  leaves library, ratings, playlists, station definitions,
+  custom EQ presets, listening history, search history, and
+  one-shot migration flags untouched. UI is a destructive
+  Surface row at the bottom of App Settings; tapping it opens an
+  AlertDialog confirm. After reset, every observable state value
+  in the screen is re-pulled so the toggles show defaults
+  immediately, and the live theme / Material You / font-scale
+  callbacks fire so the parent re-themes without a relaunch.
+- [x] **Playlist — Remove duplicates.** New dropdown menu item
+  drops every duplicate trackId in the playlist's order
+  (preserving the first occurrence), then routes through the
+  existing `repo.setTrackOrder()`. Greys out when no duplicates
+  exist, so the menu doesn't lie about having work to do.
+- [x] **Onboarding — "Skip tour" on Welcome / Scan.** Adds an
+  `onSkip` lambda for `OnboardingStep.Welcome` (calls
+  `onComplete()` directly) and `OnboardingStep.Scan` (cancels the
+  in-flight scan job, then `onComplete()`). The TextButton label
+  switches between "Skip" and "Skip tour" based on step so
+  returning users / re-installs see the right framing. Folder
+  step still routes Skip → Done as before to avoid stranding
+  users at "Starting…" on an empty queue.
+
+#### Phase 19 polish (continued, batch 11)
+
+- [x] **Now Playing — playback speed selector.** New
+  `AudioEngine.setPlaybackSpeed(Float)` interface method, wired
+  through to `MediaController.setPlaybackSpeed` on Android (clamped
+  0.5..2.0; iOS stub no-op). Persisted via new
+  `KEY_PLAYBACK_SPEED` Float pref so the choice survives both
+  track changes (Media3 resets per-item) and app restarts.
+  Surfaced as a "Speed" item in the Now Playing overflow menu
+  that opens a `PlaybackSpeedSheet` bottom sheet with 0.75 / 1 /
+  1.25 / 1.5 / 2× FilterChips.
+- [x] **Stations Home — "Surprise me" quick action.** New
+  SQL `selectRandomTrack` (`ORDER BY RANDOM() LIMIT 1` over
+  `is_available = 1`) plus `LibraryRepository.randomAvailableTrack()`.
+  An OutlinedIconButton with a casino-die icon sits in the page
+  header alongside Reorder / Add station; tap picks one library
+  track and routes it through `stationPlayback.playTracks`,
+  opening Now Playing.
+- [x] **History — Export as CSV.** New `HistoryExporter`
+  expect/actual + `HistoryCsvRow` payload. Android impl writes
+  RFC-4180-quoted rows into `cacheDir/history/`, exposes them via
+  FileProvider, and fires `ACTION_SEND` with `text/csv` so
+  spreadsheet apps and email clients show up in the chooser. Top
+  bar adds a new "Export as CSV…" overflow item below the existing
+  trim / clear actions; disabled when `entries` is empty so the
+  menu doesn't promise an empty share. New `formatIsoUtc()`
+  expect/actual produces RFC-3339 timestamps that spreadsheet
+  apps reliably sniff as date columns.
+- [x] **Lyrics — in-page search.** Top bar gains a "Find" /
+  "Hide find" toggle (synced + plain lyrics only); when on, a
+  small OutlinedTextField appears above the lyric list. Synced
+  lines compute `matchingIndices` once per `(lines, query)`,
+  scroll the LazyColumn to the first match via a
+  `LaunchedEffect`, and tint each matching row with a tertiary
+  background for at-a-glance scan.
+- [x] **Settings — Clear DJ cache.** New SQL `deleteAllDjAudio`
+  + `DjCacheRepository.deleteAll()` and `listAll()` (re-uses the
+  existing `selectDjAudioOlderThan` index with a `Long.MAX_VALUE`
+  upper bound so the index drives the read). UI is a new
+  `ClearDjCacheRow` mirroring the artwork row; tapping iterates
+  the cached blob paths via a new `deleteFileIfExists()`
+  expect/actual to wipe on-disk audio, then truncates the
+  `dj_cache` table. Status text reports the file count for parity
+  with the artwork action.
+- [x] **Playlist — inline rename via long-press.** PlaylistRow
+  now uses `combinedClickable` with `onLongClick` opening a
+  RenamePlaylistDialog. Dialog uses `ImeAction.Done` so the
+  on-screen keyboard's primary action submits, and routes
+  through `PlaylistRepository.rename()` — which already trims +
+  guards blank.
+- [x] **About — surface build date.** New `BuildInfo.BUILD_DATE`
+  constant, rendered alongside the version line in App Settings →
+  About: "RadioShed v0.1.0 · built 2026-05-03". Manual stamp for
+  now; Gradle automation (`git log -1 --format=%cd`) is on the
+  follow-up list.
+- [x] **Equalizer — copy gains as JSON.** New "Copy gains" top-
+  bar action that dumps the live band-gain vector to the
+  clipboard as a JSON array (e.g. `[1.5, -2, 0, 0.5, 1]`) using
+  a `dbFormatForCopy` helper that drops trailing zeros to keep
+  the string compact. Disabled until the EQ surface activates and
+  has bands to copy.
+
 ---
 
 ## Appendix A — Compose Multiplatform vs native UI: when to fall back

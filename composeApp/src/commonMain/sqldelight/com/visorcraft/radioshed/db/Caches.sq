@@ -115,3 +115,11 @@ SELECT * FROM dj_cache WHERE last_used_at < ? ORDER BY last_used_at;
 
 deleteDjAudio:
 DELETE FROM dj_cache WHERE cache_key = ?;
+
+-- Wipes the entire dj_cache. User-facing "Clear DJ cache" action —
+-- regenerated audio is cheap to refetch from the TTS pipeline next
+-- time the DJ chimes in, but the on-disk blobs accrue over time on
+-- a heavily-used setup so giving the user a manual reset valve is
+-- worth the SQL line.
+deleteAllDjAudio:
+DELETE FROM dj_cache;

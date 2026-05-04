@@ -2,6 +2,7 @@ package com.visorcraft.radioshed.ui.playlists
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -70,6 +71,12 @@ fun PlaylistsScreen(
     val playlists by repo.observeAll().collectAsState(initial = emptyList())
     val likedCount by ratingRepo.observeLikedCount().collectAsState(initial = 0L)
     var createOpen by remember { mutableStateOf(false) }
+    // Long-pressing a playlist row opens an inline rename dialog —
+    // matches the pattern users learn from station / track context
+    // sheets (long-press = "what else can I do with this?"). Dialog
+    // routes through PlaylistRepository.rename so the trim / blank-
+    // name guard is centralised.
+    var renamingPlaylist by remember { mutableStateOf<Playlist?>(null) }
     var importStatus by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     val libraryRepo: com.visorcraft.radioshed.data.LibraryRepository = koinInject()
@@ -187,6 +194,7 @@ fun PlaylistsScreen(
                         coverUri = coverByPlaylistId[playlist.id],
                         trackCount = trackCountByPlaylistId[playlist.id] ?: 0L,
                         onTap = { onOpenPlaylist(playlist.id) },
+                        onLongPress = { renamingPlaylist = playlist },
                     )
                 }
             }
@@ -204,6 +212,61 @@ fun PlaylistsScreen(
             },
         )
     }
+
+    renamingPlaylist?.let { target ->
+        RenamePlaylistDialog(
+            initial = target.name,
+            onDismiss = { renamingPlaylist = null },
+            onConfirm = { newName ->
+                scope.launch {
+                    if (newName.isNotBlank() && newName != target.name) {
+                        repo.rename(target.id, newName.trim())
+                    }
+                }
+                renamingPlaylist = null
+            },
+        )
+    }
+}
+
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun RenamePlaylistDialog(
+    initial: String,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit,
+) {
+    var text by remember { mutableStateOf(initial) }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Rename playlist") },
+        text = {
+            androidx.compose.material3.OutlinedTextField(
+                value = text,
+                onValueChange = { text = it },
+                singleLine = true,
+                placeholder = { Text("Playlist name") },
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                    imeAction = androidx.compose.ui.text.input.ImeAction.Done,
+                ),
+                keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                    onDone = {
+                        if (text.trim().isNotBlank()) onConfirm(text.trim())
+                    },
+                ),
+                modifier = Modifier.fillMaxWidth(),
+            )
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { if (text.trim().isNotBlank()) onConfirm(text.trim()) },
+                enabled = text.trim().isNotBlank(),
+            ) { Text("Save") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        },
+    )
 }
 
 /**
@@ -257,15 +320,19 @@ private fun LikedSongsRow(count: Long, onTap: () -> Unit) {
     }
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun PlaylistRow(
     playlist: Playlist,
     coverUri: String?,
     trackCount: Long,
     onTap: () -> Unit,
+    onLongPress: () -> Unit = {},
 ) {
     Surface(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onTap),
+        modifier = Modifier
+            .fillMaxWidth()
+            .combinedClickable(onClick = onTap, onLongClick = onLongPress),
         color = Color.Transparent,
     ) {
         Row(

@@ -156,6 +156,38 @@ class DjCacheRepository(private val db: RadioShedDatabase) {
     suspend fun delete(cacheKey: String) = withContext(IODispatcher) {
         db.cachesQueries.deleteDjAudio(cacheKey)
     }
+
+    /**
+     * Wipes every cached DJ audio row. Used by the App Settings
+     * "Clear DJ cache" action; on-disk blobs are removed separately
+     * by walking the cache dir at the call site.
+     */
+    suspend fun deleteAll() = withContext(IODispatcher) {
+        db.cachesQueries.deleteAllDjAudio()
+    }
+
+    /** Snapshot of every cached DJ row — used so the call site can
+     *  delete the on-disk blobs each row points at before wiping the
+     *  table. */
+    suspend fun listAll(): List<DjCacheEntry> = withContext(IODispatcher) {
+        // Re-uses the touch index by querying with `last_used_at < +inf`;
+        // SQLite treats Long.MAX_VALUE as a clean upper bound so the
+        // index drives the read.
+        db.cachesQueries.selectDjAudioOlderThan(Long.MAX_VALUE)
+            .executeAsList()
+            .map { row ->
+                DjCacheEntry(
+                    cacheKey = row.cache_key,
+                    blobPath = row.blob_path,
+                    templateHash = row.template_hash,
+                    voiceId = row.voice_id,
+                    variablesJson = row.variables_json,
+                    generatedAt = row.generated_at,
+                    lastUsedAt = row.last_used_at,
+                    durationMs = row.duration_ms,
+                )
+            }
+    }
 }
 
 data class ArtworkCacheEntry(

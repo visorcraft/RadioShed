@@ -357,6 +357,16 @@ class LibraryRepository(private val db: RadioShedDatabase) {
         db.libraryQueries.selectNewestTracks(limit).executeAsList().map { it.toDomain() }
     }
 
+    /**
+     * Pick one available track uniformly at random — used by the
+     * "Surprise me" / "Play random track" shortcut on Stations Home.
+     * Returns null only when the library is empty (or every track is
+     * marked unavailable).
+     */
+    suspend fun randomAvailableTrack(): Track? = withContext(IODispatcher) {
+        db.libraryQueries.selectRandomTrack().executeAsOneOrNull()?.toDomain()
+    }
+
     suspend fun setTrackAvailable(id: Long, available: Boolean) = withContext(IODispatcher) {
         db.libraryQueries.setTrackAvailable(if (available) 1L else 0L, nowMillis(), id)
     }

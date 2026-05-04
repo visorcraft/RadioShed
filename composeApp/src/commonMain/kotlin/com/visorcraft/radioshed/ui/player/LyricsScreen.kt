@@ -2,6 +2,8 @@ package com.visorcraft.radioshed.ui.player
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.material.icons.Icons
@@ -123,6 +125,13 @@ fun LyricsScreen(
         }
     }
 
+    val copyToClipboard = com.visorcraft.radioshed.ui.util.rememberCopyToClipboard()
+    // In-page lyric search — typing into this filter scrolls the
+    // synced list to the first matching line and tints matches so
+    // the user can spot the rest by eye. Empty query = inactive.
+    var findQuery by remember { mutableStateOf("") }
+    var findBarOpen by remember { mutableStateOf(false) }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -183,9 +192,12 @@ fun LyricsScreen(
                             }
                         }
                     }
-                    val copyToClipboard = com.visorcraft.radioshed.ui.util.rememberCopyToClipboard()
                     val l = lyrics
                     if (l != null && l.hasContent && !l.instrumental) {
+                        TextButton(onClick = {
+                            findBarOpen = !findBarOpen
+                            if (!findBarOpen) findQuery = ""
+                        }) { Text(if (findBarOpen) "Hide find" else "Find") }
                         TextButton(onClick = {
                             // Synced lines reduce to plain text — most
                             // users want the words, not the timestamps.
@@ -232,10 +244,36 @@ fun LyricsScreen(
         containerColor = MaterialTheme.colorScheme.background,
     ) { padding ->
         val l = lyrics
-        when {
-            loading -> CenteredLoading(modifier = Modifier.fillMaxSize().padding(padding))
+        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+            if (findBarOpen) {
+                androidx.compose.material3.OutlinedTextField(
+                    value = findQuery,
+                    onValueChange = { findQuery = it },
+                    placeholder = { Text("Find in lyrics…") },
+                    singleLine = true,
+                    leadingIcon = {
+                        androidx.compose.material3.Icon(
+                            Icons.Filled.Search, contentDescription = null,
+                        )
+                    },
+                    trailingIcon = if (findQuery.isNotEmpty()) {
+                        {
+                            androidx.compose.material3.IconButton(onClick = { findQuery = "" }) {
+                                androidx.compose.material3.Icon(
+                                    Icons.Filled.Close, contentDescription = "Clear",
+                                )
+                            }
+                        }
+                    } else null,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                )
+            }
+            when {
+            loading -> CenteredLoading(modifier = Modifier.fillMaxSize())
             l != null && l.instrumental -> InstrumentalState(
-                modifier = Modifier.fillMaxSize().padding(padding),
+                modifier = Modifier.fillMaxSize(),
             )
             l != null && !l.synced.isNullOrEmpty() -> SyncedLyrics(
                 lines = l.synced,
@@ -243,25 +281,29 @@ fun LyricsScreen(
                 onSeek = { ms -> audioEngine.seekTo(ms) },
                 fontScale = fontScale,
                 syncOffsetMs = syncOffsetMs,
-                modifier = Modifier.fillMaxSize().padding(padding),
+                onCopyLine = { copyToClipboard(it) },
+                findQuery = findQuery,
+                modifier = Modifier.fillMaxSize(),
             )
             l != null && !l.plain.isNullOrBlank() -> PlainLyrics(
                 text = l.plain,
                 fontScale = fontScale,
-                modifier = Modifier.fillMaxSize().padding(padding),
+                onCopyLine = { copyToClipboard(it) },
+                modifier = Modifier.fillMaxSize(),
             )
             notFound -> NotFoundState(
-                modifier = Modifier.fillMaxSize().padding(padding),
+                modifier = Modifier.fillMaxSize(),
                 onEditSearch = { editSearchOpen = true },
             )
             else -> Box(
-                modifier = Modifier.fillMaxSize().padding(padding),
+                modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
                     "Pick a track to see its lyrics.",
                     color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
                 )
+            }
             }
         }
     }
@@ -418,6 +460,8 @@ private fun SyncedLyrics(
     onSeek: (Long) -> Unit,
     fontScale: Float,
     syncOffsetMs: Int,
+    onCopyLine: (String) -> Unit,
+    findQuery: String = "",
     modifier: Modifier = Modifier,
 ) {
     // Find the active line: the last line whose timeMs <= adjustedPos.
@@ -488,6 +532,25 @@ private fun SyncedLyrics(
         }
     }
 
+    // Compute matching line indices once per (lines, query) — used
+    // both to drive the scroll-to-first-match LaunchedEffect and to
+    // tint matching rows so the user can see the rest at a glance.
+    val matchingIndices = remember(lines, findQuery) {
+        if (findQuery.isBlank()) emptyList()
+        else lines.mapIndexedNotNull { idx, l ->
+            if (l.text.contains(findQuery, ignoreCase = true)) idx else null
+        }
+    }
+    LaunchedEffect(matchingIndices.firstOrNull()) {
+        val first = matchingIndices.firstOrNull() ?: return@LaunchedEffect
+        animatingProgrammatically = true
+        try {
+            runCatching { listState.animateScrollToItem(first, -120) }
+        } finally {
+            animatingProgrammatically = false
+        }
+    }
+
     Box(modifier = modifier) {
         LazyColumn(
             state = listState,
@@ -498,6 +561,7 @@ private fun SyncedLyrics(
             itemsIndexed(lines, key = { i, l -> "$i:${l.timeMs}" }) { i, line ->
                 val isActive = i == activeIndex
                 val isPast = i < activeIndex
+                val isFindMatch = findQuery.isNotBlank() && i in matchingIndices
                 // Tap-to-seek: jump player position to this line's
                 // timestamp. The Spotify / Apple Music gesture vocab —
                 // people instinctively tap a lyric line they want to
@@ -505,6 +569,21 @@ private fun SyncedLyrics(
                 // the LRC) still seek; that's the right behavior.
                 val baseStyle = if (isActive) MaterialTheme.typography.headlineSmall
                                 else MaterialTheme.typography.titleMedium
+                val rowMod = Modifier
+                    .fillMaxWidth()
+                    .let { mod ->
+                        if (isFindMatch) mod.background(
+                            MaterialTheme.colorScheme.tertiary.copy(alpha = 0.15f),
+                            shape = androidx.compose.foundation.shape.RoundedCornerShape(6.dp),
+                        ) else mod
+                    }
+                    .combinedClickable(
+                        onClick = { onSeek(line.timeMs) },
+                        onLongClick = {
+                            if (line.text.isNotBlank()) onCopyLine(line.text)
+                        },
+                    )
+                    .padding(vertical = 4.dp, horizontal = if (isFindMatch) 6.dp else 0.dp)
                 Text(
                     text = line.text.ifBlank { " " },  // preserve breath gaps
                     style = baseStyle.copy(fontSize = baseStyle.fontSize * fontScale),
@@ -514,10 +593,7 @@ private fun SyncedLyrics(
                         isPast -> MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
                         else -> MaterialTheme.colorScheme.onBackground.copy(alpha = 0.85f)
                     },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onSeek(line.timeMs) }
-                        .padding(vertical = 4.dp),
+                    modifier = rowMod,
                     textAlign = TextAlign.Start,
                 )
             }
@@ -566,19 +642,38 @@ private fun SyncedLyrics(
 
 private const val USER_OVERRIDE_MS = 5_000L
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun PlainLyrics(text: String, fontScale: Float, modifier: Modifier = Modifier) {
+private fun PlainLyrics(
+    text: String,
+    fontScale: Float,
+    onCopyLine: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    // Split into per-line rows so long-press can copy a single line
+    // (mirrors the synced-lyrics gesture vocab). Blank lines stay as
+    // visible breath gaps but don't get a copy handler.
+    val lines = remember(text) { text.split('\n') }
     Column(
         modifier = modifier
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 24.dp, vertical = 24.dp),
     ) {
         val base = MaterialTheme.typography.bodyLarge
-        Text(
-            text = text,
-            style = base.copy(fontSize = base.fontSize * fontScale),
-            color = MaterialTheme.colorScheme.onBackground,
-        )
+        lines.forEach { line ->
+            val rendered = line.ifBlank { " " }
+            val rowMod = if (line.isBlank()) Modifier.fillMaxWidth()
+                         else Modifier.fillMaxWidth().combinedClickable(
+                             onClick = {},
+                             onLongClick = { onCopyLine(line) },
+                         )
+            Text(
+                text = rendered,
+                style = base.copy(fontSize = base.fontSize * fontScale),
+                color = MaterialTheme.colorScheme.onBackground,
+                modifier = rowMod.padding(vertical = 2.dp),
+            )
+        }
         Spacer(Modifier.height(40.dp))
     }
 }

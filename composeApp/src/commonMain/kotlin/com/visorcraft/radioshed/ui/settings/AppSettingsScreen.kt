@@ -107,6 +107,9 @@ fun AppSettingsScreen(
     var autoRescan by remember { mutableStateOf(settings.getAutoRescanOnLaunch()) }
     var endFadeSec by remember { mutableStateOf(settings.getEndFadeSec()) }
     var connectivityPolicy by remember { mutableStateOf(settings.getConnectivityPolicy()) }
+    var backupRetention by remember { mutableStateOf(settings.getBackupRetention()) }
+    var sleepStopOnExpire by remember { mutableStateOf(settings.getSleepStopOnExpire()) }
+    var resetConfirmOpen by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
         // Re-read on each entry so values written from sibling
         // screens (Backup, Equalizer, Library Manage, etc.) reflect
@@ -120,6 +123,8 @@ fun AppSettingsScreen(
         autoRescan = settings.getAutoRescanOnLaunch()
         endFadeSec = settings.getEndFadeSec()
         connectivityPolicy = settings.getConnectivityPolicy()
+        backupRetention = settings.getBackupRetention()
+        sleepStopOnExpire = settings.getSleepStopOnExpire()
     }
     var artworkState by remember { mutableStateOf<ArtworkSyncState>(ArtworkSyncState.Idle) }
     var artworkJob by remember { mutableStateOf<Job?>(null) }
@@ -270,11 +275,31 @@ fun AppSettingsScreen(
                 title = "Auto-backup weekly",
                 subtitle = "Silently writes a fresh backup once per week so you " +
                     "don't have to remember. Files live alongside manual backups " +
-                    "and obey the same 10-file retention cap.",
+                    "and obey the retention cap below.",
                 checked = autoBackup,
                 onCheckedChange = { v ->
                     autoBackup = v
                     settings.setAutoBackupEnabled(v)
+                },
+            )
+            Spacer(Modifier.height(8.dp))
+            BackupRetentionSlider(
+                value = backupRetention,
+                onChange = { v ->
+                    backupRetention = v
+                    settings.setBackupRetention(v)
+                },
+            )
+            Spacer(Modifier.height(8.dp))
+            ToggleRow(
+                title = "Sleep timer stops playback",
+                subtitle = "When the timer expires, fully stop playback (clears " +
+                    "the lock-screen tile) instead of pausing. Off keeps the " +
+                    "queue ready to resume with one tap.",
+                checked = sleepStopOnExpire,
+                onCheckedChange = { v ->
+                    sleepStopOnExpire = v
+                    settings.setSleepStopOnExpire(v)
                 },
             )
             Spacer(Modifier.height(8.dp))
@@ -398,13 +423,41 @@ fun AppSettingsScreen(
                     }
                 },
             )
+            // DJ TTS cache. The blob paths each row points at live in
+            // the app's writable area; we read the row list first so
+            // we can attempt to delete the on-disk blobs, then wipe
+            // the table. Best-effort — runCatching swallows individual
+            // missing-file failures so a partially purged cache
+            // (e.g. from a manual file-manager pass) still completes.
+            val djCache: com.visorcraft.radioshed.data.DjCacheRepository = koinInject()
+            var djClearStatus by remember { mutableStateOf<String?>(null) }
+            ClearDjCacheRow(
+                status = djClearStatus,
+                onClick = {
+                    scope.launch {
+                        djClearStatus = "Clearing DJ cache…"
+                        val rows = djCache.listAll()
+                        var removed = 0
+                        rows.forEach { row ->
+                            runCatching {
+                                val ok = com.visorcraft.radioshed.source
+                                    .deleteFileIfExists(row.blobPath)
+                                if (ok) removed += 1
+                            }
+                        }
+                        djCache.deleteAll()
+                        djClearStatus = "Cleared $removed DJ clip" +
+                            if (removed == 1) "." else "s."
+                    }
+                },
+            )
 
             Spacer(Modifier.height(24.dp))
 
             // ---- About ----
             SectionHeader("About")
             Text(
-                "RadioShed v${BuildInfo.VERSION_NAME}",
+                "RadioShed v${BuildInfo.VERSION_NAME} · built ${BuildInfo.BUILD_DATE}",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f),
             )
@@ -417,8 +470,81 @@ fun AppSettingsScreen(
             LibrarySummaryCard()
             Spacer(Modifier.height(12.dp))
             CreditsCard()
+            Spacer(Modifier.height(16.dp))
+            // Reset to defaults — wipes the user-portable preference
+            // keys but leaves library / playlists / ratings / station
+            // definitions / EQ presets intact. Confirmed via dialog
+            // because there's no undo and a misclick here would be
+            // genuinely annoying to recover from.
+            ResetSettingsRow(onClick = { resetConfirmOpen = true })
 
             Spacer(Modifier.height(16.dp))
+        }
+    }
+
+    if (resetConfirmOpen) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { resetConfirmOpen = false },
+            title = { Text("Reset settings to defaults?") },
+            text = {
+                Text(
+                    "Clears every preference toggled in this screen — theme, font scale, " +
+                        "audio prefs, sleep behavior, sort orders, etc. Your library, " +
+                        "stations, playlists, ratings, listening history, and saved EQ " +
+                        "presets are kept exactly as they are."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    resetConfirmOpen = false
+                    settings.resetAllUserSettings()
+                    // Re-pull every observable so the UI reflects defaults
+                    // immediately — without this the toggles look
+                    // unchanged until the user re-enters the screen.
+                    reduceMotion = settings.getReduceMotion()
+                    replayGain = settings.getReplayGainEnabled()
+                    preampDb = settings.getReplayGainPreampDb()
+                    autoResume = settings.getAutoResumeLastStation()
+                    driveMode = settings.getDriveMode()
+                    autoBackup = settings.getAutoBackupEnabled()
+                    autoRescan = settings.getAutoRescanOnLaunch()
+                    endFadeSec = settings.getEndFadeSec()
+                    connectivityPolicy = settings.getConnectivityPolicy()
+                    backupRetention = settings.getBackupRetention()
+                    sleepStopOnExpire = settings.getSleepStopOnExpire()
+                    onThemeModeChange(settings.getThemeMode())
+                    onMaterialYouChange(settings.getMaterialYouEnabled())
+                    onFontScaleChange(settings.getFontScale())
+                }) {
+                    Text("Reset", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { resetConfirmOpen = false }) { Text("Cancel") }
+            },
+        )
+    }
+}
+
+@Composable
+private fun ResetSettingsRow(onClick: () -> Unit) {
+    Surface(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+        shape = RoundedCornerShape(12.dp),
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+            Text(
+                "Reset settings to defaults",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.error,
+                fontWeight = FontWeight.Medium,
+            )
+            Text(
+                "Wipes app preferences only. Library, ratings, stations, and playlists are untouched.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+            )
         }
     }
 }
@@ -553,6 +679,35 @@ private fun ClearLyricsCacheRow(cleared: Boolean, onClick: () -> Unit) {
  * mirrors lyrics-cache for consistency. Re-runnable — pressing again
  * just confirms zero files this time.
  */
+@Composable
+private fun ClearDjCacheRow(status: String?, onClick: () -> Unit) {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    "Clear DJ cache",
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium,
+                )
+                Text(
+                    text = status ?: "Wipes generated DJ TTS audio clips. " +
+                        "Future stings regenerate from the TTS pipeline.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                )
+            }
+            TextButton(onClick = onClick) { Text("Clear") }
+        }
+    }
+}
+
 @Composable
 private fun ClearArtworkCacheRow(status: String?, onClick: () -> Unit) {
     Surface(
@@ -800,6 +955,53 @@ private fun ThemeSwatchTrio(mode: ThemeMode) {
  * Honest naming — this is a track-end fade-out, not real
  * crossfade (no overlap into the next track).
  */
+@Composable
+private fun BackupRetentionSlider(value: Int, onChange: (Int) -> Unit) {
+    // Mirror EndFadeSlider's lift-up-state pattern so prefs writes
+    // happen on release, not every drag frame. Range 3..30 — past
+    // 30 the user is better off archiving snapshots manually.
+    var dragging by remember { mutableStateOf(false) }
+    var pending by remember { mutableStateOf(value) }
+    val display = if (dragging) pending else value
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(
+                text = "Auto-backup retention",
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                text = "$display backup${if (display == 1) "" else "s"}",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
+            )
+        }
+        Text(
+            text = "Older backups are pruned once you exceed this count. Applies to manual exports too.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+        )
+        androidx.compose.material3.Slider(
+            value = display.toFloat(),
+            onValueChange = {
+                dragging = true
+                pending = it.toInt().coerceIn(3, 30)
+            },
+            onValueChangeFinished = {
+                onChange(pending)
+                dragging = false
+            },
+            valueRange = 3f..30f,
+            steps = 26,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+}
+
 @Composable
 private fun EndFadeSlider(seconds: Int, onChange: (Int) -> Unit) {
     // Same lift-up-state pattern as PreampSlider so the readout
