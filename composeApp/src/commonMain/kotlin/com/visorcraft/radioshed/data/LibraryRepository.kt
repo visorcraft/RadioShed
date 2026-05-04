@@ -367,6 +367,17 @@ class LibraryRepository(private val db: RadioShedDatabase) {
         db.libraryQueries.selectRandomTrack().executeAsOneOrNull()?.toDomain()
     }
 
+    /**
+     * [count] random available tracks. The result list is already
+     * shuffled (SQLite's `ORDER BY RANDOM()`), so callers don't need
+     * to re-shuffle before queuing. Returns up to [count] tracks;
+     * fewer when the library is smaller.
+     */
+    suspend fun randomAvailableTracks(count: Long): List<Track> =
+        withContext(IODispatcher) {
+            db.libraryQueries.selectRandomTracks(count).executeAsList().map { it.toDomain() }
+        }
+
     suspend fun setTrackAvailable(id: Long, available: Boolean) = withContext(IODispatcher) {
         db.libraryQueries.setTrackAvailable(if (available) 1L else 0L, nowMillis(), id)
     }

@@ -314,6 +314,13 @@ SELECT * FROM track WHERE is_available = 1 ORDER BY file_ctime DESC LIMIT ?;
 selectRandomTrack:
 SELECT * FROM track WHERE is_available = 1 ORDER BY RANDOM() LIMIT 1;
 
+-- N random available tracks. Used by Stations Home → "Shuffle 25"
+-- (long-press on the Surprise icon). LIMIT bounds the cost; on a
+-- 100k-track library SQLite still scans the index but the
+-- short-circuit at LIMIT keeps wall-clock under a second.
+selectRandomTracks:
+SELECT * FROM track WHERE is_available = 1 ORDER BY RANDOM() LIMIT ?;
+
 selectTracksByFormat:
 SELECT * FROM track WHERE format = ? AND is_available = 1 ORDER BY title;
 

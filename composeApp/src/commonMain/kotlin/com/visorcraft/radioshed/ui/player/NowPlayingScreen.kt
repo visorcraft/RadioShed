@@ -178,6 +178,15 @@ fun NowPlayingScreen(
     LaunchedEffect(nowPlaying?.trackId) {
         if (playbackSpeed != 1f) audioEngine.setPlaybackSpeed(playbackSpeed)
     }
+    // Keep-screen-on: only while actively playing AND the user
+    // opted in. Pause/Idle release the flag so the screen times out
+    // normally between tracks, mirroring how Spotify / Apple Music
+    // behave when the user has tapped "keep screen on".
+    val keepScreenOnPref = remember { settings.getKeepScreenOn() }
+    com.visorcraft.radioshed.ui.util.KeepScreenOn(
+        active = keepScreenOnPref && state == com.visorcraft.radioshed.audio.PlayerState.Playing,
+    )
+    val hapticTick = com.visorcraft.radioshed.ui.util.rememberHapticTick()
     // Snapshot dialog: saves the current Up Next list as a new
     // playlist. We keep the candidate tracks alongside the open
     // flag so closing/reopening the queue sheet doesn't lose the
@@ -328,10 +337,27 @@ fun NowPlayingScreen(
                             }
                         },
                         modifier = Modifier
-                            .clickable(
+                            .combinedClickable(
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = null,
                                 onClick = { queueSheetOpen = true },
+                                onLongClick = {
+                                    // Long-press on the queue icon
+                                    // jumps straight to the "Save
+                                    // queue as playlist" dialog —
+                                    // skips the bottom-sheet step
+                                    // when the user already knows
+                                    // they want to save what's
+                                    // queued. Snapshot the upcoming
+                                    // list so it doesn't drift if
+                                    // the queue mutates while the
+                                    // dialog is open.
+                                    val snap = stationPlayback.upcoming(64)
+                                    if (snap.isNotEmpty()) {
+                                        saveQueueDialog = snap
+                                        hapticTick()
+                                    }
+                                },
                             )
                             .semantics { contentDescription = "Queue" },
                     ) {
@@ -670,6 +696,10 @@ fun NowPlayingScreen(
                     stationName = currentStation?.name,
                     onSeek = { audioEngine.seekTo(it) },
                     onTogglePlayPause = { audioEngine.togglePlayPause() },
+                    onLongPressTogglePlayPause = {
+                        stationPlayback.toggleShuffle()
+                        hapticTick()
+                    },
                     onPrev = { stationPlayback.skipPrevious() },
                     onNext = { stationPlayback.skipNext() },
                     onRate = { stars ->
@@ -718,6 +748,10 @@ fun NowPlayingScreen(
                     stationName = currentStation?.name,
                     onSeek = { audioEngine.seekTo(it) },
                     onTogglePlayPause = { audioEngine.togglePlayPause() },
+                    onLongPressTogglePlayPause = {
+                        stationPlayback.toggleShuffle()
+                        hapticTick()
+                    },
                     onPrev = { stationPlayback.skipPrevious() },
                     onNext = { stationPlayback.skipNext() },
                     onRate = { stars ->
@@ -858,6 +892,7 @@ private fun CompactLayout(
     stationName: String?,
     onSeek: (Long) -> Unit,
     onTogglePlayPause: () -> Unit,
+    onLongPressTogglePlayPause: (() -> Unit)? = null,
     onPrev: () -> Unit,
     onNext: () -> Unit,
     onRate: (Double) -> Unit,
@@ -901,6 +936,7 @@ private fun CompactLayout(
         TransportRow(
             state = state,
             onTogglePlayPause = onTogglePlayPause,
+            onLongPressTogglePlayPause = onLongPressTogglePlayPause,
             onPrev = onPrev,
             onNext = onNext,
             onReplay = { delta -> onSeek((positionMs - delta).coerceAtLeast(0L)) },
@@ -940,6 +976,7 @@ private fun TwoPaneLayout(
     stationName: String?,
     onSeek: (Long) -> Unit,
     onTogglePlayPause: () -> Unit,
+    onLongPressTogglePlayPause: (() -> Unit)? = null,
     onPrev: () -> Unit,
     onNext: () -> Unit,
     onRate: (Double) -> Unit,
@@ -1002,6 +1039,7 @@ private fun TwoPaneLayout(
             TransportRow(
                 state = state,
                 onTogglePlayPause = onTogglePlayPause,
+            onLongPressTogglePlayPause = onLongPressTogglePlayPause,
                 onPrev = onPrev,
                 onNext = onNext,
                 onReplay = { delta -> onSeek((positionMs - delta).coerceAtLeast(0L)) },
@@ -1449,6 +1487,7 @@ internal fun parseSeekInput(raw: String): Long? {
 private fun TransportRow(
     state: PlayerState,
     onTogglePlayPause: () -> Unit,
+    onLongPressTogglePlayPause: (() -> Unit)? = null,
     onPrev: () -> Unit,
     onNext: () -> Unit,
     /**
@@ -1529,6 +1568,7 @@ private fun TransportRow(
             buttonSize = emphasizedSize,
             iconSize = emphasizedIconSize,
             onClick = onTogglePlayPause,
+            onLongClick = onLongPressTogglePlayPause,
         )
 
         if (!driveMode) {
@@ -1613,6 +1653,7 @@ private fun TransportRow(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun BigIconButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
@@ -1620,22 +1661,53 @@ private fun BigIconButton(
     buttonSize: androidx.compose.ui.unit.Dp,
     iconSize: androidx.compose.ui.unit.Dp,
     onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
 ) {
     // Vector icons everywhere — see MiniPlayer.TransportIconButton for why
     // we don't use Unicode media glyphs (Samsung Noto vs Roboto vs SF Pro
     // render U+23F8 with different metrics; vector icons are font-free).
-    IconButton(
-        onClick = onClick,
-        modifier = Modifier
-            .size(buttonSize)
-            .semantics { contentDescription = description },
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,  // outer modifier already labels it
-            modifier = Modifier.size(iconSize),
-            tint = MaterialTheme.colorScheme.onBackground,
-        )
+    if (onLongClick == null) {
+        IconButton(
+            onClick = onClick,
+            modifier = Modifier
+                .size(buttonSize)
+                .semantics { contentDescription = description },
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                modifier = Modifier.size(iconSize),
+                tint = MaterialTheme.colorScheme.onBackground,
+            )
+        }
+    } else {
+        // IconButton has no built-in long-click, so we drop down to a
+        // Surface + combinedClickable when we need both gestures. The
+        // hit-target stays the same `buttonSize` so the visual layout
+        // doesn't shift when long-press is wired in.
+        Surface(
+            color = Color.Transparent,
+            modifier = Modifier
+                .size(buttonSize)
+                .clip(RoundedCornerShape(buttonSize / 2))
+                .combinedClickable(
+                    onClick = onClick,
+                    onLongClick = onLongClick,
+                )
+                .semantics { contentDescription = description },
+        ) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    modifier = Modifier.size(iconSize),
+                    tint = MaterialTheme.colorScheme.onBackground,
+                )
+            }
+        }
     }
 }
 
@@ -1943,6 +2015,28 @@ private fun TrackInfoDialog(
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Text("Copy artist – title")
+                    }
+                    // Wikipedia search for the artist — opens the
+                    // system browser to a Special:Search URL so the
+                    // user can read the band's bio without leaving
+                    // the listening session for too long. Disabled
+                    // when there's no artist tag to search on.
+                    val artistForWiki = playable.artist?.takeIf { it.isNotBlank() }
+                    androidx.compose.material3.OutlinedButton(
+                        onClick = {
+                            artistForWiki?.let { name ->
+                                val encoded = name
+                                    .replace(" ", "+")
+                                    .replace("&", "%26")
+                                com.visorcraft.radioshed.source.openWebUrl(
+                                    "https://en.wikipedia.org/wiki/Special:Search?search=$encoded",
+                                )
+                            }
+                        },
+                        enabled = artistForWiki != null,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Search Wikipedia for artist")
                     }
                     Spacer(Modifier.height(4.dp))
                     InfoLine("Title", t.title)

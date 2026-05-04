@@ -18,6 +18,7 @@ import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Lyrics
 import androidx.compose.material.icons.filled.Person
@@ -77,6 +78,7 @@ fun TrackContextSheet(
     var track by remember { mutableStateOf<Track?>(null) }
     var liked by remember { mutableStateOf(false) }
     var primaryArtistId by remember { mutableStateOf<Long?>(null) }
+    var primaryArtistName by remember { mutableStateOf<String?>(null) }
     var globallyDisliked by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val navInstalled = com.visorcraft.radioshed.nav.LocalNavInstalled.current
@@ -98,7 +100,9 @@ fun TrackContextSheet(
         // time. Tracks with multiple artist links pick the first
         // primary (matches what the rest of the app does — top
         // artist stats, etc.).
-        primaryArtistId = libraryRepo.artistsForTrack(trackId).firstOrNull()?.id
+        val firstArtist = libraryRepo.artistsForTrack(trackId).firstOrNull()
+        primaryArtistId = firstArtist?.id
+        primaryArtistName = firstArtist?.name
     }
 
     ModalBottomSheet(
@@ -111,6 +115,8 @@ fun TrackContextSheet(
                 liked = liked,
                 navInstalled = navInstalled,
                 primaryArtistId = primaryArtistId,
+                primaryArtistName = primaryArtistName,
+                onDismiss = onDismiss,
                 globallyDisliked = globallyDisliked,
                 onPlayNext = {
                     track?.let { stationPlayback.playNext(it) }
@@ -163,6 +169,8 @@ private enum class Step { Main, PlaylistPicker }
 @Composable
 private fun MainStep(
     track: Track?,
+    onDismiss: () -> Unit = {},
+    primaryArtistName: String? = null,
     liked: Boolean,
     navInstalled: Boolean,
     primaryArtistId: Long?,
@@ -242,6 +250,34 @@ private fun MainStep(
                     onClick = { onGoToArtist(aid) },
                 )
             }
+        }
+        // Quick clipboard copy of "Artist – Title" so the user can
+        // paste what they're listening to into a chat / search box
+        // without opening the full Track Info dialog. Routes through
+        // the shared rememberCopyToClipboard so all clipboard writes
+        // hit the same hook.
+        run {
+            val copyToClipboard = com.visorcraft.radioshed.ui.util.rememberCopyToClipboard()
+            val displayArtist = primaryArtistName?.takeIf { it.isNotBlank() }
+            val displayTitle = track?.title?.takeIf { it.isNotBlank() }
+                ?: track?.fileName
+            val combined = remember(displayArtist, displayTitle) {
+                when {
+                    displayArtist != null && displayTitle != null ->
+                        "$displayArtist – $displayTitle"
+                    displayTitle != null -> displayTitle
+                    else -> null
+                }
+            }
+            ContextActionRow(
+                icon = Icons.Filled.ContentCopy,
+                label = "Copy artist – title",
+                enabled = combined != null,
+                onClick = {
+                    combined?.let { copyToClipboard(it) }
+                    onDismiss()
+                },
+            )
         }
         // Global dislike — "never play this anywhere" — sits at the
         // bottom because it's a destructive-ish action distinct from

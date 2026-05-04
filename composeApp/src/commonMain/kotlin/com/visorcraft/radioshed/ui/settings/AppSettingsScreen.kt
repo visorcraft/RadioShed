@@ -109,6 +109,9 @@ fun AppSettingsScreen(
     var connectivityPolicy by remember { mutableStateOf(settings.getConnectivityPolicy()) }
     var backupRetention by remember { mutableStateOf(settings.getBackupRetention()) }
     var sleepStopOnExpire by remember { mutableStateOf(settings.getSleepStopOnExpire()) }
+    var keepScreenOn by remember { mutableStateOf(settings.getKeepScreenOn()) }
+    var autoFetchLyrics by remember { mutableStateOf(settings.getAutoFetchLyrics()) }
+    var hapticsEnabled by remember { mutableStateOf(settings.getHapticsEnabled()) }
     var resetConfirmOpen by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
         // Re-read on each entry so values written from sibling
@@ -125,6 +128,9 @@ fun AppSettingsScreen(
         connectivityPolicy = settings.getConnectivityPolicy()
         backupRetention = settings.getBackupRetention()
         sleepStopOnExpire = settings.getSleepStopOnExpire()
+        keepScreenOn = settings.getKeepScreenOn()
+        autoFetchLyrics = settings.getAutoFetchLyrics()
+        hapticsEnabled = settings.getHapticsEnabled()
     }
     var artworkState by remember { mutableStateOf<ArtworkSyncState>(ArtworkSyncState.Idle) }
     var artworkJob by remember { mutableStateOf<Job?>(null) }
@@ -204,6 +210,30 @@ fun AppSettingsScreen(
                 onCheckedChange = { v ->
                     driveMode = v
                     settings.setDriveMode(v)
+                },
+            )
+            Spacer(Modifier.height(8.dp))
+            ToggleRow(
+                title = "Haptic feedback",
+                subtitle = "Subtle vibration on long-press / mode-flip gestures. Off mutes " +
+                    "every haptic across the app — useful if your phone's vibration motor " +
+                    "is loud or you find the gestures distracting.",
+                checked = hapticsEnabled,
+                onCheckedChange = { v ->
+                    hapticsEnabled = v
+                    settings.setHapticsEnabled(v)
+                },
+            )
+            Spacer(Modifier.height(8.dp))
+            ToggleRow(
+                title = "Keep screen on while playing",
+                subtitle = "Holds the display on while a track is actually playing. " +
+                    "Pause / idle releases the lock so the screen times out normally " +
+                    "between tracks. Off by default to save battery.",
+                checked = keepScreenOn,
+                onCheckedChange = { v ->
+                    keepScreenOn = v
+                    settings.setKeepScreenOn(v)
                 },
             )
 
@@ -288,6 +318,18 @@ fun AppSettingsScreen(
                 onChange = { v ->
                     backupRetention = v
                     settings.setBackupRetention(v)
+                },
+            )
+            Spacer(Modifier.height(8.dp))
+            ToggleRow(
+                title = "Auto-fetch lyrics over network",
+                subtitle = "Allows the lyrics view to query LRClib when local " +
+                    "sidecar / embedded lyrics aren't found. Off keeps the app " +
+                    "fully local for new lookups; existing cached lyrics stay.",
+                checked = autoFetchLyrics,
+                onCheckedChange = { v ->
+                    autoFetchLyrics = v
+                    settings.setAutoFetchLyrics(v)
                 },
             )
             Spacer(Modifier.height(8.dp))
@@ -470,6 +512,33 @@ fun AppSettingsScreen(
             LibrarySummaryCard()
             Spacer(Modifier.height(12.dp))
             CreditsCard()
+            Spacer(Modifier.height(12.dp))
+            // Source-URL + copy-build-info pair. Browser opens via the
+            // openWebUrl expect/actual, clipboard write goes through
+            // rememberCopyToClipboard for parity with the rest of
+            // the app's copy actions.
+            val aboutCopy = com.visorcraft.radioshed.ui.util.rememberCopyToClipboard()
+            AboutLinkRow(
+                title = "Source",
+                subtitle = "github.com/anthropics/radioshed",
+                onClick = {
+                    com.visorcraft.radioshed.source.openWebUrl(
+                        "https://github.com/anthropics/radioshed",
+                    )
+                },
+            )
+            Spacer(Modifier.height(8.dp))
+            AboutLinkRow(
+                title = "Copy build info",
+                subtitle = "Useful for bug reports.",
+                onClick = {
+                    aboutCopy(
+                        "RadioShed v${BuildInfo.VERSION_NAME} " +
+                            "(code ${BuildInfo.VERSION_CODE}) " +
+                            "built ${BuildInfo.BUILD_DATE}",
+                    )
+                },
+            )
             Spacer(Modifier.height(16.dp))
             // Reset to defaults — wipes the user-portable preference
             // keys but leaves library / playlists / ratings / station
@@ -512,6 +581,9 @@ fun AppSettingsScreen(
                     connectivityPolicy = settings.getConnectivityPolicy()
                     backupRetention = settings.getBackupRetention()
                     sleepStopOnExpire = settings.getSleepStopOnExpire()
+                    keepScreenOn = settings.getKeepScreenOn()
+                    autoFetchLyrics = settings.getAutoFetchLyrics()
+                    hapticsEnabled = settings.getHapticsEnabled()
                     onThemeModeChange(settings.getThemeMode())
                     onMaterialYouChange(settings.getMaterialYouEnabled())
                     onFontScaleChange(settings.getFontScale())
@@ -523,6 +595,28 @@ fun AppSettingsScreen(
                 TextButton(onClick = { resetConfirmOpen = false }) { Text("Cancel") }
             },
         )
+    }
+}
+
+@Composable
+private fun AboutLinkRow(title: String, subtitle: String, onClick: () -> Unit) {
+    Surface(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+        shape = RoundedCornerShape(12.dp),
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+            Text(
+                title,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium,
+            )
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+            )
+        }
     }
 }
 

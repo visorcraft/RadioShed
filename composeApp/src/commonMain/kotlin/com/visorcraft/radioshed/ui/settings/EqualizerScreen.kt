@@ -148,6 +148,19 @@ fun EqualizerScreen(
                             copyToClipboard(text)
                         },
                     ) { Text("Copy gains") }
+                    // One-tap "Flat" — sets every band to 0 dB. Useful
+                    // when the user has been A/B-ing presets and wants
+                    // back to the reference curve without picking
+                    // through bands manually. Goes through the existing
+                    // applyGains lambda so SettingsStore + the EQ
+                    // session both update; no separate persistence
+                    // path means no risk of drift.
+                    TextButton(
+                        enabled = available && gains.isNotEmpty(),
+                        onClick = {
+                            applyGains(List(gains.size) { 0f })
+                        },
+                    ) { Text("Reset") }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface,

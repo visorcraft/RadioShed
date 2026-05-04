@@ -417,6 +417,7 @@ private fun RecentSearchesBlock(
         )
         return
     }
+    var clearConfirmOpen by remember { mutableStateOf(false) }
     Column {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -429,7 +430,32 @@ private fun RecentSearchesBlock(
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f),
             )
-            TextButton(onClick = onClear) { Text("Clear") }
+            // Single-tap "Clear" used to nuke history without warning;
+            // a misclick was unrecoverable. Now opens a confirm dialog
+            // so a slip on the chip-row's neighbouring "Clear"
+            // affordance doesn't lose the user's search context.
+            TextButton(onClick = { clearConfirmOpen = true }) { Text("Clear") }
+        }
+        if (clearConfirmOpen) {
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { clearConfirmOpen = false },
+                title = { Text("Clear recent searches?") },
+                text = {
+                    Text("Removes ${queries.size} recent " +
+                        if (queries.size == 1) "query." else "queries.")
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        clearConfirmOpen = false
+                        onClear()
+                    }) {
+                        Text("Clear", color = MaterialTheme.colorScheme.error)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { clearConfirmOpen = false }) { Text("Cancel") }
+                },
+            )
         }
         Spacer(Modifier.height(4.dp))
         // Each chip carries a trailing close icon so users can drop

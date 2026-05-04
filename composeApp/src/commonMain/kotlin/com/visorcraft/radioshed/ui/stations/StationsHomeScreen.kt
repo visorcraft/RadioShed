@@ -3,6 +3,7 @@ package com.visorcraft.radioshed.ui.stations
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -397,6 +398,22 @@ fun StationsHomeScreen(
                                 val track = libraryRepo.randomAvailableTrack() ?: return@launch
                                 stationPlayback.playTracks(listOf(track), startIndex = 0)
                                 onOpenNowPlaying()
+                            }
+                        },
+                        onSurpriseShuffle = {
+                            // Long-press: shuffle 25 tracks straight
+                            // into the queue. The user gets a session
+                            // they can ride for ~90 minutes without
+                            // committing to a station's source/playback
+                            // rules. Falls back gracefully on small
+                            // libraries — fewer tracks just means a
+                            // shorter queue.
+                            scope.launch {
+                                val tracks = libraryRepo.randomAvailableTracks(25L)
+                                if (tracks.isNotEmpty()) {
+                                    stationPlayback.playTracks(tracks, startIndex = 0)
+                                    onOpenNowPlaying()
+                                }
                             }
                         },
                     )
@@ -873,6 +890,7 @@ private fun ActionRow(
     }
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun StationsPageHeader(
     stationCount: Int,
@@ -882,6 +900,7 @@ private fun StationsPageHeader(
     onAddStation: () -> Unit,
     onReorder: () -> Unit = {},
     onSurpriseMe: () -> Unit = {},
+    onSurpriseShuffle: () -> Unit = {},
 ) {
     val customCount = stationCount - builtInCount
     // When the user has toggled "Hide built-ins" on, the grid only
@@ -925,15 +944,27 @@ private fun StationsPageHeader(
         // scan); the underlying repo call still null-guards against
         // an empty result so a fresh-install user with no scanned
         // music doesn't crash on tap.
-        androidx.compose.material3.OutlinedIconButton(
-            onClick = onSurpriseMe,
-            modifier = Modifier.size(40.dp),
+        Surface(
+            shape = RoundedCornerShape(20.dp),
+            color = androidx.compose.ui.graphics.Color.Transparent,
+            border = androidx.compose.foundation.BorderStroke(
+                1.dp,
+                MaterialTheme.colorScheme.outline,
+            ),
+            modifier = Modifier
+                .size(40.dp)
+                .combinedClickable(
+                    onClick = onSurpriseMe,
+                    onLongClick = onSurpriseShuffle,
+                ),
         ) {
-            Icon(
-                imageVector = Icons.Filled.Casino,
-                contentDescription = "Play random track",
-                modifier = Modifier.size(20.dp),
-            )
+            Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                Icon(
+                    imageVector = Icons.Filled.Casino,
+                    contentDescription = "Play random track · long-press for shuffle 25",
+                    modifier = Modifier.size(20.dp),
+                )
+            }
         }
         Spacer(Modifier.size(8.dp))
         // Reorder is only useful when there's more than one station;

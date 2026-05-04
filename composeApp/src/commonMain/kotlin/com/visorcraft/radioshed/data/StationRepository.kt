@@ -468,6 +468,17 @@ class StationRepository(private val db: RadioShedDatabase) {
         db.stationsQueries.totalListenedMs().executeAsOne()
     }
 
+    /**
+     * Sum of listened_ms in `[fromMs, toMs)`. Used by the Stats screen
+     * to compute this-week vs last-week deltas; both bounds are
+     * epoch ms in the device's wall-clock zone (caller computes the
+     * boundary by stepping back N days from `nowMillis()`).
+     */
+    suspend fun listenedMsBetween(fromMs: Long, toMs: Long): Long =
+        withContext(IODispatcher) {
+            db.stationsQueries.listenedMsBetween(fromMs, toMs).executeAsOne()
+        }
+
     suspend fun countAllPlays(): Long = withContext(IODispatcher) {
         db.stationsQueries.countAllPlays().executeAsOne()
     }

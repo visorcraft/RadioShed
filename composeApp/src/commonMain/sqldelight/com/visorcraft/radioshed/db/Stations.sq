@@ -249,6 +249,13 @@ LIMIT ?;
 totalListenedMs:
 SELECT IFNULL(SUM(listened_ms), 0) FROM station_history;
 
+-- Listening time inside an arbitrary [from, to) window, in epoch
+-- milliseconds. Used by the Stats screen to compute this-week vs
+-- last-week deltas.
+listenedMsBetween:
+SELECT IFNULL(SUM(listened_ms), 0) FROM station_history
+WHERE played_at >= ? AND played_at < ?;
+
 countAllPlays:
 SELECT COUNT(*) FROM station_history;
 

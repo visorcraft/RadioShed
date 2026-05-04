@@ -28,6 +28,7 @@ class LyricsService(
     private val fetcher: LyricsFetcher,
     private val localLoader: LocalLyricsLoader,
     private val networkGate: NetworkPolicyGate,
+    private val settings: com.visorcraft.radioshed.data.SettingsStore,
 ) {
 
     suspend fun resolve(trackId: Long, forceRefresh: Boolean = false): Lyrics? {
@@ -112,7 +113,13 @@ class LyricsService(
         // path is automatic. Manual policy permits user-initiated
         // requests but blocks automatic ones; Never blocks both;
         // WiFiOnly blocks both unless on an unmetered transport.
-        val networkAllowed = if (forceRefresh) {
+        // Auto-fetch toggle: when off, only manual force-refresh
+        // proceeds to the network. The local + embedded passes above
+        // already ran, so the user still gets sidecar lyrics offline;
+        // we just don't silently dial out for tracks the local files
+        // don't cover.
+        val autoFetchAllowed = forceRefresh || settings.getAutoFetchLyrics()
+        val networkAllowed = autoFetchAllowed && if (forceRefresh) {
             networkGate.allowUserInitiatedFetch()
         } else {
             networkGate.allowAutomaticFetch()

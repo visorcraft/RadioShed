@@ -19,6 +19,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Favorite
@@ -89,6 +91,11 @@ fun LikedSongsScreen(
     var menuOpen by remember { mutableStateOf(false) }
     var sortMenuOpen by remember { mutableStateOf(false) }
     var sortOrder by remember { mutableStateOf(LikedSort.RecentlyLiked) }
+    // Free-text filter on title or artist. Composes with the sort
+    // dropdown — the visible list is the intersection. Session-local
+    // (resets on screen exit), matching the other detail-screen
+    // filter chips' UX.
+    var searchQuery by remember { mutableStateOf("") }
     var saveAsPlaylistOpen by remember { mutableStateOf(false) }
     var savedPlaylistName by remember { mutableStateOf<String?>(null) }
     val likedCount by ratingRepo.observeLikedCount().collectAsState(initial = 0L)
@@ -243,8 +250,8 @@ fun LikedSongsScreen(
                     )
                 }
             } else {
-                val sortedTracks = remember(tracks, sortOrder) {
-                    when (sortOrder) {
+                val sortedTracks = remember(tracks, sortOrder, searchQuery) {
+                    val base = when (sortOrder) {
                         LikedSort.RecentlyLiked -> tracks
                         LikedSort.TitleAsc -> tracks.sortedBy { it.title.lowercase() }
                         LikedSort.AlbumAsc -> tracks.sortedBy {
@@ -253,26 +260,69 @@ fun LikedSongsScreen(
                         LikedSort.DurationAsc -> tracks.sortedBy { it.durationMs }
                         LikedSort.DurationDesc -> tracks.sortedByDescending { it.durationMs }
                     }
+                    if (searchQuery.isBlank()) base
+                    else base.filter { it.title.contains(searchQuery, ignoreCase = true) }
                 }
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(vertical = 4.dp),
-                ) {
-                    items(sortedTracks, key = { it.id }) { track ->
-                        LikedSongRow(
-                            track = track,
-                            isCurrent = track.id == currentTrackId,
-                            onTap = {
-                                val idx = sortedTracks.indexOf(track).coerceAtLeast(0)
-                                stationPlayback.playTracks(sortedTracks, startIndex = idx)
+                Column(modifier = Modifier.fillMaxSize()) {
+                    if (tracks.size >= 6) {
+                        androidx.compose.material3.OutlinedTextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            placeholder = { Text("Find in liked…") },
+                            singleLine = true,
+                            leadingIcon = {
+                                Icon(
+                                    Icons.Filled.Search,
+                                    contentDescription = null,
+                                )
                             },
-                            onLongPress = { contextTrackId = track.id },
-                            onUnlike = {
-                                scope.launch {
-                                    ratingRepo.unlike(track.id)
+                            trailingIcon = if (searchQuery.isNotEmpty()) {
+                                {
+                                    androidx.compose.material3.IconButton(
+                                        onClick = { searchQuery = "" },
+                                    ) {
+                                        Icon(
+                                            Icons.Filled.Close,
+                                            contentDescription = "Clear",
+                                        )
+                                    }
                                 }
-                            },
+                            } else null,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 4.dp),
                         )
+                    }
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(vertical = 4.dp),
+                    ) {
+                        items(sortedTracks, key = { it.id }) { track ->
+                            LikedSongRow(
+                                track = track,
+                                isCurrent = track.id == currentTrackId,
+                                onTap = {
+                                    val idx = sortedTracks.indexOf(track).coerceAtLeast(0)
+                                    stationPlayback.playTracks(sortedTracks, startIndex = idx)
+                                },
+                                onLongPress = { contextTrackId = track.id },
+                                onUnlike = {
+                                    scope.launch {
+                                        ratingRepo.unlike(track.id)
+                                    }
+                                },
+                            )
+                        }
+                        if (sortedTracks.isEmpty() && searchQuery.isNotBlank()) {
+                            item(key = "no-match") {
+                                Text(
+                                    "No liked songs match \"$searchQuery\".",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                                    modifier = Modifier.padding(16.dp),
+                                )
+                            }
+                        }
                     }
                 }
             }

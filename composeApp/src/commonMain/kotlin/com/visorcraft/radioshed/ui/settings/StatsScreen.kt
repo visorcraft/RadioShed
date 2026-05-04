@@ -114,9 +114,26 @@ fun StatsScreen(
     LaunchedEffect(windowDays) { settings.setStatsWindowDays(windowDays) }
     val scope = rememberCoroutineScope()
 
+    // Week-over-week delta for the Total listened tile. Computed in
+    // the same effect that hydrates the rest of the screen so the
+    // arrow chip never shows a stale figure relative to the tile.
+    var weekDeltaPct by remember { mutableStateOf<Int?>(null) }
     LaunchedEffect(windowDays) {
         totalMs = stationRepo.totalListenedMs()
         totalPlays = stationRepo.countAllPlays()
+        // Last-7-days vs the prior 7. Both are inclusive of "now",
+        // exclusive of the lower bound, so the boundary
+        // overlaps cleanly. Returns null when last week had zero
+        // listened time — a "+∞%" arrow would lie about a 1ms blip
+        // being explosive growth.
+        run {
+            val now = com.visorcraft.radioshed.data.nowMillis()
+            val weekMs = 7L * 24L * 60L * 60L * 1000L
+            val thisWeek = stationRepo.listenedMsBetween(now - weekMs, now)
+            val lastWeek = stationRepo.listenedMsBetween(now - 2 * weekMs, now - weekMs)
+            weekDeltaPct = if (lastWeek <= 0L) null
+            else (((thisWeek - lastWeek) * 100.0) / lastWeek).toInt()
+        }
         // top track ids → resolve to Track objects via LibraryRepo;
         // skip ids whose tracks have been deleted from the library.
         topTracks = stationRepo.topPlayedTracks(limit = 25L)
@@ -193,6 +210,25 @@ fun StatsScreen(
                         label = "Total listened",
                         value = formatTotalDuration(totalMs),
                         modifier = Modifier.weight(1f),
+                        trailing = weekDeltaPct?.let { pct ->
+                            {
+                                val arrow = when {
+                                    pct > 0 -> "▲"
+                                    pct < 0 -> "▼"
+                                    else -> "•"
+                                }
+                                val color = when {
+                                    pct > 0 -> MaterialTheme.colorScheme.primary
+                                    pct < 0 -> MaterialTheme.colorScheme.error
+                                    else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                }
+                                Text(
+                                    "$arrow ${kotlin.math.abs(pct)}%",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = color,
+                                )
+                            }
+                        },
                     )
                     StatTile(
                         label = "Tracks played",
@@ -591,7 +627,12 @@ private fun TopAlbumRow(album: TopAlbumEntry, rank: Int, onTap: () -> Unit) {
 }
 
 @Composable
-private fun StatTile(label: String, value: String, modifier: Modifier = Modifier) {
+private fun StatTile(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier,
+    trailing: (@Composable () -> Unit)? = null,
+) {
     Surface(
         modifier = modifier,
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
@@ -610,6 +651,10 @@ private fun StatTile(label: String, value: String, modifier: Modifier = Modifier
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface,
             )
+            if (trailing != null) {
+                Spacer(Modifier.height(2.dp))
+                trailing()
+            }
         }
     }
 }

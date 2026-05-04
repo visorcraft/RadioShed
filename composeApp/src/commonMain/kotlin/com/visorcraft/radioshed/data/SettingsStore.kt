@@ -160,6 +160,36 @@ class SettingsStore(private val settings: Settings) {
     }
 
     /**
+     * If true, Now Playing keeps the screen on while a track is
+     * actually playing — useful when the user is mid-cooking / mid-
+     * driving and doesn't want the lockscreen to interrupt
+     * artwork-as-ambient. Off by default to avoid burning battery
+     * for a screen the user isn't looking at.
+     */
+    fun getKeepScreenOn(): Boolean = settings.getBoolean(KEY_KEEP_SCREEN_ON, false)
+    fun setKeepScreenOn(enabled: Boolean) = settings.putBoolean(KEY_KEEP_SCREEN_ON, enabled)
+
+    /**
+     * Whether LyricsService is allowed to hit LRClib (or other future
+     * web sources). Local sidecar + embedded extraction stay on
+     * regardless. On by default — most users want lyrics, and the
+     * connectivity policy already gates by metered/unmetered.
+     */
+    fun getAutoFetchLyrics(): Boolean = settings.getBoolean(KEY_AUTO_FETCH_LYRICS, true)
+    fun setAutoFetchLyrics(enabled: Boolean) =
+        settings.putBoolean(KEY_AUTO_FETCH_LYRICS, enabled)
+
+    /**
+     * Master haptic-feedback gate. When off, gesture/long-press
+     * vibration confirmations are suppressed app-wide. On by default
+     * so the gestures feel responsive out of the box; users who
+     * find vibration distracting can disable in one place.
+     */
+    fun getHapticsEnabled(): Boolean = settings.getBoolean(KEY_HAPTICS_ENABLED, true)
+    fun setHapticsEnabled(enabled: Boolean) =
+        settings.putBoolean(KEY_HAPTICS_ENABLED, enabled)
+
+    /**
      * Playback rate multiplier. Persisted across sessions so audiobook
      * / podcast users don't have to reset to their preferred speed
      * after every relaunch. Range 0.5..2.0; UI exposes 0.75 / 1.0 /
@@ -208,6 +238,7 @@ class SettingsStore(private val settings: Settings) {
             KEY_GENRE_TRACK_SORT, KEY_LYRICS_SYNC_OFFSET,
             KEY_STATS_WINDOW_DAYS, KEY_BACKUP_RETENTION,
             KEY_SLEEP_STOP_ON_EXPIRE, KEY_PLAYBACK_SPEED,
+            KEY_KEEP_SCREEN_ON, KEY_AUTO_FETCH_LYRICS, KEY_HAPTICS_ENABLED,
         ).forEach { settings.remove(it) }
     }
 
@@ -575,6 +606,7 @@ class SettingsStore(private val settings: Settings) {
             KEY_REPLAY_GAIN, KEY_AUTO_RESUME_STATION, KEY_AUTO_BACKUP,
             KEY_AUTO_RESCAN_ON_LAUNCH, KEY_EQ_ENABLED,
             KEY_STATIONS_HIDE_BUILTINS, KEY_SLEEP_STOP_ON_EXPIRE,
+            KEY_KEEP_SCREEN_ON, KEY_AUTO_FETCH_LYRICS, KEY_HAPTICS_ENABLED,
         ).forEach { key ->
             if (settings.hasKey(key)) {
                 out[key] = com.visorcraft.radioshed.source.BackupSettingValue.Bool(
@@ -676,7 +708,8 @@ class SettingsStore(private val settings: Settings) {
         KEY_MATERIAL_YOU, KEY_REDUCE_MOTION, KEY_DRIVE_MODE,
         KEY_REPLAY_GAIN, KEY_AUTO_RESUME_STATION, KEY_AUTO_BACKUP,
         KEY_AUTO_RESCAN_ON_LAUNCH, KEY_EQ_ENABLED,
-        KEY_STATIONS_HIDE_BUILTINS, KEY_SLEEP_STOP_ON_EXPIRE -> SettingType.BOOL
+        KEY_STATIONS_HIDE_BUILTINS, KEY_SLEEP_STOP_ON_EXPIRE,
+        KEY_KEEP_SCREEN_ON, KEY_AUTO_FETCH_LYRICS, KEY_HAPTICS_ENABLED -> SettingType.BOOL
         KEY_USER_VOLUME, KEY_REPLAY_GAIN_PREAMP,
         KEY_FONT_SCALE, KEY_LYRICS_SCALE, KEY_PLAYBACK_SPEED -> SettingType.FLOAT
         KEY_END_FADE_SEC, KEY_STATIONS_TILE_SIZE,
@@ -701,6 +734,9 @@ class SettingsStore(private val settings: Settings) {
         const val KEY_BACKUP_RETENTION = "backup.retentionCount"
         const val KEY_SLEEP_STOP_ON_EXPIRE = "audio.sleep.stopOnExpire"
         const val KEY_PLAYBACK_SPEED = "audio.playbackSpeed"
+        const val KEY_KEEP_SCREEN_ON = "ui.keepScreenOn"
+        const val KEY_AUTO_FETCH_LYRICS = "lyrics.autoFetchOverNetwork"
+        const val KEY_HAPTICS_ENABLED = "ui.hapticsEnabled"
         const val KEY_CONNECTIVITY_POLICY = "online.connectivityPolicy"
         const val KEY_ONBOARDING_DONE = "onboarding.complete"
         const val KEY_LAST_STATION_ID = "playback.lastStationId"

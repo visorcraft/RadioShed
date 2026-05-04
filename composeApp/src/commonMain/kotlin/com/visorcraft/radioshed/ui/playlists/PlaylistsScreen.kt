@@ -19,7 +19,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.IconButton
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -77,6 +80,14 @@ fun PlaylistsScreen(
     // routes through PlaylistRepository.rename so the trim / blank-
     // name guard is centralised.
     var renamingPlaylist by remember { mutableStateOf<Playlist?>(null) }
+    // In-page filter — appears above the list when there are enough
+    // playlists for find-by-scroll to be friction. Below 6 the list
+    // already fits a phone screen and the filter would be clutter.
+    var listFilter by remember { mutableStateOf("") }
+    val filteredPlaylists = remember(playlists, listFilter) {
+        if (listFilter.isBlank()) playlists
+        else playlists.filter { it.name.contains(listFilter, ignoreCase = true) }
+    }
     var importStatus by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     val libraryRepo: com.visorcraft.radioshed.data.LibraryRepository = koinInject()
@@ -174,6 +185,29 @@ fun PlaylistsScreen(
             item(key = "liked-songs") {
                 LikedSongsRow(count = likedCount, onTap = onOpenLikedSongs)
             }
+            if (playlists.size >= 6) {
+                item(key = "filter") {
+                    androidx.compose.material3.OutlinedTextField(
+                        value = listFilter,
+                        onValueChange = { listFilter = it },
+                        placeholder = { Text("Filter playlists…") },
+                        singleLine = true,
+                        leadingIcon = {
+                            Icon(Icons.Filled.Search, contentDescription = null)
+                        },
+                        trailingIcon = if (listFilter.isNotEmpty()) {
+                            {
+                                IconButton(onClick = { listFilter = "" }) {
+                                    Icon(Icons.Filled.Close, contentDescription = "Clear")
+                                }
+                            }
+                        } else null,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 4.dp),
+                    )
+                }
+            }
             if (playlists.isEmpty()) {
                 item(key = "empty") {
                     Box(
@@ -188,7 +222,7 @@ fun PlaylistsScreen(
                     }
                 }
             } else {
-                items(playlists, key = { it.id }) { playlist ->
+                items(filteredPlaylists, key = { it.id }) { playlist ->
                     PlaylistRow(
                         playlist = playlist,
                         coverUri = coverByPlaylistId[playlist.id],
@@ -196,6 +230,16 @@ fun PlaylistsScreen(
                         onTap = { onOpenPlaylist(playlist.id) },
                         onLongPress = { renamingPlaylist = playlist },
                     )
+                }
+                if (filteredPlaylists.isEmpty() && listFilter.isNotBlank()) {
+                    item(key = "no-match") {
+                        Text(
+                            "No playlists match \"$listFilter\".",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
+                        )
+                    }
                 }
             }
         }

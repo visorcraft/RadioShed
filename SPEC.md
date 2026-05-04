@@ -2432,6 +2432,90 @@ found a dozen issues. All fixed in this round:
   the string compact. Disabled until the EQ surface activates and
   has bands to copy.
 
+#### Phase 19 polish (continued, batch 12)
+
+- [x] **Settings — Keep screen on during playback.** New
+  `KEY_KEEP_SCREEN_ON` boolean pref + `KeepScreenOn` expect/actual.
+  Android impl walks the context chain to find the host Activity and
+  toggles `WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON` based on
+  the active state; cleared automatically on dispose. Now Playing
+  applies it whenever the pref is on AND the engine state is
+  `Playing`, so Pause / Idle releases the lock and the screen times
+  out normally between tracks.
+- [x] **Settings — Auto-fetch lyrics over network.** New
+  `KEY_AUTO_FETCH_LYRICS` boolean (default true). LyricsService now
+  takes a SettingsStore dependency and gates LRClib network calls
+  on `forceRefresh OR settings.getAutoFetchLyrics()` — local sidecar
+  + embedded lookups still run unconditionally. Manual force-refresh
+  from the lyrics top-bar always proceeds.
+- [x] **Settings — Haptic feedback toggle.** New
+  `KEY_HAPTICS_ENABLED` boolean + `rememberHapticTick` Composable
+  helper that wraps `LocalHapticFeedback` and short-circuits when
+  the pref is off. App-wide single source of truth for "should this
+  long-press buzz."
+- [x] **Now Playing — long-press play/pause → toggle shuffle.**
+  `BigIconButton` now optionally takes `onLongClick`; when set, it
+  switches from a stock IconButton to a Surface + `combinedClickable`
+  with the same hit-target. The play/pause button passes through
+  `onLongPressTogglePlayPause` from CompactLayout / TwoPaneLayout up
+  to the screen, which routes to `stationPlayback.toggleShuffle()`
+  and a haptic tick.
+- [x] **Now Playing — long-press queue → Save queue as playlist.**
+  Queue badge's outer Modifier swaps `clickable` for
+  `combinedClickable`; long-press snapshots `stationPlayback.upcoming(64)`
+  and opens the existing Save-queue-as-playlist dialog directly
+  (skipping the bottom-sheet step). No-op when the queue is empty.
+- [x] **PlaylistsScreen — filter field.** Surfaces above the list
+  when the user has ≥6 playlists (filter would be clutter below
+  that). Substring match (case-insensitive) on playlist name; empty
+  result renders a "No playlists match …" hint inline so the user
+  doesn't see a blank screen and assume the list broke.
+- [x] **Liked Songs — search filter.** Same find-in-place pattern
+  as the History screen's text search. Composes with the existing
+  sort dropdown (intersection of both); session-local state, mirrors
+  the other detail-screen filter UX.
+- [x] **Stats — this-week vs last-week delta.** New
+  `Stations.sq listenedMsBetween` SQL + `StationRepository.listenedMsBetween`.
+  Renders an arrow chip beside the Total listened tile (▲ green
+  for growth, ▼ red for decline, • for flat). Hidden when last
+  week had zero listened time so a 1ms blip doesn't show as ∞%.
+  StatTile gained an optional `trailing` slot to host the chip.
+- [x] **About — source URL row + copy build info.** Two new rows
+  under About; one opens `github.com/anthropics/radioshed` via
+  the new `openWebUrl` expect/actual (Android: ACTION_VIEW with
+  FLAG_ACTIVITY_NEW_TASK; iOS: `UIApplication.openURL`), the other
+  copies "RadioShed v0.1.0 (code 1) built 2026-05-04" to the
+  clipboard for paste-into-bug-report flows.
+- [x] **Search — "Clear all recents" confirmation.** RecentSearchesBlock
+  Clear button now opens an AlertDialog reporting how many entries
+  will be removed; previously a single tap nuked the list with no
+  warning. Confirm button uses error-tinted text so accidental
+  Enter doesn't fire it.
+- [x] **Stations Home — long-press Surprise → Shuffle 25.** New
+  SQL `selectRandomTracks` + `LibraryRepository.randomAvailableTracks(count)`.
+  The casino-die icon switched from OutlinedIconButton to a Surface
+  + `combinedClickable` so tap (one random track) and long-press
+  (queue 25 random tracks, navigate to Now Playing) coexist. Falls
+  back gracefully on small libraries — fewer rows just means a
+  shorter queue.
+- [x] **Track Info — Wikipedia search button.** Full-width
+  OutlinedButton that opens `en.wikipedia.org/wiki/Special:Search`
+  with the artist tag (URL-escaped via simple replace; the artist
+  string is small enough that the full encoder isn't worth pulling
+  in). Disabled when the track has no artist tag.
+- [x] **Equalizer — Reset all bands.** New "Reset" top-bar action
+  that flattens every band to 0 dB via the existing `applyGains`
+  lambda — same path used by preset selection so SettingsStore +
+  the live EQ session both update without a separate persistence
+  branch.
+- [x] **Track context sheet — "Copy artist – title" action.**
+  Now resolves the primary artist's NAME alongside the id (the
+  sheet was already fetching the artist row for the Go-to-artist
+  button, so this is one more field on the same query). Renders
+  a ContentCopy ActionRow above the Global-dislike toggle that
+  routes the formatted "Artist – Title" string through
+  `rememberCopyToClipboard`, dismissing the sheet after.
+
 ---
 
 ## Appendix A — Compose Multiplatform vs native UI: when to fall back

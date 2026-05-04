@@ -70,7 +70,7 @@ val sharedModule: Module = module {
     single { SleepTimer(get(), get()) }
 
     // Lyrics: cache + fetcher + local sidecar loader, orchestrated by LyricsService.
-    single { LyricsService(get(), get(), get(), get(), get()) }
+    single { LyricsService(get(), get(), get(), get(), get(), get()) }
 
     // Backup & restore: JSON dumps of stations + playlists + ratings.
     single { BackupService(get(), get(), get(), get(), get(), get()) }
