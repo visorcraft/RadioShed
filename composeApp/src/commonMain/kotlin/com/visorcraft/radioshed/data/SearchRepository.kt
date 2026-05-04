@@ -138,19 +138,37 @@ class SearchRepository(private val db: RadioShedDatabase) {
         // empty rather than a "match everything" surprise.
         val ids = idSet ?: return@withContext emptyList()
 
-        // Resolve ids → tracks. Cap inflate; we trim to limit after the
-        // year filter runs (album.year isn't on the track row).
-        val tracks = ids.mapNotNull { id ->
-            db.libraryQueries.selectTrackById(id).executeAsOneOrNull()?.toDomain()
-        }
-        val yearFiltered = if (yearTerms.isEmpty()) tracks else tracks.filter { t ->
-            val year = t.albumId?.let { aid ->
-                db.libraryQueries.selectAlbumById(aid).executeAsOneOrNull()?.year?.toInt()
+        // Resolve ids → tracks via a single IN(?) query. Previously
+        // this loop fired one selectTrackById per id, which on a
+        // typical "artist:Beatles" search hit the DB ~200 times for
+        // a single keystroke and dominated query latency. Cap inflate
+        // is fine here — `tracks` is trimmed to `limit` after year
+        // filtering since album.year isn't on the track row.
+        val tracks = db.libraryQueries.selectTracksByIds(ids)
+            .executeAsList()
+            .map { it.toDomain() }
+        val yearFiltered = if (yearTerms.isEmpty()) {
+            tracks
+        } else {
+            // Pre-resolve every distinct album id to its year in ONE
+            // query, then look up from a map per-track. Old code did
+            // one selectAlbumById per track which hit the DB N times
+            // again on top of the track lookup.
+            val albumIds = tracks.mapNotNull { it.albumId }.distinct()
+            val yearByAlbum: Map<Long, Int?> = if (albumIds.isEmpty()) {
+                emptyMap()
+            } else {
+                db.libraryQueries.selectAlbumsByIds(albumIds)
+                    .executeAsList()
+                    .associate { it.id to it.year?.toInt() }
             }
-            yearTerms.all { range ->
-                if (year == null) false
-                else (range.min == null || year >= range.min) &&
-                    (range.max == null || year <= range.max)
+            tracks.filter { t ->
+                val year = t.albumId?.let { yearByAlbum[it] }
+                yearTerms.all { range ->
+                    if (year == null) false
+                    else (range.min == null || year >= range.min) &&
+                        (range.max == null || year <= range.max)
+                }
             }
         }
         yearFiltered.take(limit.toInt())

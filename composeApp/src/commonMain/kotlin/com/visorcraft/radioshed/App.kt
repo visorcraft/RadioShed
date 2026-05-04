@@ -18,6 +18,7 @@ import com.visorcraft.radioshed.data.SettingsStore
 import com.visorcraft.radioshed.data.nowMillis
 import com.visorcraft.radioshed.nav.AppScreen
 import com.visorcraft.radioshed.source.BackupService
+import com.visorcraft.radioshed.stations.PresetSeeder
 import com.visorcraft.radioshed.stations.StationPlayback
 import com.visorcraft.radioshed.nav.PlatformBackHandler
 import com.visorcraft.radioshed.ui.home.HomeScreen
@@ -51,6 +52,7 @@ fun App(
     stationPlayback: StationPlayback = koinInject(),
     libraryRepo: LibraryRepository = koinInject(),
     backupService: BackupService = koinInject(),
+    presetSeeder: PresetSeeder = koinInject(),
 ) {
     // Live-mutable theme mode: read once from the persisted setting, then
     // hold in state so the AppSettingsScreen picker can re-theme the whole
@@ -190,6 +192,14 @@ fun App(
             OnboardingScreen(
                 onComplete = {
                     settings.setOnboardingComplete(true)
+                    // Skip-tour from Welcome (and Skip from Scan)
+                    // bypass the Folder→Scan→seedIfEmpty path, so the
+                    // user lands on Stations Home with zero stations
+                    // and no way to add any. Seed defensively here —
+                    // PresetSeeder is idempotent (`seedIfEmpty` no-ops
+                    // when stations already exist), so a redundant
+                    // call from the normal onboarding path is free.
+                    rootScope.launch { runCatching { presetSeeder.seedIfEmpty() } }
                     current = AppScreen.Home
                 },
             )

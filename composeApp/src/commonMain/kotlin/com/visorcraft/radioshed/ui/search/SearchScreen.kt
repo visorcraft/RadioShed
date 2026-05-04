@@ -123,11 +123,14 @@ fun SearchScreen(
             isSearching = false
             return@LaunchedEffect
         }
-        // Reset the scope chip on a fresh query — sticky scope state
-        // confused users who searched in Artists scope, then changed
-        // the query to a track and got "No matches in this scope" with
-        // no clear explanation.
-        scope = SearchScope.All
+        // NOTE: previously this block reset `scope = SearchScope.All`
+        // on every keystroke. That defeated the scope chips entirely —
+        // selecting "Tracks" or "Artists" would snap back to "All" the
+        // moment the user typed another character, and the
+        // LaunchedEffect(scope) below persisted the reset back to
+        // SettingsStore so the preference never stuck. Removed.
+        // Stale-scope confusion is better handled by the empty-state
+        // copy + the existing chip persistence (#149).
         // Clear stale results immediately so the user sees feedback the moment
         // they edit; otherwise the previous query's results linger for the
         // 200 ms debounce window with no in-flight indicator.

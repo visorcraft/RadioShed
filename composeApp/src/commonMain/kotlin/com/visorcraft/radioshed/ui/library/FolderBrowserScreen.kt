@@ -422,7 +422,14 @@ fun FolderBrowserScreen(
                         onPick = { currentPath = it },
                         onUnpin = { path ->
                             settings.unpinFileBrowserFolder(path)
-                            pinnedBookmarks = pinnedBookmarks.filterNot { it.path == path }
+                            // Re-read from storage so the chip row
+                            // reflects whatever the store actually
+                            // ended up holding (handles the empty
+                            // case where the key is removed entirely
+                            // by unpin).
+                            pinnedBookmarks = settings.getFileBrowserPinnedFolders().map {
+                                DiscoveredFolder(name = it.first, path = it.second)
+                            }
                         },
                     )
                 }
@@ -616,14 +623,14 @@ fun FolderBrowserScreen(
                         },
                         onLongPress = {
                             when {
-                                // Long-press on an audio file in
-                                // non-selection mode enters selection
-                                // mode. Long-press on a folder in
-                                // non-selection mode opens the folder
-                                // context sheet (as before).
-                                entry.isAudio && !selectionMode -> {
-                                    selectedPaths = setOf(entry.path)
-                                }
+                                // Long-press on an audio file (outside
+                                // selection mode) opens the rich
+                                // file-context sheet — Play next, Add
+                                // to queue, Add to playlist, Share,
+                                // Copy path, etc. Multi-select is
+                                // still reachable from inside that
+                                // sheet via the "Select" action.
+                                entry.isAudio && !selectionMode -> fileContext = entry
                                 entry.isDirectory && !selectionMode -> folderContext = entry
                                 entry.isAudio && selectionMode -> {
                                     // Reuse long-press inside selection
@@ -657,6 +664,10 @@ fun FolderBrowserScreen(
                 fileContext = null
                 addToPlaylistTrackId = trackId
             },
+            onStartSelection = {
+                fileContext = null
+                selectedPaths = setOf(entry.path)
+            },
         )
     }
     folderContext?.let { entry ->
@@ -683,12 +694,19 @@ fun FolderBrowserScreen(
             onTogglePin = {
                 if (isPinned) {
                     settings.unpinFileBrowserFolder(entry.path)
-                    pinnedBookmarks = pinnedBookmarks.filterNot { it.path == entry.path }
                 } else {
                     settings.pinFileBrowserFolder(entry.name, entry.path)
-                    pinnedBookmarks =
-                        listOf(DiscoveredFolder(name = entry.name, path = entry.path)) +
-                            pinnedBookmarks.filterNot { it.path == entry.path }
+                }
+                // Re-read from storage rather than mutating the
+                // in-memory list directly. SettingsStore enforces
+                // FILE_BROWSER_PIN_CAP and tab/newline sanitization;
+                // a naive in-memory prepend would let the visible
+                // list outgrow the cap and drift from the actual
+                // persisted shape (e.g. a pinned folder with a tab
+                // in its name renders one way in the bookmarks row
+                // and another after app restart).
+                pinnedBookmarks = settings.getFileBrowserPinnedFolders().map {
+                    DiscoveredFolder(name = it.first, path = it.second)
                 }
                 folderContext = null
             },
@@ -1076,6 +1094,7 @@ private fun FileContextSheet(
     scope: kotlinx.coroutines.CoroutineScope,
     onDismiss: () -> Unit,
     onAddToPlaylistTrack: (Long) -> Unit,
+    onStartSelection: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val copyToClipboard = com.visorcraft.radioshed.ui.util.rememberCopyToClipboard()
@@ -1159,6 +1178,11 @@ private fun FileContextSheet(
                     onDismiss()
                     scope.launch { trackSharer.share(entry.path, entry.name) }
                 },
+            )
+            ContextRow(
+                icon = Icons.Filled.SelectAll,
+                label = "Select…",
+                onClick = onStartSelection,
             )
             Spacer(Modifier.height(8.dp))
         }

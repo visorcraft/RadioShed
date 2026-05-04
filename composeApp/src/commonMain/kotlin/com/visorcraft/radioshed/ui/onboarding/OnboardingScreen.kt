@@ -52,6 +52,8 @@ import com.visorcraft.radioshed.scanner.ScanProgress
 import com.visorcraft.radioshed.scanner.Scanner
 import com.visorcraft.radioshed.ui.library.FolderBrowserDialog
 import com.visorcraft.radioshed.ui.util.OnResume
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
@@ -88,6 +90,13 @@ fun OnboardingScreen(
     var step by remember { mutableStateOf(OnboardingStep.Welcome) }
     var folderPath by remember { mutableStateOf("/storage/emulated/0/Music") }
     var folderName by remember { mutableStateOf("Music") }
+    // Tracks whether the user has manually edited the display-name
+    // field. Default name is "Music" (a real folder name on most
+    // devices), so a naive `folderName.isBlank()` check would never
+    // trigger and the picker's auto-fill from the chosen folder would
+    // never run. With this flag, picking a folder updates the name
+    // until the user types — after that we leave it alone.
+    var folderNameEdited by remember { mutableStateOf(false) }
     var scanFolderId by remember { mutableStateOf<Long?>(null) }
     var scanStatus by remember { mutableStateOf<ScanProgress?>(null) }
     var permissionGranted by remember { mutableStateOf(initiallyGranted) }
@@ -148,8 +157,13 @@ fun OnboardingScreen(
                             isWide = isWide,
                             folderPath = folderPath,
                             folderName = folderName,
+                            folderNameEdited = folderNameEdited,
                             onFolderPathChange = { folderPath = it },
-                            onFolderNameChange = { folderName = it },
+                            onFolderNameChange = {
+                                folderName = it
+                                folderNameEdited = true
+                            },
+                            onAutoFillFolderName = { folderName = it },
                             error = addError,
                         )
 
@@ -185,7 +199,7 @@ fun OnboardingScreen(
                                 addError = null
                                 step = OnboardingStep.Scan
                                 scanJob = scope.launch {
-                                    runCatching {
+                                    try {
                                         // Re-use the existing folder row when the
                                         // user comes back to this step after a
                                         // failed scan (or just bounces Back +
@@ -204,6 +218,13 @@ fun OnboardingScreen(
                                         )
                                         scanFolderId = id
                                         scanner.scanFolder(id).collect { ev ->
+                                            // Back-press during scan calls
+                                            // scanJob.cancel() AND mutates `step`
+                                            // directly; without this guard a
+                                            // late-arriving Completed/Failed
+                                            // would override the user's Back
+                                            // and pop UI to Done.
+                                            if (!isActive) return@collect
                                             scanStatus = ev
                                             if (ev is ScanProgress.Completed) {
                                                 runCatching { presetSeeder.seedIfEmpty() }
@@ -212,8 +233,13 @@ fun OnboardingScreen(
                                                 step = OnboardingStep.Done
                                             }
                                         }
-                                    }.onFailure {
-                                        addError = it.message ?: "Failed to add folder"
+                                    } catch (ce: CancellationException) {
+                                        // User pressed Back / Skip — the
+                                        // handlers already moved `step`. Don't
+                                        // surface this as an error.
+                                        throw ce
+                                    } catch (t: Throwable) {
+                                        addError = t.message ?: "Failed to add folder"
                                         step = OnboardingStep.Folder
                                     }
                                 }.also { it.invokeOnCompletion { scanJob = null } }
@@ -533,8 +559,10 @@ private fun FolderStep(
     isWide: Boolean,
     folderPath: String,
     folderName: String,
+    folderNameEdited: Boolean,
     onFolderPathChange: (String) -> Unit,
     onFolderNameChange: (String) -> Unit,
+    onAutoFillFolderName: (String) -> Unit,
     error: String?,
 ) {
     var browserOpen by remember { mutableStateOf(false) }
@@ -638,10 +666,16 @@ private fun FolderStep(
             initialPath = startPath,
             onSelect = { picked ->
                 onFolderPathChange(picked)
-                // Auto-fill display name from picked dir, but only if the
-                // user hasn't already customized it.
-                if (folderName.isBlank()) {
-                    onFolderNameChange(picked.substringAfterLast('/').ifBlank { picked })
+                // Auto-fill display name from picked dir, but only if
+                // the user hasn't already customized it. Default name
+                // is "Music" (a real folder name), so the prior
+                // `isBlank` check never fired — `folderNameEdited`
+                // tracks actual user typing instead. Skips the
+                // edited-flag mutation by routing through
+                // onAutoFillFolderName so picking a folder doesn't
+                // mark the field as user-edited.
+                if (!folderNameEdited || folderName.isBlank()) {
+                    onAutoFillFolderName(picked.substringAfterLast('/').ifBlank { picked })
                 }
                 browserOpen = false
             },

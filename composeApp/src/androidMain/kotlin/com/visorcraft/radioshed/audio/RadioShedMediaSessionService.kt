@@ -81,6 +81,15 @@ class RadioShedMediaSessionService : MediaLibraryService() {
      */
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
+    /**
+     * The library/session callback. Held as a field (rather than
+     * inlined into the session builder) so [onDestroy] can call into
+     * it for cleanup — specifically to flush the Bluetooth multi-click
+     * handler so a posted Runnable doesn't fire after the service is
+     * gone and crash with "Can't deliver result for stale callback".
+     */
+    private val libraryCallback = RadioShedLibraryCallback()
+
     override fun onCreate() {
         super.onCreate()
         val attributes = AudioAttributes.Builder()
@@ -159,8 +168,37 @@ class RadioShedMediaSessionService : MediaLibraryService() {
             }
         })
 
-        librarySession = MediaLibrarySession.Builder(this, player, RadioShedLibraryCallback())
+        librarySession = MediaLibrarySession.Builder(this, player, libraryCallback)
             .build()
+        // Hand the live session back to the callback so it can update
+        // the custom layout (heart state, repeat/shuffle glyph) when
+        // the user taps an action or playback state changes. Using a
+        // field on the callback rather than re-deriving from
+        // onGetSession lets the callback push setCustomLayout
+        // unconditionally (Media3 dedupes redundant updates internally).
+        libraryCallback.attach(librarySession)
+        // Mirror REPEAT_MODE / shuffleModeEnabled changes back into the
+        // custom layout so the notification glyph reflects whatever
+        // toggled the state — including in-app NowPlaying buttons,
+        // not just the notification's own action taps.
+        player.addListener(object : Player.Listener {
+            override fun onRepeatModeChanged(repeatMode: Int) {
+                libraryCallback.refreshCustomLayout()
+            }
+
+            override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) {
+                libraryCallback.refreshCustomLayout()
+            }
+
+            override fun onMediaItemTransition(
+                mediaItem: androidx.media3.common.MediaItem?,
+                reason: Int,
+            ) {
+                // New track → re-fetch its like state so the heart
+                // glyph isn't stuck on the previous track's value.
+                libraryCallback.refreshCustomLayout()
+            }
+        })
 
         // Override the default media notification provider so the
         // status-bar small icon is the RadioShed antenna silhouette
@@ -216,6 +254,13 @@ class RadioShedMediaSessionService : MediaLibraryService() {
         runCatching {
             GlobalContext.get().get<com.visorcraft.radioshed.audio.SleepTimer>().cancel()
         }
+        // Flush the Bluetooth multi-click debounce handler. Without
+        // this, a Runnable posted shortly before service teardown
+        // could fire after `librarySession` is released and crash on
+        // a NPE from `librarySession?.player`. The callback also
+        // detaches the session reference so any in-flight refresh
+        // tasks no-op rather than touch released resources.
+        libraryCallback.detach()
         librarySession?.run {
             player.release()
             release()
@@ -243,6 +288,36 @@ class RadioShedMediaSessionService : MediaLibraryService() {
         private var clickRunnable: Runnable? = null
         private val clickHandler = android.os.Handler(android.os.Looper.getMainLooper())
         private val clickWindowMs = 350L
+
+        // Live like-state for the currently-playing track. Drives the
+        // notification heart glyph (filled vs outline). Updated by
+        // [refreshCustomLayout] after track transitions and after
+        // taps on the heart action. Null = unknown / no track loaded.
+        @Volatile
+        private var currentTrackLiked: Boolean = false
+
+        // Session reference for setCustomLayout updates. Held weakly
+        // through attach/detach so [onDestroy] can null this out
+        // before releasing the actual session, preventing late-arriving
+        // refresh tasks from touching a released session.
+        @Volatile
+        private var attachedSession: MediaLibrarySession? = null
+
+        fun attach(session: MediaLibrarySession?) {
+            attachedSession = session
+            // Kick a first refresh so the layout reflects the current
+            // track's like state on cold start, not just after the
+            // first transition.
+            refreshCustomLayout()
+        }
+
+        fun detach() {
+            attachedSession = null
+            clickRunnable?.let { clickHandler.removeCallbacks(it) }
+            clickHandler.removeCallbacksAndMessages(null)
+            clickRunnable = null
+            clickCount = 0
+        }
 
         /**
          * Bluetooth headset multi-click. Routes the standard headset hook
@@ -335,44 +410,135 @@ class RadioShedMediaSessionService : MediaLibraryService() {
                 .add(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)
                 .build()
 
-            // Custom session commands: rating + dislike, surfaced in
-            // Android Auto's Now Playing template via setCustomLayout.
-            // Auto's media layout reserves a couple of slots beside the
-            // transport controls for app-defined CommandButtons; we
-            // populate them with a star toggle and a thumb-down so the
-            // user can rate / dislike without taking eyes off the road.
-            val starCommand = SessionCommand(ACTION_TOGGLE_STAR, Bundle.EMPTY)
-            val dislikeCommand = SessionCommand(ACTION_DISLIKE_ON_STATION, Bundle.EMPTY)
-            val heartCommand = SessionCommand(ACTION_TOGGLE_LIKE, Bundle.EMPTY)
-
+            // Custom session commands: rating + dislike + like + repeat
+            // + shuffle, surfaced in Android Auto's Now Playing template
+            // (and the lock-screen / notification expanded layout) via
+            // setCustomLayout. Auto's media layout reserves slots beside
+            // the transport controls for app-defined CommandButtons.
             val sessionCommands = MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS
                 .buildUpon()
-                .add(starCommand)
-                .add(dislikeCommand)
-                .add(heartCommand)
-                .build()
-
-            val starButton = CommandButton.Builder()
-                .setSessionCommand(starCommand)
-                .setDisplayName("Star")
-                .setIconResId(R.drawable.ic_radioshed_star)
-                .build()
-            val dislikeButton = CommandButton.Builder()
-                .setSessionCommand(dislikeCommand)
-                .setDisplayName("Dislike")
-                .setIconResId(R.drawable.ic_radioshed_thumb_down)
-                .build()
-            val heartButton = CommandButton.Builder()
-                .setSessionCommand(heartCommand)
-                .setDisplayName("Like")
-                .setIconResId(R.drawable.ic_radioshed_heart)
+                .add(SessionCommand(ACTION_TOGGLE_STAR, Bundle.EMPTY))
+                .add(SessionCommand(ACTION_DISLIKE_ON_STATION, Bundle.EMPTY))
+                .add(SessionCommand(ACTION_TOGGLE_LIKE, Bundle.EMPTY))
+                .add(SessionCommand(ACTION_CYCLE_REPEAT, Bundle.EMPTY))
+                .add(SessionCommand(ACTION_TOGGLE_SHUFFLE, Bundle.EMPTY))
                 .build()
 
             return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
                 .setAvailablePlayerCommands(playerCommands)
                 .setAvailableSessionCommands(sessionCommands)
-                .setCustomLayout(ImmutableList.of(heartButton, starButton, dislikeButton))
+                .setCustomLayout(buildCustomLayout())
                 .build()
+        }
+
+        /**
+         * Build the ordered list of [CommandButton]s shown in the
+         * notification / Auto custom layout. Glyphs are state-driven:
+         *
+         *  - Heart: filled when [currentTrackLiked], outline otherwise
+         *  - Repeat: off / all / one based on `Player.repeatMode`
+         *  - Shuffle: bright / dim based on `Player.shuffleModeEnabled`
+         *
+         * Re-emit via [refreshCustomLayout] whenever any of these
+         * inputs change so the user sees the result of their tap
+         * without having to dismiss & reopen the notification.
+         */
+        private fun buildCustomLayout(): ImmutableList<CommandButton> {
+            val heartIcon = if (currentTrackLiked) R.drawable.ic_radioshed_heart
+                            else R.drawable.ic_radioshed_heart_outline
+            val player = attachedSession?.player
+            val repeatMode = player?.repeatMode ?: Player.REPEAT_MODE_OFF
+            val repeatIcon = when (repeatMode) {
+                Player.REPEAT_MODE_ONE -> R.drawable.ic_radioshed_repeat_one
+                Player.REPEAT_MODE_ALL -> R.drawable.ic_radioshed_repeat_all
+                else -> R.drawable.ic_radioshed_repeat_off
+            }
+            val shuffleOn = player?.shuffleModeEnabled == true
+            val shuffleIcon = if (shuffleOn) R.drawable.ic_radioshed_shuffle_on
+                              else R.drawable.ic_radioshed_shuffle_off
+
+            val heartButton = CommandButton.Builder()
+                .setSessionCommand(SessionCommand(ACTION_TOGGLE_LIKE, Bundle.EMPTY))
+                .setDisplayName(if (currentTrackLiked) "Unlike" else "Like")
+                .setIconResId(heartIcon)
+                .build()
+            val starButton = CommandButton.Builder()
+                .setSessionCommand(SessionCommand(ACTION_TOGGLE_STAR, Bundle.EMPTY))
+                .setDisplayName("Star")
+                .setIconResId(R.drawable.ic_radioshed_star)
+                .build()
+            val dislikeButton = CommandButton.Builder()
+                .setSessionCommand(SessionCommand(ACTION_DISLIKE_ON_STATION, Bundle.EMPTY))
+                .setDisplayName("Dislike")
+                .setIconResId(R.drawable.ic_radioshed_thumb_down)
+                .build()
+            val repeatButton = CommandButton.Builder()
+                .setSessionCommand(SessionCommand(ACTION_CYCLE_REPEAT, Bundle.EMPTY))
+                .setDisplayName(
+                    when (repeatMode) {
+                        Player.REPEAT_MODE_ONE -> "Repeat one"
+                        Player.REPEAT_MODE_ALL -> "Repeat all"
+                        else -> "Repeat off"
+                    },
+                )
+                .setIconResId(repeatIcon)
+                .build()
+            val shuffleButton = CommandButton.Builder()
+                .setSessionCommand(SessionCommand(ACTION_TOGGLE_SHUFFLE, Bundle.EMPTY))
+                .setDisplayName(if (shuffleOn) "Shuffle on" else "Shuffle off")
+                .setIconResId(shuffleIcon)
+                .build()
+
+            // Order tuned for Auto's two-row template: most-used first
+            // (heart, then mode toggles, then per-station feedback).
+            return ImmutableList.of(
+                heartButton,
+                shuffleButton,
+                repeatButton,
+                starButton,
+                dislikeButton,
+            )
+        }
+
+        /**
+         * Refresh the custom layout in-place. Called from:
+         *  - track transitions (re-fetches like state for the new track)
+         *  - tap handlers (after toggling like, repeat, or shuffle)
+         *  - player listeners (mirroring in-app NowPlaying changes)
+         *
+         * The like-state lookup is async (DB hit), so the refresh
+         * happens in two phases — synchronous re-emit with the cached
+         * value for snappy mode-toggle feedback, then a follow-up
+         * re-emit once the DB returns. setCustomLayout is idempotent
+         * when called with equivalent buttons, so the duplicate emit
+         * is cheap.
+         */
+        fun refreshCustomLayout() {
+            val session = attachedSession ?: return
+            // Phase 1: synchronous re-emit using cached like state.
+            session.setCustomLayout(buildCustomLayout())
+            // Phase 2: async like-state refresh, then re-emit if it
+            // changed. Track id -1 (ad-hoc playback) skips the lookup.
+            val trackId = session.player.currentMediaItem?.mediaId?.toLongOrNull()
+            if (trackId == null || trackId < 0L) {
+                if (currentTrackLiked) {
+                    currentTrackLiked = false
+                    session.setCustomLayout(buildCustomLayout())
+                }
+                return
+            }
+            scope.launch {
+                runCatching {
+                    val ratingRepo = GlobalContext.get().get<RatingRepository>()
+                    val liked = ratingRepo.isLiked(trackId)
+                    if (liked != currentTrackLiked) {
+                        currentTrackLiked = liked
+                        // Guard against races with detach() — re-read
+                        // the field rather than reusing `session`.
+                        attachedSession?.setCustomLayout(buildCustomLayout())
+                    }
+                }
+            }
         }
 
         /**
@@ -389,6 +555,30 @@ class RadioShedMediaSessionService : MediaLibraryService() {
             args: Bundle,
         ): ListenableFuture<SessionResult> {
             val player = session.player
+            // Repeat/shuffle don't need a track id — they apply to the
+            // player as a whole. Handle them before the trackId guard
+            // so they still work between songs.
+            when (customCommand.customAction) {
+                ACTION_CYCLE_REPEAT -> {
+                    val nextMode = when (player.repeatMode) {
+                        Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
+                        Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
+                        else -> Player.REPEAT_MODE_OFF
+                    }
+                    player.repeatMode = nextMode
+                    // The Player.Listener registered in onCreate fires
+                    // refreshCustomLayout, but pushing one synchronously
+                    // here gives the user instant glyph feedback even
+                    // if the listener is throttled / queued.
+                    refreshCustomLayout()
+                    return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+                }
+                ACTION_TOGGLE_SHUFFLE -> {
+                    player.shuffleModeEnabled = !player.shuffleModeEnabled
+                    refreshCustomLayout()
+                    return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+                }
+            }
             val trackId = player.currentMediaItem?.mediaId?.toLongOrNull()
                 ?: return Futures.immediateFuture(
                     SessionResult(SessionResult.RESULT_ERROR_INVALID_STATE),
@@ -427,11 +617,15 @@ class RadioShedMediaSessionService : MediaLibraryService() {
                     scope.launch {
                         runCatching {
                             val ratingRepo = GlobalContext.get().get<RatingRepository>()
-                            if (ratingRepo.isLiked(trackId)) {
-                                ratingRepo.unlike(trackId)
-                            } else {
-                                ratingRepo.like(trackId)
-                            }
+                            val nextLiked = !ratingRepo.isLiked(trackId)
+                            if (nextLiked) ratingRepo.like(trackId)
+                            else ratingRepo.unlike(trackId)
+                            // Eagerly mirror the new state into the
+                            // cache so the next layout build paints
+                            // the right glyph without waiting for the
+                            // async re-read in refreshCustomLayout.
+                            currentTrackLiked = nextLiked
+                            attachedSession?.setCustomLayout(buildCustomLayout())
                         }
                     }
                     Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
@@ -600,6 +794,8 @@ class RadioShedMediaSessionService : MediaLibraryService() {
         const val ACTION_TOGGLE_STAR = "com.visorcraft.radioshed.RATE_STAR"
         const val ACTION_DISLIKE_ON_STATION = "com.visorcraft.radioshed.DISLIKE"
         const val ACTION_TOGGLE_LIKE = "com.visorcraft.radioshed.LIKE"
+        const val ACTION_CYCLE_REPEAT = "com.visorcraft.radioshed.REPEAT"
+        const val ACTION_TOGGLE_SHUFFLE = "com.visorcraft.radioshed.SHUFFLE"
 
         // Notification config for the foreground media-playback service.
         // Channel id is referenced from the manifest's auto-created

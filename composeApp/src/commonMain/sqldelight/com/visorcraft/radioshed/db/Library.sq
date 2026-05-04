@@ -157,6 +157,14 @@ SELECT id FROM album WHERE sort_title = ? AND artist_id IS ?;
 selectAlbumById:
 SELECT * FROM album WHERE id = ?;
 
+-- Bulk album lookup by id set. Used by SearchRepository's DSL year
+-- filter so a "year:>1980" query against 200 candidate tracks does
+-- a single IN(?) lookup rather than 200 serial selectAlbumById
+-- round-trips. SQLite IN(?) cap of 999 applies; callers should
+-- chunk above that, but DSL search is bounded by perLeafLimit.
+selectAlbumsByIds:
+SELECT * FROM album WHERE id IN ?;
+
 selectAlbumByTitleAndArtist:
 SELECT * FROM album WHERE sort_title = ? AND artist_id IS ?;
 
@@ -269,6 +277,15 @@ SELECT id FROM track WHERE path = ?;
 
 selectTrackById:
 SELECT * FROM track WHERE id = ?;
+
+-- Bulk track lookup by id set. Replaces N serial selectTrackById
+-- calls in SearchRepository.searchTracksDsl (per-id round-trips
+-- dominated query time on >50-result DSL searches).
+-- Note: SQLite has a default IN(?) parameter cap of 999; callers
+-- should chunk inputs above that, but DSL searches are bounded by
+-- perLeafLimit (typically <=200) so a single call is sufficient.
+selectTracksByIds:
+SELECT * FROM track WHERE id IN ?;
 
 selectTrackByPath:
 SELECT * FROM track WHERE path = ?;

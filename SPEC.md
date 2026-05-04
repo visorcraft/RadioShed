@@ -3379,6 +3379,99 @@ real bugs and one false positive. Three shipped here. Build
   consumer of `nowPlaying.durationMs` — none exist. False
   positive; left the code unchanged.)
 
+#### Phase 19 audit follow-up (deep audit fix sweep, multi-subsystem)
+
+Fifth audit pass — four parallel reviewers on Onboarding,
+notification/MediaSession, Search, and File Manager. Twelve real
+findings; all shipped here. Build `2026-05-04t` → `2026-05-04u`.
+
+- [x] **FIX (UX — scope chip reset every keystroke): SearchScreen
+  `LaunchedEffect(query)` reset `scope = SearchScope.All` on every
+  character typed.** Selecting "Tracks" or "Artists" snapped back to
+  All the moment the user typed another character, and the scope-
+  persistence LaunchedEffect below then wrote the reset back to
+  SettingsStore so the preference never stuck either. Removed the
+  reset; #149 finally behaves as advertised.
+- [x] **FIX (UX — FileContextSheet was dead code): long-press on
+  audio file in FolderBrowserScreen entered selection mode and
+  never set `fileContext`.** The rich per-file sheet (Play next,
+  Add to queue, Add to playlist, Share, Copy path, Show full
+  path) was unreachable. Routed long-press to `fileContext = entry`
+  and added a "Select…" row inside the sheet so multi-select mode
+  is still reachable from there.
+- [x] **FIX (UX — back-press during scan flickered to Done):
+  OnboardingScreen scan-job `runCatching` swallowed
+  CancellationException + post-cancel `step = Done` mutations
+  ignored job cancellation.** Pressing Back during scan moved
+  `step` to Folder, then a late Completed event from the cancelled
+  flow re-set it to Done. Wrapped the body in try/catch, re-throw
+  CancellationException, and added `if (!isActive) return@collect`
+  guard around step mutations.
+- [x] **FIX (UX — Skip tour from Welcome stranded user with zero
+  stations): Skip→onComplete bypassed `presetSeeder.seedIfEmpty()`.**
+  Skip-tour from Welcome (and Skip from Scan) skipped the
+  Folder→Scan→seedIfEmpty path. Moved the seedIfEmpty call into
+  App.kt's onComplete lambda so every exit from onboarding seeds
+  defensively (PresetSeeder is idempotent, so the normal path's
+  redundant call is free).
+- [x] **FIX (UX — folder picker auto-fill never worked): default
+  `folderName` is "Music", and the picker's auto-fill check was
+  `if (folderName.isBlank())`.** "Music" is a real folder name, so
+  the check never triggered and picking a non-Music folder left the
+  display name as "Music". Added a `folderNameEdited` flag tracked
+  by the OnboardingScreen state that flips on real text-field
+  edits; auto-fill from the picker now runs unless edited.
+- [x] **FIX (CRASH — OEM ROMs without per-app All-files-access
+  Activity): `requestAllFilesAccess` startActivity threw
+  ActivityNotFoundException on heavily-skinned ROMs.** Wrapped in
+  try/catch with three-level fallback chain: per-app intent →
+  system-wide MANAGE_ALL_FILES → app details settings page.
+- [x] **FIX (LEAK — Bluetooth multi-click handler): `clickHandler`
+  Runnable could fire after RadioShedMediaSessionService.onDestroy,
+  crashing on a released `librarySession`.** Held the
+  `RadioShedLibraryCallback` as a service field, added
+  `attach(session)` / `detach()` lifecycle methods, and
+  `detach()` calls `clickHandler.removeCallbacksAndMessages(null)`
+  before the session is released.
+- [x] **FIX (DATA — backup loses pinned File Manager folders):
+  `KEY_FILE_BROWSER_PINS` not in `dumpForBackup` or
+  `expectedTypeForKey`.** Restoring a backup wiped the user's
+  custom-pinned bookmarks. Added the key to both string buckets
+  (the "three-place rule" — getter/setter, dump, expectedType).
+- [x] **FIX (DATA — pinned bookmarks could exceed cap + drift from
+  storage): `onTogglePin` rebuilt `pinnedBookmarks` from the
+  in-memory list rather than re-reading from storage.** SettingsStore
+  enforces FILE_BROWSER_PIN_CAP=12 and tab/newline sanitization;
+  the in-memory prepend bypassed both, so a 13th pin showed in the
+  bookmarks row but disappeared after app restart. Re-read via
+  `settings.getFileBrowserPinnedFolders()` after every mutation
+  in both `onTogglePin` and BookmarksRow's `onUnpin`.
+- [x] **FIX (UX — notification heart icon never reflected like
+  state): `CommandButton` was built once with the filled drawable
+  and never rebuilt.** Tapping the heart toggled the DB row but
+  the glyph stayed filled regardless. Added an outline drawable
+  (`ic_radioshed_heart_outline`), an in-memory `currentTrackLiked`
+  cache, and a `refreshCustomLayout()` method that re-emits the
+  layout via `MediaLibrarySession.setCustomLayout()` on track
+  transitions, like-toggle, and async DB resolution. Eager mirror
+  on tap so the user sees the new glyph immediately rather than
+  waiting for the DB round-trip.
+- [x] **FIX (FEATURE GAP — SPEC claimed notification has repeat
+  + shuffle actions but they weren't wired):** Added
+  `ACTION_CYCLE_REPEAT` and `ACTION_TOGGLE_SHUFFLE` SessionCommands
+  with state-driven icons (off / all / one for repeat; on / off
+  for shuffle), six new vector drawables. Player.Listener mirrors
+  in-app NowPlaying mode toggles back into the custom layout so
+  the notification glyph stays in sync regardless of where the
+  state changed.
+- [x] **FIX (PERF — DSL search did N serial selectTrackById and N
+  serial selectAlbumById calls): SearchRepository.searchTracksDsl
+  hit the DB ~200×N for a single keystroke.** Added
+  `selectTracksByIds` and `selectAlbumsByIds` SQLDelight queries
+  with `WHERE id IN ?`; replaced the per-id loop with a single
+  bulk lookup, plus pre-resolved year-filter into a `Map<Long,
+  Int?>`. Single-DB-hit per query path now.
+
 ---
 
 ## Appendix A — Compose Multiplatform vs native UI: when to fall back

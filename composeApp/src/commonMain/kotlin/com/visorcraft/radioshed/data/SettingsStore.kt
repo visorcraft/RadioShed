@@ -655,6 +655,12 @@ class SettingsStore(private val settings: Settings) {
             KEY_FILE_BROWSER_SORT, KEY_SEARCH_SCOPE,
             KEY_ALBUM_TRACK_SORT, KEY_ARTIST_TRACK_SORT, KEY_GENRE_TRACK_SORT,
             KEY_NOW_PLAYING_LAYOUT,
+            // Encoded list of user-pinned File Manager folders.
+            // Format is internal to getFileBrowserPinnedFolders /
+            // pinFileBrowserFolder; restore round-trips the raw
+            // string and the next call decodes it. Without this,
+            // backups silently dropped pinned bookmarks.
+            KEY_FILE_BROWSER_PINS,
         ).forEach { key ->
             settings.getStringOrNull(key)?.let {
                 out[key] = com.visorcraft.radioshed.source.BackupSettingValue.Str(it)
@@ -787,7 +793,8 @@ class SettingsStore(private val settings: Settings) {
         KEY_LIB_ARTIST_SORT, KEY_LIB_ALBUM_SORT, KEY_LIB_GENRE_SORT,
         KEY_FILE_BROWSER_SORT, KEY_SEARCH_SCOPE,
         KEY_ALBUM_TRACK_SORT, KEY_ARTIST_TRACK_SORT, KEY_GENRE_TRACK_SORT,
-        KEY_NOW_PLAYING_LAYOUT -> SettingType.STR
+        KEY_NOW_PLAYING_LAYOUT,
+        KEY_FILE_BROWSER_PINS -> SettingType.STR
         KEY_MATERIAL_YOU, KEY_REDUCE_MOTION, KEY_DRIVE_MODE,
         KEY_REPLAY_GAIN, KEY_AUTO_RESUME_STATION, KEY_AUTO_BACKUP,
         KEY_AUTO_RESCAN_ON_LAUNCH, KEY_EQ_ENABLED,
