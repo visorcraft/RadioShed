@@ -607,6 +607,38 @@ private fun ThemeChoiceRow(
                             else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                 )
             }
+            // Three-dot color preview — surface / primary / accent
+            // pulled from the static palette for the option's mode.
+            // Gives users a visual hint of the theme's vibe without
+            // having to flip into it. System mode shows mixed swatches
+            // since it adapts at runtime.
+            Spacer(Modifier.size(8.dp))
+            ThemeSwatchTrio(option.mode)
+        }
+    }
+}
+
+/**
+ * Static three-dot palette preview for a [ThemeMode]. Reads the
+ * baked-in color tokens from `RadioShedColors` so the swatches stay
+ * accurate without needing to instantiate a full ColorScheme — this
+ * is a settings-list affordance, not a real theme preview canvas.
+ */
+@Composable
+private fun ThemeSwatchTrio(mode: ThemeMode) {
+    val triplet = remember(mode) { com.visorcraft.radioshed.ui.theme.previewSwatchesFor(mode) }
+    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        triplet.forEach { color ->
+            Box(
+                modifier = Modifier
+                    .size(12.dp)
+                    .background(color, CircleShape)
+                    .border(
+                        width = 1.dp,
+                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
+                        shape = CircleShape,
+                    ),
+            )
         }
     }
 }

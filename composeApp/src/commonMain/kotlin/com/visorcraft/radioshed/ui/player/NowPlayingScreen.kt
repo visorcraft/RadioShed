@@ -147,6 +147,7 @@ fun NowPlayingScreen(
     // mirror StateFlow in SettingsStore propagates writes from any
     // setDriveMode() call.
     val driveMode by settings.driveModeFlow.collectAsState()
+    val finiteQueueProgress by stationPlayback.finiteQueueProgress.collectAsState()
     val reduceMotion = remember(settings) { settings.getReduceMotion() }
     val nowPlaying by audioEngine.nowPlaying.collectAsState()
     val state by audioEngine.state.collectAsState()
@@ -662,6 +663,7 @@ fun NowPlayingScreen(
                         }
                     },
                     driveMode = driveMode,
+                    queueProgress = finiteQueueProgress,
                 )
             } else {
                 TwoPaneLayout(
@@ -709,6 +711,7 @@ fun NowPlayingScreen(
                         }
                     },
                     driveMode = driveMode,
+                    queueProgress = finiteQueueProgress,
                 )
             }
             if (artworkLightboxOpen) {
@@ -827,6 +830,7 @@ private fun CompactLayout(
     onTapArtist: () -> Unit,
     onTapAlbum: () -> Unit,
     driveMode: Boolean,
+    queueProgress: Pair<Int, Int>? = null,
 ) {
     Column(
         modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 16.dp),
@@ -849,6 +853,7 @@ private fun CompactLayout(
             alignment = Alignment.CenterHorizontally,
             onTapArtist = onTapArtist,
             onTapAlbum = onTapAlbum,
+            queueProgress = queueProgress,
         )
         Spacer(Modifier.height(16.dp))
         Scrubber(positionMs, durationMs, onSeek)
@@ -907,6 +912,7 @@ private fun TwoPaneLayout(
     onTapArtist: () -> Unit,
     onTapAlbum: () -> Unit,
     driveMode: Boolean,
+    queueProgress: Pair<Int, Int>? = null,
 ) {
     Row(
         modifier = Modifier.fillMaxSize().padding(24.dp),
@@ -948,6 +954,7 @@ private fun TwoPaneLayout(
                 alignment = Alignment.Start,
                 onTapArtist = onTapArtist,
                 onTapAlbum = onTapAlbum,
+                queueProgress = queueProgress,
             )
             Spacer(Modifier.height(24.dp))
             Scrubber(positionMs, durationMs, onSeek)
@@ -1166,6 +1173,7 @@ private fun TrackInfo(
     alignment: Alignment.Horizontal,
     onTapArtist: () -> Unit = {},
     onTapAlbum: () -> Unit = {},
+    queueProgress: Pair<Int, Int>? = null,
 ) {
     Column(horizontalAlignment = alignment, modifier = Modifier.fillMaxWidth()) {
         Text(
@@ -1233,6 +1241,18 @@ private fun TrackInfo(
                 text = "from $stationName",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
+                textAlign = if (alignment == Alignment.CenterHorizontally) TextAlign.Center else TextAlign.Start,
+            )
+        }
+        // Track N of M chip — only shown when we're playing a finite
+        // queue (the user tapped a track in a list view). Hidden in
+        // station mode since the candidate pool is unbounded there.
+        queueProgress?.let { (current, total) ->
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = "Track $current of $total",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.55f),
                 textAlign = if (alignment == Alignment.CenterHorizontally) TextAlign.Center else TextAlign.Start,
             )
         }

@@ -20,6 +20,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
+import androidx.compose.material.icons.automirrored.filled.Sort
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PlayArrow
@@ -71,12 +73,21 @@ fun GenreDetailScreen(
     genre: String,
     onBack: () -> Unit,
     libraryRepo: LibraryRepository = koinInject(),
+    stationRepo: com.visorcraft.radioshed.data.StationRepository = koinInject(),
     stationPlayback: StationPlayback = koinInject(),
     audioEngine: com.visorcraft.radioshed.audio.AudioEngine = koinInject(),
 ) {
     var tracks by remember { mutableStateOf<List<Track>>(emptyList()) }
     var contextTrackId by remember { mutableStateOf<Long?>(null) }
     var overflowOpen by remember { mutableStateOf(false) }
+    var sortMenuOpen by remember { mutableStateOf(false) }
+    var trackSort by remember { mutableStateOf(GenreTrackSort.TitleAsc) }
+    var playCounts by remember { mutableStateOf<Map<Long, Long>>(emptyMap()) }
+    LaunchedEffect(tracks) {
+        if (tracks.isNotEmpty()) {
+            playCounts = stationRepo.playCountForTracks(tracks.map { it.id })
+        }
+    }
     val nowPlaying by audioEngine.nowPlaying.collectAsState()
     val currentTrackId = nowPlaying?.trackId
 
@@ -90,6 +101,39 @@ fun GenreDetailScreen(
                 title = { Text(genre, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 navigationIcon = { TextButton(onClick = onBack) { Text("Back") } },
                 actions = {
+                    Box {
+                        IconButton(onClick = { sortMenuOpen = true }) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.Sort,
+                                contentDescription = "Sort tracks",
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = sortMenuOpen,
+                            onDismissRequest = { sortMenuOpen = false },
+                        ) {
+                            GenreTrackSort.entries.forEach { opt ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(opt.label, modifier = Modifier.weight(1f))
+                                            if (trackSort == opt) {
+                                                Icon(
+                                                    imageVector = Icons.Filled.Check,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(16.dp),
+                                                )
+                                            }
+                                        }
+                                    },
+                                    onClick = {
+                                        trackSort = opt
+                                        sortMenuOpen = false
+                                    },
+                                )
+                            }
+                        }
+                    }
                     Box {
                         IconButton(onClick = { overflowOpen = true }) {
                             Icon(Icons.Filled.MoreVert, contentDescription = "More")
@@ -192,17 +236,20 @@ fun GenreDetailScreen(
                     )
                 }
             } else {
+                val sortedTracks = remember(tracks, trackSort, playCounts) {
+                    sortGenreTracks(tracks, trackSort, playCounts)
+                }
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(vertical = 4.dp),
                 ) {
-                    items(tracks, key = { it.id }) { track ->
+                    items(sortedTracks, key = { it.id }) { track ->
                         GenreTrackRow(
                             track = track,
                             isCurrent = track.id == currentTrackId,
                             onTap = {
-                                val idx = tracks.indexOf(track).coerceAtLeast(0)
-                                stationPlayback.playTracks(tracks, startIndex = idx)
+                                val idx = sortedTracks.indexOf(track).coerceAtLeast(0)
+                                stationPlayback.playTracks(sortedTracks, startIndex = idx)
                             },
                             onLongPress = { contextTrackId = track.id },
                         )
@@ -268,4 +315,27 @@ private fun GenreTrackRow(
             }
         }
     }
+}
+
+/**
+ * Sort options for the Genre detail track list. Default
+ * [TitleAsc] reads alphabetically; users browsing a genre tend to
+ * scan by name rather than expect a canonical order.
+ */
+private enum class GenreTrackSort(val label: String) {
+    TitleAsc("Title A→Z"),
+    DurationAsc("Duration (shortest)"),
+    DurationDesc("Duration (longest)"),
+    MostPlayed("Most played"),
+}
+
+private fun sortGenreTracks(
+    tracks: List<com.visorcraft.radioshed.domain.Track>,
+    sort: GenreTrackSort,
+    playCounts: Map<Long, Long>,
+): List<com.visorcraft.radioshed.domain.Track> = when (sort) {
+    GenreTrackSort.TitleAsc -> tracks.sortedBy { it.title.lowercase() }
+    GenreTrackSort.DurationAsc -> tracks.sortedBy { it.durationMs }
+    GenreTrackSort.DurationDesc -> tracks.sortedByDescending { it.durationMs }
+    GenreTrackSort.MostPlayed -> tracks.sortedByDescending { playCounts[it.id] ?: 0L }
 }

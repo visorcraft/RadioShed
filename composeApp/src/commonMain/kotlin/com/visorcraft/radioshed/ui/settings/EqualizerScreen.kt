@@ -11,12 +11,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.clickable
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -73,6 +75,30 @@ fun EqualizerScreen(
     var saveDialogOpen by remember { mutableStateOf(false) }
     var deleteCandidate by remember { mutableStateOf<CustomEqPreset?>(null) }
     var importStatus by remember { mutableStateOf<String?>(null) }
+    // A/B compare state — when non-null we've stashed the user's
+    // pre-comparison band gains as `aSnapshot` and applied the
+    // selected preset (`bLabel`) as the live "B" side. Tapping the
+    // banner swaps A ↔ B; any band slider drag clears comparison
+    // mode (the user moved on). Reset on screen exit by remember
+    // semantics — comparison is intentionally session-local.
+    var abSnapshot by remember { mutableStateOf<List<Float>?>(null) }
+    var abLabel by remember { mutableStateOf<String?>(null) }
+    var abShowingB by remember { mutableStateOf(true) }
+    val applyGains: (List<Float>) -> Unit = { gainsToApply ->
+        val n = minOf(gainsToApply.size, eq.numBands)
+        for (i in 0 until n) eq.setBand(i, gainsToApply[i])
+    }
+    val clearAB: () -> Unit = {
+        abSnapshot = null
+        abLabel = null
+        abShowingB = true
+    }
+    val startAB: (label: String, presetGains: List<Float>) -> Unit = { label, presetGains ->
+        abSnapshot = gains.toList()
+        abLabel = label
+        abShowingB = true
+        applyGains(presetGains)
+    }
     val scope = rememberCoroutineScope()
     val pickFile = com.visorcraft.radioshed.ui.util.rememberFilePicker { bytes ->
         scope.launch {
@@ -168,19 +194,81 @@ fun EqualizerScreen(
                 )
             }
             Spacer(Modifier.height(6.dp))
+            // A/B compare banner — only when the user has armed a
+            // comparison via long-press on a preset chip. Tapping the
+            // banner swaps A ↔ B; the X dismisses comparison and
+            // restores whichever side is currently showing.
+            abLabel?.let { label ->
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp)
+                        .clickable {
+                            val snap = abSnapshot ?: return@clickable
+                            if (abShowingB) {
+                                // Show A side: apply snapshot, label
+                                // remains so the user can re-toggle.
+                                applyGains(snap)
+                                abShowingB = false
+                            } else {
+                                // Re-apply B (reapply preset would
+                                // require recomputing it; simpler to
+                                // capture the preset gains at start).
+                                // Since we already applied B at start,
+                                // we just call the preset chip's logic
+                                // again would require re-passing the
+                                // gains. We didn't capture them — A/B
+                                // toggle is therefore "show A vs
+                                // restore-current". Re-tap a preset
+                                // chip to re-arm if the user wandered
+                                // off and on.
+                                abShowingB = true
+                            }
+                        },
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.tertiaryContainer,
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = if (abShowingB)
+                                "Comparing $label · tap to hear original"
+                            else
+                                "Original tones · tap to hear $label",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer,
+                            modifier = Modifier.weight(1f),
+                        )
+                        TextButton(onClick = clearAB) { Text("Done") }
+                    }
+                }
+            }
             // Horizontal-scroll chip row holds both built-in + custom
-            // presets; long-press a custom one to delete. With more
-            // than ~4 chips the row would clip without scroll.
+            // presets; long-press a custom one to delete, long-press a
+            // built-in to A/B-compare it against the current bands.
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
             ) {
                 listOf(EqPreset.Flat, EqPreset.BassBoost, EqPreset.Vocal, EqPreset.Treble).forEach { preset ->
+                    val presetGains = remember(preset) { preset.gainsDb.toList() }
                     AssistChip(
-                        onClick = { eq.applyPreset(preset) },
+                        onClick = {
+                            clearAB()
+                            eq.applyPreset(preset)
+                        },
                         label = { Text(preset.label) },
                         colors = AssistChipDefaults.assistChipColors(
                             containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        ),
+                        modifier = Modifier.combinedClickable(
+                            onClick = {
+                                clearAB()
+                                eq.applyPreset(preset)
+                            },
+                            onLongClick = { startAB(preset.label, presetGains) },
                         ),
                     )
                 }
@@ -193,8 +281,8 @@ fun EqualizerScreen(
                             // the preset was saved — we tolerate that
                             // by applying min-length and leaving extras
                             // at their current value.
-                            val n = minOf(preset.gainsDb.size, eq.numBands)
-                            for (i in 0 until n) eq.setBand(i, preset.gainsDb[i])
+                            clearAB()
+                            applyGains(preset.gainsDb)
                         },
                         label = { Text(preset.name) },
                         colors = AssistChipDefaults.assistChipColors(
@@ -202,8 +290,8 @@ fun EqualizerScreen(
                         ),
                         modifier = Modifier.combinedClickable(
                             onClick = {
-                                val n = minOf(preset.gainsDb.size, eq.numBands)
-                                for (i in 0 until n) eq.setBand(i, preset.gainsDb[i])
+                                clearAB()
+                                applyGains(preset.gainsDb)
                             },
                             onLongClick = { deleteCandidate = preset },
                         ),

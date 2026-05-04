@@ -189,9 +189,22 @@ fun MiniPlayer(
                         fontWeight = FontWeight.Medium,
                         maxLines = 1,
                     )
-                    val subtitle = listOfNotNull(playable.artist, playable.album)
+                    // When paused, surface what's coming up so the
+                    // user knows what they'll hear when they tap
+                    // Play. Falls back to the artist/album subtitle
+                    // when the queue is empty (e.g., the current
+                    // track is the last one in an ad-hoc list) or
+                    // when the player is actively playing.
+                    val baseSubtitle = listOfNotNull(playable.artist, playable.album)
                         .joinToString(" · ")
-                        .ifBlank { stateLabel(state) }
+                    val pausedNextLabel = if (state == PlayerState.Paused) {
+                        val next = remember(state, playable.trackId) {
+                            stationPlayback.upcoming(1).firstOrNull()
+                        }
+                        next?.title?.ifBlank { null }?.let { "Next: $it" }
+                    } else null
+                    val subtitle = pausedNextLabel
+                        ?: baseSubtitle.ifBlank { stateLabel(state) }
                     Text(
                         text = subtitle,
                         style = MaterialTheme.typography.bodySmall,

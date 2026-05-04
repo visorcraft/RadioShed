@@ -23,7 +23,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
+import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.Album
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PlayArrow
@@ -93,6 +95,8 @@ fun ArtistDetailScreen(
     var playCounts by remember { mutableStateOf<Map<Long, Long>>(emptyMap()) }
     var contextTrackId by remember { mutableStateOf<Long?>(null) }
     var overflowOpen by remember { mutableStateOf(false) }
+    var sortMenuOpen by remember { mutableStateOf(false) }
+    var trackSort by remember { mutableStateOf(ArtistTrackSort.AlbumOrder) }
     val nowPlaying by audioEngine.nowPlaying.collectAsState()
     val currentTrackId = nowPlaying?.trackId
 
@@ -113,6 +117,39 @@ fun ArtistDetailScreen(
                 title = { Text(artist?.name ?: "Artist", maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 navigationIcon = { TextButton(onClick = onBack) { Text("Back") } },
                 actions = {
+                    Box {
+                        IconButton(onClick = { sortMenuOpen = true }) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.Sort,
+                                contentDescription = "Sort tracks",
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = sortMenuOpen,
+                            onDismissRequest = { sortMenuOpen = false },
+                        ) {
+                            ArtistTrackSort.entries.forEach { opt ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(opt.label, modifier = Modifier.weight(1f))
+                                            if (trackSort == opt) {
+                                                Icon(
+                                                    imageVector = Icons.Filled.Check,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(16.dp),
+                                                )
+                                            }
+                                        }
+                                    },
+                                    onClick = {
+                                        trackSort = opt
+                                        sortMenuOpen = false
+                                    },
+                                )
+                            }
+                        }
+                    }
                     Box {
                         IconButton(onClick = { overflowOpen = true }) {
                             Icon(Icons.Filled.MoreVert, contentDescription = "More")
@@ -244,18 +281,21 @@ fun ArtistDetailScreen(
             )
             Spacer(Modifier.height(4.dp))
 
+            val sortedTracks = remember(tracks, trackSort, playCounts) {
+                sortArtistTracks(tracks, trackSort, playCounts)
+            }
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(vertical = 4.dp),
             ) {
-                items(tracks, key = { it.id }) { track ->
+                items(sortedTracks, key = { it.id }) { track ->
                     ArtistTrackRow(
                         track = track,
                         isCurrent = track.id == currentTrackId,
                         playCount = playCounts[track.id] ?: 0L,
                         onTap = {
-                            val idx = tracks.indexOf(track).coerceAtLeast(0)
-                            stationPlayback.playTracks(tracks, startIndex = idx)
+                            val idx = sortedTracks.indexOf(track).coerceAtLeast(0)
+                            stationPlayback.playTracks(sortedTracks, startIndex = idx)
                         },
                         onLongPress = { contextTrackId = track.id },
                     )
@@ -390,4 +430,32 @@ private fun formatArtistRuntime(totalMs: Long): String {
     val hours = totalMin / 60L
     val mins = totalMin % 60L
     return if (mins == 0L) "${hours}h" else "${hours}h ${mins}m"
+}
+
+/**
+ * Sort options for the Artist detail track list. Default
+ * [AlbumOrder] matches the order coming out of the repository
+ * (album → disc → track) — what users expect when they hit "Play"
+ * on the artist. Sort state is local-only.
+ */
+private enum class ArtistTrackSort(val label: String) {
+    AlbumOrder("Album order"),
+    TitleAsc("Title A→Z"),
+    DurationAsc("Duration (shortest)"),
+    DurationDesc("Duration (longest)"),
+    MostPlayed("Most played"),
+    RecentlyAdded("Recently added"),
+}
+
+private fun sortArtistTracks(
+    tracks: List<com.visorcraft.radioshed.domain.Track>,
+    sort: ArtistTrackSort,
+    playCounts: Map<Long, Long>,
+): List<com.visorcraft.radioshed.domain.Track> = when (sort) {
+    ArtistTrackSort.AlbumOrder -> tracks
+    ArtistTrackSort.TitleAsc -> tracks.sortedBy { it.title.lowercase() }
+    ArtistTrackSort.DurationAsc -> tracks.sortedBy { it.durationMs }
+    ArtistTrackSort.DurationDesc -> tracks.sortedByDescending { it.durationMs }
+    ArtistTrackSort.MostPlayed -> tracks.sortedByDescending { playCounts[it.id] ?: 0L }
+    ArtistTrackSort.RecentlyAdded -> tracks.sortedByDescending { it.addedAt }
 }

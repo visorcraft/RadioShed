@@ -2029,6 +2029,67 @@ than the v2 polish:
   iOS `NSDateFormatter`). Falls back to the prior generic label
   on any formatter exception.
 
+#### Phase 19 polish (continued, batch 7)
+
+- [x] **Theme picker color swatches.** Each option in the
+  Settings → Theme picker now shows three small color dots
+  (background / surface tint / primary accent) pulled from the
+  baked palette via `previewSwatchesFor(mode)` in
+  `ui/theme/Color.kt`. System mode interleaves a Light + Dark
+  background dot since the actual scheme is OS-decided at
+  runtime.
+- [x] **Detail-screen track sort menus.** Album, Artist, and
+  Genre detail screens each gained a sort-icon dropdown alongside
+  the overflow menu. AlbumTrackSort defaults to
+  `TrackNumber`; ArtistTrackSort defaults to `AlbumOrder`;
+  GenreTrackSort defaults to `TitleAsc`. Each enum is local to
+  its screen — sort state isn't persisted, since the user's
+  intent is usually session-local.
+- [x] **Playlist detail one-click sort.** Three new menu items
+  in the playlist overflow — "Sort A → Z", "Sort by duration",
+  "Shuffle once" — each commit a fresh persisted track order
+  via `PlaylistRepository.setTrackOrder` and reload. Drag-to-
+  reorder still works for fine-tuning after a one-click sort.
+- [x] **MiniPlayer "Next: X" when paused.** The artist/album
+  subtitle is replaced with `Next: <track>` when the player is
+  paused and the queue has at least one upcoming entry —
+  `stationPlayback.upcoming(1).firstOrNull()`. Falls back to the
+  base subtitle (and then to `stateLabel`) when queue is empty.
+- [x] **Now Playing queue-position chip.** New
+  `StationPlayback.finiteQueueProgress: StateFlow<Pair<Int, Int>?>`
+  publishes `(currentIdx1Based, totalSize)` while the active
+  surface is a finite `playTracks` queue, and resets to null on
+  station entry / stop. NowPlayingScreen surfaces it as a small
+  "Track 4 of 12" label below the station name; hidden in
+  station mode (the candidate pool is unbounded so the label
+  would be misleading).
+- [x] **EQ A/B compare.** Long-press a built-in preset chip in
+  EqualizerScreen to arm a comparison: the current band gains
+  are snapshotted, the preset is applied, and a tertiary-color
+  banner appears above the chip row. Tapping the banner toggles
+  between the preset ("B") and the original ("A"); the "Done"
+  text-button releases comparison. Picking another preset or
+  custom preset releases automatically. Custom-preset long-
+  press still deletes (long-standing affordance, kept).
+- [x] **History "Continue session from here".** Tapping a
+  history row used to play the visible-list newest-first, which
+  produced backwards-flowing playback. The tap now selects all
+  visible entries with `playedAt ≤ entry.playedAt`, reverses
+  them to chronological order, and seeds the queue starting
+  from the tapped entry — re-creating the original listening
+  session forward in time.
+- [x] **Crossfade + gapless verification.** Audited
+  `AudioEngineAndroid` for both. **Gapless:** the `playTracks`
+  finite-list path goes through ExoPlayer's `setMediaItems`
+  (line 163) which is gapless-capable when the underlying
+  decoder reports gapless metadata; the single-track
+  `setMediaItem` path used for station-driven playback is not
+  gapless by definition because each track loads independently.
+  **Crossfade:** not implemented — would need a dual-engine
+  setup with overlap/fade buses. Both items remain deferred to a
+  Phase 20+ audio refactor; documented here so the gap is
+  explicit instead of implicit.
+
 ---
 
 ## Appendix A — Compose Multiplatform vs native UI: when to fall back

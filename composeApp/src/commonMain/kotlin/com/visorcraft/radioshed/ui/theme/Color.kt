@@ -45,3 +45,17 @@ internal val DarkOnSurface = Color(0xFFE9E1DD)
 // ---- AMOLED variant (true black) — for the AMOLED theme option in Settings ----
 internal val AmoledBackground = Color(0xFF000000)
 internal val AmoledSurface = Color(0xFF000000)
+
+/**
+ * Static three-color preview swatch list for a given theme mode.
+ * Order is (background, surface-tint, primary-accent) so the trio
+ * reads left-to-right from "page" to "accent" in the picker. System
+ * mode interleaves a light and a dark cue since the theme will
+ * follow the OS at runtime — we can't know ahead of time.
+ */
+fun previewSwatchesFor(mode: ThemeMode): List<Color> = when (mode) {
+    ThemeMode.System -> listOf(LightBackground, DarkBackground, LightPrimary)
+    ThemeMode.Light -> listOf(LightBackground, LightSecondaryContainer, LightPrimary)
+    ThemeMode.Dark -> listOf(DarkBackground, DarkSecondaryContainer, DarkPrimary)
+    ThemeMode.Amoled -> listOf(AmoledBackground, DarkSecondaryContainer, DarkPrimary)
+}

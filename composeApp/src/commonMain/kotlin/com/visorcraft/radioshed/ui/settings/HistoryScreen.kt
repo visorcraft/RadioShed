@@ -308,19 +308,26 @@ fun HistoryScreen(
                                     track = trackById[entry.trackId],
                                     isCurrent = entry.trackId == currentTrackId,
                                     onTap = {
-                                        // Same indexing logic as
-                                        // before, operating on the
-                                        // filtered list so skip-next
-                                        // walks the visible results,
-                                        // not hidden ones.
-                                        val pairs = visibleEntries.mapNotNull { e ->
-                                            trackById[e.trackId]?.let { e.id to it }
-                                        }
-                                        val idx = pairs.indexOfFirst { it.first == entry.id }
-                                        if (idx < 0) return@HistoryRow
+                                        // "Continue session from here":
+                                        // play chronologically forward
+                                        // from the tapped entry. The
+                                        // visible list is newest-first
+                                        // for human reading, but
+                                        // playback should re-create the
+                                        // original session order — so
+                                        // we filter to entries that
+                                        // happened ≤ this entry's time
+                                        // and reverse them. Falls back
+                                        // to single-track play if the
+                                        // session reduces to one entry.
+                                        val sessionTracks = visibleEntries
+                                            .filter { it.playedAt <= entry.playedAt }
+                                            .reversed()
+                                            .mapNotNull { trackById[it.trackId] }
+                                        if (sessionTracks.isEmpty()) return@HistoryRow
                                         stationPlayback.playTracks(
-                                            pairs.map { it.second },
-                                            startIndex = idx,
+                                            sessionTracks,
+                                            startIndex = 0,
                                         )
                                     },
                                     onLongPress = {

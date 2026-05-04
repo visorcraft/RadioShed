@@ -87,6 +87,18 @@ class StationPlayback(
     }
 
     /**
+     * Finite-queue position published as (currentIndex1Based, totalSize)
+     * when [playTracks] is the active play surface (no station). Null
+     * when in station-driven mode (the station is conceptually
+     * infinite, so a "Track N of M" label is meaningless). The Now
+     * Playing screen reads this flow to render a small "Track 4 of
+     * 12" chip beneath the title.
+     */
+    private val _finiteQueueProgress = MutableStateFlow<Pair<Int, Int>?>(null)
+    val finiteQueueProgress: StateFlow<Pair<Int, Int>?> =
+        _finiteQueueProgress.asStateFlow()
+
+    /**
      * Repeat mode applied at track-transition time:
      *  - [RepeatMode.Off] / [RepeatMode.All]: natural advance via
      *    [advanceToNext]. The underlying [PlaybackQueue] already
@@ -201,6 +213,14 @@ class StationPlayback(
     }
 
     private var queue: PlaybackQueue? = null
+
+    /**
+     * The finite list a [playTracks] caller seeded the queue with, kept
+     * around so we can recompute "Track N of M" when the cursor
+     * advances. Null in station mode (the candidate pool there is
+     * conceptually infinite). Cleared on station entry / stop().
+     */
+    private var finiteTracksSnapshot: List<Track>? = null
 
     /** The track currently loaded into the AudioEngine. Used to push to
      *  history when the user advances forward. */
@@ -414,6 +434,11 @@ class StationPlayback(
             queue = newQueue
             _candidateCount.value = newQueue.candidateCount
             _priorityCountFlow.value = 0
+            // Station mode: clear finite-queue progress flow — the
+            // station's pool is conceptually unbounded, so "Track N
+            // of M" doesn't make sense.
+            finiteTracksSnapshot = null
+            _finiteQueueProgress.value = null
 
             // Switching stations clears history — the previous station's tracks
             // aren't a logical "back" target from the new station's playback.
@@ -639,6 +664,11 @@ class StationPlayback(
                 queue = newQueue
                 _candidateCount.value = newQueue.candidateCount
                 _priorityCountFlow.value = 0
+                // Snapshot the finite list so we can compute "Track N
+                // of M" against it as the cursor advances. Cleared on
+                // station entry so station mode reverts to null.
+                finiteTracksSnapshot = tracks
+                _finiteQueueProgress.value = (startIndex.coerceIn(0, tracks.size - 1) + 1) to tracks.size
                 suppressAutoAdvance = true
                 scheduleClearSuppress()
                 advanceToNext()
@@ -703,6 +733,8 @@ class StationPlayback(
                 _candidateCount.value = 0
                 queue = null
                 _priorityCountFlow.value = 0
+                finiteTracksSnapshot = null
+                _finiteQueueProgress.value = null
                 history.clear()
                 currentTrack = null
                 trackStartedAtMs = null
@@ -816,6 +848,16 @@ class StationPlayback(
         recordPreviousIfAny()
         currentTrack = track
         trackStartedAtMs = nowMillis()
+        // Recompute finite-queue progress whenever the active track
+        // changes. In station mode the snapshot is null and the
+        // flow stays null. In finite mode (playTracks), look up the
+        // new track in the snapshot and publish its 1-based index.
+        finiteTracksSnapshot?.let { snapshot ->
+            val idx = snapshot.indexOfFirst { it.id == track.id }
+            if (idx >= 0) {
+                _finiteQueueProgress.value = (idx + 1) to snapshot.size
+            }
+        }
         // Apply ReplayGain to the player volume BEFORE issuing play(),
         // so the new track starts at the corrected level instead of
         // glitching at full and then snapping down. The track value is

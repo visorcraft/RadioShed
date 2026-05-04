@@ -146,6 +146,56 @@ fun PlaylistDetailScreen(
                                     }
                                 },
                             )
+                            // One-click sort actions. These rewrite
+                            // the persisted track order via
+                            // setTrackOrder — distinct from the
+                            // drag-to-reorder affordance which works
+                            // one row at a time. Each sort produces
+                            // a fresh ordering rather than toggling,
+                            // so re-applying the same sort is
+                            // idempotent (no-op once stable).
+                            androidx.compose.material3.HorizontalDivider()
+                            DropdownMenuItem(
+                                text = { Text("Sort A → Z") },
+                                enabled = tracks.size > 1,
+                                onClick = {
+                                    menuOpen = false
+                                    val ordered = tracks
+                                        .sortedBy { it.title.lowercase() }
+                                        .map { it.id }
+                                    scope.launch {
+                                        repo.setTrackOrder(playlistId, ordered)
+                                        reload()
+                                    }
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Sort by duration") },
+                                enabled = tracks.size > 1,
+                                onClick = {
+                                    menuOpen = false
+                                    val ordered = tracks
+                                        .sortedBy { it.durationMs }
+                                        .map { it.id }
+                                    scope.launch {
+                                        repo.setTrackOrder(playlistId, ordered)
+                                        reload()
+                                    }
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Shuffle once") },
+                                enabled = tracks.size > 1,
+                                onClick = {
+                                    menuOpen = false
+                                    val ordered = tracks.shuffled().map { it.id }
+                                    scope.launch {
+                                        repo.setTrackOrder(playlistId, ordered)
+                                        reload()
+                                    }
+                                },
+                            )
+                            androidx.compose.material3.HorizontalDivider()
                             DropdownMenuItem(
                                 text = { Text("Delete playlist") },
                                 onClick = {
