@@ -75,13 +75,17 @@ fun EqualizerScreen(
     var saveDialogOpen by remember { mutableStateOf(false) }
     var deleteCandidate by remember { mutableStateOf<CustomEqPreset?>(null) }
     var importStatus by remember { mutableStateOf<String?>(null) }
-    // A/B compare state — when non-null we've stashed the user's
-    // pre-comparison band gains as `aSnapshot` and applied the
-    // selected preset (`bLabel`) as the live "B" side. Tapping the
-    // banner swaps A ↔ B; any band slider drag clears comparison
-    // mode (the user moved on). Reset on screen exit by remember
+    // A/B compare state — `abSnapshot` stashes the user's
+    // pre-comparison band gains (the "A" side); `abPresetGains`
+    // captures the just-applied preset gains (the "B" side) so the
+    // banner can swap between them indefinitely. Tapping the banner
+    // toggles A ↔ B; "Done" releases comparison and leaves whichever
+    // side is currently audible. Picking a different preset chip,
+    // applying a custom preset, or moving a band slider clears
+    // comparison automatically. Reset on screen exit by remember
     // semantics — comparison is intentionally session-local.
     var abSnapshot by remember { mutableStateOf<List<Float>?>(null) }
+    var abPresetGains by remember { mutableStateOf<List<Float>?>(null) }
     var abLabel by remember { mutableStateOf<String?>(null) }
     var abShowingB by remember { mutableStateOf(true) }
     val applyGains: (List<Float>) -> Unit = { gainsToApply ->
@@ -90,11 +94,13 @@ fun EqualizerScreen(
     }
     val clearAB: () -> Unit = {
         abSnapshot = null
+        abPresetGains = null
         abLabel = null
         abShowingB = true
     }
     val startAB: (label: String, presetGains: List<Float>) -> Unit = { label, presetGains ->
         abSnapshot = gains.toList()
+        abPresetGains = presetGains
         abLabel = label
         abShowingB = true
         applyGains(presetGains)
@@ -205,23 +211,12 @@ fun EqualizerScreen(
                         .padding(bottom = 8.dp)
                         .clickable {
                             val snap = abSnapshot ?: return@clickable
+                            val bGains = abPresetGains ?: return@clickable
                             if (abShowingB) {
-                                // Show A side: apply snapshot, label
-                                // remains so the user can re-toggle.
                                 applyGains(snap)
                                 abShowingB = false
                             } else {
-                                // Re-apply B (reapply preset would
-                                // require recomputing it; simpler to
-                                // capture the preset gains at start).
-                                // Since we already applied B at start,
-                                // we just call the preset chip's logic
-                                // again would require re-passing the
-                                // gains. We didn't capture them — A/B
-                                // toggle is therefore "show A vs
-                                // restore-current". Re-tap a preset
-                                // chip to re-arm if the user wandered
-                                // off and on.
+                                applyGains(bGains)
                                 abShowingB = true
                             }
                         },
@@ -254,11 +249,13 @@ fun EqualizerScreen(
             ) {
                 listOf(EqPreset.Flat, EqPreset.BassBoost, EqPreset.Vocal, EqPreset.Treble).forEach { preset ->
                     val presetGains = remember(preset) { preset.gainsDb.toList() }
+                    // The chip's `onClick` is unreachable because the
+                    // outer `combinedClickable` consumes the gesture
+                    // first; we keep AssistChip purely for its label
+                    // + color affordance and drive both tap and
+                    // long-press through the modifier.
                     AssistChip(
-                        onClick = {
-                            clearAB()
-                            eq.applyPreset(preset)
-                        },
+                        onClick = {},
                         label = { Text(preset.label) },
                         colors = AssistChipDefaults.assistChipColors(
                             containerColor = MaterialTheme.colorScheme.surfaceVariant,
@@ -274,22 +271,20 @@ fun EqualizerScreen(
                 }
                 customPresets.forEach { preset ->
                     AssistChip(
-                        onClick = {
-                            // Apply: write each saved gain back to the
-                            // controller. Lengths mismatch when the
-                            // device's band count differs from when
-                            // the preset was saved — we tolerate that
-                            // by applying min-length and leaving extras
-                            // at their current value.
-                            clearAB()
-                            applyGains(preset.gainsDb)
-                        },
+                        onClick = {},
                         label = { Text(preset.name) },
                         colors = AssistChipDefaults.assistChipColors(
                             containerColor = MaterialTheme.colorScheme.primaryContainer,
                         ),
                         modifier = Modifier.combinedClickable(
                             onClick = {
+                                // Apply: write each saved gain back to
+                                // the controller. Lengths mismatch when
+                                // the device's band count differs from
+                                // when the preset was saved — we
+                                // tolerate that by applying min-length
+                                // and leaving extras at their current
+                                // value.
                                 clearAB()
                                 applyGains(preset.gainsDb)
                             },
@@ -305,7 +300,16 @@ fun EqualizerScreen(
                 gains = gains,
                 frequencies = eq.bandFrequenciesHz,
                 gainRangeDb = eq.gainRangeDb,
-                onChange = eq::setBand,
+                // A manual band edit ends the A/B comparison — the
+                // user has just made the bands their own; we don't
+                // want a subsequent banner tap to overwrite their
+                // tweak with a stale snapshot. clearAB() resets the
+                // comparison state and hides the banner; the actual
+                // bands stay where the user moved them.
+                onChange = { idx, gain ->
+                    clearAB()
+                    eq.setBand(idx, gain)
+                },
             )
         }
     }

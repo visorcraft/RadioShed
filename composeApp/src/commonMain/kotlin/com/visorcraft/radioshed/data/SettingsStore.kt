@@ -464,6 +464,7 @@ class SettingsStore(private val settings: Settings) {
             KEY_MATERIAL_YOU, KEY_REDUCE_MOTION, KEY_DRIVE_MODE,
             KEY_REPLAY_GAIN, KEY_AUTO_RESUME_STATION, KEY_AUTO_BACKUP,
             KEY_AUTO_RESCAN_ON_LAUNCH, KEY_EQ_ENABLED,
+            KEY_STATIONS_HIDE_BUILTINS,
         ).forEach { key ->
             if (settings.hasKey(key)) {
                 out[key] = com.visorcraft.radioshed.source.BackupSettingValue.Bool(
@@ -558,7 +559,8 @@ class SettingsStore(private val settings: Settings) {
         KEY_FILE_BROWSER_SORT -> SettingType.STR
         KEY_MATERIAL_YOU, KEY_REDUCE_MOTION, KEY_DRIVE_MODE,
         KEY_REPLAY_GAIN, KEY_AUTO_RESUME_STATION, KEY_AUTO_BACKUP,
-        KEY_AUTO_RESCAN_ON_LAUNCH, KEY_EQ_ENABLED -> SettingType.BOOL
+        KEY_AUTO_RESCAN_ON_LAUNCH, KEY_EQ_ENABLED,
+        KEY_STATIONS_HIDE_BUILTINS -> SettingType.BOOL
         KEY_USER_VOLUME, KEY_REPLAY_GAIN_PREAMP,
         KEY_FONT_SCALE, KEY_LYRICS_SCALE -> SettingType.FLOAT
         KEY_END_FADE_SEC, KEY_STATIONS_TILE_SIZE -> SettingType.INT

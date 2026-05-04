@@ -554,12 +554,29 @@ fun LibraryBrowserScreen(
                         LaunchedEffect(artistFilter) {
                             artistTracks = libraryRepo.tracksForArtist(artistFilter!!.id)
                         }
+                        // Apply the same filter the user typed into the
+                        // Songs quick-filter field — without this, the
+                        // filter text remains visible and looks active
+                        // while the artist-filtered list ignores it
+                        // entirely. Empty filter is a passthrough.
+                        val filteredArtistTracks = remember(artistTracks, songsFilter) {
+                            val q = songsFilter.trim()
+                            if (q.isBlank()) artistTracks
+                            else artistTracks.filter {
+                                it.title.contains(q, true) ||
+                                    it.fileName.contains(q, true)
+                            }
+                        }
                         SongList(
-                            tracks = artistTracks,
+                            tracks = filteredArtistTracks,
                             currentTrackId = currentTrackId,
                             onPlay = { track ->
-                                val idx = artistTracks.indexOf(track).coerceAtLeast(0)
-                                stationPlayback.playTracks(artistTracks, startIndex = idx)
+                                val idx = filteredArtistTracks
+                                    .indexOf(track).coerceAtLeast(0)
+                                stationPlayback.playTracks(
+                                    filteredArtistTracks,
+                                    startIndex = idx,
+                                )
                             },
                             onLongPress = { track -> contextTrackId = track.id },
                             albumNameById = albumNameById,

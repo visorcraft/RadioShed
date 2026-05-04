@@ -80,6 +80,14 @@ fun HistoryScreen(
     var trackById by remember { mutableStateOf<Map<Long, Track>>(emptyMap()) }
     var menuOpen by remember { mutableStateOf(false) }
     var clearConfirmOpen by remember { mutableStateOf(false) }
+    // Granular-trim confirmation. Captures both the cutoff (so the
+    // confirm-button knows what window to delete) and a label for
+    // the prompt copy. Null = no dialog shown. Mirrors the existing
+    // clearConfirmOpen flow but parameterised — the user always gets
+    // a chance to bail out of an irreversible delete.
+    var trimConfirm by remember {
+        mutableStateOf<Pair<Long, String>?>(null)
+    }
     var contextTrackId by remember { mutableStateOf<Long?>(null) }
     // Station filter: null means "show all stations". Reset back to
     // null on each entries-reload because the station the user
@@ -130,16 +138,8 @@ fun HistoryScreen(
                                 enabled = entries.isNotEmpty(),
                                 onClick = {
                                     menuOpen = false
-                                    scope.launch {
-                                        val cutoff = nowMillis() - 60L * 60L * 1000L
-                                        // trimHistoryOlderThan deletes
-                                        // played_at < cutoff, so flip the
-                                        // semantics: we keep the OLD rows
-                                        // and drop the NEW ones via a
-                                        // small dedicated query path.
-                                        stationRepo.trimHistoryNewerThan(cutoff)
-                                        reload()
-                                    }
+                                    val cutoff = nowMillis() - 60L * 60L * 1000L
+                                    trimConfirm = cutoff to "the last hour"
                                 },
                             )
                             DropdownMenuItem(
@@ -147,11 +147,8 @@ fun HistoryScreen(
                                 enabled = entries.isNotEmpty(),
                                 onClick = {
                                     menuOpen = false
-                                    scope.launch {
-                                        val cutoff = nowMillis() - 24L * 60L * 60L * 1000L
-                                        stationRepo.trimHistoryNewerThan(cutoff)
-                                        reload()
-                                    }
+                                    val cutoff = nowMillis() - 24L * 60L * 60L * 1000L
+                                    trimConfirm = cutoff to "the last 24 hours"
                                 },
                             )
                             DropdownMenuItem(
@@ -310,24 +307,34 @@ fun HistoryScreen(
                                     onTap = {
                                         // "Continue session from here":
                                         // play chronologically forward
-                                        // from the tapped entry. The
-                                        // visible list is newest-first
-                                        // for human reading, but
-                                        // playback should re-create the
-                                        // original session order — so
-                                        // we filter to entries that
-                                        // happened ≤ this entry's time
-                                        // and reverse them. Falls back
-                                        // to single-track play if the
-                                        // session reduces to one entry.
-                                        val sessionTracks = visibleEntries
+                                        // from the tapped entry. We use
+                                        // the FULL history list (not
+                                        // visibleEntries) so an active
+                                        // search filter doesn't punch
+                                        // holes through the playback
+                                        // queue — if the user filtered
+                                        // to "Track Foo" and tapped one
+                                        // result, the session they
+                                        // continue should still include
+                                        // every track that played
+                                        // around it, not just the ones
+                                        // matching the filter. The
+                                        // tapped entry's id is found in
+                                        // the reversed list to seed
+                                        // playback at the right slot.
+                                        val sessionPairs = entries
                                             .filter { it.playedAt <= entry.playedAt }
                                             .reversed()
-                                            .mapNotNull { trackById[it.trackId] }
-                                        if (sessionTracks.isEmpty()) return@HistoryRow
+                                            .mapNotNull { e ->
+                                                trackById[e.trackId]?.let { e.id to it }
+                                            }
+                                        if (sessionPairs.isEmpty()) return@HistoryRow
+                                        val startIdx = sessionPairs
+                                            .indexOfFirst { it.first == entry.id }
+                                            .coerceAtLeast(0)
                                         stationPlayback.playTracks(
-                                            sessionTracks,
-                                            startIndex = 0,
+                                            sessionPairs.map { it.second },
+                                            startIndex = startIdx,
                                         )
                                     },
                                     onLongPress = {
@@ -381,6 +388,40 @@ fun HistoryScreen(
             },
             dismissButton = {
                 TextButton(onClick = { clearConfirmOpen = false }) { Text("Cancel") }
+            },
+        )
+    }
+
+    trimConfirm?.let { (cutoff, windowLabel) ->
+        AlertDialog(
+            onDismissRequest = { trimConfirm = null },
+            title = { Text("Clear $windowLabel of history?") },
+            text = {
+                Text(
+                    "This deletes every play recorded in $windowLabel. " +
+                        "Per-station play counts and listened time are NOT " +
+                        "reset (those reflect total plays since the station " +
+                        "was first used). Library, ratings, playlists, and " +
+                        "station definitions are untouched.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val applyCutoff = cutoff
+                    trimConfirm = null
+                    scope.launch {
+                        stationRepo.trimHistoryNewerThan(applyCutoff)
+                        reload()
+                    }
+                }) {
+                    Text(
+                        "Clear",
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { trimConfirm = null }) { Text("Cancel") }
             },
         )
     }

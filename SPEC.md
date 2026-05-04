@@ -2090,6 +2090,101 @@ than the v2 polish:
   Phase 20+ audio refactor; documented here so the gap is
   explicit instead of implicit.
 
+#### Phase 19 audit follow-up (peer review fix sweep, batch 7+)
+
+A second peer-review pass on the batch-4-through-7 polish stream
+found a dozen issues. All fixed in this round:
+
+- [x] **EQ A/B compare lost the B side on toggle.** `abShowingB`
+  toggled the boolean without re-applying the preset gains, so
+  the second tap of the banner left the bands on A while the
+  label said "Comparing B". Now captures `abPresetGains` at
+  `startAB` time and the toggle applies whichever side was just
+  selected.
+- [x] **EQ band slider didn't clear A/B comparison.** Moving a
+  band slider mid-comparison silently overwrote the comparison
+  state without releasing the banner — a subsequent banner tap
+  could overwrite the user's manual tweak. `BandSliders.onChange`
+  now routes through a wrapper that calls `clearAB()` first.
+- [x] **EQ chip onClick was dead code under combinedClickable.**
+  The `AssistChip(onClick = ...)` body was unreachable because
+  the outer `combinedClickable` consumed the gesture. Empty
+  lambdas now (`onClick = {}`) so the intent is explicit.
+- [x] **MiniPlayer "Next:" stale on queue mutation while paused.**
+  The `remember(state, playable.trackId)` block didn't observe
+  queue mutations, so adding to the queue while paused didn't
+  refresh the peek. Adds `priorityCount` (from
+  `priorityCountFlow`) as a third remember key.
+- [x] **`finiteQueueProgress` stuck on stale position when track
+  not in snapshot.** When a priority-queued track or a history-
+  popped track played, `indexOfFirst` returned -1 but the flow
+  wasn't cleared, so "Track 4 of 12" persisted across an
+  unrelated track. Now sets the flow to null in the no-match
+  branch.
+- [x] **`finiteQueueProgress` wrong on duplicate track ids.**
+  `indexOfFirst { it.id == … }` returned the FIRST occurrence,
+  so a list containing the same track twice (legitimate for
+  playlists or explicit double-add) reported the wrong slot when
+  the second occurrence played. Replaced with a position cursor
+  + a new `resolveFiniteCursor()` helper that does sequential
+  advance, replay-current detection, and outward-search for
+  skipPrevious.
+- [x] **History "Continue from here" wrong index + filter
+  contamination.** Tapping a history row re-played the visible
+  (filtered) list starting at index 0, so search-filtered users
+  got a holes-in-the-session queue starting at the oldest
+  visible entry instead of the tapped one. Now uses the full
+  unfiltered `entries` list, computes the start index from the
+  tapped HistoryEntry id, and seeds playback at that position.
+- [x] **Search recent X icon double-fired the chip's onClick.**
+  An `Icon` with `.clickable` placed in `AssistChip.trailingIcon`
+  fires both the icon's clickable and the chip's outer onClick,
+  re-running the just-deleted query. Restructured: chip + remove
+  IconButton are now sibling cells in a Row, so each has its own
+  isolated touch target.
+- [x] **Search scope chip row clipped on narrow phones.** Five
+  `FilterChip`s in a non-scrolling Row exceeded the viewport
+  on a 360dp width. Added `.horizontalScroll(rememberScrollState())`
+  to the row.
+- [x] **`KEY_STATIONS_HIDE_BUILTINS` missing from backup.** The
+  hide-built-ins toggle persisted locally but didn't round-trip
+  through backup/restore. Added to the bool dump list and
+  `expectedTypeForKey()`.
+- [x] **`AndroidConnectivityChecker.isUnmetered` too permissive.**
+  The OR-of-transports (NOT_METERED || WIFI || ETHERNET) returned
+  true for Wi-Fi tethered to a metered cellular hotspot, defeating
+  the WiFi-only connectivity policy. Now consults
+  `NET_CAPABILITY_NOT_METERED` exclusively — the carrier-side
+  signal is the only reliable indicator.
+- [x] **Stations Home page header counts ignored Hide-built-ins
+  toggle.** Subtitle read "10 stations · 6 built-in" while the
+  grid showed only 4 customs — confusing. Now reads
+  "4 custom · 6 built-in hidden" when the toggle is on.
+- [x] **Stations Home grid blank when Hide-built-ins hides
+  everything.** When all stations were built-in and the toggle
+  was on, the grid silently rendered empty under a non-empty
+  page header. Added an inline empty hint that points the user
+  at the recovery action ("Add a custom station" or "untoggle
+  Hide built-ins"). The substring filter has the same hint when
+  it filters to nothing.
+- [x] **LibraryBrowser songsFilter inert under artistFilter.**
+  Typing in the Songs quick filter while an artist was filtered
+  did nothing — `artistTracks` bypassed the filter pipeline
+  entirely. Now applies the same substring match to
+  `artistTracks` so the filter feels consistent.
+- [x] **History granular trim had no confirmation.** "Clear last
+  hour" and "Clear last 24 hours" deleted immediately on tap; the
+  more-destructive "Clear all" had a confirm dialog. Both
+  granular actions now route through a parameterised
+  `trimConfirm` AlertDialog with the cutoff snapshotted at
+  menu-tap time so the confirm-button delete window doesn't
+  drift if the user takes 30 seconds to confirm.
+- [x] **Stats date-range header `nowMs` never re-evaluated.**
+  Captured in `remember { nowMillis() }` with no key, so a
+  long-open StatsScreen could show a stale "Apr 4 – May 3" past
+  midnight. Re-keyed on `dailyActivity` so the label moves in
+  lock-step with the underlying data fetch.
+
 ---
 
 ## Appendix A — Compose Multiplatform vs native UI: when to fall back

@@ -209,13 +209,17 @@ fun StatsScreen(
                 item {
                     // Concrete date range reads better than a generic
                     // "Last 30 days" — the user sees exactly which
-                    // days the chart covers ("Apr 4 – May 3"). Falls
-                    // back to the prior label if formatting fails on
-                    // an unusual locale.
-                    val nowMs = remember { com.visorcraft.radioshed.data.nowMillis() }
+                    // days the chart covers ("Apr 4 – May 3"). Re-
+                    // derived against `dailyActivity` so the label
+                    // moves in lock-step with the underlying data
+                    // (the Stats screen's main LaunchedEffect re-
+                    // fetches dailyActivity, which then bumps the
+                    // remember key here too — important for users
+                    // who leave the screen open across midnight).
                     val DAY_MS_LOCAL = 24L * 60L * 60L * 1000L
-                    val rangeLabel = remember(nowMs) {
+                    val rangeLabel = remember(dailyActivity) {
                         runCatching {
+                            val nowMs = com.visorcraft.radioshed.data.nowMillis()
                             val start = com.visorcraft.radioshed.data.formatShortDate(
                                 nowMs - 29L * DAY_MS_LOCAL,
                             )

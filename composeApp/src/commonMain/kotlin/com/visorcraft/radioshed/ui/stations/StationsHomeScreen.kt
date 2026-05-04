@@ -380,6 +380,7 @@ fun StationsHomeScreen(
                     StationsPageHeader(
                         stationCount = stations.size,
                         builtInCount = stations.count { it.isBuiltIn },
+                        builtInsHidden = hideBuiltIns,
                         isCompact = isCompact,
                         onAddStation = onAddStation,
                         onReorder = onReorderStations,
@@ -509,6 +510,37 @@ fun StationsHomeScreen(
                                 (it.customSubtitle?.contains(q, ignoreCase = true) == true)
                         }
                     }
+                // Inline empty hint when an active filter (Hide
+                // built-ins toggle, or text filter) has reduced the
+                // visible grid to nothing. The full-screen EmptyState
+                // only fires for an actually-empty stations table;
+                // here we want a softer reset hint that points the
+                // user at how to recover. Spans the full grid width
+                // so it isn't squeezed into a single tile slot.
+                if (displayedStations.isEmpty()) {
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 24.dp, horizontal = outerPadding),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            Text(
+                                text = if (hideBuiltIns && stationFilter.isBlank()) {
+                                    "All stations are built-in. Tap + to add a custom station, " +
+                                        "or untoggle \"Hide built-ins\" in the grid menu to see them."
+                                } else if (stationFilter.isNotBlank()) {
+                                    "No stations match \"${stationFilter.trim()}\"."
+                                } else {
+                                    "No stations to show."
+                                },
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.65f),
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            )
+                        }
+                    }
+                }
                 items(displayedStations, key = { it.id }) { station ->
                     val rate = completionRates[station.id]
                     val skipRateLine = rate?.let { (plays, skips) ->
@@ -799,15 +831,26 @@ private fun ActionRow(
 private fun StationsPageHeader(
     stationCount: Int,
     builtInCount: Int,
+    builtInsHidden: Boolean = false,
     isCompact: Boolean,
     onAddStation: () -> Unit,
     onReorder: () -> Unit = {},
 ) {
     val customCount = stationCount - builtInCount
+    // When the user has toggled "Hide built-ins" on, the grid only
+    // shows custom stations; the subtitle then reads "X custom · Y
+    // built-in hidden" so the count actually matches the visible
+    // tiles. Without this, the page header reads "10 stations" while
+    // the grid shows 4 — confusing.
     val subtitleParts = buildList {
-        add("$stationCount station${if (stationCount == 1) "" else "s"}")
-        if (builtInCount > 0) add("$builtInCount built-in")
-        if (customCount > 0) add("$customCount custom")
+        if (builtInsHidden && builtInCount > 0) {
+            add("$customCount custom")
+            add("$builtInCount built-in hidden")
+        } else {
+            add("$stationCount station${if (stationCount == 1) "" else "s"}")
+            if (builtInCount > 0) add("$builtInCount built-in")
+            if (customCount > 0) add("$customCount custom")
+        }
     }
     Row(
         modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 8.dp),

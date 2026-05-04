@@ -222,6 +222,18 @@ class StationPlayback(
      */
     private var finiteTracksSnapshot: List<Track>? = null
 
+    /**
+     * Position-tracked cursor into [finiteTracksSnapshot]. Distinct
+     * from a `indexOfFirst { id == … }` lookup because the same
+     * track id can appear multiple times in a finite list (e.g. user
+     * tapped "Add to queue" on the same song twice, or a playlist
+     * legitimately repeats a track). Maintained sequentially: +1 on
+     * normal advance, jumped on skipPrevious via best-effort
+     * proximity search. -1 means "track isn't in the snapshot" and
+     * the chip hides.
+     */
+    private var finiteCursor: Int = -1
+
     /** The track currently loaded into the AudioEngine. Used to push to
      *  history when the user advances forward. */
     private var currentTrack: Track? = null
@@ -438,6 +450,7 @@ class StationPlayback(
             // station's pool is conceptually unbounded, so "Track N
             // of M" doesn't make sense.
             finiteTracksSnapshot = null
+            finiteCursor = -1
             _finiteQueueProgress.value = null
 
             // Switching stations clears history — the previous station's tracks
@@ -668,7 +681,8 @@ class StationPlayback(
                 // of M" against it as the cursor advances. Cleared on
                 // station entry so station mode reverts to null.
                 finiteTracksSnapshot = tracks
-                _finiteQueueProgress.value = (startIndex.coerceIn(0, tracks.size - 1) + 1) to tracks.size
+                finiteCursor = startIndex.coerceIn(0, tracks.size - 1)
+                _finiteQueueProgress.value = (finiteCursor + 1) to tracks.size
                 suppressAutoAdvance = true
                 scheduleClearSuppress()
                 advanceToNext()
@@ -734,6 +748,7 @@ class StationPlayback(
                 queue = null
                 _priorityCountFlow.value = 0
                 finiteTracksSnapshot = null
+                finiteCursor = -1
                 _finiteQueueProgress.value = null
                 history.clear()
                 currentTrack = null
@@ -848,14 +863,19 @@ class StationPlayback(
         recordPreviousIfAny()
         currentTrack = track
         trackStartedAtMs = nowMillis()
-        // Recompute finite-queue progress whenever the active track
-        // changes. In station mode the snapshot is null and the
-        // flow stays null. In finite mode (playTracks), look up the
-        // new track in the snapshot and publish its 1-based index.
+        // Recompute finite-queue progress against the position
+        // cursor (NOT a track-id lookup, since the same track can
+        // appear multiple times in a list). The cursor advances
+        // sequentially in the common case; skipPrevious can jump
+        // backwards via the proximity search below. If the new
+        // track isn't anywhere in the snapshot the chip hides.
         finiteTracksSnapshot?.let { snapshot ->
-            val idx = snapshot.indexOfFirst { it.id == track.id }
-            if (idx >= 0) {
-                _finiteQueueProgress.value = (idx + 1) to snapshot.size
+            val newCursor = resolveFiniteCursor(snapshot, finiteCursor, track.id)
+            finiteCursor = newCursor
+            _finiteQueueProgress.value = if (newCursor in snapshot.indices) {
+                (newCursor + 1) to snapshot.size
+            } else {
+                null
             }
         }
         // Apply ReplayGain to the player volume BEFORE issuing play(),
@@ -972,4 +992,52 @@ class StationPlayback(
          *  enough that a real natural-end fires through promptly. */
         const val SUPPRESS_GRACE_MS = 600L
     }
+}
+
+/**
+ * Resolve where the active track sits within a finite playTracks
+ * snapshot. Sequential advance is the common case (`prev + 1`); we
+ * also handle replay (`prev` unchanged), skipPrevious (search
+ * outward from the prior position), and the "track isn't in the
+ * snapshot" case (returns -1, telling the caller to hide the chip).
+ *
+ * Crucially, this is position-based, not id-based — a track id that
+ * appears multiple times in the snapshot resolves to whichever
+ * occurrence is closest to the previous cursor, so a list that
+ * contains "Foo, Bar, Foo" reports "Track 1 / Track 2 / Track 3"
+ * correctly as it advances sequentially.
+ */
+internal fun resolveFiniteCursor(
+    snapshot: List<Track>,
+    previousCursor: Int,
+    newTrackId: Long,
+): Int {
+    if (snapshot.isEmpty()) return -1
+    // Common path: a sequential advance. Check this first so the
+    // duplicate-track case ("Foo" at positions 0 and 5) lands on
+    // the right index.
+    val nextIdx = previousCursor + 1
+    if (nextIdx in snapshot.indices && snapshot[nextIdx].id == newTrackId) {
+        return nextIdx
+    }
+    // Replay-current path: same track, same cursor (e.g., user hit
+    // skipPrevious within the first second of a track and the queue
+    // restarted it).
+    if (previousCursor in snapshot.indices &&
+        snapshot[previousCursor].id == newTrackId
+    ) {
+        return previousCursor
+    }
+    // Outward search from the prior cursor — skipPrevious + history
+    // can land us on a track that was earlier in the snapshot.
+    // Walk distance 1..max so the closest match wins, which
+    // matches the user's mental model when duplicates exist.
+    val maxDist = maxOf(previousCursor + 1, snapshot.size - previousCursor)
+    for (dist in 1..maxDist) {
+        val back = previousCursor - dist
+        if (back in snapshot.indices && snapshot[back].id == newTrackId) return back
+        val fwd = previousCursor + dist
+        if (fwd in snapshot.indices && snapshot[fwd].id == newTrackId) return fwd
+    }
+    return -1
 }

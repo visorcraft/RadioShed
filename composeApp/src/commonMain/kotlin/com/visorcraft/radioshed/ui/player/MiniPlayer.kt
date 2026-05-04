@@ -78,6 +78,11 @@ fun MiniPlayer(
     val state by audioEngine.state.collectAsState()
     val position by audioEngine.position.collectAsState()
     val sleepState by sleepTimer.state.collectAsState()
+    // Keyed alongside playable.trackId / state below so the "Next:"
+    // peek refreshes whenever the priority queue mutates (e.g., the
+    // user adds a track via Play next while paused). Without this
+    // signal a queue add wouldn't re-evaluate the remembered peek.
+    val priorityCount by stationPlayback.priorityCountFlow.collectAsState()
 
     val playable = nowPlaying ?: return
     var contextSheetOpen by remember { mutableStateOf(false) }
@@ -198,7 +203,7 @@ fun MiniPlayer(
                     val baseSubtitle = listOfNotNull(playable.artist, playable.album)
                         .joinToString(" · ")
                     val pausedNextLabel = if (state == PlayerState.Paused) {
-                        val next = remember(state, playable.trackId) {
+                        val next = remember(state, playable.trackId, priorityCount) {
                             stationPlayback.upcoming(1).firstOrNull()
                         }
                         next?.title?.ifBlank { null }?.let { "Next: $it" }

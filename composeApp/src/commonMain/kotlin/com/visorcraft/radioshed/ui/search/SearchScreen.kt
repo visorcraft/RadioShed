@@ -221,7 +221,15 @@ fun SearchScreen(
             Spacer(Modifier.height(8.dp))
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.fillMaxWidth(),
+                // Five chips (All / Tracks / Artists / Albums / Liked)
+                // exceed the viewport on a 360dp-wide phone. Without
+                // horizontalScroll the trailing chips clip silently —
+                // the Liked filter would be unreachable on a Pixel
+                // Mini or Galaxy A-series. Scrollable Row keeps every
+                // chip available regardless of width.
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
             ) {
                 SearchScope.entries.forEach { s ->
                     FilterChip(
@@ -426,19 +434,30 @@ private fun RecentSearchesBlock(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             queries.forEach { q ->
-                AssistChip(
-                    onClick = { onPick(q) },
-                    label = { Text(q) },
-                    trailingIcon = {
+                // The chip itself re-runs the query on tap. Removal
+                // gets a separate IconButton rendered ALONGSIDE the
+                // chip (not as a trailingIcon, since AssistChip's
+                // trailingIcon slot lives inside the chip's outer
+                // click target — its tap fires the chip onClick too,
+                // re-running the query for an entry the user just
+                // asked to delete). Two adjacent touch targets is the
+                // unambiguous fix.
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    AssistChip(
+                        onClick = { onPick(q) },
+                        label = { Text(q) },
+                    )
+                    androidx.compose.material3.IconButton(
+                        onClick = { onRemoveOne(q) },
+                        modifier = Modifier.size(28.dp),
+                    ) {
                         androidx.compose.material3.Icon(
                             imageVector = Icons.Filled.Close,
-                            contentDescription = "Remove from history",
-                            modifier = Modifier
-                                .size(16.dp)
-                                .clickable { onRemoveOne(q) },
+                            contentDescription = "Remove \"$q\" from history",
+                            modifier = Modifier.size(14.dp),
                         )
-                    },
-                )
+                    }
+                }
             }
         }
     }
