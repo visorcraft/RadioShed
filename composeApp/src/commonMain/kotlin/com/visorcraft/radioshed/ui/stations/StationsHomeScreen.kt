@@ -381,10 +381,37 @@ fun StationsHomeScreen(
                 // Page header spanning the full row — replaces the TopAppBar
                 // title with something proportional to a 1290dp screen.
                 item(span = { GridItemSpan(maxLineSpan) }) {
+                    // Visible count for the header subtitle, computed
+                    // here (the full filter pipeline lives further
+                    // down inside the items block but we can recreate
+                    // its name+subtitle predicate cheaply for the
+                    // count). Same predicate as the items filter
+                    // below — keep them in sync if either changes.
+                    val visibleCountForHeader = remember(
+                        stations,
+                        stationFilter,
+                        hideBuiltIns,
+                    ) {
+                        val src = if (hideBuiltIns) stations.filterNot { it.isBuiltIn }
+                                  else stations
+                        val q = stationFilter.trim()
+                        if (q.isBlank()) src.size
+                        else src.count {
+                            it.name.contains(q, ignoreCase = true) ||
+                                (it.customSubtitle?.contains(q, ignoreCase = true) == true)
+                        }
+                    }
                     StationsPageHeader(
                         stationCount = stations.size,
                         builtInCount = stations.count { it.isBuiltIn },
                         builtInsHidden = hideBuiltIns,
+                        // While the filter is active, the subtitle
+                        // reads "M of N stations" — same pattern as
+                        // PlaylistsScreen. Visible-count vs total
+                        // matters more mid-search than the
+                        // built-in / custom split.
+                        filterActive = stationFilter.isNotBlank(),
+                        visibleCount = visibleCountForHeader,
                         isCompact = isCompact,
                         onAddStation = onAddStation,
                         onReorder = onReorderStations,
@@ -570,6 +597,22 @@ fun StationsHomeScreen(
                                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.65f),
                                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                             )
+                            // CTA for the filter-active empty state:
+                            // jump to the New Station flow with the
+                            // filter text as a starting suggestion.
+                            // Saves the "didn't find what I wanted —
+                            // want to create a new one named for this
+                            // idea" detour. Mirrors the PlaylistsScreen
+                            // empty-filter CTA shipped in batch 15.
+                            if (stationFilter.isNotBlank()) {
+                                Spacer(Modifier.height(8.dp))
+                                TextButton(onClick = {
+                                    stationFilter = ""
+                                    onAddStation()
+                                }) {
+                                    Text("Create new station…")
+                                }
+                            }
                         }
                     }
                 }
@@ -896,6 +939,8 @@ private fun StationsPageHeader(
     stationCount: Int,
     builtInCount: Int,
     builtInsHidden: Boolean = false,
+    filterActive: Boolean = false,
+    visibleCount: Int = stationCount,
     isCompact: Boolean,
     onAddStation: () -> Unit,
     onReorder: () -> Unit = {},
@@ -908,8 +953,17 @@ private fun StationsPageHeader(
     // built-in hidden" so the count actually matches the visible
     // tiles. Without this, the page header reads "10 stations" while
     // the grid shows 4 — confusing.
+    //
+    // While the text filter is active, neither breakdown is the
+    // most useful info — the user wants "M of N" to know how
+    // narrow their search is. Mirror the PlaylistsScreen pattern.
     val subtitleParts = buildList {
-        if (builtInsHidden && builtInCount > 0) {
+        if (filterActive) {
+            add(
+                "$visibleCount of $stationCount " +
+                    if (stationCount == 1) "station" else "stations",
+            )
+        } else if (builtInsHidden && builtInCount > 0) {
             add("$customCount custom")
             add("$builtInCount built-in hidden")
         } else {

@@ -256,10 +256,24 @@ fun PlaylistDetailScreen(
                 val totalMs = tracks.sumOf { it.durationMs }
                 "$trackCountLabel · ${formatPlaylistRuntime(totalMs)}"
             }
+            // Subtitle is tappable so the user can copy a paste-
+            // friendly "{name} — {N tracks · runtime}" line into a
+            // chat / journal without a separate Share flow. No
+            // dedicated "Copy" affordance because the whole
+            // subtitle row IS the affordance — single-tap surfaces
+            // are unambiguous here.
+            val playlistSubtitleClipboard = com.visorcraft.radioshed.ui.util
+                .rememberCopyToClipboard()
+            val playlistName = playlist?.name.orEmpty()
             Text(
                 subtitleText,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                modifier = Modifier.clickable {
+                    val combined = if (playlistName.isBlank()) subtitleText
+                                   else "$playlistName — $subtitleText"
+                    playlistSubtitleClipboard(combined)
+                },
             )
             Spacer(Modifier.height(12.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

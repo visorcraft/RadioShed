@@ -2,6 +2,7 @@ package com.visorcraft.radioshed.ui.settings
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -594,10 +595,23 @@ private fun SectionHeader(label: String) {
     Spacer(Modifier.height(4.dp))
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun TopStationRow(station: Station, rank: Int, onTap: () -> Unit) {
+    val copyToClipboard = com.visorcraft.radioshed.ui.util.rememberCopyToClipboard()
     Surface(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onTap),
+        modifier = Modifier
+            .fillMaxWidth()
+            .combinedClickable(
+                onClick = onTap,
+                onLongClick = {
+                    val plays = station.stats.playCount
+                    copyToClipboard(
+                        "${station.name} — $plays play" +
+                            if (plays == 1L) "" else "s",
+                    )
+                },
+            ),
         color = Color.Transparent,
     ) {
         Row(
@@ -643,10 +657,22 @@ private fun TopStationRow(station: Station, rank: Int, onTap: () -> Unit) {
     }
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun TopArtistRow(artist: TopArtistEntry, rank: Int, onTap: () -> Unit) {
+    val copyToClipboard = com.visorcraft.radioshed.ui.util.rememberCopyToClipboard()
     Surface(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onTap),
+        modifier = Modifier
+            .fillMaxWidth()
+            .combinedClickable(
+                onClick = onTap,
+                onLongClick = {
+                    copyToClipboard(
+                        "${artist.name} — ${artist.plays} play" +
+                            if (artist.plays == 1L) "" else "s",
+                    )
+                },
+            ),
         color = Color.Transparent,
     ) {
         Row(
@@ -693,10 +719,22 @@ private fun TopArtistRow(artist: TopArtistEntry, rank: Int, onTap: () -> Unit) {
     }
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun TopAlbumRow(album: TopAlbumEntry, rank: Int, onTap: () -> Unit) {
+    val copyToClipboard = com.visorcraft.radioshed.ui.util.rememberCopyToClipboard()
     Surface(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onTap),
+        modifier = Modifier
+            .fillMaxWidth()
+            .combinedClickable(
+                onClick = onTap,
+                onLongClick = {
+                    copyToClipboard(
+                        "${album.title} — ${album.plays} play" +
+                            if (album.plays == 1L) "" else "s",
+                    )
+                },
+            ),
         color = Color.Transparent,
     ) {
         Row(
@@ -1051,6 +1089,7 @@ private fun ActivityTimeline(
     }
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun TopTrackRow(
     track: Track,
@@ -1059,8 +1098,20 @@ private fun TopTrackRow(
     onTap: () -> Unit,
     playsLabel: String = "play",
 ) {
+    val copyToClipboard = com.visorcraft.radioshed.ui.util.rememberCopyToClipboard()
     Surface(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onTap),
+        modifier = Modifier
+            .fillMaxWidth()
+            .combinedClickable(
+                onClick = onTap,
+                onLongClick = {
+                    val title = track.title.ifBlank { track.fileName }
+                    copyToClipboard(
+                        "$title — $plays $playsLabel" +
+                            if (plays == 1L) "" else "s",
+                    )
+                },
+            ),
         color = Color.Transparent,
     ) {
         Row(

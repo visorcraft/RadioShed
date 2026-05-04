@@ -2237,12 +2237,40 @@ private fun TrackInfoDialog(
                     if (genres.isNotEmpty()) {
                         InfoLine("Genre", genres.joinToString(", "))
                     }
-                    InfoLine("Format", t.format.uppercase())
-                    InfoLine("Duration", formatMs(t.durationMs))
-                    t.bitrateKbps?.let { InfoLine("Bitrate", "$it kbps") }
-                    t.sampleRateHz?.let { InfoLine("Sample rate", "${it / 1000.0} kHz") }
+                    // Spec rows are tappable-to-copy. Useful when a
+                    // user wants to drop "FLAC · 44.1 kHz · 1024 kbps"
+                    // into a chat or compare tracks. Each line copies
+                    // its own value (the label is implicit context);
+                    // a Format-and-Bitrate combo would be nice but the
+                    // existing single-line copy keeps the gesture
+                    // unambiguous.
+                    InfoLineTappable("Format", t.format.uppercase()) {
+                        copyToClipboard(t.format.uppercase())
+                        ringtoneStatus = "Format copied to clipboard."
+                    }
+                    InfoLineTappable("Duration", formatMs(t.durationMs)) {
+                        copyToClipboard(formatMs(t.durationMs))
+                        ringtoneStatus = "Duration copied to clipboard."
+                    }
+                    t.bitrateKbps?.let { kbps ->
+                        InfoLineTappable("Bitrate", "$kbps kbps") {
+                            copyToClipboard("$kbps kbps")
+                            ringtoneStatus = "Bitrate copied to clipboard."
+                        }
+                    }
+                    t.sampleRateHz?.let { hz ->
+                        InfoLineTappable("Sample rate", "${hz / 1000.0} kHz") {
+                            copyToClipboard("${hz / 1000.0} kHz")
+                            ringtoneStatus = "Sample rate copied to clipboard."
+                        }
+                    }
                     t.channels?.let { InfoLine("Channels", "$it") }
-                    t.bpm?.let { InfoLine("BPM", "%.1f".format(it)) }
+                    t.bpm?.let { bpm ->
+                        InfoLineTappable("BPM", "%.1f".format(bpm)) {
+                            copyToClipboard("%.1f".format(bpm))
+                            ringtoneStatus = "BPM copied to clipboard."
+                        }
+                    }
                     InfoLine("File size", formatFileSize(t.fileSize))
                     InfoLine("Added", formatRelativeDate(t.addedAt))
                     t.replayGainTrack?.let { InfoLine("ReplayGain (track)", "%.2f dB".format(it)) }

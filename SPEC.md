@@ -2749,6 +2749,39 @@ gaps. All shipped together as a follow-on pass before batch 15.
   they're scoped narrowly enough that the user knows what
   they're nuking.
 
+#### Phase 19 polish (continued, batch 16)
+
+- [x] **Stations Home — filter-aware header subtitle.** When the
+  filter input is non-blank, the page-header subtitle reads "M of N
+  stations" instead of the built-in/custom split. Mirrors the
+  PlaylistsScreen pattern from batch 13. Visible-count is computed
+  inline at the header callsite (the full filter pipeline lives
+  in the items block); the predicate is duplicated since the items
+  computation happens later in the LazyVerticalGrid scope.
+- [x] **Stations Home — "Create new station…" CTA on empty filter.**
+  When a non-blank filter has zero matches, an inline TextButton
+  below the "no stations match" copy clears the filter and routes
+  to `onAddStation()`. Same flow that PlaylistsScreen got in
+  batch 15 — friction reduction for the "didn't find what I
+  wanted, want a fresh one" motion.
+- [x] **PlaylistDetailScreen — tap header subtitle to copy.** The
+  "N tracks · runtime" line is now `clickable`; tap copies a
+  paste-friendly "{playlist name} — {N tracks · runtime}" string
+  to the clipboard. Single-tap because the row is purely
+  informational, no other gesture to collide with.
+- [x] **Track Info — tap-to-copy on Format / Duration / Bitrate /
+  Sample rate / BPM.** Five spec rows switched from `InfoLine`
+  to `InfoLineTappable`. Each copies its own value (the label
+  is implicit context). Channels stays as a plain `InfoLine`
+  because "2" with no unit isn't worth a copy gesture.
+- [x] **Stats — long-press top-station / top-artist / top-album /
+  top-track rows to copy.** Each `Top*Row` switched its outer
+  `clickable` to `combinedClickable`. Tap navigates as before
+  (artist detail, album detail, etc.); long-press copies a
+  paste-friendly "{name} — N plays" line. Track row also handles
+  the Most-skipped variant via the existing `playsLabel`
+  parameter.
+
 ---
 
 ## Appendix A — Compose Multiplatform vs native UI: when to fall back
