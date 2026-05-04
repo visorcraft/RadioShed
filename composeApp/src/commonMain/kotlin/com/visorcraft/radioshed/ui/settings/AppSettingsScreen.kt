@@ -89,6 +89,7 @@ fun AppSettingsScreen(
     onOpenStats: () -> Unit = {},
     onOpenHistory: () -> Unit = {},
     onOpenCrashLog: () -> Unit = {},
+    onOpenSyncthingWizard: () -> Unit = {},
     settings: SettingsStore = koinInject(),
     artworkSync: MissingArtworkSync = koinInject(),
     lyricsCache: com.visorcraft.radioshed.data.LyricsCacheRepository = koinInject(),
@@ -378,6 +379,16 @@ fun AppSettingsScreen(
                 subtitle = "Recent crashes / ANRs reported by Android. Local-only — " +
                     "share via the system share sheet if you want to send a report.",
                 onClick = onOpenCrashLog,
+            )
+            Spacer(Modifier.height(8.dp))
+            // Syncthing setup wizard. The wizard's a one-time flow but
+            // we leave the entry point here so users can re-run it for
+            // additional folders or after re-installing Syncthing.
+            NavRow(
+                title = "Set up Syncthing sync",
+                subtitle = "Step-by-step wizard to mirror a music folder " +
+                    "from your PC to this phone over Wi-Fi.",
+                onClick = onOpenSyncthingWizard,
             )
 
             Spacer(Modifier.height(24.dp))

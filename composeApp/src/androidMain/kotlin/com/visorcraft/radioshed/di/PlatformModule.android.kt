@@ -84,6 +84,11 @@ actual val platformModule: Module = module {
     // Crash log reader — backed by ApplicationExitInfo (API 30+).
     single<CrashLogReader> { AndroidCrashLogReader(androidContext()) }
     single<CrashLogSharer> { AndroidCrashLogSharer(androidContext()) }
+
+    // Syncthing detection for the setup wizard. Probe-only — we don't
+    // talk to Syncthing's REST API or modify its config; the wizard
+    // just deep-links into the app at the right moments.
+    single { com.visorcraft.radioshed.source.SyncthingDetector(androidContext()) }
 }
 
 private const val PREFS_NAME = "radioshed.prefs"

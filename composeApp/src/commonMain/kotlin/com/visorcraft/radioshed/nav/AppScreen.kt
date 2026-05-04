@@ -88,6 +88,10 @@ sealed interface AppScreen {
     /** Crash log — local-only triage of recent ANRs / crashes. */
     data object CrashLog : AppScreen
 
+    /** Syncthing setup wizard — walks the user through pairing the
+     *  phone with a PC and registering the synced folder. */
+    data object SyncthingWizard : AppScreen
+
     /** Playlist library — list of all playlists with create button. */
     data object Playlists : AppScreen
 

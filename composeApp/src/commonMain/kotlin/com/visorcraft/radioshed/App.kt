@@ -324,6 +324,7 @@ fun App(
                             onOpenStats = { current = AppScreen.Stats },
                             onOpenHistory = { current = AppScreen.History },
                             onOpenCrashLog = { current = AppScreen.CrashLog },
+                            onOpenSyncthingWizard = { current = AppScreen.SyncthingWizard },
                         )
                     }
 
@@ -345,6 +346,14 @@ fun App(
                         PlatformBackHandler { current = AppScreen.AppSettings }
                         com.visorcraft.radioshed.ui.settings.CrashLogScreen(
                             onBack = { current = AppScreen.AppSettings },
+                        )
+                    }
+
+                    AppScreen.SyncthingWizard -> {
+                        PlatformBackHandler { current = AppScreen.AppSettings }
+                        com.visorcraft.radioshed.ui.onboarding.SyncthingWizardScreen(
+                            onBack = { current = AppScreen.AppSettings },
+                            onComplete = { current = AppScreen.AppSettings },
                         )
                     }
 

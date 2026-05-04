@@ -3011,6 +3011,55 @@ new web-search affordance.
   page rather than the disambiguation page that bare titles
   like "Greatest Hits" produce.
 
+#### Phase 19 polish (continued, batch 22 — Syncthing setup wizard)
+
+A focused build to address the "I have to manually copy new music
+files from my PC to my phone" friction. RadioShed itself doesn't sync
+— that's outside the app's scope — but it now ships a six-step
+wizard that walks the user through configuring Syncthing (the
+peer-to-peer sync engine) and registering the resulting folder with
+RadioShed's library scanner. Build `2026-05-04l` → `2026-05-04m`.
+
+- [x] **`source/SyncthingDetector` (expect/actual).**
+  Probes PackageManager for the two known Syncthing packages
+  (`com.github.catfriend1.syncthingandroid` — the maintained
+  fork on Play Store + F-Droid — and `com.nutomic.syncthingandroid`
+  — the original, discontinued in 2022 but still on devices that
+  installed it years ago). `launch()` fires the app's main
+  launcher intent. iOS implementation is a stub returning
+  `false`/`null` since there's no Syncthing client for iOS; the
+  wizard's UI degrades gracefully there.
+- [x] **AndroidManifest `<queries>` declaration.** Required on
+  API 30+ for `getPackageInfo` to return successfully (rather
+  than throwing `NameNotFoundException`) for installed but
+  invisible packages. Two `<package>` entries, one per Syncthing
+  fork. Without this the detector always returned "not installed"
+  on Android 11+.
+- [x] **`ui/onboarding/SyncthingWizardScreen`.** Six steps:
+  Welcome (overview + expectations), Install on phone
+  (auto-detected with green-check banner once present, Play
+  Store / F-Droid buttons otherwise), Install on PC (link to
+  syncthing.net/downloads with per-OS recommendations), Pair
+  devices (numbered instructions with deep-link buttons to
+  open Syncthing on the phone and `localhost:8384` on the PC),
+  Share folder (Syncthing-side instructions + "Open Syncthing"
+  shortcut), Add to RadioShed (uses the existing
+  `FolderBrowserDialog`, registers via `FolderRepository.insert`,
+  kicks off a `Scanner.scanFolder` and surfaces the live progress
+  status). Same UNIQUE-uri defensive pattern from the onboarding
+  flow so re-running the wizard against the same path doesn't
+  trip a SQLite constraint.
+- [x] **AppSettings entry-point row.** New "Set up Syncthing
+  sync" `NavRow` sits below "Crash log" in the diagnostics
+  section. Routes to the new `AppScreen.SyncthingWizard`. Left
+  in Settings (rather than gating it behind first-run) so users
+  can re-run for additional folders or after a Syncthing
+  reinstall.
+- [x] **Koin wiring.** `SyncthingDetector` registered as a
+  `single` in the Android `platformModule`; iOS gets the no-op
+  actual via the same expect class. Wizard UI takes it through
+  `koinInject()` for testability.
+
 ---
 
 ## Appendix A — Compose Multiplatform vs native UI: when to fall back
