@@ -455,6 +455,15 @@ private fun BandSliders(
                 onChange = onChange,
             )
         }
+        // Hint footer: discoverability for the long-press gesture. Quiet
+        // styling (small label, dim alpha) so it doesn't dominate the EQ
+        // panel for users who already know.
+        Text(
+            text = "Long-press a band's frequency label to reset that band to 0 dB.",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
+            modifier = Modifier.padding(top = 6.dp, start = 4.dp, end = 4.dp),
+        )
     }
 }
 
@@ -467,6 +476,7 @@ private fun BandSliders(
  * whenever the parent's gain changes (preset applied, restored from
  * cache, etc.).
  */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun BandSliderRow(
     index: Int,
@@ -486,7 +496,19 @@ private fun BandSliderRow(
             text = formatHz(centerHz),
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
-            modifier = Modifier.width(56.dp),
+            modifier = Modifier
+                .width(56.dp)
+                // Long-press the frequency label to flatten this single
+                // band. Localising the gesture to the label (not the
+                // slider track) keeps drags from accidentally firing it
+                // — the slider needs the full hit area for fine control.
+                .combinedClickable(
+                    onClick = {},
+                    onLongClick = {
+                        pendingValue = 0f
+                        onChange(index, 0f)
+                    },
+                ),
         )
         Slider(
             value = pendingValue,

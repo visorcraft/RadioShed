@@ -484,6 +484,18 @@ class StationRepository(private val db: RadioShedDatabase) {
     }
 
     /**
+     * Earliest played_at across all of station_history, or null when
+     * no rows exist. The query returns a single nullable column so
+     * SQLDelight wraps the row itself in `executeAsOneOrNull()`'s
+     * "no rows found" idiom — but `MIN(...)` on an empty table still
+     * returns one row containing NULL, so we unwrap the nullable
+     * Long inside the row instead.
+     */
+    suspend fun earliestPlayedAt(): Long? = withContext(IODispatcher) {
+        db.stationsQueries.earliestPlayedAt().executeAsOneOrNull()?.earliest_ms
+    }
+
+    /**
      * Day-bucketed play activity for the last [windowDays]. Returns a
      * dense list of [windowDays] entries — index 0 is the oldest day,
      * the last index is "today" — so the caller can render a uniform

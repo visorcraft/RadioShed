@@ -4,6 +4,8 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -100,6 +102,13 @@ fun HistoryScreen(
     // the station chip — the visible list is the intersection of
     // both filters. Empty string means no text filter.
     var searchQuery by remember { mutableStateOf("") }
+    // Time-window filter: All / Today / Week / Month. Composes with
+    // the station chip + free-text query — visible list is the
+    // intersection of all three filters. The boundary is computed
+    // from `nowMillis()` at filter-evaluation time so the user
+    // doesn't get stuck with a stale "today" if the screen lingers
+    // across midnight.
+    var timeWindow by remember { mutableStateOf(HistoryTimeWindow.All) }
     val nowPlaying by audioEngine.nowPlaying.collectAsState()
     val currentTrackId = nowPlaying?.trackId
     val scope = rememberCoroutineScope()
@@ -151,6 +160,22 @@ fun HistoryScreen(
                                     menuOpen = false
                                     val cutoff = nowMillis() - 24L * 60L * 60L * 1000L
                                     trimConfirm = cutoff to "the last 24 hours"
+                                },
+                            )
+                            // 7d trim pairs with the Week chip so the
+                            // user can preview what's about to vanish
+                            // before committing. Same monotonic-cutoff
+                            // semantics as the hour / 24h options —
+                            // trimHistoryNewerThan deletes rows
+                            // STRICTLY newer than the threshold so we
+                            // never accidentally nuke the boundary row.
+                            DropdownMenuItem(
+                                text = { Text("Clear last 7 days") },
+                                enabled = entries.isNotEmpty(),
+                                onClick = {
+                                    menuOpen = false
+                                    val cutoff = nowMillis() - 7L * 24L * 60L * 60L * 1000L
+                                    trimConfirm = cutoff to "the last 7 days"
                                 },
                             )
                             DropdownMenuItem(
@@ -228,9 +253,21 @@ fun HistoryScreen(
                     .distinctBy { it.stationId }
                     .map { it.stationId to it.stationName }
             }
-            val visibleEntries = remember(entries, selectedStationId, searchQuery, trackById) {
-                val byStation = if (selectedStationId == null) entries
-                                else entries.filter { it.stationId == selectedStationId }
+            val visibleEntries = remember(entries, selectedStationId, searchQuery, trackById, timeWindow) {
+                // Time-window cutoff: nowMillis() at filter eval, so a
+                // user who left the screen open across midnight gets a
+                // freshly-rolled window when the chip composes again.
+                val nowMs = nowMillis()
+                val cutoffMs = when (timeWindow) {
+                    HistoryTimeWindow.All -> 0L
+                    HistoryTimeWindow.Today -> nowMs - 24L * 60L * 60L * 1000L
+                    HistoryTimeWindow.Week -> nowMs - 7L * 24L * 60L * 60L * 1000L
+                    HistoryTimeWindow.Month -> nowMs - 30L * 24L * 60L * 60L * 1000L
+                }
+                val byTime = if (cutoffMs == 0L) entries
+                             else entries.filter { it.playedAt >= cutoffMs }
+                val byStation = if (selectedStationId == null) byTime
+                                else byTime.filter { it.stationId == selectedStationId }
                 val q = searchQuery.trim()
                 if (q.isBlank()) byStation
                 else byStation.filter { entry ->
@@ -277,6 +314,24 @@ fun HistoryScreen(
                         .fillMaxWidth()
                         .padding(horizontal = 12.dp, vertical = 4.dp),
                 )
+                // Time-window chip row, always rendered (doesn't need a
+                // size threshold like station chips do — even one
+                // station's history benefits from "show me Today only").
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 4.dp)
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    HistoryTimeWindow.entries.forEach { opt ->
+                        androidx.compose.material3.FilterChip(
+                            selected = timeWindow == opt,
+                            onClick = { timeWindow = opt },
+                            label = { Text(opt.label) },
+                        )
+                    }
+                }
                 if (stationOptions.size > 1) {
                     androidx.compose.foundation.lazy.LazyRow(
                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
@@ -606,6 +661,19 @@ private enum class HistoryBucket(val label: String) {
     EarlierThisWeek("Earlier this week"),
     EarlierThisMonth("Earlier this month"),
     Older("Older"),
+}
+
+/**
+ * Time-window filter for history rows. Independent from
+ * [HistoryBucket] (which groups visible entries by relative-time
+ * band for header rendering). Order matters here — `entries` is
+ * iterated in declaration order to render the chip row.
+ */
+private enum class HistoryTimeWindow(val label: String) {
+    All("All"),
+    Today("24h"),
+    Week("7d"),
+    Month("30d"),
 }
 
 private sealed interface HistoryListItem {

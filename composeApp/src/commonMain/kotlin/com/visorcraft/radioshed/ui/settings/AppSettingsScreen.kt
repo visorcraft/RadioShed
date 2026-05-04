@@ -493,6 +493,46 @@ fun AppSettingsScreen(
                     }
                 },
             )
+            Spacer(Modifier.height(8.dp))
+            // One-shot for users who don't care which cache is which —
+            // wipes lyrics + artwork + DJ in one tap and reports an
+            // aggregate count. Useful as part of the "free up storage"
+            // motion without making the user hunt through three rows.
+            // Sequential rather than parallel because the on-disk
+            // deletions trip on each other otherwise (the artwork
+            // persister and DJ blob path both walk filesDir).
+            var clearAllStatus by remember { mutableStateOf<String?>(null) }
+            ClearAllCachesRow(
+                status = clearAllStatus,
+                onClick = {
+                    scope.launch {
+                        clearAllStatus = "Clearing all caches…"
+                        var artworkRemoved = 0
+                        runCatching {
+                            artworkRemoved = artworkPersister.clearAll()
+                            artworkCache.deleteAll()
+                            libraryRepoForCache.clearAllAlbumArtwork()
+                        }
+                        var djRemoved = 0
+                        runCatching {
+                            val rows = djCache.listAll()
+                            rows.forEach { row ->
+                                runCatching {
+                                    val ok = com.visorcraft.radioshed.source
+                                        .deleteFileIfExists(row.blobPath)
+                                    if (ok) djRemoved += 1
+                                }
+                            }
+                            djCache.deleteAll()
+                        }
+                        runCatching { lyricsCache.deleteAll() }
+                        clearAllStatus = "Cleared lyrics, $artworkRemoved " +
+                            (if (artworkRemoved == 1) "artwork file, " else "artwork files, ") +
+                            "and $djRemoved DJ clip" +
+                            (if (djRemoved == 1) "." else "s.")
+                    }
+                },
+            )
 
             Spacer(Modifier.height(24.dp))
 
@@ -798,6 +838,43 @@ private fun ClearDjCacheRow(status: String?, onClick: () -> Unit) {
                 )
             }
             TextButton(onClick = onClick) { Text("Clear") }
+        }
+    }
+}
+
+/**
+ * One-tap "wipe every cache the app generated" row. Sits below the
+ * granular Clear-X rows so users who already know which cache they
+ * want still find that path first; this row exists for the "I just
+ * want to free up storage" motion. Status string echoes the
+ * aggregate counts back so the user reads a meaningful confirmation
+ * (e.g. "Cleared lyrics, 124 artwork files, and 8 DJ clips.").
+ */
+@Composable
+private fun ClearAllCachesRow(status: String?, onClick: () -> Unit) {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    "Clear all online caches",
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium,
+                )
+                Text(
+                    text = status ?: "Wipes lyrics, artwork, and DJ clips in " +
+                        "one tap. All three regenerate on demand.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                )
+            }
+            TextButton(onClick = onClick) { Text("Clear all") }
         }
     }
 }

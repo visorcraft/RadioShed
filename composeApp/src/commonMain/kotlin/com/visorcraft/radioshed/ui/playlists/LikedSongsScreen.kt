@@ -17,6 +17,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -200,8 +204,23 @@ fun LikedSongsScreen(
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.SemiBold,
                     )
+                    // Subtitle: count + total runtime so the user reads
+                    // "how big is this collection" at a glance instead of
+                    // having to do shoebox math from the row count.
+                    // formatTotalRuntime omits the runtime when sum is
+                    // zero (e.g. cold-start with no liked tracks yet).
+                    val totalDurationMs = remember(tracks) {
+                        tracks.sumOf { it.durationMs }
+                    }
                     Text(
-                        "${tracks.size} track${if (tracks.size == 1) "" else "s"}",
+                        text = buildString {
+                            append(tracks.size)
+                            append(if (tracks.size == 1) " track" else " tracks")
+                            if (totalDurationMs > 0L) {
+                                append(" · ")
+                                append(formatLikedTotalRuntime(totalDurationMs))
+                            }
+                        },
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
                     )
@@ -261,7 +280,14 @@ fun LikedSongsScreen(
                         LikedSort.DurationDesc -> tracks.sortedByDescending { it.durationMs }
                     }
                     if (searchQuery.isBlank()) base
-                    else base.filter { it.title.contains(searchQuery, ignoreCase = true) }
+                    else base.filter {
+                        // Match on the displayed title (or file name
+                        // for tracks with empty title tags) so a user
+                        // searching for "ramble" still finds rips
+                        // that have only the filename to identify them.
+                        it.title.contains(searchQuery, ignoreCase = true) ||
+                            it.fileName.contains(searchQuery, ignoreCase = true)
+                    }
                 }
                 Column(modifier = Modifier.fillMaxSize()) {
                     if (tracks.size >= 6) {
@@ -293,8 +319,14 @@ fun LikedSongsScreen(
                                 .padding(horizontal = 16.dp, vertical = 4.dp),
                         )
                     }
+                    val listState = rememberLazyListState()
+                    val showScrollTop by remember {
+                        derivedStateOf { listState.firstVisibleItemIndex > 8 }
+                    }
+                    Box(modifier = Modifier.fillMaxSize()) {
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
+                        state = listState,
                         contentPadding = PaddingValues(vertical = 4.dp),
                     ) {
                         items(sortedTracks, key = { it.id }) { track ->
@@ -323,6 +355,23 @@ fun LikedSongsScreen(
                                 )
                             }
                         }
+                    }
+                    if (showScrollTop) {
+                        SmallFloatingActionButton(
+                            onClick = {
+                                scope.launch { listState.animateScrollToItem(0) }
+                            },
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .padding(end = 16.dp, bottom = 16.dp),
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.KeyboardArrowUp,
+                                contentDescription = "Scroll to top",
+                            )
+                        }
+                    }
                     }
                 }
             }
@@ -487,4 +536,21 @@ private enum class LikedSort(val label: String) {
     AlbumAsc("Album"),
     DurationAsc("Duration (shortest)"),
     DurationDesc("Duration (longest)"),
+}
+
+/**
+ * Format a sum of track durations for the Liked Songs subtitle.
+ * Tiered output (Xh Ym vs Mm) keeps narrow phone widths from
+ * truncating "1h 23m 45s" — once you're past an hour the seconds
+ * stop being meaningful for "how big is my collection".
+ */
+private fun formatLikedTotalRuntime(totalMs: Long): String {
+    val totalSec = totalMs / 1000L
+    val hours = totalSec / 3600L
+    val minutes = (totalSec % 3600L) / 60L
+    return when {
+        hours > 0L -> "${hours}h ${minutes}m"
+        minutes > 0L -> "${minutes}m"
+        else -> "<1m"
+    }
 }

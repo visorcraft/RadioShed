@@ -16,6 +16,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DriveFileRenameOutline
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material3.SmallFloatingActionButton
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -80,6 +89,13 @@ fun PlaylistsScreen(
     // routes through PlaylistRepository.rename so the trim / blank-
     // name guard is centralised.
     var renamingPlaylist by remember { mutableStateOf<Playlist?>(null) }
+    // Long-press a playlist row → bottom sheet with Rename / Delete.
+    // Rename routes through the existing dialog; Delete prompts a
+    // confirm before nuking the playlist (the action is irreversible
+    // and the row clearly identifies the target, so a confirm dialog
+    // is preferable to undo-on-snackbar for now).
+    var actionPlaylist by remember { mutableStateOf<Playlist?>(null) }
+    var deleteConfirm by remember { mutableStateOf<Playlist?>(null) }
     // In-page filter — appears above the list when there are enough
     // playlists for find-by-scroll to be friction. Below 6 the list
     // already fits a phone screen and the filter would be clutter.
@@ -142,10 +158,34 @@ fun PlaylistsScreen(
         trackCountByPlaylistId = playlists.associate { it.id to repo.trackCount(it.id) }
     }
 
+    // Aggregate track count across every user playlist. Recomputed
+    // whenever the per-playlist counts map changes (which already
+    // re-runs when the playlist list mutates), so this stays in sync
+    // without an extra Flow / DB query.
+    val totalTrackCount = remember(trackCountByPlaylistId) {
+        trackCountByPlaylistId.values.sum()
+    }
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Playlists") },
+                title = {
+                    Column {
+                        Text("Playlists")
+                        if (playlists.isNotEmpty()) {
+                            Text(
+                                text = "${playlists.size} playlist" +
+                                    (if (playlists.size == 1) "" else "s") +
+                                    " · $totalTrackCount track" +
+                                    (if (totalTrackCount == 1L) "" else "s"),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface
+                                    .copy(alpha = 0.6f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                },
                 navigationIcon = { TextButton(onClick = onBack) { Text("Back") } },
                 actions = {
                     TextButton(onClick = { importPicker("audio/x-mpegurl") }) {
@@ -168,8 +208,19 @@ fun PlaylistsScreen(
         // user-created playlists or has hearted anything yet — it
         // doubles as a discovery affordance for the heart-toggle
         // mechanic. Pinned to the top, never deletable from this view.
+        val listState = rememberLazyListState()
+        // Show the scroll-to-top FAB once the user has moved past the
+        // playlist count where reaching the top via flick is friction.
+        // Threshold of 8 matches the rest of the app's FABs (Library,
+        // Playlist detail, Station detail) so the behaviour is
+        // consistent across screens.
+        val showScrollTop by remember {
+            derivedStateOf { listState.firstVisibleItemIndex > 8 }
+        }
+        Box(modifier = Modifier.fillMaxSize().padding(padding)) {
         LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(padding),
+            modifier = Modifier.fillMaxSize(),
+            state = listState,
             contentPadding = PaddingValues(vertical = 8.dp),
         ) {
             importStatus?.let { msg ->
@@ -228,7 +279,7 @@ fun PlaylistsScreen(
                         coverUri = coverByPlaylistId[playlist.id],
                         trackCount = trackCountByPlaylistId[playlist.id] ?: 0L,
                         onTap = { onOpenPlaylist(playlist.id) },
-                        onLongPress = { renamingPlaylist = playlist },
+                        onLongPress = { actionPlaylist = playlist },
                     )
                 }
                 if (filteredPlaylists.isEmpty() && listFilter.isNotBlank()) {
@@ -243,6 +294,27 @@ fun PlaylistsScreen(
                 }
             }
         }
+        if (showScrollTop) {
+            // BottomStart so we don't overlap with the primary "New
+            // playlist" FAB at BottomEnd. SmallFloatingActionButton
+            // matches the size used on PlaylistDetailScreen and
+            // StationDetailScreen so the gesture target is consistent.
+            SmallFloatingActionButton(
+                onClick = {
+                    scope.launch { listState.animateScrollToItem(0) }
+                },
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(start = 16.dp, bottom = 16.dp),
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.KeyboardArrowUp,
+                    contentDescription = "Scroll to top",
+                )
+            }
+        }
+        }
     }
 
     if (createOpen) {
@@ -253,6 +325,49 @@ fun PlaylistsScreen(
                     if (name.isNotBlank()) repo.insert(name = name.trim())
                 }
                 createOpen = false
+            },
+        )
+    }
+
+    actionPlaylist?.let { target ->
+        PlaylistActionsSheet(
+            playlist = target,
+            onDismiss = { actionPlaylist = null },
+            onRename = {
+                actionPlaylist = null
+                renamingPlaylist = target
+            },
+            onDelete = {
+                actionPlaylist = null
+                deleteConfirm = target
+            },
+        )
+    }
+
+    deleteConfirm?.let { target ->
+        AlertDialog(
+            onDismissRequest = { deleteConfirm = null },
+            title = { Text("Delete playlist?") },
+            text = {
+                Text(
+                    "\"${target.name}\" will be removed. The tracks " +
+                        "themselves stay in your library — only the " +
+                        "playlist itself is deleted.",
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val id = target.id
+                        deleteConfirm = null
+                        scope.launch { repo.delete(id) }
+                    },
+                ) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { deleteConfirm = null }) { Text("Cancel") }
             },
         )
     }
@@ -270,6 +385,62 @@ fun PlaylistsScreen(
                 renamingPlaylist = null
             },
         )
+    }
+}
+
+/**
+ * Bottom sheet shown when the user long-presses a playlist row.
+ * Currently exposes Rename + Delete; new playlist-level actions
+ * (export, duplicate, etc.) plug in here as additional rows so the
+ * long-press surface stays the single discovery point. Pattern
+ * mirrors StationActionSheet on Stations Home.
+ */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun PlaylistActionsSheet(
+    playlist: Playlist,
+    onDismiss: () -> Unit,
+    onRename: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+        Column(modifier = Modifier.padding(bottom = 24.dp)) {
+            Text(
+                text = playlist.name,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            ListItem(
+                modifier = Modifier.clickable(onClick = onRename),
+                leadingContent = {
+                    Icon(
+                        imageVector = Icons.Filled.DriveFileRenameOutline,
+                        contentDescription = null,
+                    )
+                },
+                headlineContent = { Text("Rename") },
+            )
+            ListItem(
+                modifier = Modifier.clickable(onClick = onDelete),
+                leadingContent = {
+                    Icon(
+                        imageVector = Icons.Filled.Delete,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error,
+                    )
+                },
+                headlineContent = {
+                    Text(
+                        "Delete",
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                },
+            )
+        }
     }
 }
 

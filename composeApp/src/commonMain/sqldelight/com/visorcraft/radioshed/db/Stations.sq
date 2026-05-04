@@ -259,6 +259,14 @@ WHERE played_at >= ? AND played_at < ?;
 countAllPlays:
 SELECT COUNT(*) FROM station_history;
 
+-- Earliest play timestamp across all of station_history. Used by the
+-- Stats screen as a "listening since…" tile so the user has a sense
+-- of how much of their listening lifetime is captured. Returns NULL
+-- when the table is empty (cold-start) — the screen hides the tile
+-- in that case rather than rendering a placeholder.
+earliestPlayedAt:
+SELECT MIN(played_at) AS earliest_ms FROM station_history;
+
 -- Daily play counts within a rolling window. ?1 is "now" in epoch
 -- ms, ?2 is the cutoff (now - windowMs). Returns one row per day
 -- with at least one play, with days_ago=0 = today's bucket. The

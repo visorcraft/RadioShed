@@ -2516,6 +2516,73 @@ found a dozen issues. All fixed in this round:
   routes the formatted "Artist – Title" string through
   `rememberCopyToClipboard`, dismissing the sheet after.
 
+#### Phase 19 polish (continued, batch 13)
+
+- [x] **Track Info — MusicBrainz / YouTube / Discogs search.** Three
+  more full-width OutlinedButtons join the Wikipedia row, sharing a
+  small `encodeForUrl` helper that hand-rolls percent-encoding (we
+  don't depend on a URL-encoder for these search-form lookups).
+  MusicBrainz + Discogs run on the artist tag; YouTube combines
+  artist + title for a direct music-video hit and stays enabled even
+  when the track has no artist tag.
+- [x] **PlaylistsScreen — scroll-to-top FAB.** Wraps the LazyColumn
+  in a Box; SmallFloatingActionButton at BottomStart so it doesn't
+  overlap the existing primary "New playlist" FAB at BottomEnd.
+  Same `firstVisibleItemIndex > 8` threshold as PlaylistDetail /
+  StationDetail / Library Browser for cross-screen consistency.
+- [x] **Liked songs — scroll-to-top FAB.** Same pattern; sits at
+  BottomEnd here since LikedSongsScreen has no primary FAB.
+- [x] **PlaylistsScreen — total track count subtitle.** TopAppBar
+  title became a Column with "Playlists" + a bodySmall subtitle
+  reading "N playlists · M tracks" derived from
+  `trackCountByPlaylistId.values.sum()`. Hides when the playlist
+  list is empty so the subtitle isn't a confusing "0 tracks" on
+  cold start.
+- [x] **PlaylistsScreen — long-press → Rename / Delete sheet.**
+  Long-press now opens a ModalBottomSheet (`PlaylistActionsSheet`)
+  with Rename + Delete rows. Rename routes through the existing
+  dialog; Delete prompts a confirm (irreversible action) before
+  calling `repo.delete(id)`. Pattern mirrors StationActionSheet.
+- [x] **Liked songs — total duration in header.** Subtitle now
+  reads "N tracks · Xh Ym" via `formatLikedTotalRuntime` (tiered
+  hours/minutes formatting; sub-minute totals fall back to
+  "<1m"). Hidden when total is zero so the cold-start row stays
+  clean.
+- [x] **Liked songs — filter matches title OR file name.** Was
+  title-only; now matches file name too so users searching for
+  rips with empty title tags ("Track01.mp3") still find them.
+  Composes with the existing sort dropdown identically.
+- [x] **Equalizer — long-press band frequency to reset.** The 56dp
+  frequency label became a `combinedClickable` target with
+  `onClick = {}` (so taps don't intercept slider scroll-edge
+  gestures) and `onLongClick` flattening that one band to 0 dB
+  via the existing `pendingValue` + `onChange(index, 0f)` path.
+  Footer hint advertises the gesture so it's discoverable.
+- [x] **Stats — "Listening since" tile.** New SQL
+  `Stations.sq earliestPlayedAt` (`MIN(played_at) AS earliest_ms`)
+  + `StationRepository.earliestPlayedAt(): Long?`. The Stats screen
+  hydrates `listeningSinceMs` and renders a two-tile row (date
+  + day count) below the streak tiles. Hides on cold-start when
+  station_history is empty.
+- [x] **History — time-window filter chips.** New
+  `HistoryTimeWindow` enum (All / 24h / 7d / 30d) rendered as a
+  horizontalScrollable Row of FilterChips above the station chip
+  row. Composes with the station + free-text filters — visible
+  list is the intersection of all three. Cutoff is recomputed at
+  filter-eval time so leaving the screen open across midnight
+  rolls the window forward correctly.
+- [x] **History — Clear last 7 days.** New overflow-menu option
+  alongside Clear last hour / 24h. Same monotonic-cutoff +
+  trim-confirm-dialog flow as the existing window options;
+  pairs nicely with the new Week filter chip for preview-then-trim.
+- [x] **App Settings — Clear all online caches.** New
+  `ClearAllCachesRow` below the granular ClearLyrics /
+  ClearArtwork / ClearDjCache rows. One-tap wipes all three
+  sequentially (sequential rather than parallel — both
+  ArtworkPersister and DJ-blob deletion walk filesDir and trip
+  on each other otherwise). Aggregate status string echoes back
+  the per-cache counts.
+
 ---
 
 ## Appendix A — Compose Multiplatform vs native UI: when to fall back

@@ -118,9 +118,15 @@ fun StatsScreen(
     // the same effect that hydrates the rest of the screen so the
     // arrow chip never shows a stale figure relative to the tile.
     var weekDeltaPct by remember { mutableStateOf<Int?>(null) }
+    // Earliest played_at across all of station_history. Powers a
+    // "Listening since…" tile so the user reads at a glance how
+    // much listening lifetime is captured. Independent of windowDays
+    // — this is a lifetime stat, not a window stat.
+    var listeningSinceMs by remember { mutableStateOf<Long?>(null) }
     LaunchedEffect(windowDays) {
         totalMs = stationRepo.totalListenedMs()
         totalPlays = stationRepo.countAllPlays()
+        listeningSinceMs = stationRepo.earliestPlayedAt()
         // Last-7-days vs the prior 7. Both are inclusive of "now",
         // exclusive of the lower bound, so the boundary
         // overlaps cleanly. Returns null when last week had zero
@@ -300,6 +306,29 @@ fun StatsScreen(
                         StatTile(
                             label = "Longest streak (90d)",
                             value = "${streaks.second} day${if (streaks.second == 1) "" else "s"}",
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+                listeningSinceMs?.let { ms ->
+                    Spacer(Modifier.height(12.dp))
+                    val daysAgo = remember(ms) {
+                        val DAY_MS = 24L * 60L * 60L * 1000L
+                        ((com.visorcraft.radioshed.data.nowMillis() - ms) / DAY_MS)
+                            .coerceAtLeast(0L)
+                    }
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        StatTile(
+                            label = "Listening since",
+                            value = com.visorcraft.radioshed.data.formatShortDate(ms),
+                            modifier = Modifier.weight(1f),
+                        )
+                        StatTile(
+                            label = "Days tracked",
+                            value = daysAgo.toString(),
                             modifier = Modifier.weight(1f),
                         )
                     }

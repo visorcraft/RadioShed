@@ -2016,27 +2016,81 @@ private fun TrackInfoDialog(
                     ) {
                         Text("Copy artist – title")
                     }
-                    // Wikipedia search for the artist — opens the
-                    // system browser to a Special:Search URL so the
-                    // user can read the band's bio without leaving
-                    // the listening session for too long. Disabled
-                    // when there's no artist tag to search on.
-                    val artistForWiki = playable.artist?.takeIf { it.isNotBlank() }
+                    // Web look-ups. Each opens the system browser at a
+                    // search-form URL for the relevant service so the
+                    // user can read the band's bio / cross-reference
+                    // discographies / find the original pressing
+                    // without leaving the listening session for too
+                    // long. The artist tag is mandatory for the
+                    // artist-only buttons (Wikipedia, MusicBrainz,
+                    // Discogs); YouTube combines artist + title for a
+                    // direct hit on the music video. We percent-encode
+                    // by hand because LRClib/Cover Art Archive are the
+                    // only Ktor consumers and we don't want to pull a
+                    // URL-encoder dep into commonMain just for these.
+                    val artistForWeb = playable.artist?.takeIf { it.isNotBlank() }
+                    fun encodeForUrl(s: String): String = s
+                        .replace("%", "%25")
+                        .replace(" ", "+")
+                        .replace("&", "%26")
+                        .replace("#", "%23")
+                        .replace("?", "%3F")
                     androidx.compose.material3.OutlinedButton(
                         onClick = {
-                            artistForWiki?.let { name ->
-                                val encoded = name
-                                    .replace(" ", "+")
-                                    .replace("&", "%26")
+                            artistForWeb?.let { name ->
                                 com.visorcraft.radioshed.source.openWebUrl(
-                                    "https://en.wikipedia.org/wiki/Special:Search?search=$encoded",
+                                    "https://en.wikipedia.org/wiki/Special:Search?search=${encodeForUrl(name)}",
                                 )
                             }
                         },
-                        enabled = artistForWiki != null,
+                        enabled = artistForWeb != null,
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Text("Search Wikipedia for artist")
+                    }
+                    androidx.compose.material3.OutlinedButton(
+                        onClick = {
+                            artistForWeb?.let { name ->
+                                com.visorcraft.radioshed.source.openWebUrl(
+                                    "https://musicbrainz.org/search?type=artist&query=${encodeForUrl(name)}",
+                                )
+                            }
+                        },
+                        enabled = artistForWeb != null,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Search MusicBrainz for artist")
+                    }
+                    androidx.compose.material3.OutlinedButton(
+                        onClick = {
+                            artistForWeb?.let { name ->
+                                com.visorcraft.radioshed.source.openWebUrl(
+                                    "https://www.discogs.com/search/?type=artist&q=${encodeForUrl(name)}",
+                                )
+                            }
+                        },
+                        enabled = artistForWeb != null,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Search Discogs for artist")
+                    }
+                    // YouTube uses "artist title" if both are present,
+                    // falls back to the title alone when the track has
+                    // no artist tag (still useful for instrumental /
+                    // public-domain rips). Always enabled.
+                    val ytQuery = run {
+                        val titlePart = t.title.ifBlank { t.fileName }
+                        if (artistForWeb != null) "$artistForWeb $titlePart" else titlePart
+                    }
+                    androidx.compose.material3.OutlinedButton(
+                        onClick = {
+                            com.visorcraft.radioshed.source.openWebUrl(
+                                "https://www.youtube.com/results?search_query=${encodeForUrl(ytQuery)}",
+                            )
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Search YouTube for track")
                     }
                     Spacer(Modifier.height(4.dp))
                     InfoLine("Title", t.title)
