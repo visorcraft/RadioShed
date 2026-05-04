@@ -2834,6 +2834,102 @@ gaps. All shipped together as a follow-on pass before batch 15.
   recording. Long-press copies the raw UUID for pasting into
   other tools.
 
+#### Phase 19 polish (continued, batch 19)
+
+A 15-feature push aimed at copy-friction reduction across screens
+plus a few UX gaps that surfaced when stress-testing empty / edge
+states. Build date `2026-05-04i` → `2026-05-04j`.
+
+- [x] **Stations Home grid scroll-to-top FAB.** A `LazyGridState` was
+  threaded into the `LazyVerticalGrid` so a `SmallFloatingActionButton`
+  can show after the user scrolls past the ~9th tile. Tapping
+  animates back to index 0. Sibling to the equivalent FABs on
+  Library Browser and Lyrics — once tile-size XL plus a 30-station
+  library produces a long scroll, the trip back to the top was
+  the only place left without one.
+- [x] **Library Browser long-press shuffle FAB → Random song.**
+  The Songs-tab Shuffle IconButton now sits inside a
+  `Box.combinedClickable`. Short tap is unchanged (shuffle the
+  full visible Songs pool). Long-press picks a single random
+  track and plays just that — useful for "I want to be surprised
+  but not commit to a 5000-track shuffle session."
+- [x] **Search scope persistence.** `KEY_SEARCH_SCOPE` joins the
+  three-place rule (constant + getter/setter + `expectedTypeForKey`
+  STR list + `dumpForBackup` + `resetAllUserSettings`). SearchScreen
+  reads it on entry and writes via `LaunchedEffect(scope)` — so
+  the user's last-used scope (All / Songs / Albums / Artists)
+  sticks across app sessions instead of always falling back to All.
+- [x] **AppSettings library-stats card tap-to-copy.** `LibrarySummaryCard`
+  Surface gained a `.clickable` that copies "Library: $tc tracks ·
+  $ac albums · $arc artists · $sc stations · $rt total runtime"
+  to the clipboard — convenient for pasting into a backup notes
+  file or sharing a "this is my collection" snapshot in chat.
+- [x] **Lyrics attribution copy.** The "Lyrics from LRClib /
+  embedded / sidecar" subtitle now copies the full attribution
+  string when tapped. Helps users who quote lyrics in other apps
+  attribute the source correctly.
+- [x] **Up Next sheet header tap-to-copy queue.** The "Up next"
+  Row routes its tap (when the upcoming list is non-empty) to a
+  clipboard write of the numbered track titles — `"1. Title\n2. Title"`.
+  Useful for sharing a "what I'm listening to right now" set list.
+- [x] **Stats top-genres chip tap-to-copy.** The AssistChip onClick
+  in `TopGenresChips` switched from a no-op to a clipboard write
+  of "$genre — $plays plays" — same pattern as the existing
+  top-artists/albums chips.
+- [x] **Playlist action sheet — creation date subtitle + Export
+  as M3U action.** PlaylistActionsSheet now shows "Created
+  {formatShortDate(createdAt)}" under the playlist name. Adds an
+  "Export as M3U…" ListItem (Material `OpenInNew` icon) wired to
+  the Koin-injected `PlaylistExporter`. Reuses the batched
+  `libraryRepo.primaryArtistNameMap` so a 200-track playlist
+  doesn't fan out into 200 sequential `artistsForTrack` queries
+  (the lesson from #268).
+- [x] **PlaylistDetailScreen long-press track → context sheet.**
+  Mirrors LikedSongsScreen / HistoryScreen. `PlaylistTrackRow`
+  gained an optional `onLongPress` slot; the Surface modifier
+  branches between `combinedClickable` (when both handlers are
+  wired) and plain `clickable` (when only tap is). Tapping a
+  track still plays it; long-press opens TrackContextSheet for
+  Add to playlist / Go to album / View lyrics / Set as ringtone.
+- [x] **Backup screen — tap row → details dialog.** Tapping a
+  BackupRow now opens an AlertDialog showing filename, save
+  timestamp, file size, and a `BackupService.preview()` content
+  breakdown (stations / playlists / ratings / liked / settings /
+  EQ presets). Confirm button jumps directly to the Restore
+  confirmation dialog — preserving the existing two-step
+  "preview → confirm restore" safety net while making content
+  inspection a single tap instead of "Restore → read preview →
+  Cancel."
+- [x] **Connectivity policy long-press → cycle policy.** The
+  AppSettings "Online lookups" Surface gained a `combinedClickable`
+  whose long-press advances the policy through Always → WiFiOnly
+  → Manual → Never → Always. Faster than re-targeting one of
+  four FilterChips when you just want to step through.
+- [x] **Stations Home zero-stations empty state polish.** Replaced
+  the bare "No stations yet." text with a centered icon-anchored
+  state: a 72dp `LibraryMusic` icon, a clearer headline, a longer
+  explanation that lists which presets seed automatically, plus
+  a primary "Go to Library" Button and a secondary "Rescan all
+  folders" OutlinedButton (which falls back to "Scanning…" while
+  `rescanInFlight`). Same `triggerRescan` lambda the page uses
+  for pull-to-refresh-rescan.
+- [x] **Now Playing format/codec inline below scrubber.** Both
+  `CompactLayout` and `TwoPaneLayout` accept a `formatLine: String?`
+  param. The parent fetches the current track via
+  `libraryRepo.getTrackById(playable.trackId)` in a
+  `LaunchedEffect(playable.trackId)` and assembles
+  "FORMAT · {kbps} kbps · {kHz}" — rendered as a monospace
+  labelSmall directly under the scrubber. Track Info still has
+  the full breakdown; this is the at-a-glance Foobar-status-bar
+  read.
+- [x] **History tap station chip while search active → clears
+  search.** When a user taps a station chip with a non-empty
+  `searchQuery`, the search field is cleared at the same time
+  the station filter is set. Without this, chip + text filter
+  compounded and could leave a confusingly empty list — the
+  station tap was the user signaling "narrow by station, drop
+  the broad text filter."
+
 ---
 
 ## Appendix A — Compose Multiplatform vs native UI: when to fall back

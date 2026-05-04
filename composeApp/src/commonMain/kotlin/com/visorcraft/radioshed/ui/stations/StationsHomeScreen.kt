@@ -31,6 +31,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.VerticalAlignBottom
 import androidx.compose.material.icons.filled.VerticalAlignTop
 import androidx.compose.material.icons.filled.AutoAwesome
@@ -349,6 +350,8 @@ fun StationsHomeScreen(
                 EmptyState(
                     isCompact = isCompact,
                     onOpenLibrary = onBack,
+                    onRunScan = triggerRescan,
+                    rescanInFlight = rescanInFlight,
                     modifier = Modifier.fillMaxSize().padding(outerPadding),
                 )
                 return@BoxWithConstraints
@@ -366,8 +369,19 @@ fun StationsHomeScreen(
                 onRefresh = triggerRescan,
                 modifier = Modifier.fillMaxSize(),
             ) {
+            val gridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
+            // Threshold of 8 first-visible items aligns with every
+            // other scroll-to-top FAB in the app (Library, Playlists,
+            // PlaylistDetail, StationDetail, LikedSongs).
+            val showGridScrollTop by remember {
+                androidx.compose.runtime.derivedStateOf {
+                    gridState.firstVisibleItemIndex > 8
+                }
+            }
+            androidx.compose.foundation.layout.Box(modifier = Modifier.fillMaxSize()) {
             LazyVerticalGrid(
                 columns = columns,
+                state = gridState,
                 contentPadding = PaddingValues(
                     start = outerPadding,
                     end = outerPadding,
@@ -657,6 +671,23 @@ fun StationsHomeScreen(
                     }
                 }
             }
+            if (showGridScrollTop) {
+                androidx.compose.material3.SmallFloatingActionButton(
+                    onClick = {
+                        scope.launch { gridState.animateScrollToItem(0) }
+                    },
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = 16.dp, bottom = 16.dp),
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.KeyboardArrowUp,
+                        contentDescription = "Scroll to top",
+                    )
+                }
+            }
+            } // Box
             } // PullToRefreshBox
         }
     }
@@ -1370,6 +1401,8 @@ private fun RecentChip(station: Station, onTap: () -> Unit) {
 private fun EmptyState(
     isCompact: Boolean,
     onOpenLibrary: () -> Unit,
+    onRunScan: () -> Unit,
+    rescanInFlight: Boolean,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -1377,35 +1410,42 @@ private fun EmptyState(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
+        // Big neutral icon to anchor the page so the empty state
+        // doesn't look like a loading-indicator-less blank screen.
+        Icon(
+            imageVector = androidx.compose.material.icons.Icons.Filled.LibraryMusic,
+            contentDescription = null,
+            modifier = Modifier.size(72.dp),
+            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
+        )
+        Spacer(Modifier.size(16.dp))
         Text(
-            "Stations",
-            style = if (isCompact) MaterialTheme.typography.headlineMedium
-                    else MaterialTheme.typography.displaySmall,
+            "No stations yet",
+            style = if (isCompact) MaterialTheme.typography.headlineSmall
+                    else MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onBackground,
         )
-        Spacer(Modifier.size(12.dp))
-        Text(
-            "No stations yet.",
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
-        )
         Spacer(Modifier.size(8.dp))
         Text(
-            "Finish onboarding (or scan a folder in Library) — built-in presets are seeded automatically once tracks are indexed.",
+            "Built-in presets (Liked Songs, Recently Added, Most Played, Forgotten Gems, decade buckets) seed automatically the first time tracks are indexed. Add a folder in Library, or rescan if your folders are already registered.",
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.55f),
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.65f),
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             modifier = Modifier.padding(horizontal = 24.dp),
         )
-        Spacer(Modifier.size(16.dp))
-        // Direct path to Library so the user can register a folder
-        // without having to bounce back through Home → Library by
-        // hand. Reuses the existing onBack callback (which routes
-        // back to Home, where Library is one tap away) — wired
-        // straight to a button so the action's discoverable on the
-        // same screen the empty state is showing.
-        androidx.compose.material3.OutlinedButton(onClick = onOpenLibrary) {
+        Spacer(Modifier.size(20.dp))
+        androidx.compose.material3.Button(
+            onClick = onOpenLibrary,
+        ) {
             Text("Go to Library")
+        }
+        Spacer(Modifier.size(8.dp))
+        androidx.compose.material3.OutlinedButton(
+            onClick = onRunScan,
+            enabled = !rescanInFlight,
+        ) {
+            Text(if (rescanInFlight) "Scanning…" else "Rescan all folders")
         }
     }
 }

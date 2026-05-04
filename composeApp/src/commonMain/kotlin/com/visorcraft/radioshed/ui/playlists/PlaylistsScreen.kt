@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.IconButton
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material3.AlertDialog
@@ -114,6 +115,9 @@ fun PlaylistsScreen(
     var importStatus by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     val libraryRepo: com.visorcraft.radioshed.data.LibraryRepository = koinInject()
+    // M3U exporter is shared with PlaylistDetailScreen's export flow.
+    // Same expect/actual share-sheet path on Android, no-op on iOS.
+    val m3uExporter: com.visorcraft.radioshed.source.PlaylistExporter = koinInject()
     // M3U import via system file picker. The picked .m3u/.m3u8 bytes
     // are decoded UTF-8, parsed line-by-line (skip blank + #-prefixed
     // metadata), each path resolved through `getTrackByPathOrSuffix`
@@ -436,6 +440,31 @@ fun PlaylistsScreen(
                     )
                 }
             },
+            onExportM3u = {
+                actionPlaylist = null
+                scope.launch {
+                    val tracks = repo.tracksIn(target.id)
+                    if (tracks.isNotEmpty()) {
+                        // Mirror PlaylistDetailScreen's M3U export
+                        // — single batched primaryArtistNameMap
+                        // query, then assemble M3uEntry per track.
+                        // Without this batched lookup the export
+                        // would block on N artistsForTrack
+                        // round-trips per the #268 fix.
+                        val artistByTrack = libraryRepo
+                            .primaryArtistNameMap(tracks.map { it.id })
+                        val entries = tracks.map { t ->
+                            com.visorcraft.radioshed.source.M3uEntry(
+                                absolutePath = t.path,
+                                durationSec = (t.durationMs / 1000L).toInt(),
+                                artist = artistByTrack[t.id],
+                                title = t.title.ifBlank { t.fileName },
+                            )
+                        }
+                        m3uExporter.exportM3u(target.name, entries)
+                    }
+                }
+            },
             onDelete = {
                 actionPlaylist = null
                 deleteConfirm = target
@@ -501,6 +530,7 @@ private fun PlaylistActionsSheet(
     onDismiss: () -> Unit,
     onRename: () -> Unit,
     onDuplicate: () -> Unit,
+    onExportM3u: () -> Unit,
     onDelete: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -510,10 +540,25 @@ private fun PlaylistActionsSheet(
                 text = playlist.name,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+                modifier = Modifier.padding(
+                    start = 24.dp, end = 24.dp, top = 8.dp, bottom = 0.dp,
+                ),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
+            // Created date helps users confirm they're acting on the
+            // right playlist when several names overlap (multiple
+            // "Workout" mixes accumulated over time, etc.). Quiet
+            // styling so it doesn't compete with the title.
+            Text(
+                text = "Created " + com.visorcraft.radioshed.data
+                    .formatShortDate(playlist.createdAt),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 0.dp),
+                maxLines = 1,
+            )
+            Spacer(Modifier.height(8.dp))
             ListItem(
                 modifier = Modifier.clickable(onClick = onRename),
                 leadingContent = {
@@ -536,6 +581,22 @@ private fun PlaylistActionsSheet(
                 supportingContent = {
                     Text(
                         "Creates \"${playlist.name} (copy)\" with the same tracks.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                },
+            )
+            ListItem(
+                modifier = Modifier.clickable(onClick = onExportM3u),
+                leadingContent = {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                        contentDescription = null,
+                    )
+                },
+                headlineContent = { Text("Export as M3U…") },
+                supportingContent = {
+                    Text(
+                        "Hands the .m3u file to the system share sheet.",
                         style = MaterialTheme.typography.bodySmall,
                     )
                 },

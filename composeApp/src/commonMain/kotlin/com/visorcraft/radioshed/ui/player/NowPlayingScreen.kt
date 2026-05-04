@@ -559,6 +559,26 @@ fun NowPlayingScreen(
         containerColor = MaterialTheme.colorScheme.background,
     ) { padding ->
         val playable = nowPlaying
+        // One-line tech summary below the scrubber: format · bitrate ·
+        // sample rate. Lazy-fetched via getTrackById on each track
+        // change. The full breakdown still lives on the Track Info
+        // dialog; this just answers "what am I listening to right
+        // now" at a glance, the way Foobar/Winamp status bars used to.
+        var formatLine by remember { mutableStateOf<String?>(null) }
+        LaunchedEffect(playable?.trackId) {
+            val tid = playable?.trackId
+            formatLine = if (tid == null) null else {
+                val t = libraryRepo.getTrackById(tid)
+                if (t == null) null else {
+                    val parts = buildList {
+                        if (t.format.isNotBlank()) add(t.format.uppercase())
+                        t.bitrateKbps?.let { add("${it} kbps") }
+                        t.sampleRateHz?.let { add("${"%.1f".format(it / 1000.0)} kHz") }
+                    }
+                    if (parts.isEmpty()) null else parts.joinToString(" · ")
+                }
+            }
+        }
         if (playable == null) {
             Box(
                 modifier = Modifier.fillMaxSize().padding(padding),
@@ -775,6 +795,7 @@ fun NowPlayingScreen(
                     volume = userVolume,
                     accent = accent,
                     stationName = currentStation?.name,
+                    formatLine = formatLine,
                     onSeek = { audioEngine.seekTo(it) },
                     onTogglePlayPause = { audioEngine.togglePlayPause() },
                     onLongPressTogglePlayPause = {
@@ -827,6 +848,7 @@ fun NowPlayingScreen(
                     volume = userVolume,
                     accent = accent,
                     stationName = currentStation?.name,
+                    formatLine = formatLine,
                     onSeek = { audioEngine.seekTo(it) },
                     onTogglePlayPause = { audioEngine.togglePlayPause() },
                     onLongPressTogglePlayPause = {
@@ -984,6 +1006,7 @@ private fun CompactLayout(
     volume: Float,
     accent: Color,
     stationName: String?,
+    formatLine: String?,
     onSeek: (Long) -> Unit,
     onTogglePlayPause: () -> Unit,
     onLongPressTogglePlayPause: (() -> Unit)? = null,
@@ -1026,6 +1049,15 @@ private fun CompactLayout(
         )
         Spacer(Modifier.height(16.dp))
         Scrubber(positionMs, durationMs, onSeek)
+        if (!formatLine.isNullOrBlank()) {
+            Text(
+                text = formatLine,
+                style = MaterialTheme.typography.labelSmall,
+                fontFamily = FontFamily.Monospace,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.55f),
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
         Spacer(Modifier.height(16.dp))
         TransportRow(
             state = state,
@@ -1068,6 +1100,7 @@ private fun TwoPaneLayout(
     volume: Float,
     accent: Color,
     stationName: String?,
+    formatLine: String?,
     onSeek: (Long) -> Unit,
     onTogglePlayPause: () -> Unit,
     onLongPressTogglePlayPause: (() -> Unit)? = null,
@@ -1129,6 +1162,15 @@ private fun TwoPaneLayout(
             )
             Spacer(Modifier.height(24.dp))
             Scrubber(positionMs, durationMs, onSeek)
+            if (!formatLine.isNullOrBlank()) {
+                Text(
+                    text = formatLine,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontFamily = FontFamily.Monospace,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.55f),
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
             Spacer(Modifier.height(24.dp))
             TransportRow(
                 state = state,
@@ -2528,20 +2570,27 @@ private fun QueueBottomSheet(
                 item { Spacer(Modifier.height(8.dp)) }
             }
             item {
+                val queueHeaderClipboard = com.visorcraft.radioshed.ui.util
+                    .rememberCopyToClipboard()
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        // Tap the section header to copy the upcoming
+                        // queue as a numbered text list — paste-friendly
+                        // for "what's queued?" chats. No-op when the
+                        // queue is empty.
+                        .clickable(enabled = upcoming.isNotEmpty()) {
+                            val text = upcoming.mapIndexed { i, t ->
+                                "${i + 1}. ${t.title.ifBlank { t.fileName }}"
+                            }.joinToString("\n")
+                            queueHeaderClipboard(text)
+                        },
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     QueueSectionHeader(
                         if (isShuffleMode) "Up next (shuffle pool)" else "Up next",
                     )
                     Spacer(Modifier.weight(1f))
-                    // "Save" snapshots the visible upcoming list into
-                    // a new playlist via a dialog prompt. Useful for
-                    // capturing a smart-shuffle session you liked
-                    // before it scrolls past. We surface it whenever
-                    // the upcoming list has rows — both pure priority
-                    // queues and rule-driven peeks count.
                     if (upcoming.isNotEmpty()) {
                         TextButton(onClick = onSaveAsPlaylist) { Text("Save") }
                     }

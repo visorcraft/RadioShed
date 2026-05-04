@@ -1186,6 +1186,7 @@ private fun formatTotalDuration(ms: Long): String {
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun TopGenresChips(genres: List<Pair<String, Long>>) {
+    val genreClipboard = com.visorcraft.radioshed.ui.util.rememberCopyToClipboard()
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
@@ -1197,8 +1198,21 @@ private fun TopGenresChips(genres: List<Pair<String, Long>>) {
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             genres.forEach { (genre, plays) ->
+                // Tap-to-copy "Genre · N plays" because tap-to-filter
+                // (the future hook) routes through GenreDetail nav,
+                // which the Stats screen doesn't have an obvious path
+                // to without threading an `onGenreTap` lambda all
+                // the way down. Copy is the safe interim — users
+                // share top-genres screenshots / text often enough
+                // that this is useful even after the tap-to-filter
+                // hook lands.
                 androidx.compose.material3.AssistChip(
-                    onClick = { /* tap-to-filter is a future hook */ },
+                    onClick = {
+                        genreClipboard(
+                            "$genre — $plays play" +
+                                if (plays == 1L) "" else "s",
+                        )
+                    },
                     label = {
                         Text("$genre · $plays")
                     },

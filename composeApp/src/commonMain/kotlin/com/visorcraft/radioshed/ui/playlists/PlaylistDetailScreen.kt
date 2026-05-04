@@ -2,6 +2,7 @@ package com.visorcraft.radioshed.ui.playlists
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -83,6 +84,9 @@ fun PlaylistDetailScreen(
     var tracks by remember { mutableStateOf<List<Track>>(emptyList()) }
     var menuOpen by remember { mutableStateOf(false) }
     var deleteConfirmOpen by remember { mutableStateOf(false) }
+    // Long-press a track row → opens the standard TrackContextSheet
+    // for Play next / Add to queue / Like / Go-to-album / etc.
+    var contextTrackId by remember { mutableStateOf<Long?>(null) }
     val scope = rememberCoroutineScope()
     val nowPlaying by audioEngine.nowPlaying.collectAsState()
     val currentTrackId = nowPlaying?.trackId
@@ -363,6 +367,16 @@ fun PlaylistDetailScreen(
                                     val idx = tracks.indexOf(track).coerceAtLeast(0)
                                     stationPlayback.playTracks(tracks, startIndex = idx)
                                 },
+                                // Long-press → standard track context
+                                // sheet (Play next / Add to queue /
+                                // Add to playlist / Like / Go to album
+                                // / Go to artist / etc). Closes the
+                                // gap with every other track-list
+                                // surface that already routes long-
+                                // press through the context sheet.
+                                onLongPress = {
+                                    contextTrackId = track.id
+                                },
                                 onRemove = {
                                     scope.launch {
                                         repo.removeTrack(playlistId, track.id)
@@ -393,6 +407,13 @@ fun PlaylistDetailScreen(
         }
     }
 
+    contextTrackId?.let { id ->
+        TrackContextSheet(
+            trackId = id,
+            onDismiss = { contextTrackId = null },
+        )
+    }
+
     if (deleteConfirmOpen) {
         AlertDialog(
             onDismissRequest = { deleteConfirmOpen = false },
@@ -418,6 +439,7 @@ fun PlaylistDetailScreen(
     }
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun PlaylistTrackRow(
     track: Track,
@@ -425,10 +447,17 @@ private fun PlaylistTrackRow(
     isCurrent: Boolean = false,
     modifier: Modifier = Modifier,
     onTap: () -> Unit,
+    onLongPress: (() -> Unit)? = null,
     onRemove: () -> Unit,
 ) {
     Surface(
-        modifier = modifier.fillMaxWidth().clickable(onClick = onTap),
+        modifier = if (onLongPress != null) {
+            modifier
+                .fillMaxWidth()
+                .combinedClickable(onClick = onTap, onLongClick = onLongPress)
+        } else {
+            modifier.fillMaxWidth().clickable(onClick = onTap)
+        },
         // Subtle background when actively dragging so the row visually
         // separates from its neighbours during the gesture.
         color = if (isDragging) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)

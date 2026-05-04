@@ -153,11 +153,21 @@ fun LyricsScreen(
                         val subtitle = listOfNotNull(artistName, sourceLabel)
                             .joinToString(" · ")
                         if (subtitle.isNotBlank()) {
+                            // Tap-to-copy the subtitle so users can
+                            // share "{artist} · from LRClib" or
+                            // similar attribution into a chat or
+                            // bug report. Single-tap is fine here —
+                            // attribution is purely informational.
+                            val attributionClipboard = com.visorcraft
+                                .radioshed.ui.util.rememberCopyToClipboard()
                             Text(
                                 subtitle,
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                                 maxLines = 1,
+                                modifier = Modifier.clickable {
+                                    attributionClipboard(subtitle)
+                                },
                             )
                         }
                     }

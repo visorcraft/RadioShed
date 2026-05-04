@@ -383,6 +383,17 @@ fun HistoryScreen(
                             androidx.compose.material3.FilterChip(
                                 selected = selectedStationId == id,
                                 onClick = {
+                                    // Tapping a station chip while a
+                                    // text search is active also clears
+                                    // the search — the user signaled
+                                    // "narrow by station" and likely
+                                    // wants the broad text filter out
+                                    // of the way to see what's in that
+                                    // station. Without this, the chip
+                                    // tap and search box compound and
+                                    // can leave a confusingly empty
+                                    // list.
+                                    if (searchQuery.isNotEmpty()) searchQuery = ""
                                     selectedStationId = if (selectedStationId == id) null else id
                                 },
                                 label = { Text(name) },

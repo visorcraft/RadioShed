@@ -355,14 +355,32 @@ fun LibraryBrowserScreen(
                         // this is the "play everything I own, surprise
                         // me" entry point that doesn't require building
                         // a station first.
-                        IconButton(onClick = {
-                            val pool = allTracks.shuffled()
-                            stationPlayback.playTracks(pool, startIndex = 0)
-                        }) {
-                            Icon(
-                                imageVector = Icons.Filled.Shuffle,
-                                contentDescription = "Shuffle all",
-                            )
+                        // Long-press: "Random song" — picks a single
+                        // track instead of seeding the whole library.
+                        // Faster surprise without committing to a
+                        // session-length queue.
+                        Box(
+                            modifier = Modifier.combinedClickable(
+                                onClick = {
+                                    val pool = allTracks.shuffled()
+                                    stationPlayback.playTracks(pool, startIndex = 0)
+                                },
+                                onLongClick = {
+                                    val pick = allTracks.randomOrNull()
+                                    if (pick != null) {
+                                        stationPlayback.playTracks(
+                                            listOf(pick), startIndex = 0,
+                                        )
+                                    }
+                                },
+                            ),
+                        ) {
+                            IconButton(onClick = {}) {
+                                Icon(
+                                    imageVector = Icons.Filled.Shuffle,
+                                    contentDescription = "Shuffle all (long-press for one random)",
+                                )
+                            }
                         }
                         Box {
                             IconButton(onClick = { sortMenuOpen = true }) {

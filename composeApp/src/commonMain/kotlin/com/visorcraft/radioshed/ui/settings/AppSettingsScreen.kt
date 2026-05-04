@@ -3,6 +3,7 @@ package com.visorcraft.radioshed.ui.settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -808,10 +809,27 @@ private fun LibrarySummaryCard(
             totalRuntimeMs = libraryRepo.totalLibraryDurationMs()
         }
     }
+    val copyToClipboard = com.visorcraft.radioshed.ui.util.rememberCopyToClipboard()
     Surface(
         shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            // Tap copies a paste-friendly multi-line summary —
+            // useful for "what's in your library?" chats and bug
+            // reports. No long-press behavior because the row is
+            // purely informational.
+            .clickable {
+                val tc = trackCount?.toString() ?: "…"
+                val ac = albumCount?.toString() ?: "…"
+                val arc = artistCount?.toString() ?: "…"
+                val sc = stationCount?.toString() ?: "…"
+                val rt = totalRuntimeMs?.let { formatLibraryRuntime(it) } ?: "…"
+                copyToClipboard(
+                    "Library: $tc tracks · $ac albums · $arc artists · " +
+                        "$sc stations · $rt total runtime",
+                )
+            },
     ) {
         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
             Text(
@@ -1643,10 +1661,26 @@ private fun ConnectivityPolicyRow(
         com.visorcraft.radioshed.domain.ConnectivityPolicy.Never ->
             "All online lookups disabled — only embedded artwork + sidecar lyrics."
     }
+    val cycle = remember {
+        listOf(
+            com.visorcraft.radioshed.domain.ConnectivityPolicy.Always,
+            com.visorcraft.radioshed.domain.ConnectivityPolicy.WiFiOnly,
+            com.visorcraft.radioshed.domain.ConnectivityPolicy.Manual,
+            com.visorcraft.radioshed.domain.ConnectivityPolicy.Never,
+        )
+    }
     Surface(
         shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .combinedClickable(
+                onClick = {},
+                onLongClick = {
+                    val nextIdx = (cycle.indexOf(current) + 1).mod(cycle.size)
+                    onPick(cycle[nextIdx])
+                },
+            ),
     ) {
         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
             Text(

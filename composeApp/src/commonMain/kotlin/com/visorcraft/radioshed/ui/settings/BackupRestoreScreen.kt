@@ -77,6 +77,7 @@ fun BackupRestoreScreen(
     var deleteConfirm by remember { mutableStateOf<BackupFile?>(null) }
     var deleteAllConfirm by remember { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
+    var detailsOpen by remember { mutableStateOf<BackupFile?>(null) }
 
     suspend fun reload() {
         files = backupService.listBackups()
@@ -235,6 +236,7 @@ fun BackupRestoreScreen(
                                 }
                             },
                             onDelete = { deleteConfirm = file },
+                            onTap = { detailsOpen = file },
                             enabled = !working,
                         )
                     }
@@ -433,6 +435,65 @@ fun BackupRestoreScreen(
             },
         )
     }
+
+    detailsOpen?.let { file ->
+        var preview by remember { mutableStateOf<BackupService.BundlePreview?>(null) }
+        var loaded by remember { mutableStateOf(false) }
+        LaunchedEffect(file.uri) {
+            preview = backupService.preview(file.uri)
+            loaded = true
+        }
+        AlertDialog(
+            onDismissRequest = { detailsOpen = null },
+            title = { Text(file.displayName, maxLines = 2, overflow = TextOverflow.Ellipsis) },
+            text = {
+                Column {
+                    Text(
+                        text = "Saved ${formatTimestamp(file.createdAt)} · ${formatBytes(file.sizeBytes)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    val p = preview
+                    if (p != null) {
+                        Text("Contents", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                        Spacer(Modifier.height(4.dp))
+                        Text("${p.stationCount} station${if (p.stationCount == 1) "" else "s"}")
+                        Text("${p.playlistCount} playlist${if (p.playlistCount == 1) "" else "s"}")
+                        Text("${p.ratingCount} rating${if (p.ratingCount == 1) "" else "s"}")
+                        if (p.likedCount > 0) Text("${p.likedCount} liked")
+                        if (p.settingsCount > 0) Text("${p.settingsCount} setting${if (p.settingsCount == 1) "" else "s"}")
+                        if (p.eqPresetCount > 0) Text("${p.eqPresetCount} EQ preset${if (p.eqPresetCount == 1) "" else "s"}")
+                        if (p.exportedAtMs > 0L) {
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                "Exported ${formatTimestamp(p.exportedAtMs)}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+                            )
+                        }
+                    } else if (loaded) {
+                        Text(
+                            "Couldn't parse this backup — the file is missing or corrupt.",
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    } else {
+                        Text("Reading…", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val target = file
+                    detailsOpen = null
+                    restoreConfirm = target
+                }) { Text("Restore") }
+            },
+            dismissButton = {
+                TextButton(onClick = { detailsOpen = null }) { Text("Close") }
+            },
+        )
+    }
 }
 
 @Composable
@@ -441,10 +502,13 @@ private fun BackupRow(
     onRestore: () -> Unit,
     onShare: () -> Unit,
     onDelete: () -> Unit,
+    onTap: () -> Unit,
     enabled: Boolean,
 ) {
     Surface(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = enabled, onClick = onTap),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
         shape = RoundedCornerShape(12.dp),
     ) {

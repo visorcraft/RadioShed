@@ -178,6 +178,16 @@ class SettingsStore(private val settings: Settings) {
         kotlinx.coroutines.flow.MutableStateFlow(settings.getBoolean(KEY_KEEP_SCREEN_ON, false))
     val keepScreenOnFlow: kotlinx.coroutines.flow.StateFlow<Boolean> = _keepScreenOnFlow
 
+    /**
+     * Last-used Search scope chip ("All" / "Tracks" / "Artists" /
+     * "Albums"). Persisted so a user who consistently searches one
+     * scope doesn't have to re-pick it on every Search-screen entry.
+     * Stored as the enum name string; an unknown / typo'd value
+     * falls back to All.
+     */
+    fun getSearchScope(): String = settings.getStringOrNull(KEY_SEARCH_SCOPE) ?: "All"
+    fun setSearchScope(name: String) = settings.putString(KEY_SEARCH_SCOPE, name)
+
     fun getKeepScreenOn(): Boolean = settings.getBoolean(KEY_KEEP_SCREEN_ON, false)
     fun setKeepScreenOn(enabled: Boolean) {
         settings.putBoolean(KEY_KEEP_SCREEN_ON, enabled)
@@ -254,6 +264,7 @@ class SettingsStore(private val settings: Settings) {
             KEY_STATS_WINDOW_DAYS, KEY_BACKUP_RETENTION,
             KEY_SLEEP_STOP_ON_EXPIRE, KEY_PLAYBACK_SPEED,
             KEY_KEEP_SCREEN_ON, KEY_AUTO_FETCH_LYRICS, KEY_HAPTICS_ENABLED,
+            KEY_SEARCH_SCOPE,
         ).forEach { settings.remove(it) }
         // Reset wipes the underlying entries; mirror flows must
         // republish so live consumers (NowPlaying for driveMode /
@@ -609,7 +620,7 @@ class SettingsStore(private val settings: Settings) {
         listOf(
             KEY_THEME_MODE, KEY_CONNECTIVITY_POLICY,
             KEY_LIB_ARTIST_SORT, KEY_LIB_ALBUM_SORT, KEY_LIB_GENRE_SORT,
-            KEY_FILE_BROWSER_SORT,
+            KEY_FILE_BROWSER_SORT, KEY_SEARCH_SCOPE,
             KEY_ALBUM_TRACK_SORT, KEY_ARTIST_TRACK_SORT, KEY_GENRE_TRACK_SORT,
         ).forEach { key ->
             settings.getStringOrNull(key)?.let {
@@ -739,7 +750,7 @@ class SettingsStore(private val settings: Settings) {
     private fun expectedTypeForKey(key: String): SettingType? = when (key) {
         KEY_THEME_MODE, KEY_CONNECTIVITY_POLICY,
         KEY_LIB_ARTIST_SORT, KEY_LIB_ALBUM_SORT, KEY_LIB_GENRE_SORT,
-        KEY_FILE_BROWSER_SORT,
+        KEY_FILE_BROWSER_SORT, KEY_SEARCH_SCOPE,
         KEY_ALBUM_TRACK_SORT, KEY_ARTIST_TRACK_SORT, KEY_GENRE_TRACK_SORT -> SettingType.STR
         KEY_MATERIAL_YOU, KEY_REDUCE_MOTION, KEY_DRIVE_MODE,
         KEY_REPLAY_GAIN, KEY_AUTO_RESUME_STATION, KEY_AUTO_BACKUP,
@@ -773,6 +784,7 @@ class SettingsStore(private val settings: Settings) {
         const val KEY_KEEP_SCREEN_ON = "ui.keepScreenOn"
         const val KEY_AUTO_FETCH_LYRICS = "lyrics.autoFetchOverNetwork"
         const val KEY_HAPTICS_ENABLED = "ui.hapticsEnabled"
+        const val KEY_SEARCH_SCOPE = "ui.search.scope"
         const val KEY_CONNECTIVITY_POLICY = "online.connectivityPolicy"
         const val KEY_ONBOARDING_DONE = "onboarding.complete"
         const val KEY_LAST_STATION_ID = "playback.lastStationId"

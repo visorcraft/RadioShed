@@ -79,7 +79,17 @@ fun SearchScreen(
     var contextTrackId by remember { mutableStateOf<Long?>(null) }
     val nowPlaying by audioEngine.nowPlaying.collectAsState()
     val currentTrackId = nowPlaying?.trackId
-    var scope by remember { mutableStateOf(SearchScope.All) }
+    // Persisted across screen entries — a user who consistently
+    // searches one scope shouldn't have to re-pick it on every visit.
+    // Falls back to All when the stored name is unknown (e.g. an
+    // older bundle had a now-removed scope).
+    var scope by remember {
+        val initial = runCatching {
+            SearchScope.valueOf(settings.getSearchScope())
+        }.getOrDefault(SearchScope.All)
+        mutableStateOf(initial)
+    }
+    LaunchedEffect(scope) { settings.setSearchScope(scope.name) }
     // Liked-only filter applied to the Tracks results only — albums
     // and artists don't carry a liked flag. The set refreshes after
     // each query lands AND when liked-count changes elsewhere
