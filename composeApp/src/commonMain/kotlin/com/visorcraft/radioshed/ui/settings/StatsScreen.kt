@@ -99,6 +99,7 @@ fun StatsScreen(
         mutableStateOf<List<com.visorcraft.radioshed.data.DailyActivity>>(emptyList())
     }
     var hourActivity by remember { mutableStateOf<LongArray>(LongArray(24)) }
+    var weekdayActivity by remember { mutableStateOf<LongArray>(LongArray(7)) }
     var completionStats by remember { mutableStateOf<Pair<Long, Long>>(0L to 0L) }
     var streaks by remember { mutableStateOf<Pair<Int, Int>>(0 to 0) }
     val scope = rememberCoroutineScope()
@@ -125,6 +126,7 @@ fun StatsScreen(
         mostSkipped = ratingRepo.mostSkippedTracks(limit = 10L)
         dailyActivity = stationRepo.dailyActivity(windowDays = 30)
         hourActivity = stationRepo.playsByHourOfDay(windowDays = 30)
+        weekdayActivity = stationRepo.playsByWeekday(windowDays = 30)
         completionStats = stationRepo.completionStats()
         streaks = stationRepo.listeningStreaks(windowDays = 90)
     }
@@ -217,6 +219,15 @@ fun StatsScreen(
                     SectionHeader("By hour of day")
                     Spacer(Modifier.height(4.dp))
                     HourHistogram(hourActivity)
+                    Spacer(Modifier.height(20.dp))
+                }
+            }
+
+            if (weekdayActivity.any { it > 0L }) {
+                item {
+                    SectionHeader("By weekday")
+                    Spacer(Modifier.height(4.dp))
+                    WeekdayHistogram(weekdayActivity)
                     Spacer(Modifier.height(20.dp))
                 }
             }
@@ -596,6 +607,83 @@ private fun formatHour(h: Int): String = when (h) {
     12 -> "noon"
     in 1..11 -> "${h}am"
     else -> "${h - 12}pm"
+}
+
+/**
+ * 7-bar weekday histogram. Index 0 = Monday … 6 = Sunday so the
+ * work week reads on the left of the chart. Rendered with the same
+ * bar-styling vocabulary as [HourHistogram] for visual consistency
+ * within the Stats screen.
+ */
+@Composable
+private fun WeekdayHistogram(plays: LongArray) {
+    val peak = remember(plays) { (plays.maxOrNull() ?: 0L).coerceAtLeast(1L) }
+    val peakIdx = remember(plays) { plays.indices.maxByOrNull { plays[it] } ?: 0 }
+    val labels = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = "Busiest day: ${labels[peakIdx]}",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+            )
+            Spacer(Modifier.height(10.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(72.dp),
+                verticalAlignment = Alignment.Bottom,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                for (d in 0..6) {
+                    val v = plays[d]
+                    val ratio = if (v == 0L) 0.04f
+                                else (0.12f + 0.88f * (v.toFloat() / peak.toFloat()))
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxSize(),
+                        contentAlignment = Alignment.BottomCenter,
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height((72f * ratio).dp.coerceAtLeast(2.dp))
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(
+                                    if (v == 0L)
+                                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
+                                    else
+                                        MaterialTheme.colorScheme.tertiary.copy(
+                                            alpha = (0.45f + 0.55f * (v.toFloat() / peak.toFloat()))
+                                                .coerceAtMost(1f),
+                                        ),
+                                ),
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.height(6.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                labels.forEach { label ->
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                        modifier = Modifier.weight(1f),
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    )
+                }
+            }
+        }
+    }
 }
 
 /**

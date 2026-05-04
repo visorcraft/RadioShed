@@ -27,6 +27,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.Casino
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Settings
@@ -759,18 +760,46 @@ private fun SongList(
         EmptyHint("No songs match this view.")
         return
     }
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(vertical = 4.dp),
-    ) {
-        items(tracks, key = { it.id }) { track ->
-            SongRow(
-                track = track,
-                isCurrent = track.id == currentTrackId,
-                onTap = { onPlay(track) },
-                onLongPress = { onLongPress(track) },
-                albumName = track.albumId?.let { albumNameById[it] },
-            )
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val scope = rememberCoroutineScope()
+    // Show the back-to-top FAB once the user has scrolled past the
+    // ~first viewport. derivedStateOf keeps the snapshot read cheap
+    // — only triggers when firstVisibleItemIndex actually changes
+    // category (above/below threshold).
+    val showFab by remember {
+        androidx.compose.runtime.derivedStateOf { listState.firstVisibleItemIndex > 8 }
+    }
+    Box(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(vertical = 4.dp),
+        ) {
+            items(tracks, key = { it.id }) { track ->
+                SongRow(
+                    track = track,
+                    isCurrent = track.id == currentTrackId,
+                    onTap = { onPlay(track) },
+                    onLongPress = { onLongPress(track) },
+                    albumName = track.albumId?.let { albumNameById[it] },
+                )
+            }
+        }
+        if (showFab) {
+            androidx.compose.material3.SmallFloatingActionButton(
+                onClick = {
+                    scope.launch { listState.animateScrollToItem(0) }
+                },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 16.dp, bottom = 16.dp),
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.KeyboardArrowUp,
+                    contentDescription = "Scroll to top",
+                )
+            }
         }
     }
 }

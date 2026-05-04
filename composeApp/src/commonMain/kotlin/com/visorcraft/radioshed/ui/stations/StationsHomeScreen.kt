@@ -40,7 +40,9 @@ import androidx.compose.material.icons.filled.NewReleases
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.PushPin
@@ -55,6 +57,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -131,6 +134,14 @@ fun StationsHomeScreen(
     // four stops cover phone (Small / Medium) through tablet
     // (Large / X-Large) sensibilities.
     var tileSizeDp by remember { mutableStateOf(settings.getStationsTileSizeDp()) }
+    // Filter & built-in visibility toggles — both purely client-side
+    // off the live `stations` list. Filter shows a single inline text
+    // field above the grid; visible only when the user has enough
+    // stations that scrolling becomes friction (≥9). The built-in
+    // toggle hides the seeded preset stations so power users with a
+    // dozen custom stations don't have to scroll past the defaults.
+    var stationFilter by remember { mutableStateOf("") }
+    var hideBuiltIns by remember { mutableStateOf(settings.getStationsHideBuiltIns()) }
     val stations by stationRepo.observeAll().collectAsState(initial = emptyList())
     val currentStation by stationPlayback.currentStation.collectAsState()
     val playerState by audioEngine.state.collectAsState()
@@ -291,6 +302,31 @@ fun StationsHomeScreen(
                                     },
                                 )
                             }
+                            androidx.compose.material3.HorizontalDivider()
+                            DropdownMenuItem(
+                                text = {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Text(
+                                            "Hide built-in stations",
+                                            modifier = Modifier.weight(1f),
+                                        )
+                                        if (hideBuiltIns) {
+                                            Icon(
+                                                Icons.Filled.Check,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(16.dp),
+                                            )
+                                        }
+                                    }
+                                },
+                                onClick = {
+                                    hideBuiltIns = !hideBuiltIns
+                                    settings.setStationsHideBuiltIns(hideBuiltIns)
+                                    tileSizeMenuOpen = false
+                                },
+                            )
                         }
                     }
                 },
@@ -348,6 +384,39 @@ fun StationsHomeScreen(
                         onAddStation = onAddStation,
                         onReorder = onReorderStations,
                     )
+                }
+
+                // Inline filter field above the grid. Only surfaces
+                // when the grid is busy enough that scroll-to-find
+                // is a real friction point (≥9 stations) so a fresh-
+                // install user with the seeded preset count doesn't
+                // see clutter.
+                if (stations.size >= 9) {
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        androidx.compose.material3.OutlinedTextField(
+                            value = stationFilter,
+                            onValueChange = { stationFilter = it },
+                            placeholder = { Text("Filter stations…") },
+                            singleLine = true,
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Filled.Search,
+                                    contentDescription = null,
+                                )
+                            },
+                            trailingIcon = if (stationFilter.isNotEmpty()) {
+                                {
+                                    IconButton(onClick = { stationFilter = "" }) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Close,
+                                            contentDescription = "Clear filter",
+                                        )
+                                    }
+                                }
+                            } else null,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
                 }
 
                 // Continue Listening callout — only when a station is active.
@@ -424,7 +493,23 @@ fun StationsHomeScreen(
                     }
                 }
 
-                items(stations, key = { it.id }) { station ->
+                // Apply hide-built-ins toggle and the substring filter
+                // before rendering tiles. Filter checks both name and
+                // customSubtitle so users can search "tag-driven" or
+                // "60s" if they remember the subtitle but not the name.
+                val displayedStations = stations
+                    .let { src ->
+                        if (hideBuiltIns) src.filterNot { it.isBuiltIn } else src
+                    }
+                    .let { src ->
+                        val q = stationFilter.trim()
+                        if (q.isBlank()) src
+                        else src.filter {
+                            it.name.contains(q, ignoreCase = true) ||
+                                (it.customSubtitle?.contains(q, ignoreCase = true) == true)
+                        }
+                    }
+                items(displayedStations, key = { it.id }) { station ->
                     val rate = completionRates[station.id]
                     val skipRateLine = rate?.let { (plays, skips) ->
                         // Display only when we've got enough plays for

@@ -1967,6 +1967,46 @@ than the v2 polish:
   freezing a smart-shuffle session you liked before it scrolls
   past.
 
+#### Phase 19 polish (continued, batch 5)
+
+- [x] **Stations Home — inline filter.** When the user has 9 or
+  more stations, an `OutlinedTextField` (with leading search /
+  trailing clear icons) appears between the page header and the
+  tile grid. Substring match against station name and
+  customSubtitle, case-insensitive. Hidden on smaller libraries
+  to keep fresh-install UX uncluttered.
+- [x] **Stations Home — "Hide built-ins" toggle.** Persisted
+  `KEY_STATIONS_HIDE_BUILTINS` boolean, exposed in the same
+  GridView dropdown that hosts the tile-size stops. Off by
+  default; flipping it filters preset stations (`isBuiltIn = 1`)
+  out of the visible grid for power users with a dozen custom
+  stations.
+- [x] **Library Browser — scroll-to-top FAB.** The Songs tab
+  LazyColumn carries a `rememberLazyListState`; once
+  `firstVisibleItemIndex > 8`, a `SmallFloatingActionButton` with
+  Up arrow renders bottom-right and `animateScrollToItem(0)`s on
+  tap. A `derivedStateOf` keeps the visibility check cheap.
+- [x] **Stats — weekday histogram.** New
+  `selectPlaysPerWeekdayWindow` SQL query buckets plays by
+  local weekday (`strftime('%w')`) over a 30-day window, rotated
+  in Kotlin to Monday-first. Renders as a 7-bar `WeekdayHistogram`
+  with a "Busiest day" header below the existing hour-of-day
+  histogram.
+- [x] **Lyrics — long-press FAB to scroll to top.** The existing
+  jump-to-current FAB now responds to long-press by scrolling all
+  the way to the first line and arming the user-override window
+  so the auto-scroll doesn't immediately yank back. Surface
+  swapped to a `combinedClickable` Box so both gestures fit on
+  one widget.
+- [x] **Replay/Forward 10s — long-press for 30s.** The
+  ±10-second seek buttons in the Now Playing transport row gained
+  a long-press affordance: long-press jumps 30s instead of 10s.
+  Same combinedClickable+Surface pattern as the SkipNext
+  long-press menu, threaded through `onReplay(deltaMs)` /
+  `onForward(deltaMs)` callbacks so the parent computes the
+  bounds (preserving the existing `(durationMs - 250)` cap on
+  forward seeks).
+
 ---
 
 ## Appendix A — Compose Multiplatform vs native UI: when to fall back

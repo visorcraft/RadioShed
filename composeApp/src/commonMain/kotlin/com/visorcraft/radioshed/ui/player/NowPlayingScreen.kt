@@ -858,10 +858,10 @@ private fun CompactLayout(
             onTogglePlayPause = onTogglePlayPause,
             onPrev = onPrev,
             onNext = onNext,
-            onReplay10 = { onSeek((positionMs - 10_000).coerceAtLeast(0L)) },
-            onForward10 = {
+            onReplay = { delta -> onSeek((positionMs - delta).coerceAtLeast(0L)) },
+            onForward = { delta ->
                 val cap = if (durationMs > 0) (durationMs - 250L).coerceAtLeast(0L) else Long.MAX_VALUE
-                onSeek((positionMs + 10_000).coerceAtMost(cap))
+                onSeek((positionMs + delta).coerceAtMost(cap))
             },
             onDislikeOnStation = onDislikeOnStation,
             driveMode = driveMode,
@@ -957,10 +957,10 @@ private fun TwoPaneLayout(
                 onTogglePlayPause = onTogglePlayPause,
                 onPrev = onPrev,
                 onNext = onNext,
-                onReplay10 = { onSeek((positionMs - 10_000).coerceAtLeast(0L)) },
-                onForward10 = {
+                onReplay = { delta -> onSeek((positionMs - delta).coerceAtLeast(0L)) },
+                onForward = { delta ->
                     val cap = if (durationMs > 0) (durationMs - 250L).coerceAtLeast(0L) else Long.MAX_VALUE
-                    onSeek((positionMs + 10_000).coerceAtMost(cap))
+                    onSeek((positionMs + delta).coerceAtMost(cap))
                 },
                 onDislikeOnStation = onDislikeOnStation,
                 driveMode = driveMode,
@@ -1296,8 +1296,13 @@ private fun TransportRow(
     onTogglePlayPause: () -> Unit,
     onPrev: () -> Unit,
     onNext: () -> Unit,
-    onReplay10: () -> Unit,
-    onForward10: () -> Unit,
+    /**
+     * Tap = 10s, long-press = 30s. The argument is the delta in
+     * milliseconds (always positive); the parent decides direction
+     * via which callback is invoked.
+     */
+    onReplay: (deltaMs: Long) -> Unit,
+    onForward: (deltaMs: Long) -> Unit,
     onDislikeOnStation: () -> Unit,
     driveMode: Boolean,
 ) {
@@ -1332,13 +1337,35 @@ private fun TransportRow(
         )
 
         if (!driveMode) {
-            BigIconButton(
-                icon = Icons.Filled.Replay10,
-                description = "Back 10 seconds",
-                buttonSize = seekButtonSize,
-                iconSize = seekIconSize,
-                onClick = onReplay10,
-            )
+            // Replay: tap = 10s back, long-press = 30s back. Pattern
+            // mirrors podcast apps' fast-rewind affordance.
+            Box {
+                Surface(
+                    color = Color.Transparent,
+                    modifier = Modifier
+                        .size(seekButtonSize)
+                        .clip(RoundedCornerShape(seekButtonSize / 2))
+                        .combinedClickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                            onClick = { onReplay(10_000L) },
+                            onLongClick = { onReplay(30_000L) },
+                        )
+                        .semantics { contentDescription = "Back 10 seconds (long-press 30)" },
+                ) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Replay10,
+                            contentDescription = null,
+                            modifier = Modifier.size(seekIconSize),
+                            tint = MaterialTheme.colorScheme.onBackground,
+                        )
+                    }
+                }
+            }
         }
 
         BigIconButton(
@@ -1350,13 +1377,35 @@ private fun TransportRow(
         )
 
         if (!driveMode) {
-            BigIconButton(
-                icon = Icons.Filled.Forward10,
-                description = "Forward 10 seconds",
-                buttonSize = seekButtonSize,
-                iconSize = seekIconSize,
-                onClick = onForward10,
-            )
+            // Forward: tap = 10s, long-press = 30s. See onReplay above
+            // for the rationale.
+            Box {
+                Surface(
+                    color = Color.Transparent,
+                    modifier = Modifier
+                        .size(seekButtonSize)
+                        .clip(RoundedCornerShape(seekButtonSize / 2))
+                        .combinedClickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                            onClick = { onForward(10_000L) },
+                            onLongClick = { onForward(30_000L) },
+                        )
+                        .semantics { contentDescription = "Forward 10 seconds (long-press 30)" },
+                ) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Forward10,
+                            contentDescription = null,
+                            modifier = Modifier.size(seekIconSize),
+                            tint = MaterialTheme.colorScheme.onBackground,
+                        )
+                    }
+                }
+            }
         }
 
         // Skip-next: tap = skip; long-press opens "don't play on this station" menu.

@@ -502,6 +502,30 @@ class StationRepository(private val db: RadioShedDatabase) {
         }
 
     /**
+     * Plays bucketed by local weekday over the last [windowDays].
+     * Returns a dense LongArray of size 7 — Monday is index 0,
+     * Sunday is index 6 (rotated from SQLite's Sunday-first
+     * convention so the chart reads with the work week as the
+     * "front" of the histogram).
+     */
+    suspend fun playsByWeekday(windowDays: Int = 30): LongArray =
+        withContext(IODispatcher) {
+            val sinceMs = nowMillis() - windowDays.toLong() * DAY_MS
+            val rows = db.stationsQueries.selectPlaysPerWeekdayWindow(sinceMs)
+                .executeAsList()
+            val out = LongArray(7)
+            rows.forEach { row ->
+                val sqliteWd = row.weekday?.toInt() ?: return@forEach
+                if (sqliteWd !in 0..6) return@forEach
+                // SQLite: 0 = Sunday … 6 = Saturday.
+                // Our index: 0 = Monday … 6 = Sunday.
+                val mondayFirst = (sqliteWd + 6) % 7
+                out[mondayFirst] = row.plays
+            }
+            out
+        }
+
+    /**
      * Listening streak over the rolling [windowDays] window. Returns a
      * pair of (currentStreakDays, longestStreakDays). Current streak
      * is the consecutive run of days with ≥1 play counting back from

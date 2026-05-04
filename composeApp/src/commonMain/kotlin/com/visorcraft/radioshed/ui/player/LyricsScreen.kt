@@ -1,8 +1,12 @@
 package com.visorcraft.radioshed.ui.player
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -338,6 +342,7 @@ private fun EditLyricsSearchDialog(
     )
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun SyncedLyrics(
     lines: List<LyricLine>,
@@ -445,28 +450,41 @@ private fun SyncedLyrics(
             }
         }
         // "Jump back to current line" — only rendered when the user
-        // has scrolled the active line off-screen. Tap: scroll to it
-        // immediately and clear the user-override window so
-        // subsequent auto-scrolls resume.
+        // has scrolled the active line off-screen. Tap: scroll to
+        // the active line and clear the user-override window so
+        // subsequent auto-scrolls resume. Long-press: scroll all the
+        // way to the first line (handy when the user has dragged the
+        // list way past the song's start to read ahead).
         if (activeOffscreen && activeIndex >= 0) {
-            androidx.compose.material3.SmallFloatingActionButton(
-                onClick = {
-                    lastUserScrollAt = 0L
-                    coroutineScope.launch {
-                        runCatching {
-                            listState.animateScrollToItem(activeIndex, -120)
-                        }
-                    }
-                },
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
+            Box(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(bottom = 16.dp),
+                    .padding(bottom = 16.dp)
+                    .size(56.dp)
+                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(28.dp))
+                    .background(MaterialTheme.colorScheme.primary)
+                    .combinedClickable(
+                        onClick = {
+                            lastUserScrollAt = 0L
+                            coroutineScope.launch {
+                                runCatching {
+                                    listState.animateScrollToItem(activeIndex, -120)
+                                }
+                            }
+                        },
+                        onLongClick = {
+                            lastUserScrollAt = nowMillis()
+                            coroutineScope.launch {
+                                runCatching { listState.animateScrollToItem(0) }
+                            }
+                        },
+                    ),
+                contentAlignment = Alignment.Center,
             ) {
                 androidx.compose.material3.Icon(
                     imageVector = Icons.Filled.ArrowDownward,
-                    contentDescription = "Jump to current line",
+                    contentDescription = "Jump to current line · long-press for top",
+                    tint = MaterialTheme.colorScheme.onPrimary,
                 )
             }
         }

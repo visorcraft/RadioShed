@@ -90,6 +90,19 @@ class SettingsStore(private val settings: Settings) {
     }
 
     /**
+     * Hides the seeded preset stations from the Stations Home grid.
+     * Off by default — built-ins are part of v1's first-run UX. Power
+     * users with a dozen custom stations may toggle this on so the
+     * grid scrolls less.
+     */
+    fun getStationsHideBuiltIns(): Boolean =
+        settings.getBoolean(KEY_STATIONS_HIDE_BUILTINS, false)
+
+    fun setStationsHideBuiltIns(value: Boolean) {
+        settings.putBoolean(KEY_STATIONS_HIDE_BUILTINS, value)
+    }
+
+    /**
      * Drive Mode bumps transport / rating tap targets to be safer
      * to hit while driving. Off by default; users opt in once and
      * the setting follows them across sessions.
@@ -545,6 +558,7 @@ class SettingsStore(private val settings: Settings) {
         const val KEY_REDUCE_MOTION = "ui.reduceMotion"
         const val KEY_FONT_SCALE = "ui.fontScale"
         const val KEY_STATIONS_TILE_SIZE = "ui.stations.tileSizeDp"
+        const val KEY_STATIONS_HIDE_BUILTINS = "ui.stations.hideBuiltIns"
         const val KEY_CONNECTIVITY_POLICY = "online.connectivityPolicy"
         const val KEY_ONBOARDING_DONE = "onboarding.complete"
         const val KEY_LAST_STATION_ID = "playback.lastStationId"

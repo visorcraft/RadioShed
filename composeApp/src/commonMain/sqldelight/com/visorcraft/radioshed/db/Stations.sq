@@ -266,6 +266,19 @@ WHERE played_at >= :sinceMs
 GROUP BY days_ago
 ORDER BY days_ago;
 
+-- Plays bucketed by local weekday (0=Sunday..6=Saturday per SQLite's
+-- strftime('%w')) within a rolling window. Returns one row per
+-- weekday with at least one play; the renderer fills in zero-play
+-- weekdays. Same windowing semantics as the hour-of-day query.
+selectPlaysPerWeekdayWindow:
+SELECT
+    CAST(strftime('%w', played_at / 1000, 'unixepoch', 'localtime') AS INTEGER) AS weekday,
+    COUNT(*) AS plays
+FROM station_history
+WHERE played_at >= :sinceMs
+GROUP BY weekday
+ORDER BY weekday;
+
 -- Distinct calendar dates (in the user's local timezone) on which at
 -- least one play happened, within a rolling window. Returned newest-
 -- first as integer days-since-epoch so the streak calculator can
