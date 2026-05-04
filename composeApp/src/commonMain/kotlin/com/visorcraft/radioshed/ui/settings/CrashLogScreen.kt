@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -201,6 +202,14 @@ private fun CrashLogRow(
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
+                                // Inner verticalScroll inside a LazyColumn item
+                                // requires a finite height — without heightIn,
+                                // expanding any crash row with a stack trace
+                                // throws "Vertical scroll not permitted when
+                                // the parent was measured with infinite
+                                // height." 240dp matches a typical 8-10 frames
+                                // of a stack trace; longer traces scroll.
+                                .heightIn(max = 240.dp)
                                 .verticalScroll(rememberScrollState())
                                 .padding(8.dp),
                         ) {

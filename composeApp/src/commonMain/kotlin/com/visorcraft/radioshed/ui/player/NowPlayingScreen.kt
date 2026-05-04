@@ -159,6 +159,13 @@ fun NowPlayingScreen(
     val repeatMode by stationPlayback.repeatMode.collectAsState()
     val shuffleSession by stationPlayback.shuffleSession.collectAsState()
     val userVolume by stationPlayback.userVolume.collectAsState()
+    // Pre-mute level snapshot for the volume icon's tap-to-mute
+    // toggle. Lives at screen scope rather than inside VolumeRow so
+    // a layout-switch recomposition (Compact ↔ TwoPane on a Galaxy
+    // Fold's inner-display unfold) doesn't reset it back to 0.6 and
+    // surprise the user with a different unmute level than what
+    // they had before muting.
+    var preMuteLevel by remember { mutableFloatStateOf(0.6f) }
     val sleepState by sleepTimer.state.collectAsState()
     val scope = rememberCoroutineScope()
     var sleepMenuOpen by remember { mutableStateOf(false) }
@@ -566,6 +573,10 @@ fun NowPlayingScreen(
         // now" at a glance, the way Foobar/Winamp status bars used to.
         var formatLine by remember { mutableStateOf<String?>(null) }
         LaunchedEffect(playable?.trackId) {
+            // Clear before the async getTrackById so rapid track
+            // changes (skip-five) don't keep showing the previous
+            // track's format/bitrate while the next read resolves.
+            formatLine = null
             val tid = playable?.trackId
             formatLine = if (tid == null) null else {
                 val t = libraryRepo.getTrackById(tid)
@@ -822,6 +833,8 @@ fun NowPlayingScreen(
                     onToggleLike = onToggleLike,
                     onVolumeLive = { stationPlayback.previewUserVolume(it) },
                     onVolumeCommit = { stationPlayback.commitUserVolume(it) },
+                    preMuteLevel = preMuteLevel,
+                    onPreMuteLevelChange = { preMuteLevel = it },
                     onDislikeOnStation = {
                         val stationId = currentStation?.id ?: return@CompactLayout
                         scope.launch {
@@ -887,6 +900,8 @@ fun NowPlayingScreen(
                     onToggleLike = onToggleLike,
                     onVolumeLive = { stationPlayback.previewUserVolume(it) },
                     onVolumeCommit = { stationPlayback.commitUserVolume(it) },
+                    preMuteLevel = preMuteLevel,
+                    onPreMuteLevelChange = { preMuteLevel = it },
                     onDislikeOnStation = {
                         val stationId = currentStation?.id ?: return@TwoPaneLayout
                         scope.launch {
@@ -1041,6 +1056,8 @@ private fun CompactLayout(
     onToggleLike: () -> Unit,
     onVolumeLive: (Float) -> Unit,
     onVolumeCommit: (Float) -> Unit,
+    preMuteLevel: Float,
+    onPreMuteLevelChange: (Float) -> Unit,
     onDislikeOnStation: () -> Unit,
     onTapArtwork: () -> Unit,
     onPinchOpenLyrics: () -> Unit,
@@ -1112,6 +1129,8 @@ private fun CompactLayout(
         Spacer(Modifier.height(8.dp))
         VolumeRow(
             volume = volume,
+            preMuteLevel = preMuteLevel,
+            onPreMuteLevelChange = onPreMuteLevelChange,
             onVolumeLive = onVolumeLive,
             onVolumeCommit = onVolumeCommit,
         )
@@ -1140,6 +1159,8 @@ private fun TwoPaneLayout(
     onToggleLike: () -> Unit,
     onVolumeLive: (Float) -> Unit,
     onVolumeCommit: (Float) -> Unit,
+    preMuteLevel: Float,
+    onPreMuteLevelChange: (Float) -> Unit,
     onDislikeOnStation: () -> Unit,
     onTapArtwork: () -> Unit,
     onPinchOpenLyrics: () -> Unit,
@@ -1230,6 +1251,8 @@ private fun TwoPaneLayout(
             Spacer(Modifier.height(8.dp))
             VolumeRow(
                 volume = volume,
+                preMuteLevel = preMuteLevel,
+                onPreMuteLevelChange = onPreMuteLevelChange,
                 onVolumeLive = onVolumeLive,
                 onVolumeCommit = onVolumeCommit,
             )
@@ -2006,6 +2029,8 @@ private fun RatingRow(
 @Composable
 private fun VolumeRow(
     volume: Float,
+    preMuteLevel: Float,
+    onPreMuteLevelChange: (Float) -> Unit,
     onVolumeLive: (Float) -> Unit,
     onVolumeCommit: (Float) -> Unit,
 ) {
@@ -2018,13 +2043,6 @@ private fun VolumeRow(
     var dragging by remember { mutableStateOf(false) }
     var pending by remember { mutableFloatStateOf(volume) }
     val display = if (dragging) pending else volume
-    // Volume snapshot for the mute toggle. When the user taps the
-    // icon to mute, we stash the pre-mute level here so a second tap
-    // restores it. If they then drag the slider while muted we drop
-    // the snapshot — the new manual level becomes the new "unmute"
-    // target. Defaults to 0.6 so unmuting from a fresh-install state
-    // (no previous level recorded) lands at a reasonable value.
-    var preMuteLevel by remember { mutableFloatStateOf(0.6f) }
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -2045,7 +2063,7 @@ private fun VolumeRow(
                         onVolumeLive(target)
                         onVolumeCommit(target)
                     } else {
-                        preMuteLevel = volume
+                        onPreMuteLevelChange(volume)
                         onVolumeLive(0f)
                         onVolumeCommit(0f)
                     }

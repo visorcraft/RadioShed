@@ -3082,6 +3082,60 @@ Two transport-row affordances. Build `2026-05-04m` → `2026-05-04n`.
   StationPlayback mutex, so the rapid loop is safe even though
   it doesn't take a single long lock.
 
+#### Phase 19 audit follow-up (peer review fix sweep, batch 23+)
+
+A peer-review pass over the diff for batches 19–23 (~2,829 lines
+across ~30 files) found five real bugs. Each is fixed below. Build
+`2026-05-04n` → `2026-05-04o`.
+
+- [x] **FIX (crash): CrashLogScreen nested verticalScroll inside
+  LazyColumn item.** Expanding any crash row that has a non-null
+  stack trace was throwing `IllegalStateException: Vertical scroll
+  not permitted when the parent was measured with infinite height.`
+  The trace `Surface` wraps a `Column.verticalScroll`, but each
+  LazyColumn item is measured with unbounded height — the inner
+  scroll has no finite height to fit into. Added
+  `Modifier.heightIn(max = 240.dp)` to the trace `Column` so it has
+  a bounded extent; longer traces now scroll within their card. New
+  `import androidx.compose.foundation.layout.heightIn` added.
+- [x] **FIX (UX): Syncthing wizard — "Skip scan and finish" was
+  inverted.** The bottom-bar button was `enabled = pickedFolder
+  == null`, meaning the moment a folder was picked the only exit
+  besides "Add and scan now" became disabled. Inverted to always
+  enabled, with the label switching between "Done" (no folder
+  picked) and "Skip scan and finish" (folder picked). Users can
+  now exit the wizard cleanly after picking without committing
+  to a scan.
+- [x] **FIX (concurrency): Syncthing wizard — "Add and scan now"
+  had no double-tap guard.** A rapid double-tap on the confirm
+  button fired two concurrent `scope.launch` blocks both running
+  `scanner.scanFolder(id).collect`, racing to write `scanStatus`
+  and ending with two `onComplete()` calls back-to-back. Added a
+  `scanning` Compose state flag, gated entry on `if (scanning)
+  return`, and reflected the state in the button (label flips to
+  "Scanning…" and `enabled = false` while a scan is running).
+- [x] **FIX (Fold-7-specific): preMuteLevel reset on layout
+  switch.** The mute toggle's pre-mute level snapshot
+  (`preMuteLevel`) was `remember`ed inside the private
+  `VolumeRow` composable. When the screen swapped between
+  `CompactLayout` and `TwoPaneLayout` — exactly what happens on
+  a Galaxy Fold 7's inner display when the user unfolds while
+  the app is open — the call site changed and `remember` reset
+  the snapshot to `0.6f`. A user who muted at 0.9, unfolded, and
+  then unmuted got 0.6 instead of their original 0.9. Hoisted
+  `preMuteLevel` to screen scope alongside `userVolume` (where
+  `rating`/`liked`/`playbackSpeed` already live) and threaded
+  it + `onPreMuteLevelChange` through both layouts down to
+  `VolumeRow`.
+- [x] **FIX (cosmetic): formatLine LaunchedEffect doesn't clear
+  on key change.** During rapid track changes (e.g. the new
+  "Skip 5 ahead" action), the format/bitrate label below the
+  scrubber kept showing the previous track's data until each
+  new `LaunchedEffect(trackId)` resolved its async
+  `getTrackById` read. Added `formatLine = null` at the start
+  of the effect body so the label clears immediately on key
+  change and only re-populates once the new read returns.
+
 ---
 
 ## Appendix A — Compose Multiplatform vs native UI: when to fall back

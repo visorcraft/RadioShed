@@ -101,6 +101,12 @@ fun SyncthingWizardScreen(
     var pickedFolderName by remember { mutableStateOf<String?>(null) }
     var scanStatus by remember { mutableStateOf<ScanProgress?>(null) }
     var addError by remember { mutableStateOf<String?>(null) }
+    // Guards the "Add and scan now" button against concurrent
+    // launches. Without this, a rapid double-tap fires two
+    // scope.launch blocks each running scanner.scanFolder.collect
+    // on the same folder id, producing duplicate writes and a
+    // double onComplete() at the end.
+    var scanning by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -148,9 +154,12 @@ fun SyncthingWizardScreen(
                     pickedFolderName = pickedFolderName,
                     scanStatus = scanStatus,
                     addError = addError,
+                    scanning = scanning,
                     onPickFolder = { folderPickerOpen = true },
                     onConfirm = {
                         val path = pickedFolder ?: return@PickInRadioShedBody
+                        if (scanning) return@PickInRadioShedBody
+                        scanning = true
                         scope.launch {
                             runCatching {
                                 // Re-use the existing folder row when the
@@ -179,6 +188,7 @@ fun SyncthingWizardScreen(
                             }.onFailure {
                                 addError = it.message ?: "Failed to add folder"
                             }
+                            scanning = false
                         }
                     },
                 )
@@ -504,6 +514,7 @@ private fun PickInRadioShedBody(
     pickedFolderName: String?,
     scanStatus: ScanProgress?,
     addError: String?,
+    scanning: Boolean,
     onPickFolder: () -> Unit,
     onConfirm: () -> Unit,
 ) {
@@ -545,8 +556,9 @@ private fun PickInRadioShedBody(
             Spacer(Modifier.height(12.dp))
             Button(
                 onClick = onConfirm,
+                enabled = !scanning,
                 modifier = Modifier.fillMaxWidth(),
-            ) { Text("Add and scan now") }
+            ) { Text(if (scanning) "Scanning…" else "Add and scan now") }
         }
         addError?.let { msg ->
             Spacer(Modifier.height(12.dp))
@@ -612,9 +624,18 @@ private fun NavRow(
             WizardStep.PairDevices -> Button(onClick = onNext) { Text("Devices paired — continue") }
             WizardStep.AddFolder -> Button(onClick = onNext) { Text("Folder shared — continue") }
             WizardStep.PickInRadioShed -> Button(
+                // Always allow finishing the wizard from the last
+                // step. The body's "Add and scan now" is the
+                // recommended path when a folder has been picked,
+                // but the user must always have a way out: when
+                // they haven't picked a folder yet they can just
+                // close out, and when they have, they may want to
+                // skip the scan and let the auto-rescan-on-launch
+                // pick it up later.
                 onClick = onFinish,
-                enabled = pickedFolder == null,
-            ) { Text("Skip scan and finish") }
+            ) {
+                Text(if (pickedFolder == null) "Done" else "Skip scan and finish")
+            }
         }
     }
 }
