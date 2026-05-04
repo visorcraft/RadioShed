@@ -123,6 +123,14 @@ fun MiniPlayer(
                 )
             }
             .pointerInput(Unit) {
+                // PointerInputScope extends Density, so `.dp.toPx()`
+                // works via the implicit receiver. The threshold is
+                // computed here (rather than from a top-level const)
+                // so it scales with device density: a raw 60-px value
+                // collapses to ~9 dp of perceived movement on a
+                // 420-dpi phone like the Galaxy Fold 7, producing
+                // accidental skips on near-stationary taps.
+                val swipeThresholdPx = 20.dp.toPx()
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
                     var horizontal = false
@@ -144,13 +152,13 @@ fun MiniPlayer(
                             change.consume()
                         }
                         when {
-                            accum < -SWIPE_THRESHOLD_PX -> {
+                            accum < -swipeThresholdPx -> {
                                 stationPlayback.skipNext()
                                 haptics.performHapticFeedback(
                                     androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove,
                                 )
                             }
-                            accum > SWIPE_THRESHOLD_PX -> {
+                            accum > swipeThresholdPx -> {
                                 stationPlayback.skipPrevious()
                                 haptics.performHapticFeedback(
                                     androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove,
@@ -163,9 +171,9 @@ fun MiniPlayer(
                             accum += change.positionChange().y
                             change.consume()
                         }
-                        // Negative accum = upward swipe. ~20dp threshold
+                        // Negative accum = upward swipe. 20-dp threshold
                         // matches Spotify / Apple Music swipe-up feel.
-                        if (accum < -SWIPE_THRESHOLD_PX) onExpand()
+                        if (accum < -swipeThresholdPx) onExpand()
                     }
                 }
             },
@@ -357,8 +365,6 @@ private fun TransportIconButton(
         )
     }
 }
-
-private const val SWIPE_THRESHOLD_PX: Float = 60f
 
 private fun stateLabel(state: PlayerState): String = when (state) {
     PlayerState.Buffering -> "Buffering…"

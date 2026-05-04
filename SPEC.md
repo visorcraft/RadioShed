@@ -3327,6 +3327,58 @@ audited. Both fix data-consistency issues. Build `2026-05-04r`
   TrackContextSheet still uses `addTrack(position = 0)`
   directly because the playlist is freshly empty there.
 
+#### Phase 19 audit follow-up (deep audit fix sweep, service + UI pass)
+
+A fourth round of focused audit on previously-unreviewed files
+(MediaSession service, AudioEngine, MiniPlayer, StationsHome,
+LyricsScreen, EqualizerScreen, NowPlayingWidget) surfaced three
+real bugs and one false positive. Three shipped here. Build
+`2026-05-04s` → `2026-05-04t`.
+
+- [x] **FIX (CRITICAL — widget blank artwork or crash):
+  NowPlayingWidget recycled the artwork bitmap before
+  `mgr.updateAppWidget` parceled it.** RemoteViews doesn't
+  serialize bitmap pixels until the `updateAppWidget` call
+  delivers them across the IPC boundary — the previous code
+  recycled immediately after `setImageViewBitmap`, before the
+  parcel write. Result: the host process sees an already-recycled
+  bitmap, producing either a blank artwork tile or a
+  "Canvas: trying to use a recycled bitmap" RuntimeException
+  inside AppWidgetHost on every track change with embedded art.
+  Moved the recycle to immediately after `mgr.updateAppWidget`.
+  Note: the previous "Bitmap not recycled + decoded at full
+  size" fix (#290) decoded the bitmap at the right size but
+  introduced this ordering bug. Now both correct.
+- [x] **FIX (UX — stale lyrics find state on track change):
+  LyricsScreen.findQuery / findBarOpen not reset.** Typing a
+  search term on track A and then changing tracks (skip-next,
+  auto-advance) left the find bar visible with the old query.
+  When track B's lyrics loaded, `matchingIndices` ran on the new
+  text — accidental matches in track B caused the lyric scroll
+  to auto-jump to a random line on load and the matched lines
+  to render with a highlight tint. Hoisted the find state
+  declarations above the track-id LaunchedEffect and added an
+  explicit `findQuery = ""; findBarOpen = false` reset at the
+  top of the effect body.
+- [x] **FIX (UX — accidental MiniPlayer skips on high-density
+  phones): SWIPE_THRESHOLD_PX was hard-coded as 60 raw pixels.**
+  On the test device (Galaxy Fold 7, ~420 dpi), 60 px ≈ 9 dp
+  of finger movement — barely above Compose's default touch
+  slop, so any tap that drifts horizontally during the press
+  fires skip-next or skip-previous. Replaced the top-level
+  const with `20.dp.toPx()` computed inside the `pointerInput`
+  block (PointerInputScope extends Density, so the conversion
+  works via the implicit receiver). 20 dp matches Spotify /
+  Apple Music swipe-up feel; on a 160-dpi screen this is 20 px,
+  on a 420-dpi screen ~52 px — consistent perceived movement.
+- (skipped — `_nowPlaying.value = playable` eager write in
+  `AudioEngineAndroid.play()`. The reviewer claimed this would
+  produce a stuck progress bar, but the MiniPlayer + NowPlaying
+  read `audioEngine.position.durationMs` via the polling loop,
+  not `nowPlaying.durationMs`. Verified by grepping every
+  consumer of `nowPlaying.durationMs` — none exist. False
+  positive; left the code unchanged.)
+
 ---
 
 ## Appendix A — Compose Multiplatform vs native UI: when to fall back

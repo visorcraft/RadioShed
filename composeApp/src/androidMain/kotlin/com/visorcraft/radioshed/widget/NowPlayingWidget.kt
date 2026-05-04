@@ -131,13 +131,14 @@ class NowPlayingWidget : AppWidgetProvider() {
             }
             if (artworkBitmap != null) {
                 views.setImageViewBitmap(R.id.widget_artwork, artworkBitmap)
-                // RemoteViews serialises the bitmap into a Parcel for
-                // IPC, so the host process gets its own copy. We can
-                // drop our reference here — without the recycle, a
-                // burst of pushUpdate calls (bluetooth reconnect, rapid
-                // skip-next) leaves the widget process leaking ~100KB
-                // of bitmap heap per call until GC catches up.
-                artworkBitmap.recycle()
+                // Note: do NOT recycle the bitmap here. RemoteViews
+                // doesn't actually parcel the bitmap pixels until
+                // mgr.updateAppWidget(...) is called below — recycling
+                // before that point makes the parcel-side read against
+                // a recycled bitmap, which either yields a blank
+                // artwork tile or throws "Canvas: trying to use a
+                // recycled bitmap" inside AppWidgetHost. Recycle
+                // happens after updateAppWidget.
             } else {
                 views.setImageViewResource(
                     R.id.widget_artwork,
@@ -173,6 +174,13 @@ class NowPlayingWidget : AppWidgetProvider() {
             )
 
             mgr.updateAppWidget(widgetId, views)
+            // Now safe to recycle — updateAppWidget runs synchronously
+            // and parcels the bitmap pixels inline before returning,
+            // so the host process already has its own copy. Recycling
+            // here releases our heap reference and prevents the
+            // ~100KB-per-update accumulation noted in the original
+            // optimization (rapid skip-next, bluetooth reconnect).
+            artworkBitmap?.recycle()
         }
 
         private fun idleSnapshot(context: Context): Snapshot = Snapshot(

@@ -106,7 +106,23 @@ fun LyricsScreen(
 
     // Re-resolve whenever the active track changes. The service handles
     // caching internally, so this is cheap on cache hits.
+    val copyToClipboard = com.visorcraft.radioshed.ui.util.rememberCopyToClipboard()
+    // In-page lyric search — typing into this filter scrolls the
+    // synced list to the first matching line and tints matches so
+    // the user can spot the rest by eye. Empty query = inactive.
+    // Declared above the LaunchedEffect that resets it on track
+    // change so the effect can reference both states.
+    var findQuery by remember { mutableStateOf("") }
+    var findBarOpen by remember { mutableStateOf(false) }
+
     LaunchedEffect(nowPlaying?.trackId) {
+        // Reset the in-page find state on every track change.
+        // Without this, the find bar stays visible with the
+        // previous track's query, and matchingIndices runs on the
+        // new lyrics — auto-scrolling to (and highlighting) any
+        // accidental matches in the new song.
+        findQuery = ""
+        findBarOpen = false
         val id = nowPlaying?.trackId ?: run {
             lyrics = null; notFound = false; loading = false; return@LaunchedEffect
         }
@@ -124,13 +140,6 @@ fun LyricsScreen(
             loading = false
         }
     }
-
-    val copyToClipboard = com.visorcraft.radioshed.ui.util.rememberCopyToClipboard()
-    // In-page lyric search — typing into this filter scrolls the
-    // synced list to the first matching line and tints matches so
-    // the user can spot the rest by eye. Empty query = inactive.
-    var findQuery by remember { mutableStateOf("") }
-    var findBarOpen by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
