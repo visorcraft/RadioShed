@@ -2803,6 +2803,37 @@ gaps. All shipped together as a follow-on pass before batch 15.
   dialog flow; failures here are silent because the OS picker
   handles its own UI.
 
+#### Phase 19 polish (continued, batch 18)
+
+- [x] **Up Next sheet — long-press played row → replay this track.**
+  `QueueTrackRow` gained an optional `onLongPress` slot. Played
+  rows now route long-press to `stationPlayback.playNext(track)`,
+  re-injecting it at the head of the priority queue. Distinct
+  from "jump upcoming" (which the played row can't do, since it's
+  no longer in `upcoming`); the path goes through the existing
+  mutex-protected enqueue so concurrent advances stay safe.
+- [x] **Up Next sheet — long-press priority row → move to top.**
+  Same `onLongPress` plumbing. For priority rows (idx <
+  `priorityCount`), long-press calls `onMoveQueueItem(idx, 0)` —
+  same effect as drag-reordering to position 0, but discoverable
+  as a single gesture. Bails when already at position 0 to skip a
+  wasted DB round-trip. Rule-driven rows (canRemove=false) get
+  `onLongPress = null` since their positions regenerate per-peek.
+- [x] **`QueueTrackRow` gesture-modifier branching.** The row's
+  modifier picks between plain `clickable`, plain `combinedClickable`
+  with a no-op tap, the full both-handlers `combinedClickable`,
+  or no clickable at all — based on which callbacks are non-null.
+  Avoids paying combinedClickable's gesture-detector cost on every
+  Just-played row when nothing was queued.
+- [x] **Track Info — MusicBrainz Recording row (when tagged).**
+  When the scanner read a `musicbrainzId` from the file's tags
+  (most modern rippers write one), the dialog now renders a row
+  showing the UUID with an "Open" link affordance. Tap opens
+  `musicbrainz.org/recording/{mbid}` directly via `openWebUrl` —
+  no search-form roundtrip, since the ID points straight at the
+  recording. Long-press copies the raw UUID for pasting into
+  other tools.
+
 ---
 
 ## Appendix A — Compose Multiplatform vs native UI: when to fall back

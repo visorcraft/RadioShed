@@ -634,6 +634,28 @@ fun NowPlayingScreen(
                         queueSheetOpen = false
                     }
                 },
+                onReplayPlayed = { track ->
+                    // Re-inject at the head of the priority queue.
+                    // Distinct from "jumpUpcoming" — the played row
+                    // is no longer in `upcoming`, so we route through
+                    // stationPlayback.playNext for a fresh enqueue.
+                    stationPlayback.playNext(track)
+                    hapticTick()
+                },
+                onMoveUpcomingToTop = { idx ->
+                    // Optimistic local reorder + mutex-protected
+                    // commit, mirroring onMoveQueueItem. Bail when
+                    // the row is already at position 0 — saves a
+                    // wasted DB round-trip.
+                    if (idx in 1 until priorityCount) {
+                        upcoming = upcoming.toMutableList().also {
+                            val item = it.removeAt(idx)
+                            it.add(0, item)
+                        }
+                        stationPlayback.moveQueueItem(idx, 0)
+                        hapticTick()
+                    }
+                },
             )
         }
         saveQueueDialog?.let { tracks ->
@@ -2265,6 +2287,42 @@ private fun TrackInfoDialog(
                         }
                     }
                     t.channels?.let { InfoLine("Channels", "$it") }
+                    // MusicBrainz recording ID surfaced when the
+                    // scanner picked one up from the track's tags
+                    // (most modern rippers write it). Tap to open
+                    // the recording's MB page directly — no
+                    // search-form roundtrip. Trailing "Open"
+                    // affordance signals it's a link-out, not a
+                    // copy. Long-press copies the raw UUID for
+                    // pasting into other tools.
+                    t.musicbrainzId?.takeIf { it.isNotBlank() }?.let { mbid ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .combinedClickable(
+                                    onClick = {
+                                        com.visorcraft.radioshed.source.openWebUrl(
+                                            "https://musicbrainz.org/recording/$mbid",
+                                        )
+                                    },
+                                    onLongClick = {
+                                        copyToClipboard(mbid)
+                                        ringtoneStatus = "MusicBrainz ID copied to clipboard."
+                                    },
+                                ),
+                        ) {
+                            Box(modifier = Modifier.weight(1f)) {
+                                InfoLine("MusicBrainz ID", mbid, monospace = true)
+                            }
+                            Text(
+                                text = "Open",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(start = 8.dp),
+                            )
+                        }
+                    }
                     t.bpm?.let { bpm ->
                         InfoLineTappable("BPM", "%.1f".format(bpm)) {
                             copyToClipboard("%.1f".format(bpm))
@@ -2412,6 +2470,8 @@ private fun QueueBottomSheet(
     onClearQueue: () -> Unit,
     onMoveQueueItem: (from: Int, to: Int) -> Unit,
     onSaveAsPlaylist: () -> Unit = {},
+    onReplayPlayed: (Track) -> Unit = {},
+    onMoveUpcomingToTop: (Int) -> Unit = {},
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
@@ -2456,6 +2516,11 @@ private fun QueueBottomSheet(
                         dim = true,
                         onTap = null,
                         onRemove = null,
+                        // Long-press a played row to re-inject it
+                        // at the head of the priority queue. Faster
+                        // than scrolling back through history then
+                        // tapping context-sheet → Play next.
+                        onLongPress = { onReplayPlayed(track) },
                     )
                 }
                 item { Spacer(Modifier.height(8.dp)) }
@@ -2521,6 +2586,16 @@ private fun QueueBottomSheet(
                         onRemove = if (canRemove) {
                             { onRemoveQueueItem(idx) }
                         } else null,
+                        // Long-press a priority row to jump it to
+                        // the top — same effect as drag-reordering
+                        // it to position 0, but discoverable as a
+                        // single gesture for users who don't use
+                        // drag-reorder. No-op for rule-driven rows
+                        // (canRemove=false) since those positions
+                        // are regenerated each peek.
+                        onLongPress = if (canRemove && idx > 0) {
+                            { onMoveUpcomingToTop(idx) }
+                        } else null,
                         modifier = rowModifier,
                     )
                 }
@@ -2542,18 +2617,38 @@ private fun QueueSectionHeader(label: String) {
 }
 
 @Composable
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 private fun QueueTrackRow(
     track: Track,
     artworkUri: String?,
     dim: Boolean,
     onTap: (() -> Unit)?,
     onRemove: (() -> Unit)?,
+    onLongPress: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val baseColor = if (dim) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
                     else MaterialTheme.colorScheme.onSurface
-    val rowMod = if (onTap != null) modifier.fillMaxWidth().clickable(onClick = onTap)
-                 else modifier.fillMaxWidth()
+    // Combine tap + long-press when both are provided. Tap alone
+    // keeps the original simple `clickable` for the no-long-press
+    // case so we don't pay for combinedClickable's gesture-detector
+    // overhead on every Just-played row.
+    val rowMod = when {
+        onTap != null && onLongPress != null -> modifier
+            .fillMaxWidth()
+            .combinedClickable(
+                onClick = onTap,
+                onLongClick = onLongPress,
+            )
+        onTap != null -> modifier.fillMaxWidth().clickable(onClick = onTap)
+        onLongPress != null -> modifier
+            .fillMaxWidth()
+            .combinedClickable(
+                onClick = {},
+                onLongClick = onLongPress,
+            )
+        else -> modifier.fillMaxWidth()
+    }
     Row(
         modifier = rowMod.padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
