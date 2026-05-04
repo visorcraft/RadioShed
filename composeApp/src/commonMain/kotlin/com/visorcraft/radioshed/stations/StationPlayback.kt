@@ -724,6 +724,15 @@ class StationPlayback(
                 userSkipPending = true
                 val prev = history.removeLastOrNull()
                 if (prev == null) {
+                    // No previous track to go to — seek-to-start is a
+                    // graceful fallback. CRUCIAL: clear userSkipPending
+                    // before returning. We set it on entry to suppress
+                    // a parallel auto-advance from misattributing this
+                    // press, but on the empty-history path no actual
+                    // skip happens, so leaving the flag set would cause
+                    // the *next* naturally-completed track to be
+                    // recorded as a skip in the listening stats.
+                    userSkipPending = false
                     audioEngine.seekTo(0L)
                     return@withLock
                 }

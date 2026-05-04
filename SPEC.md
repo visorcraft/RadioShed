@@ -3246,6 +3246,43 @@ real issues. Each is fixed below. Build `2026-05-04p` →
   `withContext(IO)` thinking it was suspend). Now calls
   `playStation` directly from the click handler.
 
+#### Phase 19 audit follow-up (deep audit fix sweep)
+
+A targeted audit on high-churn / concurrency-sensitive files
+that hadn't been individually reviewed since Phase 18 surfaced
+two real bugs in core logic (StationPlayback / Scanner) — both
+behind subtle paths that no individual code change would have
+flagged. PlaybackQueue and BackupService came back clean. Build
+`2026-05-04q` → `2026-05-04r`.
+
+- [x] **FIX (skip stats corruption):
+  StationPlayback.skipPrevious leaks `userSkipPending = true` on
+  empty-history path.** When the user taps Previous and history
+  is empty (first track of a station, just after a station
+  switch cleared history), the function sets `userSkipPending =
+  true` to suppress a parallel auto-advance from misattributing
+  the press, then returns early via `audioEngine.seekTo(0L)`
+  without clearing the flag. The next time the current track
+  *naturally completes*, `recordPreviousIfAny()` sees
+  `userSkipPending = true` and writes a `skip_log` row for it,
+  inflating skip counts in the listening stats. Added an explicit
+  `userSkipPending = false` reset on the empty-history early
+  return.
+- [x] **FIX (album artwork loss): Scanner marks album as
+  artwork-processed even when no bytes existed.** The
+  `albumsWithArtwork += albumId` line ran unconditionally inside
+  the `if (albumId != null && albumId !in albumsWithArtwork)`
+  block, regardless of whether `tags.artworkBytes` was non-null.
+  Compilation-style albums commonly carry the cover only on
+  track 1 / disc 1; if MediaStore enumeration surfaced an
+  art-less track first, we marked the album done on that empty
+  pass and never persisted the cover from later tracks. Moved
+  the set-membership write inside the `let { bytes -> ... }`
+  block so the album is only marked processed when we actually
+  had art bytes to persist. Affects users whose libraries have
+  partially-tagged compilation albums; on rescan they'll now
+  pick up covers that were silently dropped on prior passes.
+
 ---
 
 ## Appendix A — Compose Multiplatform vs native UI: when to fall back

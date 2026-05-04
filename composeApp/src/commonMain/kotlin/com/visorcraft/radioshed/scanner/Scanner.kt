@@ -144,13 +144,20 @@ class Scanner(
         // across scans. The DB-side write uses the IfMissing variant so a
         // second rescan whose enumeration surfaces a different track first
         // doesn't replace the originally-discovered cover.
+        //
+        // Mark the album "processed" only when we actually had artwork
+        // bytes to persist. Compilation-style albums often carry the
+        // cover only on track 1 / disc 1; if MediaStore enumeration
+        // surfaces an art-less track first, we used to mark the album
+        // done on that empty pass and never look at it again, leaving
+        // the user with a coverless album in the library.
         if (albumId != null && albumId !in albumsWithArtwork) {
             tags.artworkBytes?.let { bytes ->
                 artworkPersister.persist(bytes)?.let { uri ->
                     libraryRepo.setAlbumArtworkIfMissing(albumId, uri)
                 }
+                albumsWithArtwork += albumId
             }
-            albumsWithArtwork += albumId
         }
 
         val title = tags.title
