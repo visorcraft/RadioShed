@@ -804,6 +804,15 @@ fun NowPlayingScreen(
                     },
                     onPrev = { stationPlayback.skipPrevious() },
                     onNext = { stationPlayback.skipNext() },
+                    onSkipFive = {
+                        // Five rapid skipNext() calls. Each advances the
+                        // queue inside StationPlayback's mutex — running
+                        // them in a tight loop is safe because each
+                        // re-acquires the lock; we just want the user
+                        // to see five tracks fly past in their notification
+                        // / now-playing UI without separately tapping.
+                        repeat(5) { stationPlayback.skipNext() }
+                    },
                     onRate = { stars ->
                         scope.launch {
                             ratingRepo.setRating(playable.trackId, stars)
@@ -860,6 +869,15 @@ fun NowPlayingScreen(
                     },
                     onPrev = { stationPlayback.skipPrevious() },
                     onNext = { stationPlayback.skipNext() },
+                    onSkipFive = {
+                        // Five rapid skipNext() calls. Each advances the
+                        // queue inside StationPlayback's mutex — running
+                        // them in a tight loop is safe because each
+                        // re-acquires the lock; we just want the user
+                        // to see five tracks fly past in their notification
+                        // / now-playing UI without separately tapping.
+                        repeat(5) { stationPlayback.skipNext() }
+                    },
                     onRate = { stars ->
                         scope.launch {
                             ratingRepo.setRating(playable.trackId, stars)
@@ -1018,6 +1036,7 @@ private fun CompactLayout(
     onLongPressTogglePlayPause: (() -> Unit)? = null,
     onPrev: () -> Unit,
     onNext: () -> Unit,
+    onSkipFive: (() -> Unit)? = null,
     onRate: (Double) -> Unit,
     onToggleLike: () -> Unit,
     onVolumeLive: (Float) -> Unit,
@@ -1072,7 +1091,9 @@ private fun CompactLayout(
             onTogglePlayPause = onTogglePlayPause,
             onLongPressTogglePlayPause = onLongPressTogglePlayPause,
             onPrev = onPrev,
+            onLongPressPrev = { onSeek(0L) },
             onNext = onNext,
+            onSkipFive = onSkipFive,
             onReplay = { delta -> onSeek((positionMs - delta).coerceAtLeast(0L)) },
             onForward = { delta ->
                 val cap = if (durationMs > 0) (durationMs - 250L).coerceAtLeast(0L) else Long.MAX_VALUE
@@ -1114,6 +1135,7 @@ private fun TwoPaneLayout(
     onLongPressTogglePlayPause: (() -> Unit)? = null,
     onPrev: () -> Unit,
     onNext: () -> Unit,
+    onSkipFive: (() -> Unit)? = null,
     onRate: (Double) -> Unit,
     onToggleLike: () -> Unit,
     onVolumeLive: (Float) -> Unit,
@@ -1185,9 +1207,11 @@ private fun TwoPaneLayout(
             TransportRow(
                 state = state,
                 onTogglePlayPause = onTogglePlayPause,
-            onLongPressTogglePlayPause = onLongPressTogglePlayPause,
+                onLongPressTogglePlayPause = onLongPressTogglePlayPause,
                 onPrev = onPrev,
+                onLongPressPrev = { onSeek(0L) },
                 onNext = onNext,
+                onSkipFive = onSkipFive,
                 onReplay = { delta -> onSeek((positionMs - delta).coerceAtLeast(0L)) },
                 onForward = { delta ->
                     val cap = if (durationMs > 0) (durationMs - 250L).coerceAtLeast(0L) else Long.MAX_VALUE
@@ -1646,7 +1670,9 @@ private fun TransportRow(
     onTogglePlayPause: () -> Unit,
     onLongPressTogglePlayPause: (() -> Unit)? = null,
     onPrev: () -> Unit,
+    onLongPressPrev: (() -> Unit)? = null,
     onNext: () -> Unit,
+    onSkipFive: (() -> Unit)? = null,
     /**
      * Tap = 10s, long-press = 30s. The argument is the delta in
      * milliseconds (always positive); the parent decides direction
@@ -1681,10 +1707,11 @@ private fun TransportRow(
     ) {
         BigIconButton(
             icon = Icons.Filled.SkipPrevious,
-            description = "Previous",
+            description = "Previous (long-press to restart current)",
             buttonSize = baseSize,
             iconSize = iconSize,
             onClick = onPrev,
+            onLongClick = onLongPressPrev,
         )
 
         if (!driveMode) {
@@ -1798,6 +1825,15 @@ private fun TransportRow(
                         dislikeMenuOpen = false
                     },
                 )
+                if (onSkipFive != null) {
+                    DropdownMenuItem(
+                        text = { Text("Skip 5 ahead") },
+                        onClick = {
+                            onSkipFive()
+                            dislikeMenuOpen = false
+                        },
+                    )
+                }
                 DropdownMenuItem(
                     text = { Text("Don't play on this station again") },
                     onClick = {

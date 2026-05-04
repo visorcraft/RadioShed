@@ -3060,6 +3060,28 @@ RadioShed's library scanner. Build `2026-05-04l` → `2026-05-04m`.
   actual via the same expect class. Wizard UI takes it through
   `koinInject()` for testability.
 
+#### Phase 19 polish (continued, batch 23)
+
+Two transport-row affordances. Build `2026-05-04m` → `2026-05-04n`.
+
+- [x] **Now Playing — SkipPrevious long-press → restart current
+  track.** Plumbed `onLongPressPrev` through `CompactLayout` and
+  `TwoPaneLayout` into `TransportRow`'s `BigIconButton`. Long-press
+  invokes `onSeek(0L)`, returning the current track to its
+  beginning rather than skipping back one. Matches the convention
+  most music players use (tap = previous track, hold = restart).
+  The button's content description was also updated to surface
+  the long-press.
+- [x] **Now Playing — SkipNext dropdown "Skip 5 ahead" option.**
+  The existing skip-next dropdown (which already had "Skip this
+  track" + "Don't play on this station again") now gains a
+  middle option that fires `stationPlayback.skipNext()` five
+  times in rapid succession. Wired only when the parent supplies
+  an `onSkipFive` callback so the dropdown stays compact when
+  the feature isn't applicable. Each `skipNext()` re-acquires the
+  StationPlayback mutex, so the rapid loop is safe even though
+  it doesn't take a single long lock.
+
 ---
 
 ## Appendix A — Compose Multiplatform vs native UI: when to fall back
