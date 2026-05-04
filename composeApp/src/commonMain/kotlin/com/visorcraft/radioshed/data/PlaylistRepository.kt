@@ -99,6 +99,46 @@ class PlaylistRepository(private val db: RadioShedDatabase) {
             db.playlistsQueries.addTrackToPlaylist(playlistId, trackId, position.toLong(), nowMillis())
         }
 
+    /**
+     * Atomic "append to end" — replaces the unsafe pattern
+     *   `addTrack(id, tid, position = trackCount(id).toInt())`
+     * which had a TOCTOU between the count and the insert: two
+     * concurrent appends both saw the same count and both wrote
+     * rows at the same `position`, leaving the playlist with
+     * duplicate position values and an arbitrary visible order.
+     *
+     * Wrapping count + insert in `db.transaction` serializes
+     * concurrent appends on the SQLite write lock, so the second
+     * append sees the first one's row when computing its position.
+     */
+    suspend fun appendTrack(playlistId: Long, trackId: Long) = withContext(IODispatcher) {
+        db.transaction {
+            val nextPos = db.playlistsQueries.countTracksInPlaylist(playlistId).executeAsOne()
+            db.playlistsQueries.addTrackToPlaylist(playlistId, trackId, nextPos, nowMillis())
+        }
+    }
+
+    /**
+     * Bulk append: every track lands in the same transaction so a
+     * mid-batch crash either commits the whole album/artist or
+     * none of it. Avoids the per-track count+insert race even when
+     * the caller is single-threaded — the count is read once at
+     * the top of the transaction and each subsequent insert
+     * increments the local position counter from there.
+     */
+    suspend fun appendTracks(playlistId: Long, trackIds: List<Long>) =
+        withContext(IODispatcher) {
+            if (trackIds.isEmpty()) return@withContext
+            val now = nowMillis()
+            db.transaction {
+                var pos = db.playlistsQueries.countTracksInPlaylist(playlistId).executeAsOne()
+                for (trackId in trackIds) {
+                    db.playlistsQueries.addTrackToPlaylist(playlistId, trackId, pos, now)
+                    pos += 1
+                }
+            }
+        }
+
     suspend fun removeTrack(playlistId: Long, trackId: Long) = withContext(IODispatcher) {
         db.playlistsQueries.removeTrackFromPlaylist(playlistId, trackId)
     }

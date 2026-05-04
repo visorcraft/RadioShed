@@ -385,8 +385,11 @@ private fun AddToPlaylistInline(
                     enabled = true,
                     onClick = {
                         scope.launch {
-                            val count = repo.trackCount(playlist.id).toInt()
-                            repo.addTrack(playlist.id, trackId, position = count)
+                            // Atomic append — see PlaylistRepository.appendTrack.
+                            // The previous count + addTrack split was racy and
+                            // could leave duplicate position values when two
+                            // adds landed close together.
+                            repo.appendTrack(playlist.id, trackId)
                             onDone()
                         }
                     },

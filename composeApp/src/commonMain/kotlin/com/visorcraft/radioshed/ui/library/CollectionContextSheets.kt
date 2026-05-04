@@ -334,11 +334,15 @@ private fun CollectionPlaylistPicker(
                             scope.launch {
                                 try {
                                     val tracks = resolveTracks()
-                                    var pos = repo.trackCount(playlist.id).toInt()
-                                    tracks.forEach { t ->
-                                        repo.addTrack(playlist.id, t.id, position = pos)
-                                        pos += 1
-                                    }
+                                    // Atomic bulk append. Per-track
+                                    // count+insert was racy across concurrent
+                                    // album/artist adds and produced
+                                    // half-imported playlists when the
+                                    // process was killed mid-batch.
+                                    repo.appendTracks(
+                                        playlistId = playlist.id,
+                                        trackIds = tracks.map { it.id },
+                                    )
                                     onDone()
                                 } finally {
                                     inFlight = false

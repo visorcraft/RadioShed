@@ -149,8 +149,13 @@ private suspend fun addTrackAtEnd(
     playlist: Playlist,
     trackId: Long,
 ) {
-    val count = repo.trackCount(playlist.id).toInt()
-    repo.addTrack(playlist.id, trackId, position = count)
+    // Atomic append. The previous count + addTrack split was racy:
+    // two near-simultaneous adds both read the same count and
+    // wrote rows at the same `position`, scrambling the visible
+    // playlist order. `appendTrack` wraps the read + write in a
+    // transaction so the SQLite write lock serializes concurrent
+    // appends.
+    repo.appendTrack(playlist.id, trackId)
 }
 
 @Composable

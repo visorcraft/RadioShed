@@ -438,8 +438,16 @@ class StationRepository(private val db: RadioShedDatabase) {
         // station-level counters so the Stats screen's Top Stations
         // section actually resets (it reads station.play_count, not
         // station_history aggregates).
-        db.stationsQueries.clearAllHistory()
-        db.stationsQueries.resetAllStationStats(nowMillis())
+        //
+        // Wrapped in a transaction so a process kill between the two
+        // statements can't leave history empty but station play_count
+        // values stale. The single-station `resetStationStats(id)`
+        // analog already uses transactionWithResult — same protection
+        // is applied here.
+        db.stationsQueries.transaction {
+            db.stationsQueries.clearAllHistory()
+            db.stationsQueries.resetAllStationStats(nowMillis())
+        }
     }
 
     /** Top played tracks across all stations. Returned as (trackId, playCount). */
