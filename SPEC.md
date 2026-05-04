@@ -3194,6 +3194,58 @@ phone in landscape on a dashboard mount.
   `stations`, so they pay zero cost — Compose only collects the
   flow when TriplePane is the resolved layout.
 
+#### Phase 19 audit follow-up (peer review fix sweep, batch 25+)
+
+A peer-review pass on the batch 25 triple-pane work surfaced four
+real issues. Each is fixed below. Build `2026-05-04p` →
+`2026-05-04q`.
+
+- [x] **FIX (CRITICAL — Compose rule violation):
+  `collectAsState` called inside conditional branch.** The
+  station list `collectAsState(initial = emptyList())` was inside
+  `if (resolvedLayout == TriplePane) { ... }`. Composables must
+  be invoked unconditionally; the slot table de-syncs when the
+  layout toggles mid-session, producing a runtime
+  `IllegalStateException` or silent state corruption. Hoisted
+  the `stationsForTriplePane by stationRepo.observeAll().collectAsState`
+  out to the screen body alongside the other `collectAsState`
+  calls, so it runs on every recomposition regardless of the
+  resolved layout. The cost is one observed flow whose
+  collection is tied to NowPlaying's lifecycle — negligible.
+- [x] **FIX (responsiveness): layout pref now reactive via
+  StateFlow mirror.** Previously
+  `remember { settings.getNowPlayingLayout() }` cached at first
+  composition and never refreshed — fragile if any future router
+  change keeps NowPlaying alive across nav. Added
+  `_nowPlayingLayoutFlow` mirror in SettingsStore (same pattern
+  as `_driveModeFlow` / `_keepScreenOnFlow`), updated
+  `setNowPlayingLayout` to push through the flow, added it to
+  `republishMirrorFlows` so backup-restore + reset-defaults
+  republish correctly. Both `NowPlayingScreen` and
+  `AppSettingsScreen` now read via
+  `settings.nowPlayingLayoutFlow.collectAsState()` so a layout
+  change in Settings applies live without requiring a
+  Settings → NowPlaying re-entry.
+- [x] **FIX (visual overflow): TriplePane's TransportRow clipped
+  the next button on narrow columns.** Forcing TriplePane on a
+  ~360dp portrait phone gave each column ~112dp. The
+  TransportRow's five children (prev / replay-10 / play / forward-10
+  / next) at their natural sizes summed to ~297dp, overflowing
+  and clipping the next button — a tap target became unhittable.
+  Added `compact: Boolean = false` to TransportRow; when true,
+  the ±10s mini-buttons are suppressed (same code path the
+  existing `driveMode` flag uses). TriplePaneLayout passes
+  `compact = true`. Users still seek via the Scrubber above; only
+  the long-press-30s shortcut is sacrificed.
+- [x] **FIX (clarity): redundant `scope.launch` around
+  non-suspend `playStation`.** TriplePaneLayout's station-tap
+  handler wrapped `stationPlayback.playStation(id)` in
+  `scope.launch { }`. `playStation` is a regular fun that fires
+  off its own internal `stationLoadJob`; the launch wrapper added
+  no behavior and misled future readers (someone might add
+  `withContext(IO)` thinking it was suspend). Now calls
+  `playStation` directly from the click handler.
+
 ---
 
 ## Appendix A — Compose Multiplatform vs native UI: when to fall back

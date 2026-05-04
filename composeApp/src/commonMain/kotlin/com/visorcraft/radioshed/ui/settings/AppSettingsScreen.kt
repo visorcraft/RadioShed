@@ -230,20 +230,16 @@ fun AppSettingsScreen(
                 },
             )
             Spacer(Modifier.height(8.dp))
-            // Now Playing layout selector. Reads/writes
-            // KEY_NOW_PLAYING_LAYOUT directly so a changed value
-            // takes effect on the next NowPlayingScreen entry — the
-            // screen reads the pref once via `remember` so flipping
-            // it mid-session needs a re-entry to apply, which is
-            // fine since the screen rebuilds anyway when the user
-            // navigates back to it.
-            var npLayout by remember { mutableStateOf(settings.getNowPlayingLayout()) }
+            // Now Playing layout selector. Reads via the mirror
+            // StateFlow so the chip selection stays in sync with
+            // any external write (e.g. backup-restore). Writing
+            // through `setNowPlayingLayout` updates both the
+            // underlying Settings and the flow, so NowPlayingScreen
+            // (also subscribed) sees the change live.
+            val npLayout by settings.nowPlayingLayoutFlow.collectAsState()
             NowPlayingLayoutRow(
                 current = npLayout,
-                onPick = { v ->
-                    npLayout = v
-                    settings.setNowPlayingLayout(v)
-                },
+                onPick = { v -> settings.setNowPlayingLayout(v) },
             )
             Spacer(Modifier.height(8.dp))
             ToggleRow(

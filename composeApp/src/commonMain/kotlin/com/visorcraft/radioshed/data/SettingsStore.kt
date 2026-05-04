@@ -200,10 +200,25 @@ class SettingsStore(private val settings: Settings) {
      * available on every width — it'll squeeze badly on a phone
      * portrait but the user asked for the option.
      */
+    /**
+     * Mirror flow for the layout preference. NowPlayingScreen
+     * subscribes via `collectAsState()` so a layout change in
+     * AppSettings propagates without requiring the user to leave
+     * and re-enter Now Playing. Same pattern as `_driveModeFlow`
+     * and `_keepScreenOnFlow`.
+     */
+    private val _nowPlayingLayoutFlow =
+        kotlinx.coroutines.flow.MutableStateFlow(
+            settings.getStringOrNull(KEY_NOW_PLAYING_LAYOUT) ?: "Auto",
+        )
+    val nowPlayingLayoutFlow: kotlinx.coroutines.flow.StateFlow<String> = _nowPlayingLayoutFlow
+
     fun getNowPlayingLayout(): String =
         settings.getStringOrNull(KEY_NOW_PLAYING_LAYOUT) ?: "Auto"
-    fun setNowPlayingLayout(name: String) =
+    fun setNowPlayingLayout(name: String) {
         settings.putString(KEY_NOW_PLAYING_LAYOUT, name)
+        _nowPlayingLayoutFlow.value = name
+    }
 
     fun getKeepScreenOn(): Boolean = settings.getBoolean(KEY_KEEP_SCREEN_ON, false)
     fun setKeepScreenOn(enabled: Boolean) {
@@ -746,6 +761,8 @@ class SettingsStore(private val settings: Settings) {
     private fun republishMirrorFlows() {
         _driveModeFlow.value = settings.getBoolean(KEY_DRIVE_MODE, false)
         _keepScreenOnFlow.value = settings.getBoolean(KEY_KEEP_SCREEN_ON, false)
+        _nowPlayingLayoutFlow.value =
+            settings.getStringOrNull(KEY_NOW_PLAYING_LAYOUT) ?: "Auto"
     }
 
     private enum class SettingType { BOOL, STR, INT, LONG, FLOAT }

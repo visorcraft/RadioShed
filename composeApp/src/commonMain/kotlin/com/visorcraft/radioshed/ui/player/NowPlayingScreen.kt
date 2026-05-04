@@ -160,6 +160,14 @@ fun NowPlayingScreen(
     val repeatMode by stationPlayback.repeatMode.collectAsState()
     val shuffleSession by stationPlayback.shuffleSession.collectAsState()
     val userVolume by stationPlayback.userVolume.collectAsState()
+    // Station list for the TriplePane layout's left column.
+    // Collected unconditionally — even when the user is on Compact
+    // or TwoPane the cost is one observed flow whose collector is
+    // tied to NowPlaying's lifecycle. Collecting only inside the
+    // `if (resolvedLayout == TriplePane)` branch is illegal in
+    // Compose: composables must be invoked unconditionally so the
+    // composition slot table stays stable across layout-pref toggles.
+    val stationsForTriplePane by stationRepo.observeAll().collectAsState(initial = emptyList())
     // Pre-mute level snapshot for the volume icon's tap-to-mute
     // toggle. Lives at screen scope rather than inside VolumeRow so
     // a layout-switch recomposition (Compact ↔ TwoPane on a Galaxy
@@ -263,7 +271,14 @@ fun NowPlayingScreen(
     // available width — useful when the user mounts a phone in
     // landscape on a dashboard and wants the SXM-style three-column
     // view even though the breakpoint hasn't been crossed.
-    val layoutPref = remember { settings.getNowPlayingLayout() }
+    //
+    // Read via the StateFlow mirror so a layout change in
+    // AppSettings propagates immediately. The previous
+    // `remember { settings.getNowPlayingLayout() }` cached at first
+    // composition — fine for the AppSettings-back-then-NowPlaying
+    // path that destroys composition, fragile for any future router
+    // change that keeps NowPlaying alive across nav.
+    val layoutPref by settings.nowPlayingLayoutFlow.collectAsState()
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val isNarrow = maxWidth < 360.dp
         val resolvedLayout = when (layoutPref) {
@@ -814,7 +829,6 @@ fun NowPlayingScreen(
             }
 
             if (resolvedLayout == NowPlayingLayoutChoice.TriplePane) {
-                val stations by stationRepo.observeAll().collectAsState(initial = emptyList())
                 TriplePaneLayout(
                     playable = playable,
                     state = state,
@@ -826,9 +840,13 @@ fun NowPlayingScreen(
                     accent = accent,
                     stationName = currentStation?.name,
                     formatLine = formatLine,
-                    stations = stations,
+                    stations = stationsForTriplePane,
                     currentStationId = currentStation?.id,
-                    onStationTap = { id -> scope.launch { stationPlayback.playStation(id) } },
+                    // playStation isn't a suspend fun — it launches
+                    // its own internal stationLoadJob. Calling it
+                    // directly avoids a misleading scope.launch
+                    // wrapper that would suggest otherwise.
+                    onStationTap = { id -> stationPlayback.playStation(id) },
                     onSeek = { audioEngine.seekTo(it) },
                     onTogglePlayPause = { audioEngine.togglePlayPause() },
                     onLongPressTogglePlayPause = {
@@ -1775,6 +1793,7 @@ private fun TransportRow(
     onLongPressPrev: (() -> Unit)? = null,
     onNext: () -> Unit,
     onSkipFive: (() -> Unit)? = null,
+    compact: Boolean = false,
     /**
      * Tap = 10s, long-press = 30s. The argument is the delta in
      * milliseconds (always positive); the parent decides direction
@@ -1816,7 +1835,7 @@ private fun TransportRow(
             onLongClick = onLongPressPrev,
         )
 
-        if (!driveMode) {
+        if (!driveMode && !compact) {
             // Replay: tap = 10s back, long-press = 30s back. Pattern
             // mirrors podcast apps' fast-rewind affordance.
             Box {
@@ -1857,7 +1876,7 @@ private fun TransportRow(
             onLongClick = onLongPressTogglePlayPause,
         )
 
-        if (!driveMode) {
+        if (!driveMode && !compact) {
             // Forward: tap = 10s, long-press = 30s. See onReplay above
             // for the rationale.
             Box {
@@ -3327,6 +3346,14 @@ private fun TriplePaneLayout(
                 onLongPressPrev = { onSeek(0L) },
                 onNext = onNext,
                 onSkipFive = onSkipFive,
+                // compact = true hides the ±10s seek mini-buttons.
+                // The center column in TriplePane is one-third of the
+                // screen — five transport buttons at their natural
+                // sizes overflow and clip the next button when the
+                // user forces TriplePane on a portrait phone (~112dp
+                // column). The Scrubber above already covers seeking;
+                // the user just loses the long-press 30s shortcut.
+                compact = true,
                 onReplay = { delta -> onSeek((positionMs - delta).coerceAtLeast(0L)) },
                 onForward = { delta ->
                     val cap = if (durationMs > 0) (durationMs - 250L).coerceAtLeast(0L)
