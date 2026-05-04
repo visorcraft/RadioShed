@@ -70,7 +70,49 @@ fun PlaylistsScreen(
     val playlists by repo.observeAll().collectAsState(initial = emptyList())
     val likedCount by ratingRepo.observeLikedCount().collectAsState(initial = 0L)
     var createOpen by remember { mutableStateOf(false) }
+    var importStatus by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
+    val libraryRepo: com.visorcraft.radioshed.data.LibraryRepository = koinInject()
+    // M3U import via system file picker. The picked .m3u/.m3u8 bytes
+    // are decoded UTF-8, parsed line-by-line (skip blank + #-prefixed
+    // metadata), each path resolved through `getTrackByPathOrSuffix`
+    // (so a relative path or suffix-match works the same way as the
+    // backup restore flow), and the resulting tracks land in a fresh
+    // playlist named after the file.
+    val importPicker = com.visorcraft.radioshed.ui.util.rememberFilePicker { bytes ->
+        scope.launch {
+            val text = bytes.decodeToString()
+            val paths = text.lineSequence()
+                .map { it.trim() }
+                .filter { it.isNotEmpty() && !it.startsWith("#") }
+                .toList()
+            if (paths.isEmpty()) {
+                importStatus = "No track entries found in the selected file."
+                return@launch
+            }
+            var added = 0
+            var missing = 0
+            // Default name is the timestamp; the user can rename
+            // after import via long-press on the playlist row.
+            val name = "Imported m3u (${com.visorcraft.radioshed.data.formatShortDate(
+                com.visorcraft.radioshed.data.nowMillis(),
+            )})"
+            val playlistId = repo.insert(name = name, description = null)
+            paths.forEachIndexed { idx, path ->
+                val track = libraryRepo.getTrackByPathOrSuffix(path)
+                if (track != null) {
+                    runCatching { repo.addTrack(playlistId, track.id, position = idx) }
+                        .onSuccess { added += 1 }
+                        .onFailure { missing += 1 }
+                } else {
+                    missing += 1
+                }
+            }
+            importStatus = "Imported $added track" +
+                (if (added == 1) "" else "s") +
+                (if (missing > 0) " · $missing not in library" else "") + "."
+        }
+    }
 
     // Resolve cover art per playlist whenever the list changes. The
     // queries are LIMIT 1 + indexed, so this is cheap even with dozens
@@ -87,6 +129,11 @@ fun PlaylistsScreen(
             TopAppBar(
                 title = { Text("Playlists") },
                 navigationIcon = { TextButton(onClick = onBack) { Text("Back") } },
+                actions = {
+                    TextButton(onClick = { importPicker("audio/x-mpegurl") }) {
+                        Text("Import")
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface,
                 ),
@@ -107,6 +154,16 @@ fun PlaylistsScreen(
             modifier = Modifier.fillMaxSize().padding(padding),
             contentPadding = PaddingValues(vertical = 8.dp),
         ) {
+            importStatus?.let { msg ->
+                item(key = "import-status") {
+                    Text(
+                        text = msg,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+                    )
+                }
+            }
             item(key = "liked-songs") {
                 LikedSongsRow(count = likedCount, onTap = onOpenLikedSongs)
             }

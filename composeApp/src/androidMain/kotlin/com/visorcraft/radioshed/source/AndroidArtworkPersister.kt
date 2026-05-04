@@ -62,6 +62,22 @@ class AndroidArtworkPersister(private val context: Context) : ArtworkPersister {
         }.getOrNull()
     }
 
+    override suspend fun clearAll(): Int = withContext(IODispatcher) {
+        // listFiles() can return null on a freshly-created dir or
+        // a permissions edge case; treat that as zero. We delete
+        // each file individually rather than rm -rf the whole
+        // directory so the dir handle stays valid for subsequent
+        // persists without re-creating it.
+        val files = artworkDir.listFiles() ?: return@withContext 0
+        var removed = 0
+        for (f in files) {
+            if (f.isFile && runCatching { f.delete() }.getOrDefault(false)) {
+                removed += 1
+            }
+        }
+        removed
+    }
+
     private fun sha256Hex(bytes: ByteArray): String {
         val digest = MessageDigest.getInstance("SHA-256").digest(bytes)
         return digest.joinToString("") { "%02x".format(it) }

@@ -59,6 +59,13 @@ SELECT * FROM artwork_cache WHERE last_accessed_at < ? ORDER BY last_accessed_at
 deleteArtwork:
 DELETE FROM artwork_cache WHERE cache_key = ?;
 
+-- Wipe every artwork_cache row. Paired with deleting the on-disk
+-- blobs (`ArtworkPersister.clearAll`) and clearing the
+-- `album.artwork_uri` pointers, this is the user-facing "Clear
+-- artwork cache" action — the next CoverArt sweep will refetch.
+deleteAllArtwork:
+DELETE FROM artwork_cache;
+
 -- ==== Lyrics cache ====
 
 putLyrics:

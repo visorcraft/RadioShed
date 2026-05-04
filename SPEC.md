@@ -2235,6 +2235,62 @@ found a dozen issues. All fixed in this round:
   long podcasts/sets where the slider's hit zone is ~10 seconds
   wide.
 
+#### Phase 19 polish (continued, batch 9)
+
+- [x] **Stats — Top genres tile.** New
+  `selectTopPlayedGenres` SQL joins station_history → track →
+  track_tag (key='GENRE') and aggregates plays per tag value.
+  Renders as a chip-cloud (`TopGenresChips` via FlowRow) below
+  the existing top-played-albums list, capped at 8 entries.
+- [x] **History — summary header.** Above the date-bucketed
+  list a Surface row shows total plays, summed listened time,
+  and avg-per-day for the visible window. Aggregation re-runs
+  whenever the search/station filter changes; hidden when the
+  visible list is empty.
+- [x] **Settings — Clear artwork cache.** New three-step reset:
+  drops every `artwork_cache` DB row (new SQL
+  `deleteAllArtwork` + `ArtworkCacheRepository.deleteAll()`),
+  wipes the on-disk artwork blobs (new `ArtworkPersister.clearAll()`
+  expect/actual; Android iterates `filesDir/artwork/`, iOS stub
+  returns 0 for now), and nulls every `album.artwork_uri`
+  pointer (new `clearAllAlbumArtwork` SQL +
+  `LibraryRepository` method). Status text reports the number
+  of files removed; the next Cover Art sweep refetches.
+- [x] **Track Info — combined "Copy artist – title".** A new
+  full-width OutlinedButton in the Track Info dialog copies a
+  `"Artist – Title"` formatted string to the clipboard (or just
+  the title when the artist is missing). Useful for pasting
+  what's currently playing into a chat or the Spotify/YouTube
+  search box without sharing the actual file.
+- [x] **About — Credits & open-source disclosure.** New
+  expandable card under the App Settings → About section lists
+  the major direct OSS dependencies shipping with the APK
+  (Kotlin Multiplatform, Compose Multiplatform, Material 3,
+  Media3 ExoPlayer, SQLDelight, Koin, Coil 3, kotlinx-
+  serialization/coroutines, multiplatform-settings) plus the
+  CC0 attributions for LRClib + Cover Art Archive content
+  sources. Collapsed by default; tap the row to expand.
+- [x] **LikedSongsScreen — sort menu.** New Sort icon in the
+  top bar opens a dropdown with Recently liked / Title A→Z /
+  Album / Duration shortest / Duration longest. Default
+  matches the prior most-recently-liked order via a
+  passthrough `LikedSort.RecentlyLiked` arm. Sort state is
+  session-local (resets on screen exit, matching the other
+  detail screens' UX).
+- [x] **Playlists — M3U import via system file picker.** A new
+  "Import" action in the Playlists screen top bar opens the
+  system file picker scoped to `audio/x-mpegurl`. Picked bytes
+  are decoded UTF-8 line-by-line (skipping blanks +
+  `#EXTM3U`/`#EXTINF` metadata lines), each non-comment path
+  resolved through the same `getTrackByPathOrSuffix` matcher
+  the backup-restore flow uses — so a relative path or suffix-
+  match resolves to a library row when possible. Resulting
+  tracks land in a new playlist named "Imported m3u (Apr 4)"
+  via `formatShortDate(nowMillis())`. A status line above the
+  playlist rows reports
+  "Imported N tracks · M not in library." until the user
+  navigates away.
+
 ---
 
 ## Appendix A — Compose Multiplatform vs native UI: when to fall back

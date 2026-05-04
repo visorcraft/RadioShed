@@ -556,6 +556,16 @@ class LibraryRepository(private val db: RadioShedDatabase) {
     }
 
     /**
+     * Clear every album's artwork pointer. Used by the Settings →
+     * "Clear artwork cache" reset path. The on-disk blobs are wiped
+     * separately via `ArtworkPersister.clearAll()`; this just nulls
+     * the URI columns so the UI stops trying to load deleted files.
+     */
+    suspend fun clearAllAlbumArtwork() = withContext(IODispatcher) {
+        db.libraryQueries.clearAllAlbumArtwork(nowMillis())
+    }
+
+    /**
      * One-shot pass that consolidates GENRE tag values that differ
      * only in case. For each lower-cased group, picks the most-
      * frequent variant as the canonical (or title-cases the lower

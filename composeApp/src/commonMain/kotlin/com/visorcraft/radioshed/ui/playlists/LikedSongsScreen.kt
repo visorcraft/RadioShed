@@ -19,6 +19,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Sort
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PlayArrow
@@ -85,6 +87,8 @@ fun LikedSongsScreen(
     var tracks by remember { mutableStateOf<List<Track>>(emptyList()) }
     var contextTrackId by remember { mutableStateOf<Long?>(null) }
     var menuOpen by remember { mutableStateOf(false) }
+    var sortMenuOpen by remember { mutableStateOf(false) }
+    var sortOrder by remember { mutableStateOf(LikedSort.RecentlyLiked) }
     var saveAsPlaylistOpen by remember { mutableStateOf(false) }
     var savedPlaylistName by remember { mutableStateOf<String?>(null) }
     val likedCount by ratingRepo.observeLikedCount().collectAsState(initial = 0L)
@@ -106,6 +110,39 @@ fun LikedSongsScreen(
                 title = { Text("Liked songs") },
                 navigationIcon = { TextButton(onClick = onBack) { Text("Back") } },
                 actions = {
+                    Box {
+                        IconButton(onClick = { sortMenuOpen = true }) {
+                            Icon(
+                                imageVector = androidx.compose.material.icons.Icons.AutoMirrored.Filled.Sort,
+                                contentDescription = "Sort",
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = sortMenuOpen,
+                            onDismissRequest = { sortMenuOpen = false },
+                        ) {
+                            LikedSort.entries.forEach { opt ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(opt.label, modifier = Modifier.weight(1f))
+                                            if (sortOrder == opt) {
+                                                Icon(
+                                                    imageVector = androidx.compose.material.icons.Icons.Filled.Check,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(16.dp),
+                                                )
+                                            }
+                                        }
+                                    },
+                                    onClick = {
+                                        sortOrder = opt
+                                        sortMenuOpen = false
+                                    },
+                                )
+                            }
+                        }
+                    }
                     Box {
                         IconButton(onClick = { menuOpen = true }) {
                             Icon(Icons.Filled.MoreVert, contentDescription = "More")
@@ -206,17 +243,28 @@ fun LikedSongsScreen(
                     )
                 }
             } else {
+                val sortedTracks = remember(tracks, sortOrder) {
+                    when (sortOrder) {
+                        LikedSort.RecentlyLiked -> tracks
+                        LikedSort.TitleAsc -> tracks.sortedBy { it.title.lowercase() }
+                        LikedSort.AlbumAsc -> tracks.sortedBy {
+                            (it.albumId?.toString() ?: it.title).lowercase()
+                        }
+                        LikedSort.DurationAsc -> tracks.sortedBy { it.durationMs }
+                        LikedSort.DurationDesc -> tracks.sortedByDescending { it.durationMs }
+                    }
+                }
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(vertical = 4.dp),
                 ) {
-                    items(tracks, key = { it.id }) { track ->
+                    items(sortedTracks, key = { it.id }) { track ->
                         LikedSongRow(
                             track = track,
                             isCurrent = track.id == currentTrackId,
                             onTap = {
-                                val idx = tracks.indexOf(track).coerceAtLeast(0)
-                                stationPlayback.playTracks(tracks, startIndex = idx)
+                                val idx = sortedTracks.indexOf(track).coerceAtLeast(0)
+                                stationPlayback.playTracks(sortedTracks, startIndex = idx)
                             },
                             onLongPress = { contextTrackId = track.id },
                             onUnlike = {
@@ -374,4 +422,19 @@ private fun LikedSongRow(
             }
         }
     }
+}
+
+/**
+ * Sort options for the Liked Songs list. Default [RecentlyLiked]
+ * matches Spotify / Apple Music's "Liked Songs" order — the
+ * `RatingRepository.likedTracks()` query already returns rows in
+ * that order, so the default is a passthrough. Sort state is
+ * session-local; the user picks per visit.
+ */
+private enum class LikedSort(val label: String) {
+    RecentlyLiked("Recently liked"),
+    TitleAsc("Title A→Z"),
+    AlbumAsc("Album"),
+    DurationAsc("Duration (shortest)"),
+    DurationDesc("Duration (longest)"),
 }

@@ -22,6 +22,8 @@ import androidx.compose.material.icons.filled.Brightness4
 import androidx.compose.material.icons.filled.Brightness7
 import androidx.compose.material.icons.filled.Brightness6
 import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.NightsStay
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -372,6 +374,30 @@ fun AppSettingsScreen(
                     }
                 },
             )
+            Spacer(Modifier.height(8.dp))
+            // Three-step artwork cache reset: wipe the artwork_cache
+            // table, delete every artwork blob on disk, then null out
+            // every album.artwork_uri pointer so the UI stops trying
+            // to load deleted files. The next CoverArt sweep / scan
+            // refetches.
+            val artworkCache: com.visorcraft.radioshed.data.ArtworkCacheRepository = koinInject()
+            val artworkPersister: com.visorcraft.radioshed.source.ArtworkPersister = koinInject()
+            val libraryRepoForCache: com.visorcraft.radioshed.data.LibraryRepository = koinInject()
+            var artworkClearStatus by remember { mutableStateOf<String?>(null) }
+            ClearArtworkCacheRow(
+                status = artworkClearStatus,
+                onClick = {
+                    scope.launch {
+                        artworkClearStatus = "Clearing artwork…"
+                        val removed = artworkPersister.clearAll()
+                        artworkCache.deleteAll()
+                        libraryRepoForCache.clearAllAlbumArtwork()
+                        artworkClearStatus =
+                            "Cleared $removed artwork file" +
+                                if (removed == 1) "." else "s."
+                    }
+                },
+            )
 
             Spacer(Modifier.height(24.dp))
 
@@ -389,6 +415,8 @@ fun AppSettingsScreen(
             )
             Spacer(Modifier.height(12.dp))
             LibrarySummaryCard()
+            Spacer(Modifier.height(12.dp))
+            CreditsCard()
 
             Spacer(Modifier.height(16.dp))
         }
@@ -518,6 +546,130 @@ private fun ClearLyricsCacheRow(cleared: Boolean, onClick: () -> Unit) {
         }
     }
 }
+
+/**
+ * Three-step artwork reset row: deletes on-disk blobs, clears the
+ * cache table, nulls every album.artwork_uri pointer. Status text
+ * mirrors lyrics-cache for consistency. Re-runnable — pressing again
+ * just confirms zero files this time.
+ */
+@Composable
+private fun ClearArtworkCacheRow(status: String?, onClick: () -> Unit) {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    "Clear artwork cache",
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium,
+                )
+                Text(
+                    text = status ?: "Wipes downloaded album art. The next " +
+                        "Cover Art sweep or library scan refetches.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                )
+            }
+            TextButton(onClick = onClick) { Text("Clear") }
+        }
+    }
+}
+
+/**
+ * Expandable Credits / OSS-licenses card. Lists the major direct
+ * dependencies that ship in the APK so a curious user (or a Play-
+ * Store reviewer once we get there) can see RadioShed's lineage.
+ * Collapsed by default — most users don't care, and the section is
+ * non-essential.
+ */
+@Composable
+private fun CreditsCard() {
+    var expanded by remember { mutableStateOf(false) }
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { expanded = !expanded },
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Credits & open-source",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Medium,
+                    )
+                    Text(
+                        text = if (expanded) "Tap to hide"
+                               else "Tap to see the libraries shipping with RadioShed.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    )
+                }
+                Icon(
+                    imageVector = if (expanded) Icons.Filled.ExpandLess
+                                  else Icons.Filled.ExpandMore,
+                    contentDescription = null,
+                )
+            }
+            if (expanded) {
+                Spacer(Modifier.height(8.dp))
+                CREDIT_ENTRIES.forEach { (name, license) ->
+                    Row(modifier = Modifier.padding(vertical = 2.dp)) {
+                        Text(
+                            text = name,
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Text(
+                            text = license,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+                        )
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = "Lyrics from LRClib (CC0). Album art via the " +
+                        "Cover Art Archive (CC0 / public domain). Genre + " +
+                        "rating data from local file tags only — no online " +
+                        "fingerprinting, no telemetry, internet usage is " +
+                        "opt-in via the Connectivity policy above.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                )
+            }
+        }
+    }
+}
+
+/** Hand-curated list of direct OSS dependencies shipped with the
+ *  APK. Order is rough relative-importance to playback. Updated
+ *  as deps shift — this is a UI string list, not a build-time
+ *  generated manifest, so versions are intentionally omitted. */
+private val CREDIT_ENTRIES: List<Pair<String, String>> = listOf(
+    "Kotlin Multiplatform" to "Apache-2.0",
+    "Compose Multiplatform" to "Apache-2.0",
+    "Material 3" to "Apache-2.0",
+    "Media3 ExoPlayer" to "Apache-2.0",
+    "SQLDelight" to "Apache-2.0",
+    "Koin" to "Apache-2.0",
+    "Coil 3" to "Apache-2.0",
+    "kotlinx-serialization" to "Apache-2.0",
+    "kotlinx-coroutines" to "Apache-2.0",
+    "multiplatform-settings" to "Apache-2.0",
+)
 
 @Composable
 private fun SectionHeader(text: String) {

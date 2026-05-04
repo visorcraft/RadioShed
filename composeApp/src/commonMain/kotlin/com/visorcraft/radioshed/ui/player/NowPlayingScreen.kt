@@ -1885,6 +1885,26 @@ private fun TrackInfoDialog(
                         }
                     }
                     Spacer(Modifier.height(4.dp))
+                    // One-tap "Artist – Title" copy. Useful for
+                    // pasting into a chat or Spotify/YouTube search
+                    // when the user wants to share what they're
+                    // hearing without sending the actual file.
+                    val copyToClipboard = com.visorcraft.radioshed.ui.util.rememberCopyToClipboard()
+                    val combined = remember(playable.artist, t.title, t.fileName) {
+                        val artistPart = playable.artist?.takeIf { it.isNotBlank() }
+                        val titlePart = t.title.ifBlank { t.fileName }
+                        if (artistPart != null) "$artistPart – $titlePart" else titlePart
+                    }
+                    androidx.compose.material3.OutlinedButton(
+                        onClick = {
+                            copyToClipboard(combined)
+                            ringtoneStatus = "Copied \"$combined\" to clipboard."
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Copy artist – title")
+                    }
+                    Spacer(Modifier.height(4.dp))
                     InfoLine("Title", t.title)
                     // Artist + Album rows: tappable when the host
                     // installed nav handlers AND we have a target id
@@ -1938,7 +1958,6 @@ private fun TrackInfoDialog(
                         )
                         InfoLine("Listened", formatStatDuration(s.listenedMs))
                     }
-                    val copyToClipboard = com.visorcraft.radioshed.ui.util.rememberCopyToClipboard()
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier

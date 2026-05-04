@@ -180,6 +180,13 @@ SELECT COUNT(*) FROM album;
 updateAlbumArtwork:
 UPDATE album SET artwork_uri = ?, updated_at = ? WHERE id = ?;
 
+-- Clear every album's artwork pointer in one pass. Used by the
+-- "Clear artwork cache" action — paired with deleting the on-disk
+-- blobs and the artwork_cache table, this is the reset path for a
+-- corrupted / oversized cache. The next CoverArt sweep refetches.
+clearAllAlbumArtwork:
+UPDATE album SET artwork_uri = NULL, updated_at = ?;
+
 -- First-seen-wins variant for the scanner: only write artwork if the
 -- album row has none yet. Avoids the "scrolling library flickers as
 -- different tracks of the same album report different embedded art"

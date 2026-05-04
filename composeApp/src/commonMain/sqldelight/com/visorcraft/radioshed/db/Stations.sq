@@ -377,6 +377,23 @@ SELECT track_id FROM station_pinned_track WHERE station_id = ?;
 countPinnedTracksForStation:
 SELECT COUNT(*) FROM station_pinned_track WHERE station_id = ?;
 
+-- Top genres by play count. Joins station_history → track →
+-- track_tag (key='GENRE') and aggregates plays per tag value.
+-- Filters to GENRE tag specifically; case-sensitive match because
+-- the genre canonicalization migration already collapsed casing
+-- variants. Empty/blank values are excluded so a track with a stray
+-- empty GENRE tag doesn't dilute the count.
+selectTopPlayedGenres:
+SELECT tt.value AS genre, COUNT(*) AS plays
+FROM station_history sh
+JOIN track t ON t.id = sh.track_id
+JOIN track_tag tt ON tt.track_id = t.id
+WHERE tt.key = 'GENRE'
+  AND TRIM(tt.value) != ''
+GROUP BY tt.value
+ORDER BY plays DESC, MAX(sh.played_at) DESC
+LIMIT ?;
+
 -- Top albums by play count. Tracks without album_id are excluded from
 -- the count. Album artwork URI included so the UI doesn't need a
 -- second per-row query.

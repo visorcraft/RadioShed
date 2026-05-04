@@ -283,10 +283,65 @@ fun HistoryScreen(
                         }
                     }
                 }
+                // Aggregate header — total plays in the visible
+                // window, summed listened-time, and avg/day across
+                // the calendar-day span the entries cover. Quietly
+                // hides when visibleEntries is empty (the empty-state
+                // copy at the screen top already handles that case).
+                val summary = remember(visibleEntries, nowSnap) {
+                    if (visibleEntries.isEmpty()) null
+                    else {
+                        val plays = visibleEntries.size
+                        val listenedMs = visibleEntries.sumOf { it.listenedMs }
+                        val span = visibleEntries.maxOf { it.playedAt } -
+                            visibleEntries.minOf { it.playedAt }
+                        val daysInSpan = (span / DAY_MS_MILLIS).toInt() + 1
+                        val avgPerDay = if (daysInSpan > 0)
+                            (plays.toDouble() / daysInSpan).coerceAtLeast(0.0)
+                        else 0.0
+                        Triple(plays, listenedMs, avgPerDay)
+                    }
+                }
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(vertical = 4.dp),
                 ) {
+                    summary?.let { (plays, listenedMs, avgPerDay) ->
+                        item(key = "summary") {
+                            Surface(
+                                color = MaterialTheme.colorScheme.surfaceVariant
+                                    .copy(alpha = 0.45f),
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(
+                                        horizontal = 12.dp,
+                                        vertical = 8.dp,
+                                    ),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                ) {
+                                    Text(
+                                        text = "$plays play${if (plays == 1) "" else "s"}",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                    )
+                                    Text(
+                                        text = formatHistoryListened(listenedMs),
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                    )
+                                    Text(
+                                        text = "%.1f/day".format(avgPerDay),
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                    )
+                                }
+                            }
+                        }
+                    }
                     items(
                         grouped,
                         key = { item ->
@@ -560,5 +615,21 @@ private fun formatHistoryTimestamp(ms: Long): String {
         day < 7L -> "${day}d ago"
         day < 30L -> "${day / 7L}w ago"
         else -> "${day / 30L}mo ago"
+    }
+}
+
+private const val DAY_MS_MILLIS: Long = 24L * 60L * 60L * 1000L
+
+/** Total listened time formatted compact for the summary header
+ *  ("3h 12m" / "47m" / "9s"). Distinct from the per-row recency
+ *  string above so the two render side by side without confusion. */
+private fun formatHistoryListened(ms: Long): String {
+    if (ms <= 0L) return "0m"
+    val totalMin = ms / 60_000L
+    val hours = totalMin / 60L
+    val mins = totalMin % 60L
+    return when {
+        hours > 0L -> "${hours}h ${mins}m"
+        else -> "${mins}m"
     }
 }

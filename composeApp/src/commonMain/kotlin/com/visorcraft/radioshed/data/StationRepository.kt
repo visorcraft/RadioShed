@@ -601,6 +601,18 @@ class StationRepository(private val db: RadioShedDatabase) {
             }
         }
 
+    /**
+     * Top genres by play count. Joins history → track → track_tag
+     * filtered to GENRE values. The Stats screen renders this as a
+     * compact tile alongside top tracks/artists/albums.
+     */
+    suspend fun topPlayedGenres(limit: Long): List<Pair<String, Long>> =
+        withContext(IODispatcher) {
+            db.stationsQueries.selectTopPlayedGenres(limit).executeAsList().map { row ->
+                row.genre to row.plays
+            }
+        }
+
     /** Top albums by play count, including pre-resolved artwork URI. */
     suspend fun topPlayedAlbums(limit: Long): List<TopAlbumEntry> =
         withContext(IODispatcher) {

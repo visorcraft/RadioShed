@@ -44,6 +44,17 @@ class ArtworkCacheRepository(private val db: RadioShedDatabase) {
     suspend fun delete(key: String) = withContext(IODispatcher) {
         db.cachesQueries.deleteArtwork(key)
     }
+
+    /**
+     * Wipe every artwork_cache row. Callers ALSO need to delete the
+     * on-disk blobs (`ArtworkPersister.clearAll()`) and clear the
+     * album.artwork_uri pointers (`LibraryRepository.clearAllAlbumArtwork()`)
+     * for a full reset — the AppSettings "Clear artwork cache"
+     * action does all three together.
+     */
+    suspend fun deleteAll() = withContext(IODispatcher) {
+        db.cachesQueries.deleteAllArtwork()
+    }
 }
 
 class LyricsCacheRepository(private val db: RadioShedDatabase) {

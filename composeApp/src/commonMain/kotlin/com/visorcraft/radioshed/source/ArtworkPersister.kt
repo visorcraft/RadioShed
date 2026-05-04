@@ -21,4 +21,15 @@ package com.visorcraft.radioshed.source
 interface ArtworkPersister {
     /** Persist the bytes and return a URI to load them, or null on failure. */
     suspend fun persist(bytes: ByteArray): String?
+
+    /**
+     * Wipe every previously-persisted artwork blob (the user-facing
+     * "Clear artwork cache" reset path). Returns the number of files
+     * removed — best effort, individual delete failures are swallowed
+     * since the goal is recovery, not a per-file audit. After clearing
+     * the disk, callers MUST also clear `album.artwork_uri` and the
+     * `artwork_cache` DB table; the previously-returned URIs all point
+     * at deleted files.
+     */
+    suspend fun clearAll(): Int
 }

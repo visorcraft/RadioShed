@@ -84,6 +84,7 @@ fun StatsScreen(
     }
     var topArtists by remember { mutableStateOf<List<TopArtistEntry>>(emptyList()) }
     var topAlbums by remember { mutableStateOf<List<TopAlbumEntry>>(emptyList()) }
+    var topGenres by remember { mutableStateOf<List<Pair<String, Long>>>(emptyList()) }
     var topStations by remember { mutableStateOf<List<Station>>(emptyList()) }
     // Tracks the user skips most often. Surfaced to invite a "you
     // don't seem to like this" decision — long-press to dislike on
@@ -124,6 +125,7 @@ fun StatsScreen(
             }
         topArtists = stationRepo.topPlayedArtists(limit = 10L)
         topAlbums = stationRepo.topPlayedAlbums(limit = 10L)
+        topGenres = stationRepo.topPlayedGenres(limit = 8L)
         // Top stations come from the existing play_count column on the
         // stations table — distinct from the station_history-based
         // lists above, since "play count" here is "times the user
@@ -287,6 +289,7 @@ fun StatsScreen(
                 topTracks.isEmpty() &&
                 topArtists.isEmpty() &&
                 topAlbums.isEmpty() &&
+                topGenres.isEmpty() &&
                 topStations.isEmpty() &&
                 mostSkipped.isEmpty()
             ) {
@@ -335,6 +338,12 @@ fun StatsScreen(
                         onTap = { onAlbumTap(album.id) },
                     )
                 }
+                item { Spacer(Modifier.height(16.dp)) }
+            }
+
+            if (topGenres.isNotEmpty()) {
+                item { SectionHeader("Top played genres") }
+                item { TopGenresChips(topGenres) }
                 item { Spacer(Modifier.height(16.dp)) }
             }
 
@@ -906,5 +915,39 @@ private fun formatTotalDuration(ms: Long): String {
         hours > 0L -> "${hours}h ${minutes}m"
         minutes > 0L -> "${minutes}m"
         else -> "${totalSeconds}s"
+    }
+}
+
+/**
+ * Compact chip-cloud for top played genres. Each chip shows the
+ * genre name + plays count. Wraps via FlowRow when there are more
+ * than fit on a single line — Material's recommended pattern for
+ * "top N tags" surfaces. Capped at 8 entries from the SQL side.
+ */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun TopGenresChips(genres: List<Pair<String, Long>>) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+        shape = RoundedCornerShape(12.dp),
+    ) {
+        androidx.compose.foundation.layout.FlowRow(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            genres.forEach { (genre, plays) ->
+                androidx.compose.material3.AssistChip(
+                    onClick = { /* tap-to-filter is a future hook */ },
+                    label = {
+                        Text("$genre · $plays")
+                    },
+                    colors = androidx.compose.material3.AssistChipDefaults.assistChipColors(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                    ),
+                )
+            }
+        }
     }
 }
