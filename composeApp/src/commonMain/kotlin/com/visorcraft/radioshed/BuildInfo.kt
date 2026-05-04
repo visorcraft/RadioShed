@@ -14,5 +14,5 @@ object BuildInfo {
      * a Gradle task that stamps it from `git log -1 --format=%cd` is
      * tracked as a follow-up.
      */
-    const val BUILD_DATE: String = "2026-05-04d-audit"
+    const val BUILD_DATE: String = "2026-05-04e"
 }

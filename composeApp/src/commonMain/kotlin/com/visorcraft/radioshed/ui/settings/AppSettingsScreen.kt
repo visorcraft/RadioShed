@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.Brightness6
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.NightsStay
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -148,11 +149,25 @@ fun AppSettingsScreen(
         },
         containerColor = MaterialTheme.colorScheme.background,
     ) { padding ->
+        // AppSettings is a deep, vertically-scrolling Column (not a
+        // LazyColumn — most of its rows are unique composables). Hoist
+        // the scrollState so a back-to-top FAB can drive it once the
+        // user has paged past the visible window.
+        val scrollState = rememberScrollState()
+        // Threshold of ~1.5 viewports — `viewportSize` and
+        // `maxValue` aren't available on `ScrollState` directly, so
+        // we approximate with a fixed pixel cutoff. 1500 px is roughly
+        // halfway down on a Galaxy Fold 7's main screen.
+        val showScrollTop by remember {
+            androidx.compose.runtime.derivedStateOf { scrollState.value > 1500 }
+        }
+        androidx.compose.foundation.layout.Box(
+            modifier = Modifier.fillMaxSize().padding(padding),
+        ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(scrollState)
                 .padding(horizontal = 16.dp, vertical = 8.dp),
         ) {
             // ---- Appearance ----
@@ -502,37 +517,72 @@ fun AppSettingsScreen(
             // deletions trip on each other otherwise (the artwork
             // persister and DJ blob path both walk filesDir).
             var clearAllStatus by remember { mutableStateOf<String?>(null) }
+            // Confirm gate. The granular clear rows act on a single
+            // cache each (lyrics / artwork / DJ) where the user
+            // typically knows what they're nuking; the all-in-one
+            // path wipes ~hundreds of artwork files plus regenerable
+            // TTS clips and earned a lot more "wait, did I mean to
+            // do that?" feedback. Confirm dialog matches the
+            // Reset-settings flow's pattern.
+            var clearAllConfirm by remember { mutableStateOf(false) }
             ClearAllCachesRow(
                 status = clearAllStatus,
-                onClick = {
-                    scope.launch {
-                        clearAllStatus = "Clearing all caches…"
-                        var artworkRemoved = 0
-                        runCatching {
-                            artworkRemoved = artworkPersister.clearAll()
-                            artworkCache.deleteAll()
-                            libraryRepoForCache.clearAllAlbumArtwork()
-                        }
-                        var djRemoved = 0
-                        runCatching {
-                            val rows = djCache.listAll()
-                            rows.forEach { row ->
-                                runCatching {
-                                    val ok = com.visorcraft.radioshed.source
-                                        .deleteFileIfExists(row.blobPath)
-                                    if (ok) djRemoved += 1
-                                }
-                            }
-                            djCache.deleteAll()
-                        }
-                        runCatching { lyricsCache.deleteAll() }
-                        clearAllStatus = "Cleared lyrics, $artworkRemoved " +
-                            (if (artworkRemoved == 1) "artwork file, " else "artwork files, ") +
-                            "and $djRemoved DJ clip" +
-                            (if (djRemoved == 1) "." else "s.")
-                    }
-                },
+                onClick = { clearAllConfirm = true },
             )
+            if (clearAllConfirm) {
+                androidx.compose.material3.AlertDialog(
+                    onDismissRequest = { clearAllConfirm = false },
+                    title = { Text("Clear all online caches?") },
+                    text = {
+                        Text(
+                            "Wipes lyrics, downloaded album art, and DJ TTS " +
+                                "clips. All three regenerate on demand from " +
+                                "their original sources. This is safe — " +
+                                "your library, ratings, playlists, and " +
+                                "stations stay intact.",
+                        )
+                    },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            clearAllConfirm = false
+                            scope.launch {
+                                clearAllStatus = "Clearing all caches…"
+                                var artworkRemoved = 0
+                                runCatching {
+                                    artworkRemoved = artworkPersister.clearAll()
+                                    artworkCache.deleteAll()
+                                    libraryRepoForCache.clearAllAlbumArtwork()
+                                }
+                                var djRemoved = 0
+                                runCatching {
+                                    val rows = djCache.listAll()
+                                    rows.forEach { row ->
+                                        runCatching {
+                                            val ok = com.visorcraft.radioshed.source
+                                                .deleteFileIfExists(row.blobPath)
+                                            if (ok) djRemoved += 1
+                                        }
+                                    }
+                                    djCache.deleteAll()
+                                }
+                                runCatching { lyricsCache.deleteAll() }
+                                clearAllStatus = "Cleared lyrics, $artworkRemoved " +
+                                    (if (artworkRemoved == 1) "artwork file, " else "artwork files, ") +
+                                    "and $djRemoved DJ clip" +
+                                    (if (djRemoved == 1) "." else "s.")
+                            }
+                        }) {
+                            Text(
+                                "Clear all",
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { clearAllConfirm = false }) { Text("Cancel") }
+                    },
+                )
+            }
 
             Spacer(Modifier.height(24.dp))
 
@@ -616,6 +666,23 @@ fun AppSettingsScreen(
             ResetSettingsRow(onClick = { resetConfirmOpen = true })
 
             Spacer(Modifier.height(16.dp))
+        }
+        if (showScrollTop) {
+            androidx.compose.material3.SmallFloatingActionButton(
+                onClick = {
+                    scope.launch { scrollState.animateScrollTo(0) }
+                },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 16.dp, bottom = 16.dp),
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.KeyboardArrowUp,
+                    contentDescription = "Scroll to top",
+                )
+            }
+        }
         }
     }
 

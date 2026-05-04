@@ -28,11 +28,13 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.IconButton
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
+import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
@@ -100,10 +102,14 @@ fun PlaylistsScreen(
     // playlists for find-by-scroll to be friction. Below 6 the list
     // already fits a phone screen and the filter would be clutter.
     var listFilter by remember { mutableStateOf("") }
-    val filteredPlaylists = remember(playlists, listFilter) {
-        if (listFilter.isBlank()) playlists
-        else playlists.filter { it.name.contains(listFilter, ignoreCase = true) }
-    }
+    // Sort order for the playlist list. Default is the natural
+    // PlaylistRepository.observeAll() order (most-recently-created
+    // first, matching the user's mental "what did I just make"
+    // expectation). Session-local — resets on screen exit since
+    // user-named playlists don't churn often enough to justify a
+    // persisted pref.
+    var sortOrder by remember { mutableStateOf(PlaylistsSort.RecentlyCreated) }
+    var sortMenuOpen by remember { mutableStateOf(false) }
     var importStatus by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     val libraryRepo: com.visorcraft.radioshed.data.LibraryRepository = koinInject()
@@ -165,6 +171,23 @@ fun PlaylistsScreen(
     val totalTrackCount = remember(trackCountByPlaylistId) {
         trackCountByPlaylistId.values.sum()
     }
+    // Apply filter, then sort. Filter first so the visible-count
+    // math stays consistent. RecentlyCreated falls back to the
+    // natural Flow order (createdAt desc); the explicit sort still
+    // renders the same order — keeping the lambda symmetric reads
+    // better than a `when` skipping the sort branch entirely.
+    val filteredPlaylists = remember(playlists, listFilter, sortOrder, trackCountByPlaylistId) {
+        val base = if (listFilter.isBlank()) playlists
+                   else playlists.filter { it.name.contains(listFilter, ignoreCase = true) }
+        when (sortOrder) {
+            PlaylistsSort.RecentlyCreated -> base.sortedByDescending { it.createdAt }
+            PlaylistsSort.NameAsc -> base.sortedBy { it.name.lowercase() }
+            PlaylistsSort.NameDesc -> base.sortedByDescending { it.name.lowercase() }
+            PlaylistsSort.TrackCountDesc -> base.sortedByDescending {
+                trackCountByPlaylistId[it.id] ?: 0L
+            }
+        }
+    }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -199,6 +222,39 @@ fun PlaylistsScreen(
                 },
                 navigationIcon = { TextButton(onClick = onBack) { Text("Back") } },
                 actions = {
+                    Box {
+                        IconButton(onClick = { sortMenuOpen = true }) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.Sort,
+                                contentDescription = "Sort playlists",
+                            )
+                        }
+                        androidx.compose.material3.DropdownMenu(
+                            expanded = sortMenuOpen,
+                            onDismissRequest = { sortMenuOpen = false },
+                        ) {
+                            PlaylistsSort.entries.forEach { opt ->
+                                androidx.compose.material3.DropdownMenuItem(
+                                    text = {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(opt.label, modifier = Modifier.weight(1f))
+                                            if (sortOrder == opt) {
+                                                Icon(
+                                                    imageVector = Icons.Filled.Check,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(16.dp),
+                                                )
+                                            }
+                                        }
+                                    },
+                                    onClick = {
+                                        sortOrder = opt
+                                        sortMenuOpen = false
+                                    },
+                                )
+                            }
+                        }
+                    }
                     TextButton(onClick = { importPicker("audio/x-mpegurl") }) {
                         Text("Import")
                     }
@@ -295,12 +351,31 @@ fun PlaylistsScreen(
                 }
                 if (filteredPlaylists.isEmpty() && listFilter.isNotBlank()) {
                     item(key = "no-match") {
-                        Text(
-                            "No playlists match \"$listFilter\".",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                        Column(
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
-                        )
+                        ) {
+                            Text(
+                                "No playlists match \"$listFilter\".",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            // CTA to create a playlist with the
+                            // user's filter text as the name. Removes
+                            // friction in the "couldn't find what I
+                            // wanted, want to start a new one named
+                            // for this idea" flow without needing to
+                            // tap the FAB then re-type.
+                            TextButton(onClick = {
+                                val name = listFilter.trim()
+                                listFilter = ""
+                                scope.launch {
+                                    if (name.isNotBlank()) repo.insert(name = name)
+                                }
+                            }) {
+                                Text("Create \"${listFilter.trim()}\"")
+                            }
+                        }
                     }
                 }
             }
@@ -650,4 +725,19 @@ private fun CreatePlaylistDialog(
             TextButton(onClick = onDismiss) { Text("Cancel") }
         },
     )
+}
+
+/**
+ * Sort options for the Playlists list. Default [RecentlyCreated]
+ * matches the natural Flow order (createdAt desc) so the user sees
+ * "what did I just make" at the top. Session-local — sort prefs
+ * for screen-list views in this app are intentionally not
+ * persisted unless the screen has many users-of-many-decisions
+ * (Library Browser tabs persist; this one doesn't).
+ */
+private enum class PlaylistsSort(val label: String) {
+    RecentlyCreated("Recently created"),
+    NameAsc("Name A→Z"),
+    NameDesc("Name Z→A"),
+    TrackCountDesc("Most tracks"),
 }

@@ -2702,6 +2702,53 @@ gaps. All shipped together as a follow-on pass before batch 15.
   double-encode. Affects every web search button (Wikipedia,
   MusicBrainz, Discogs, YouTube, SoundCloud, Bandcamp).
 
+#### Phase 19 polish (continued, batch 15)
+
+- [x] **PlaylistsScreen — sort menu.** New `PlaylistsSort` enum
+  (Recently created / Name A→Z / Name Z→A / Most tracks). Sort icon
+  in TopAppBar opens a DropdownMenu with check marks on the active
+  option. Sort applied AFTER filter so the visible-count math in
+  the subtitle stays correct. Default `RecentlyCreated` matches
+  the natural Flow order from `PlaylistRepository.observeAll()`.
+- [x] **Equalizer — ±1 dB nudge buttons.** Each `BandSliderRow`
+  gained two 36 dp `TextButton`s flanking the slider. Useful when
+  the slider's hit-test resolution (~0.4 dB on a phone column) is
+  too coarse for fine-tuning. Both clamp to `gainRangeDb` and
+  route through `onChange` so the live audiofx + persisted gains
+  update on the same path as drag commits.
+- [x] **History — long-press time-window chip → trim window.**
+  Long-pressing a 24h / 7d / 30d chip jumps straight to the
+  trim-confirm dialog parameterised for that window — preview-
+  then-trim in one motion. The "All" chip skips the long-press
+  path because wiping all history already lives in the menu's
+  Clear-all option (with its own confirm).
+- [x] **AppSettings — scroll-to-top FAB.** Wraps the Column in a
+  Box; `SmallFloatingActionButton` aligned BottomEnd appears once
+  `scrollState.value > 1500 px` (rough 1.5-viewport threshold).
+  Tap animates back to position 0. The settings list grew long
+  enough that a flick-back was friction.
+- [x] **Stats — tap-to-copy on every tile.** `StatTile` gained
+  an optional `onClick: (() -> Unit)? = null` slot. Wired up
+  Total listened / Tracks played / Avg tracks/day / Listening
+  since / Days tracked / Distinct artists / Distinct albums /
+  Completion rate / Finished / Current streak / Longest streak
+  to copy a paste-friendly summary line each. Tiles without
+  `onClick` stay rippleless so purely informational tiles
+  (Window, etc.) read identically.
+- [x] **PlaylistsScreen — empty filter → "Create '<query>'".**
+  When the filter shows zero matches, an inline `TextButton`
+  below the "no playlists match" copy creates a playlist named
+  for the user's filter text. Saves the FAB-then-retype motion
+  in the "didn't find what I wanted, want to start a new one
+  named for this idea" flow.
+- [x] **AppSettings — Clear-all-online-caches confirmation.**
+  Tap now opens an `AlertDialog` listing what gets wiped
+  (lyrics + artwork + DJ TTS) and explicitly callouts that the
+  rest of the user's library / ratings / playlists / stations
+  stay intact. The granular per-cache rows remain unguarded —
+  they're scoped narrowly enough that the user knows what
+  they're nuking.
+
 ---
 
 ## Appendix A — Compose Multiplatform vs native UI: when to fall back

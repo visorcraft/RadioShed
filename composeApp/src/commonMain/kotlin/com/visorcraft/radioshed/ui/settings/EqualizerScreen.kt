@@ -512,6 +512,22 @@ private fun BandSliderRow(
                     },
                 ),
         )
+        // -1 dB nudge. Useful for fine-tuning past the slider's
+        // hit-test resolution — Compose's Slider on a 56-px-wide
+        // band column produces ~0.4 dB minimum step. The buttons
+        // are unbounded by gainRangeDb at the call site so we
+        // clamp here.
+        androidx.compose.material3.TextButton(
+            onClick = {
+                val next = (pendingValue - 1f).coerceIn(
+                    gainRangeDb.start, gainRangeDb.endInclusive,
+                )
+                pendingValue = next
+                onChange(index, next)
+            },
+            modifier = Modifier.width(36.dp),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
+        ) { Text("−", style = MaterialTheme.typography.titleMedium) }
         Slider(
             value = pendingValue,
             onValueChange = { pendingValue = it },
@@ -520,6 +536,17 @@ private fun BandSliderRow(
             steps = 0,
             modifier = Modifier.weight(1f),
         )
+        androidx.compose.material3.TextButton(
+            onClick = {
+                val next = (pendingValue + 1f).coerceIn(
+                    gainRangeDb.start, gainRangeDb.endInclusive,
+                )
+                pendingValue = next
+                onChange(index, next)
+            },
+            modifier = Modifier.width(36.dp),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
+        ) { Text("+", style = MaterialTheme.typography.titleMedium) }
         Text(
             text = "${if (pendingValue >= 0) "+" else ""}${"%.1f".format(pendingValue)} dB",
             style = MaterialTheme.typography.labelMedium,

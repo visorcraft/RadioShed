@@ -337,11 +337,34 @@ fun HistoryScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     HistoryTimeWindow.entries.forEach { opt ->
-                        androidx.compose.material3.FilterChip(
-                            selected = timeWindow == opt,
-                            onClick = { timeWindow = opt },
-                            label = { Text(opt.label) },
-                        )
+                        // Long-press the chip to trim history matching
+                        // that window — preview-then-trim in one motion.
+                        // The "All" chip skips the long-press path
+                        // because it's destructive on the order of "wipe
+                        // everything" which already lives in the menu's
+                        // Clear-all-history option (with its own confirm).
+                        Box(
+                            modifier = Modifier.combinedClickable(
+                                onClick = { timeWindow = opt },
+                                onLongClick = lp@{
+                                    if (opt == HistoryTimeWindow.All) return@lp
+                                    val nowMs = nowMillis()
+                                    val cutoff = when (opt) {
+                                        HistoryTimeWindow.Today -> nowMs - 24L * 60L * 60L * 1000L
+                                        HistoryTimeWindow.Week -> nowMs - 7L * 24L * 60L * 60L * 1000L
+                                        HistoryTimeWindow.Month -> nowMs - 30L * 24L * 60L * 60L * 1000L
+                                        else -> return@lp
+                                    }
+                                    trimConfirm = cutoff to opt.trimLabel
+                                },
+                            ),
+                        ) {
+                            androidx.compose.material3.FilterChip(
+                                selected = timeWindow == opt,
+                                onClick = { timeWindow = opt },
+                                label = { Text(opt.label) },
+                            )
+                        }
                     }
                 }
                 if (stationOptions.size > 1) {
@@ -696,11 +719,11 @@ private enum class HistoryBucket(val label: String) {
  * band for header rendering). Order matters here — `entries` is
  * iterated in declaration order to render the chip row.
  */
-private enum class HistoryTimeWindow(val label: String) {
-    All("All"),
-    Today("24h"),
-    Week("7d"),
-    Month("30d"),
+private enum class HistoryTimeWindow(val label: String, val trimLabel: String) {
+    All("All", "all history"),
+    Today("24h", "the last 24 hours"),
+    Week("7d", "the last 7 days"),
+    Month("30d", "the last 30 days"),
 }
 
 private sealed interface HistoryListItem {

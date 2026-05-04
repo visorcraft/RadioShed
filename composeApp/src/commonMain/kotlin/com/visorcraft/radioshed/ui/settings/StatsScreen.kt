@@ -216,6 +216,8 @@ fun StatsScreen(
                         )
                     }
                 }
+                val topRowClipboard = com.visorcraft.radioshed.ui.util
+                    .rememberCopyToClipboard()
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     modifier = Modifier.fillMaxWidth(),
@@ -224,6 +226,11 @@ fun StatsScreen(
                         label = "Total listened",
                         value = formatTotalDuration(totalMs),
                         modifier = Modifier.weight(1f),
+                        onClick = {
+                            topRowClipboard(
+                                "Total listened: ${formatTotalDuration(totalMs)}",
+                            )
+                        },
                         trailing = weekDeltaPct?.let { pct ->
                             {
                                 val arrow = when {
@@ -248,12 +255,17 @@ fun StatsScreen(
                         label = "Tracks played",
                         value = totalPlays.toString(),
                         modifier = Modifier.weight(1f),
+                        onClick = {
+                            topRowClipboard("Tracks played: $totalPlays")
+                        },
                     )
                 }
                 if (completionStats.second > 0L) {
                     Spacer(Modifier.height(12.dp))
                     val pct = (completionStats.first.toDouble() /
                         completionStats.second.toDouble() * 100.0).toInt()
+                    val completionClipboard = com.visorcraft.radioshed.ui.util
+                        .rememberCopyToClipboard()
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         modifier = Modifier.fillMaxWidth(),
@@ -262,11 +274,23 @@ fun StatsScreen(
                             label = "Completion rate",
                             value = "$pct%",
                             modifier = Modifier.weight(1f),
+                            onClick = {
+                                completionClipboard(
+                                    "$pct% completion " +
+                                        "(${completionStats.first}/${completionStats.second})",
+                                )
+                            },
                         )
                         StatTile(
                             label = "Finished",
                             value = "${completionStats.first} / ${completionStats.second}",
                             modifier = Modifier.weight(1f),
+                            onClick = {
+                                completionClipboard(
+                                    "${completionStats.first}/${completionStats.second} tracks " +
+                                        "finished ($pct%)",
+                                )
+                            },
                         )
                     }
                 }
@@ -289,6 +313,8 @@ fun StatsScreen(
                             rounded.toString()
                         }
                     }
+                    val avgRowClipboard = com.visorcraft.radioshed.ui.util
+                        .rememberCopyToClipboard()
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         modifier = Modifier.fillMaxWidth(),
@@ -297,6 +323,11 @@ fun StatsScreen(
                             label = "Avg tracks/day",
                             value = avgLabel,
                             modifier = Modifier.weight(1f),
+                            onClick = {
+                                avgRowClipboard(
+                                    "$avgLabel tracks/day over $windowDays days",
+                                )
+                            },
                         )
                         StatTile(
                             label = "Window",
@@ -307,6 +338,8 @@ fun StatsScreen(
                 }
                 if (streaks.second > 0) {
                     Spacer(Modifier.height(12.dp))
+                    val streakClipboard = com.visorcraft.radioshed.ui.util
+                        .rememberCopyToClipboard()
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         modifier = Modifier.fillMaxWidth(),
@@ -315,14 +348,27 @@ fun StatsScreen(
                             label = "Current streak",
                             value = "${streaks.first} day${if (streaks.first == 1) "" else "s"}",
                             modifier = Modifier.weight(1f),
+                            onClick = {
+                                streakClipboard(
+                                    "Current streak: ${streaks.first} day" +
+                                        (if (streaks.first == 1) "" else "s"),
+                                )
+                            },
                         )
                         StatTile(
                             label = "Longest streak (90d)",
                             value = "${streaks.second} day${if (streaks.second == 1) "" else "s"}",
                             modifier = Modifier.weight(1f),
+                            onClick = {
+                                streakClipboard(
+                                    "Longest streak (90d): ${streaks.second} day" +
+                                        (if (streaks.second == 1) "" else "s"),
+                                )
+                            },
                         )
                     }
                 }
+                val statsCopy = com.visorcraft.radioshed.ui.util.rememberCopyToClipboard()
                 listeningSinceMs?.let { ms ->
                     Spacer(Modifier.height(12.dp))
                     val daysAgo = remember(ms) {
@@ -330,19 +376,28 @@ fun StatsScreen(
                         ((com.visorcraft.radioshed.data.nowMillis() - ms) / DAY_MS)
                             .coerceAtLeast(0L)
                     }
+                    val sinceDate = com.visorcraft.radioshed.data.formatShortDate(ms)
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         StatTile(
                             label = "Listening since",
-                            value = com.visorcraft.radioshed.data.formatShortDate(ms),
+                            value = sinceDate,
                             modifier = Modifier.weight(1f),
+                            // Tap-to-copy a compact summary sentence
+                            // — useful for journal / chat shares.
+                            onClick = {
+                                statsCopy("Listening since $sinceDate ($daysAgo days)")
+                            },
                         )
                         StatTile(
                             label = "Days tracked",
                             value = daysAgo.toString(),
                             modifier = Modifier.weight(1f),
+                            onClick = {
+                                statsCopy("$daysAgo days of listening tracked")
+                            },
                         )
                     }
                 }
@@ -356,11 +411,23 @@ fun StatsScreen(
                             label = "Distinct artists",
                             value = distinctArtists.toString(),
                             modifier = Modifier.weight(1f),
+                            onClick = {
+                                statsCopy(
+                                    "Heard $distinctArtists artists across " +
+                                        "$distinctAlbums albums",
+                                )
+                            },
                         )
                         StatTile(
                             label = "Distinct albums",
                             value = distinctAlbums.toString(),
                             modifier = Modifier.weight(1f),
+                            onClick = {
+                                statsCopy(
+                                    "Heard $distinctArtists artists across " +
+                                        "$distinctAlbums albums",
+                                )
+                            },
                         )
                     }
                 }
@@ -692,9 +759,15 @@ private fun StatTile(
     value: String,
     modifier: Modifier = Modifier,
     trailing: (@Composable () -> Unit)? = null,
+    onClick: (() -> Unit)? = null,
 ) {
     Surface(
-        modifier = modifier,
+        modifier = modifier.then(
+            // Optional clickable wrapper for tap-to-copy. Tiles
+            // without onClick stay rippleless so the visual stays
+            // identical for purely informational tiles.
+            if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier
+        ),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
         shape = RoundedCornerShape(12.dp),
     ) {
