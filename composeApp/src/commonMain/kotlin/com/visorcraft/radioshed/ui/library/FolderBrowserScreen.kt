@@ -76,8 +76,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -1080,7 +1078,7 @@ private fun FileContextSheet(
     onAddToPlaylistTrack: (Long) -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val clipboard = LocalClipboardManager.current
+    val copyToClipboard = com.visorcraft.radioshed.ui.util.rememberCopyToClipboard()
     var showPath by remember { mutableStateOf(false) }
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
         Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp)) {
@@ -1145,7 +1143,7 @@ private fun FileContextSheet(
                 icon = Icons.Filled.Description,
                 label = "Copy path",
                 onClick = {
-                    clipboard.setText(AnnotatedString(entry.path))
+                    copyToClipboard(entry.path)
                     onDismiss()
                 },
             )
@@ -1178,7 +1176,7 @@ private fun FileContextSheet(
             },
             confirmButton = {
                 TextButton(onClick = {
-                    clipboard.setText(AnnotatedString(entry.path))
+                    copyToClipboard(entry.path)
                     showPath = false
                 }) { Text("Copy") }
             },
@@ -1207,7 +1205,7 @@ private fun FolderContextSheet(
     onTogglePin: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val clipboard = LocalClipboardManager.current
+    val copyToClipboard = com.visorcraft.radioshed.ui.util.rememberCopyToClipboard()
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
         Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp)) {
             Text(
@@ -1287,7 +1285,7 @@ private fun FolderContextSheet(
                 icon = Icons.Filled.Description,
                 label = "Copy path",
                 onClick = {
-                    clipboard.setText(AnnotatedString(entry.path))
+                    copyToClipboard(entry.path)
                     onDismiss()
                 },
             )

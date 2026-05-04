@@ -100,6 +100,7 @@ fun StatsScreen(
     }
     var hourActivity by remember { mutableStateOf<LongArray>(LongArray(24)) }
     var completionStats by remember { mutableStateOf<Pair<Long, Long>>(0L to 0L) }
+    var streaks by remember { mutableStateOf<Pair<Int, Int>>(0 to 0) }
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
@@ -125,6 +126,7 @@ fun StatsScreen(
         dailyActivity = stationRepo.dailyActivity(windowDays = 30)
         hourActivity = stationRepo.playsByHourOfDay(windowDays = 30)
         completionStats = stationRepo.completionStats()
+        streaks = stationRepo.listeningStreaks(windowDays = 90)
     }
 
     Scaffold(
@@ -176,6 +178,24 @@ fun StatsScreen(
                         StatTile(
                             label = "Finished",
                             value = "${completionStats.first} / ${completionStats.second}",
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+                if (streaks.second > 0) {
+                    Spacer(Modifier.height(12.dp))
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        StatTile(
+                            label = "Current streak",
+                            value = "${streaks.first} day${if (streaks.first == 1) "" else "s"}",
+                            modifier = Modifier.weight(1f),
+                        )
+                        StatTile(
+                            label = "Longest streak (90d)",
+                            value = "${streaks.second} day${if (streaks.second == 1) "" else "s"}",
                             modifier = Modifier.weight(1f),
                         )
                     }

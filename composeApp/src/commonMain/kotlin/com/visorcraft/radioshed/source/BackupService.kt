@@ -220,7 +220,15 @@ class BackupService(
             )
         }
 
+        // Track per-bucket failures separately from "skipped" (track
+        // not in library). A failure is a thrown exception during the
+        // insert / setRating / like call — almost certainly a SQLite
+        // constraint or unrecognized JSON, distinct from the benign
+        // "we don't have that track on this device" case. Both numbers
+        // surface in the result so the user can tell which class of
+        // problem to chase.
         var stationsAdded = 0
+        var stationsFailed = 0
         bundle.stations.forEach { s ->
             runCatching {
                 // StationRepository.insert returns the new row's id via
@@ -242,10 +250,11 @@ class BackupService(
                     stationRepo.setPinned(newId, true)
                 }
                 stationsAdded += 1
-            }
+            }.onFailure { stationsFailed += 1 }
         }
 
         var playlistsAdded = 0
+        var playlistsFailed = 0
         bundle.playlists.forEach { p ->
             runCatching {
                 val playlistId = playlistRepo.insert(name = p.name, description = p.description)
@@ -254,29 +263,31 @@ class BackupService(
                     playlistRepo.addTrack(playlistId, track.id, position = idx)
                 }
                 playlistsAdded += 1
-            }
+            }.onFailure { playlistsFailed += 1 }
         }
 
         var ratingsApplied = 0
         var ratingsSkipped = 0
+        var ratingsFailed = 0
         bundle.ratings.forEach { r ->
             val track = libraryRepo.getTrackByPathOrSuffix(r.trackPath)
             if (track == null) { ratingsSkipped += 1; return@forEach }
             runCatching {
                 ratingRepo.setRating(track.id, r.stars)
                 ratingsApplied += 1
-            }
+            }.onFailure { ratingsFailed += 1 }
         }
 
         var likedApplied = 0
         var likedSkipped = 0
+        var likedFailed = 0
         bundle.likedTracks.forEach { l ->
             val track = libraryRepo.getTrackByPathOrSuffix(l.trackPath)
             if (track == null) { likedSkipped += 1; return@forEach }
             runCatching {
                 ratingRepo.like(track.id, l.likedAt)
                 likedApplied += 1
-            }
+            }.onFailure { likedFailed += 1 }
         }
 
         // Settings + EQ presets — only present in v3+ bundles.
@@ -290,6 +301,7 @@ class BackupService(
             }
         }
         var eqPresetsApplied = 0
+        var eqPresetsFailed = 0
         bundle.customEqPresets.forEach { p ->
             runCatching {
                 settings.saveCustomEqPreset(
@@ -299,8 +311,10 @@ class BackupService(
                     ),
                 )
                 eqPresetsApplied += 1
-            }
+            }.onFailure { eqPresetsFailed += 1 }
         }
+        val totalFailed = stationsFailed + playlistsFailed + ratingsFailed +
+            likedFailed + eqPresetsFailed
 
         return RestoreResult.Done(
             stationsAdded = stationsAdded,
@@ -311,6 +325,7 @@ class BackupService(
             likedSkipped = likedSkipped,
             settingsApplied = settingsApplied,
             eqPresetsApplied = eqPresetsApplied,
+            errors = totalFailed,
         )
     }
 
@@ -336,6 +351,13 @@ class BackupService(
             val likedSkipped: Int = 0,
             val settingsApplied: Int = 0,
             val eqPresetsApplied: Int = 0,
+            /**
+             * Total exceptions caught across all per-row inserts
+             * (stations / playlists / ratings / liked / EQ presets).
+             * Distinct from "skipped" (track not in library) — these
+             * are unexpected failures the user should know about.
+             */
+            val errors: Int = 0,
         ) : RestoreResult
         data class Failed(val reason: String) : RestoreResult
     }

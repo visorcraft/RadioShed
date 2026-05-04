@@ -420,7 +420,11 @@ class SettingsStore(private val settings: Settings) {
     fun dumpForBackup(): Map<String, com.visorcraft.radioshed.source.BackupSettingValue> {
         val out = mutableMapOf<String, com.visorcraft.radioshed.source.BackupSettingValue>()
         // Strings
-        listOf(KEY_THEME_MODE, KEY_CONNECTIVITY_POLICY).forEach { key ->
+        listOf(
+            KEY_THEME_MODE, KEY_CONNECTIVITY_POLICY,
+            KEY_LIB_ARTIST_SORT, KEY_LIB_ALBUM_SORT, KEY_LIB_GENRE_SORT,
+            KEY_FILE_BROWSER_SORT,
+        ).forEach { key ->
             settings.getStringOrNull(key)?.let {
                 out[key] = com.visorcraft.radioshed.source.BackupSettingValue.Str(it)
             }
@@ -441,7 +445,10 @@ class SettingsStore(private val settings: Settings) {
             }
         }
         // Floats
-        listOf(KEY_USER_VOLUME, KEY_REPLAY_GAIN_PREAMP).forEach { key ->
+        listOf(
+            KEY_USER_VOLUME, KEY_REPLAY_GAIN_PREAMP,
+            KEY_FONT_SCALE, KEY_LYRICS_SCALE,
+        ).forEach { key ->
             if (settings.hasKey(key)) {
                 out[key] = com.visorcraft.radioshed.source.BackupSettingValue.FloatValue(
                     settings.getFloat(key, 0f),
@@ -449,7 +456,7 @@ class SettingsStore(private val settings: Settings) {
             }
         }
         // Ints
-        listOf(KEY_END_FADE_SEC).forEach { key ->
+        listOf(KEY_END_FADE_SEC, KEY_STATIONS_TILE_SIZE).forEach { key ->
             if (settings.hasKey(key)) {
                 out[key] = com.visorcraft.radioshed.source.BackupSettingValue.IntValue(
                     settings.getInt(key, 0),
@@ -519,12 +526,15 @@ class SettingsStore(private val settings: Settings) {
      * adding a new key isn't dropped on the floor.
      */
     private fun expectedTypeForKey(key: String): SettingType? = when (key) {
-        KEY_THEME_MODE, KEY_CONNECTIVITY_POLICY -> SettingType.STR
+        KEY_THEME_MODE, KEY_CONNECTIVITY_POLICY,
+        KEY_LIB_ARTIST_SORT, KEY_LIB_ALBUM_SORT, KEY_LIB_GENRE_SORT,
+        KEY_FILE_BROWSER_SORT -> SettingType.STR
         KEY_MATERIAL_YOU, KEY_REDUCE_MOTION, KEY_DRIVE_MODE,
         KEY_REPLAY_GAIN, KEY_AUTO_RESUME_STATION, KEY_AUTO_BACKUP,
         KEY_AUTO_RESCAN_ON_LAUNCH, KEY_EQ_ENABLED -> SettingType.BOOL
-        KEY_USER_VOLUME, KEY_REPLAY_GAIN_PREAMP -> SettingType.FLOAT
-        KEY_END_FADE_SEC -> SettingType.INT
+        KEY_USER_VOLUME, KEY_REPLAY_GAIN_PREAMP,
+        KEY_FONT_SCALE, KEY_LYRICS_SCALE -> SettingType.FLOAT
+        KEY_END_FADE_SEC, KEY_STATIONS_TILE_SIZE -> SettingType.INT
         else -> null
     }
 

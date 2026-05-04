@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.AssistChip
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.ui.Alignment
 import androidx.compose.foundation.layout.Column
@@ -177,7 +178,19 @@ fun SearchScreen(
                 label = { Text("Title, artist, or album") },
                 singleLine = true,
                 trailingIcon = {
-                    if (com.visorcraft.radioshed.ui.util.supportsVoiceInput()) {
+                    // Clear-text trumps voice when there's a query to
+                    // wipe — clear is the more frequent action once
+                    // the user has started typing. Voice mic is
+                    // shown only on an empty field, where it's the
+                    // most useful affordance anyway.
+                    if (query.isNotEmpty()) {
+                        androidx.compose.material3.IconButton(onClick = { query = "" }) {
+                            androidx.compose.material3.Icon(
+                                imageVector = Icons.Filled.Clear,
+                                contentDescription = "Clear search",
+                            )
+                        }
+                    } else if (com.visorcraft.radioshed.ui.util.supportsVoiceInput()) {
                         androidx.compose.material3.IconButton(onClick = { voicePicker() }) {
                             androidx.compose.material3.Icon(
                                 imageVector = Icons.Filled.Mic,

@@ -119,8 +119,43 @@ fun HistoryScreen(
                             expanded = menuOpen,
                             onDismissRequest = { menuOpen = false },
                         ) {
+                            // Trim a rolling window. Useful when the user
+                            // wants to delete a casual-listening session
+                            // that's polluting their stats without
+                            // wiping the entire history. trimHistoryOlderThan
+                            // is monotonic in playedAt so we pass `now -
+                            // window` as the threshold.
                             DropdownMenuItem(
-                                text = { Text("Clear history") },
+                                text = { Text("Clear last hour") },
+                                enabled = entries.isNotEmpty(),
+                                onClick = {
+                                    menuOpen = false
+                                    scope.launch {
+                                        val cutoff = nowMillis() - 60L * 60L * 1000L
+                                        // trimHistoryOlderThan deletes
+                                        // played_at < cutoff, so flip the
+                                        // semantics: we keep the OLD rows
+                                        // and drop the NEW ones via a
+                                        // small dedicated query path.
+                                        stationRepo.trimHistoryNewerThan(cutoff)
+                                        reload()
+                                    }
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Clear last 24 hours") },
+                                enabled = entries.isNotEmpty(),
+                                onClick = {
+                                    menuOpen = false
+                                    scope.launch {
+                                        val cutoff = nowMillis() - 24L * 60L * 60L * 1000L
+                                        stationRepo.trimHistoryNewerThan(cutoff)
+                                        reload()
+                                    }
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Clear all history") },
                                 enabled = entries.isNotEmpty(),
                                 onClick = {
                                     menuOpen = false

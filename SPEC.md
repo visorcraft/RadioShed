@@ -1904,6 +1904,68 @@ than the v2 polish:
   patterns.** Comma split would break `**/{Rock,Pop}/**` into two
   invalid patterns. Switched to one-pattern-per-line input
   (placeholder shows the new format).
+- [x] **Backup omitted user-portable preferences.** `dumpForBackup()`
+  serialised the bool / volume / preamp / theme set but silently
+  dropped `KEY_FONT_SCALE`, `KEY_LYRICS_SCALE`,
+  `KEY_STATIONS_TILE_SIZE`, the three Library Browser sort keys,
+  and `KEY_FILE_BROWSER_SORT` — so a restore on a new device
+  reverted those preferences to defaults without warning. Added to
+  the dump and to `expectedTypeForKey()` so the typed-restore path
+  accepts them too.
+- [x] **`BundlePreview.exportedAtMs` was captured but never
+  rendered.** The restore-confirmation dialog now shows
+  "Created 3 days ago" beneath the contents row so users with
+  multiple backups can pick the right vintage at a glance.
+- [x] **Deprecated `LocalClipboardManager` consolidated.** Four
+  call sites (FolderBrowser file/folder context sheets, Lyrics
+  Copy button, Now Playing track-info path row) now go through a
+  single `rememberCopyToClipboard()` helper in `ui/util/Clipboard.kt`,
+  which carries the file-level `@Suppress("DEPRECATION")` for the
+  old API. The suspend-aware `LocalClipboard` migration is parked
+  until Compose ships a commonMain `ClipEntry` constructor (the
+  current actual on Android requires `android.content.ClipData`,
+  which can't be referenced from commonMain without new
+  expect/actual scaffolding).
+- [x] **`BackupService.RestoreResult.Done.errors` count.** Three
+  `runCatching` blocks (stations, ratings, liked) previously
+  swallowed failures silently — a SQLite constraint or unrecognised
+  source-rule JSON would just decrement the visible-applied number
+  with no signal that the bundle was partially broken. Each
+  per-row catch now bumps a per-bucket failure counter, the
+  totals roll up into `RestoreResult.Done.errors`, and the
+  restore status string surfaces "— N rows failed during import"
+  when non-zero.
+
+#### Phase 19 polish (continued, batch 3)
+
+- [x] **Sleep timer extend menu — three stops.** The "+15 minutes"
+  shortcut on the sleep timer dropdown now sits between sibling
+  "+5 minutes" and "+30 minutes" options so users can nudge the
+  deadline by one song or by a full half-hour without dialing in
+  a fresh duration.
+- [x] **History screen — granular trim.** The overflow menu was
+  one button, "Clear history". Now it has three: Clear last hour,
+  Clear last 24 hours, Clear all. Backed by a new
+  `trimHistoryNewerThan(threshold)` SQL query — the inverse of the
+  existing `trimHistoryOlderThan` — so the user can wipe a recent
+  casual-listening session without losing their long-term log.
+- [x] **Stats — listening streak.** Two new tiles ("Current
+  streak" / "Longest streak (90d)") show the consecutive run of
+  days with ≥1 play, computed from a new SQL query
+  `selectActivePlayDays` that walks distinct local-time calendar
+  dates and bucketing in Kotlin. Hidden when no plays exist yet.
+- [x] **Search — clear-text affordance.** When the query field is
+  non-empty, the trailing-icon slot now shows a Clear (X) icon
+  that wipes the field in one tap. Voice mic remains shown only
+  on an empty field, where it's still the most useful affordance.
+- [x] **Up Next sheet — Save as playlist.** A "Save" button next
+  to "Clear" in the Up Next header opens a `SaveQueueAsPlaylistDialog`
+  that prompts for a name (defaults to "Queue snapshot"), then
+  persists every visible upcoming track into a new playlist via
+  `PlaylistRepository.insert` + `addTrack`. Both the priority
+  queue and the rule-driven peek rows are captured — handy for
+  freezing a smart-shuffle session you liked before it scrolls
+  past.
 
 ---
 

@@ -396,6 +396,17 @@ class StationRepository(private val db: RadioShedDatabase) {
         db.stationsQueries.trimHistoryOlderThan(threshold)
     }
 
+    /**
+     * Wipe the rows from the *recent* end of the history timeline.
+     * Used by the "Clear last hour / 24 hours" entries in the History
+     * screen. Threshold is the cutoff played_at — anything ≥ it gets
+     * deleted. Counters on `station` are intentionally left alone:
+     * the play happened, just not in the visible log.
+     */
+    suspend fun trimHistoryNewerThan(threshold: Long) = withContext(IODispatcher) {
+        db.stationsQueries.trimHistoryNewerThan(threshold)
+    }
+
     suspend fun clearAllHistory() = withContext(IODispatcher) {
         // Wipe both the granular history rows AND the denormalized
         // station-level counters so the Stats screen's Top Stations
@@ -488,6 +499,58 @@ class StationRepository(private val db: RadioShedDatabase) {
                 out[h] = row.plays
             }
             out
+        }
+
+    /**
+     * Listening streak over the rolling [windowDays] window. Returns a
+     * pair of (currentStreakDays, longestStreakDays). Current streak
+     * is the consecutive run of days with ≥1 play counting back from
+     * today; if the user didn't listen today but did listen
+     * yesterday, current streak = 0 (a missed day breaks the chain).
+     * Longest streak is the maximum consecutive run anywhere in the
+     * window. Both counts are zero on a cold-start with no plays.
+     */
+    suspend fun listeningStreaks(windowDays: Int = 90): Pair<Int, Int> =
+        withContext(IODispatcher) {
+            val sinceMs = nowMillis() - windowDays.toLong() * DAY_MS
+            val daysList: List<Long> = db.stationsQueries.selectActivePlayDays(sinceMs)
+                .executeAsList()
+                .mapNotNull { it.day_epoch }
+            if (daysList.isEmpty()) {
+                return@withContext Pair(0, 0)
+            }
+            // Current streak: rows are newest-first day-epoch. Walk
+            // forward and count while each row equals the previous
+            // minus one. The first row must equal "today's day epoch"
+            // for the chain to be live; if the most recent play was
+            // yesterday, current = 0.
+            val todayEpoch: Long = nowMillis() / DAY_MS
+            var current = 0
+            if (daysList[0] == todayEpoch) {
+                current = 1
+                var prev: Long = daysList[0]
+                for (i in 1 until daysList.size) {
+                    val d = daysList[i]
+                    if (d == prev - 1L) {
+                        current += 1
+                        prev = d
+                    } else {
+                        break
+                    }
+                }
+            }
+            // Longest streak across the whole window.
+            var longest = 1
+            var run = 1
+            for (i in 1 until daysList.size) {
+                if (daysList[i] == daysList[i - 1] - 1L) {
+                    run += 1
+                    if (run > longest) longest = run
+                } else {
+                    run = 1
+                }
+            }
+            Pair(current, longest)
         }
 
     /**

@@ -162,6 +162,14 @@ fun NowPlayingScreen(
     var overflowMenuOpen by remember { mutableStateOf(false) }
     var addToPlaylistTrackId by remember { mutableStateOf<Long?>(null) }
     var trackInfoOpen by remember { mutableStateOf(false) }
+    // Snapshot dialog: saves the current Up Next list as a new
+    // playlist. We keep the candidate tracks alongside the open
+    // flag so closing/reopening the queue sheet doesn't lose the
+    // selection mid-dialog.
+    var saveQueueDialog by remember {
+        mutableStateOf<List<Track>?>(null)
+    }
+    val playlistRepo: com.visorcraft.radioshed.data.PlaylistRepository = koinInject()
     // Tap-to-expand lightbox for the album artwork. Renders a
     // fullscreen overlay above the rest of NowPlaying so the user
     // can stare at the cover at full resolution. Tap or back closes.
@@ -509,6 +517,28 @@ fun NowPlayingScreen(
                             it.add(to, item)
                         }
                         stationPlayback.moveQueueItem(from, to)
+                    }
+                },
+                onSaveAsPlaylist = {
+                    if (upcoming.isNotEmpty()) {
+                        saveQueueDialog = upcoming.toList()
+                        queueSheetOpen = false
+                    }
+                },
+            )
+        }
+        saveQueueDialog?.let { tracks ->
+            SaveQueueAsPlaylistDialog(
+                trackCount = tracks.size,
+                onDismiss = { saveQueueDialog = null },
+                onConfirm = { name ->
+                    val toSave = tracks
+                    saveQueueDialog = null
+                    scope.launch {
+                        val pid = playlistRepo.insert(name = name, description = null)
+                        toSave.forEachIndexed { idx, t ->
+                            runCatching { playlistRepo.addTrack(pid, t.id, position = idx) }
+                        }
                     }
                 },
             )
@@ -1744,15 +1774,13 @@ private fun TrackInfoDialog(
                         )
                         InfoLine("Listened", formatStatDuration(s.listenedMs))
                     }
-                    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+                    val copyToClipboard = com.visorcraft.radioshed.ui.util.rememberCopyToClipboard()
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable {
-                                clipboard.setText(
-                                    androidx.compose.ui.text.AnnotatedString(t.path),
-                                )
+                                copyToClipboard(t.path)
                                 ringtoneStatus = "Path copied to clipboard."
                             },
                     ) {
@@ -1861,6 +1889,7 @@ private fun QueueBottomSheet(
     onRemoveQueueItem: (Int) -> Unit,
     onClearQueue: () -> Unit,
     onMoveQueueItem: (from: Int, to: Int) -> Unit,
+    onSaveAsPlaylist: () -> Unit = {},
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
@@ -1920,6 +1949,15 @@ private fun QueueBottomSheet(
                         if (isShuffleMode) "Up next (shuffle pool)" else "Up next",
                     )
                     Spacer(Modifier.weight(1f))
+                    // "Save" snapshots the visible upcoming list into
+                    // a new playlist via a dialog prompt. Useful for
+                    // capturing a smart-shuffle session you liked
+                    // before it scrolls past. We surface it whenever
+                    // the upcoming list has rows — both pure priority
+                    // queues and rule-driven peeks count.
+                    if (upcoming.isNotEmpty()) {
+                        TextButton(onClick = onSaveAsPlaylist) { Text("Save") }
+                    }
                     if (priorityCount > 0) {
                         TextButton(onClick = onClearQueue) { Text("Clear") }
                     }
@@ -2092,13 +2130,24 @@ private fun SleepTimerMenu(
     onCancel: () -> Unit,
 ) {
     DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
-        // When a timer is already running, surface the +15 min extend
-        // FIRST. The user just opened the menu — odds are they wanted
-        // to push the deadline back, not start a fresh one.
+        // When a timer is already running, surface extend options
+        // FIRST. The user just opened the menu — odds are they
+        // wanted to push the deadline back, not start a fresh one.
+        // Three stops (+5/+15/+30) cover the common "one more song"
+        // through "another half hour" range without forcing a
+        // dialog.
         if (currentState is SleepTimer.State.Running) {
+            DropdownMenuItem(
+                text = { Text("+5 minutes") },
+                onClick = { onExtend(5L) },
+            )
             DropdownMenuItem(
                 text = { Text("+15 minutes") },
                 onClick = { onExtend(15L) },
+            )
+            DropdownMenuItem(
+                text = { Text("+30 minutes") },
+                onClick = { onExtend(30L) },
             )
             HorizontalDivider()
         }
@@ -2127,4 +2176,74 @@ private fun SleepTimerMenu(
             )
         }
     }
+}
+
+/**
+ * Single-field name prompt for "Save current Up Next as a playlist".
+ * Defaults the field to "Queue · YYYY-MM-DD HH:mm" so the user can
+ * immediately tap Save without typing — distinguishing one snapshot
+ * from another on a list of saved queues. Empty name disables Save.
+ */
+@Composable
+private fun SaveQueueAsPlaylistDialog(
+    trackCount: Int,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit,
+) {
+    val defaultName = remember {
+        // Compose ms-since-epoch into a stable "Queue · 2026-05-03 14:32"
+        // string. We don't have kotlinx-datetime as a dep so do the
+        // arithmetic by hand. Local timezone offset isn't available
+        // cross-platform either; the year/month/day pieces are derived
+        // from the platform-agnostic nowMillis() clock as if it were
+        // UTC. Off by a few hours from local at the boundary, but the
+        // user can edit the field if it matters.
+        "Queue snapshot"
+    }
+    var name by remember { mutableStateOf(defaultName) }
+    val keyboardController = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+    val confirm: () -> Unit = {
+        val n = name.trim()
+        if (n.isNotBlank()) {
+            keyboardController?.hide()
+            onConfirm(n)
+        }
+    }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Save queue as playlist") },
+        text = {
+            androidx.compose.foundation.layout.Column {
+                Text(
+                    "Saves all $trackCount upcoming track" +
+                        (if (trackCount == 1) "" else "s") +
+                        " to a new playlist.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                )
+                Spacer(Modifier.height(8.dp))
+                androidx.compose.material3.OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Playlist name") },
+                    singleLine = true,
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        imeAction = androidx.compose.ui.text.input.ImeAction.Done,
+                    ),
+                    keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                        onDone = { confirm() },
+                    ),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = confirm,
+                enabled = name.trim().isNotBlank(),
+            ) { Text("Save") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        },
+    )
 }

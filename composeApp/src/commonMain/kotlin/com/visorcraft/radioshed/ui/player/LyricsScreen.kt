@@ -40,8 +40,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -161,7 +159,7 @@ fun LyricsScreen(
                             settings.setLyricsScale(next)
                         }) { Text("A+") }
                     }
-                    val clipboard = LocalClipboardManager.current
+                    val copyToClipboard = com.visorcraft.radioshed.ui.util.rememberCopyToClipboard()
                     val l = lyrics
                     if (l != null && l.hasContent && !l.instrumental) {
                         TextButton(onClick = {
@@ -175,7 +173,7 @@ fun LyricsScreen(
                                     ?.takeIf { it.isNotBlank() }
                                 ?: ""
                             if (text.isNotBlank()) {
-                                clipboard.setText(AnnotatedString(text))
+                                copyToClipboard(text)
                             }
                         }) { Text("Copy") }
                     }

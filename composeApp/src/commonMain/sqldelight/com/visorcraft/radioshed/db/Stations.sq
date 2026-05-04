@@ -222,6 +222,14 @@ DELETE FROM station_history WHERE station_id = ?;
 trimHistoryOlderThan:
 DELETE FROM station_history WHERE played_at < ?;
 
+-- Inverse of trimHistoryOlderThan — drops rows from the *recent*
+-- side of the timeline, used by the "Clear last hour" / "Clear last
+-- 24 hours" menu items in the History screen. Doesn't touch the
+-- denormalized station counters (caller must follow up if they
+-- want a Stats reset).
+trimHistoryNewerThan:
+DELETE FROM station_history WHERE played_at >= ?;
+
 clearAllHistory:
 DELETE FROM station_history;
 
@@ -257,6 +265,19 @@ FROM station_history
 WHERE played_at >= :sinceMs
 GROUP BY days_ago
 ORDER BY days_ago;
+
+-- Distinct calendar dates (in the user's local timezone) on which at
+-- least one play happened, within a rolling window. Returned newest-
+-- first as integer days-since-epoch so the streak calculator can
+-- check consecutiveness with subtraction. Window is 90 days because
+-- the streak card stops being interesting past ~3 months and the
+-- query stays tiny.
+selectActivePlayDays:
+SELECT DISTINCT
+    CAST(strftime('%s', played_at / 1000, 'unixepoch', 'localtime', 'start of day') AS INTEGER) / 86400 AS day_epoch
+FROM station_history
+WHERE played_at >= :sinceMs
+ORDER BY day_epoch DESC;
 
 -- Hour-of-day play distribution within a rolling window. SQLite's
 -- strftime needs seconds, hence /1000, and 'localtime' tells it to

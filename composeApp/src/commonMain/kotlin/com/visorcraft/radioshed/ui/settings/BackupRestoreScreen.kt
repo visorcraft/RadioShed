@@ -256,6 +256,18 @@ fun BackupRestoreScreen(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                         )
+                        // Backup creation time helps the user disambiguate
+                        // when several backups have similar contents but
+                        // different vintages — e.g. "yesterday" vs
+                        // "3 weeks ago" picks the right snapshot.
+                        if (p.exportedAtMs > 0L) {
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                text = "Created ${formatTimestamp(p.exportedAtMs)}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+                            )
+                        }
                         Spacer(Modifier.height(8.dp))
                         Text(
                             "Stations and playlists are added to your library. " +
@@ -309,6 +321,11 @@ fun BackupRestoreScreen(
                                 val totalSkipped = result.ratingsSkipped + result.likedSkipped
                                 if (totalSkipped > 0) {
                                     append(" ($totalSkipped skipped — tracks not in library)")
+                                }
+                                if (result.errors > 0) {
+                                    append(" — ${result.errors} row")
+                                    if (result.errors != 1) append("s")
+                                    append(" failed during import")
                                 }
                             }
                             is BackupService.RestoreResult.Failed -> "Restore failed: ${result.reason}"
