@@ -103,6 +103,48 @@ class SettingsStore(private val settings: Settings) {
     }
 
     /**
+     * Album/Artist/Genre detail screen track-sort prefs. Each
+     * detail screen has its own enum (`AlbumTrackSort`,
+     * `ArtistTrackSort`, `GenreTrackSort`); we store the enum's
+     * name and let the screen `valueOf()` it back at composition
+     * time. Default falls through whenever the enum has shifted
+     * (a removed/renamed sort key is silently ignored).
+     */
+    fun getAlbumTrackSort(): String? = settings.getStringOrNull(KEY_ALBUM_TRACK_SORT)
+    fun setAlbumTrackSort(name: String) = settings.putString(KEY_ALBUM_TRACK_SORT, name)
+
+    fun getArtistTrackSort(): String? = settings.getStringOrNull(KEY_ARTIST_TRACK_SORT)
+    fun setArtistTrackSort(name: String) = settings.putString(KEY_ARTIST_TRACK_SORT, name)
+
+    fun getGenreTrackSort(): String? = settings.getStringOrNull(KEY_GENRE_TRACK_SORT)
+    fun setGenreTrackSort(name: String) = settings.putString(KEY_GENRE_TRACK_SORT, name)
+
+    /**
+     * Lyrics sync offset in milliseconds. Positive = lyrics are
+     * delayed (positionMs is decreased before line lookup),
+     * negative = lyrics are early. Clamped to ±5000 ms — past
+     * that the user is dealing with a fundamentally wrong file
+     * and should re-fetch via the manual retry dialog.
+     */
+    fun getLyricsSyncOffsetMs(): Int =
+        settings.getInt(KEY_LYRICS_SYNC_OFFSET, 0).coerceIn(-5000, 5000)
+
+    fun setLyricsSyncOffsetMs(value: Int) {
+        settings.putInt(KEY_LYRICS_SYNC_OFFSET, value.coerceIn(-5000, 5000))
+    }
+
+    /**
+     * Stats screen window in days. 7 / 30 / 90 / 365 are the
+     * common stops; default 30 matches the prior hardcoded value.
+     */
+    fun getStatsWindowDays(): Int =
+        settings.getInt(KEY_STATS_WINDOW_DAYS, 30).coerceIn(1, 365)
+
+    fun setStatsWindowDays(days: Int) {
+        settings.putInt(KEY_STATS_WINDOW_DAYS, days.coerceIn(1, 365))
+    }
+
+    /**
      * Drive Mode bumps transport / rating tap targets to be safer
      * to hit while driving. Off by default; users opt in once and
      * the setting follows them across sessions.
@@ -575,6 +617,11 @@ class SettingsStore(private val settings: Settings) {
         const val KEY_FONT_SCALE = "ui.fontScale"
         const val KEY_STATIONS_TILE_SIZE = "ui.stations.tileSizeDp"
         const val KEY_STATIONS_HIDE_BUILTINS = "ui.stations.hideBuiltIns"
+        const val KEY_ALBUM_TRACK_SORT = "ui.album.trackSort"
+        const val KEY_ARTIST_TRACK_SORT = "ui.artist.trackSort"
+        const val KEY_GENRE_TRACK_SORT = "ui.genre.trackSort"
+        const val KEY_LYRICS_SYNC_OFFSET = "ui.lyrics.syncOffsetMs"
+        const val KEY_STATS_WINDOW_DAYS = "ui.stats.windowDays"
         const val KEY_CONNECTIVITY_POLICY = "online.connectivityPolicy"
         const val KEY_ONBOARDING_DONE = "onboarding.complete"
         const val KEY_LAST_STATION_ID = "playback.lastStationId"

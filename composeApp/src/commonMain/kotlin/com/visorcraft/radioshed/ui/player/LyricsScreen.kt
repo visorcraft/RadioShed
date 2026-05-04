@@ -10,6 +10,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -85,6 +86,16 @@ fun LyricsScreen(
     // buttons in the topbar step it in 0.1 increments inside
     // the SettingsStore-clamped range.
     var fontScale by remember { mutableStateOf(settings.getLyricsScale()) }
+    // Sync offset compensates for lyrics that consistently arrive
+    // early/late vs the audio. Persisted globally — the most common
+    // case is system-wide latency from the audio output (Bluetooth
+    // headphones, speakers), not per-track lyric drift, so a single
+    // global value matches user mental model. ±5s clamped at the
+    // store level. Persistence is an LaunchedEffect on the live
+    // value below.
+    var syncOffsetMs by remember { mutableStateOf(settings.getLyricsSyncOffsetMs()) }
+    var syncSheetOpen by remember { mutableStateOf(false) }
+    LaunchedEffect(syncOffsetMs) { settings.setLyricsSyncOffsetMs(syncOffsetMs) }
 
     var lyrics by remember { mutableStateOf<Lyrics?>(null) }
     var loading by remember { mutableStateOf(false) }
@@ -162,6 +173,15 @@ fun LyricsScreen(
                             fontScale = next
                             settings.setLyricsScale(next)
                         }) { Text("A+") }
+                        // Sync offset is only meaningful for synced
+                        // lyrics — plain text has no per-line timing
+                        // to compensate. Hidden when there's only
+                        // plain text or no lyrics at all.
+                        if (lyrics?.synced?.isNotEmpty() == true) {
+                            TextButton(onClick = { syncSheetOpen = true }) {
+                                Text("Sync")
+                            }
+                        }
                     }
                     val copyToClipboard = com.visorcraft.radioshed.ui.util.rememberCopyToClipboard()
                     val l = lyrics
@@ -222,6 +242,7 @@ fun LyricsScreen(
                 positionMs = position.currentMs,
                 onSeek = { ms -> audioEngine.seekTo(ms) },
                 fontScale = fontScale,
+                syncOffsetMs = syncOffsetMs,
                 modifier = Modifier.fillMaxSize().padding(padding),
             )
             l != null && !l.plain.isNullOrBlank() -> PlainLyrics(
@@ -243,6 +264,53 @@ fun LyricsScreen(
                 )
             }
         }
+    }
+
+    if (syncSheetOpen) {
+        AlertDialog(
+            onDismissRequest = { syncSheetOpen = false },
+            title = { Text("Lyrics sync offset") },
+            text = {
+                Column {
+                    Text(
+                        "Adjust if lyrics are showing early or late. " +
+                            "Positive = delay lyrics; negative = show " +
+                            "lyrics earlier. Typical Bluetooth latency is " +
+                            "150–250ms.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        text = "${(syncOffsetMs / 1000.0).let {
+                            if (it == 0.0) "0.0s" else "%+.1fs".format(it)
+                        }}",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    androidx.compose.material3.Slider(
+                        value = syncOffsetMs.toFloat(),
+                        onValueChange = { syncOffsetMs = it.toInt() },
+                        valueRange = -5000f..5000f,
+                        steps = 99, // 100ms increments across ±5s
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Row(
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        TextButton(onClick = { syncOffsetMs = -250 }) { Text("BT") }
+                        TextButton(onClick = { syncOffsetMs = 0 }) { Text("Reset") }
+                        TextButton(onClick = { syncOffsetMs = 250 }) { Text("+250ms") }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { syncSheetOpen = false }) { Text("Done") }
+            },
+        )
     }
 
     if (editSearchOpen) {
@@ -349,15 +417,20 @@ private fun SyncedLyrics(
     positionMs: Long,
     onSeek: (Long) -> Unit,
     fontScale: Float,
+    syncOffsetMs: Int,
     modifier: Modifier = Modifier,
 ) {
-    // Find the active line: the last line whose timeMs <= positionMs.
-    // Linear scan is fine here — typical songs have <200 lines and this
-    // runs at ~2 Hz with the position flow.
-    val activeIndex = remember(lines, positionMs) {
+    // Find the active line: the last line whose timeMs <= adjustedPos.
+    // Sync offset compensates for lyrics that arrive consistently
+    // early/late vs the audio. Positive offset = lyrics show later
+    // (we subtract from positionMs when matching), negative = lyrics
+    // show earlier. Linear scan is fine — typical songs have <200
+    // lines and this runs at ~2 Hz with the position flow.
+    val activeIndex = remember(lines, positionMs, syncOffsetMs) {
+        val adjusted = (positionMs - syncOffsetMs).coerceAtLeast(0L)
         var idx = -1
         for (i in lines.indices) {
-            if (lines[i].timeMs <= positionMs) idx = i else break
+            if (lines[i].timeMs <= adjusted) idx = i else break
         }
         idx
     }

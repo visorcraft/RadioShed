@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DragHandle
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PlayArrow
@@ -299,32 +300,55 @@ fun PlaylistDetailScreen(
                         }
                     },
                 )
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    state = listState,
-                    contentPadding = PaddingValues(vertical = 4.dp),
-                ) {
-                    itemsIndexed(tracks, key = { _, t -> t.id }) { index, track ->
-                        PlaylistTrackRow(
-                            track = track,
-                            isDragging = dragState.draggedIndex == index,
-                            isCurrent = track.id == currentTrackId,
-                            modifier = Modifier.dragReorderItem(dragState, index),
-                            onTap = {
-                                // indexOf-by-equality is safe here because
-                                // Track is a data class; if the dragged
-                                // state is mid-flight we ignore tap.
-                                if (dragState.draggedIndex != null) return@PlaylistTrackRow
-                                val idx = tracks.indexOf(track).coerceAtLeast(0)
-                                stationPlayback.playTracks(tracks, startIndex = idx)
+                val showFab by remember {
+                    androidx.compose.runtime.derivedStateOf {
+                        listState.firstVisibleItemIndex > 8
+                    }
+                }
+                Box(modifier = Modifier.fillMaxSize()) {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        state = listState,
+                        contentPadding = PaddingValues(vertical = 4.dp),
+                    ) {
+                        itemsIndexed(tracks, key = { _, t -> t.id }) { index, track ->
+                            PlaylistTrackRow(
+                                track = track,
+                                isDragging = dragState.draggedIndex == index,
+                                isCurrent = track.id == currentTrackId,
+                                modifier = Modifier.dragReorderItem(dragState, index),
+                                onTap = {
+                                    // indexOf-by-equality is safe here because
+                                    // Track is a data class; if the dragged
+                                    // state is mid-flight we ignore tap.
+                                    if (dragState.draggedIndex != null) return@PlaylistTrackRow
+                                    val idx = tracks.indexOf(track).coerceAtLeast(0)
+                                    stationPlayback.playTracks(tracks, startIndex = idx)
+                                },
+                                onRemove = {
+                                    scope.launch {
+                                        repo.removeTrack(playlistId, track.id)
+                                        reload()
+                                    }
+                                },
+                            )
+                        }
+                    }
+                    if (showFab) {
+                        androidx.compose.material3.SmallFloatingActionButton(
+                            onClick = {
+                                scope.launch { listState.animateScrollToItem(0) }
                             },
-                            onRemove = {
-                                scope.launch {
-                                    repo.removeTrack(playlistId, track.id)
-                                    reload()
-                                }
-                            },
-                        )
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .padding(end = 16.dp, bottom = 16.dp),
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        ) {
+                            Icon(
+                                imageVector = androidx.compose.material.icons.Icons.Filled.KeyboardArrowUp,
+                                contentDescription = "Scroll to top",
+                            )
+                        }
                     }
                 }
             }

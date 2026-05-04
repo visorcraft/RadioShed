@@ -20,6 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FileOpen
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
@@ -74,6 +75,8 @@ fun BackupRestoreScreen(
     var status by remember { mutableStateOf<String?>(null) }
     var restoreConfirm by remember { mutableStateOf<BackupFile?>(null) }
     var deleteConfirm by remember { mutableStateOf<BackupFile?>(null) }
+    var deleteAllConfirm by remember { mutableStateOf(false) }
+    var menuOpen by remember { mutableStateOf(false) }
 
     suspend fun reload() {
         files = backupService.listBackups()
@@ -85,6 +88,29 @@ fun BackupRestoreScreen(
             TopAppBar(
                 title = { Text("Backup & restore") },
                 navigationIcon = { TextButton(onClick = onBack) { Text("Back") } },
+                actions = {
+                    Box {
+                        IconButton(onClick = { menuOpen = true }) {
+                            Icon(
+                                imageVector = androidx.compose.material.icons.Icons.Filled.MoreVert,
+                                contentDescription = "More",
+                            )
+                        }
+                        androidx.compose.material3.DropdownMenu(
+                            expanded = menuOpen,
+                            onDismissRequest = { menuOpen = false },
+                        ) {
+                            androidx.compose.material3.DropdownMenuItem(
+                                text = { Text("Delete all backups") },
+                                enabled = files.isNotEmpty() && !working,
+                                onClick = {
+                                    menuOpen = false
+                                    deleteAllConfirm = true
+                                },
+                            )
+                        }
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface,
                 ),
@@ -360,6 +386,50 @@ fun BackupRestoreScreen(
             },
             dismissButton = {
                 TextButton(onClick = { deleteConfirm = null }) { Text("Cancel") }
+            },
+        )
+    }
+
+    if (deleteAllConfirm) {
+        AlertDialog(
+            onDismissRequest = { deleteAllConfirm = false },
+            title = { Text("Delete all backup files?") },
+            text = {
+                Text(
+                    "This permanently removes every backup file under " +
+                        "the app's private storage (${files.size} file" +
+                        (if (files.size == 1) "" else "s") +
+                        "). Library, ratings, playlists, and stations are " +
+                        "untouched — only the saved JSON dumps go away.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val toDelete = files
+                    deleteAllConfirm = false
+                    scope.launch {
+                        working = true
+                        var failed = 0
+                        toDelete.forEach { f ->
+                            runCatching { backupService.delete(f.uri) }
+                                .onFailure { failed += 1 }
+                        }
+                        status = if (failed == 0) {
+                            "Deleted ${toDelete.size} backup file" +
+                                (if (toDelete.size == 1) "" else "s") + "."
+                        } else {
+                            "Deleted ${toDelete.size - failed} of " +
+                                "${toDelete.size} (${failed} failed)."
+                        }
+                        reload()
+                        working = false
+                    }
+                }) {
+                    Text("Delete all", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { deleteAllConfirm = false }) { Text("Cancel") }
             },
         )
     }

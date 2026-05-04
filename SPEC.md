@@ -2185,6 +2185,56 @@ found a dozen issues. All fixed in this round:
   midnight. Re-keyed on `dailyActivity` so the label moves in
   lock-step with the underlying data fetch.
 
+#### Phase 19 polish (continued, batch 8)
+
+- [x] **Detail-screen sort prefs persist.** Album / Artist /
+  Genre detail screens persist their selected track sort via
+  three new `SettingsStore` keys (`KEY_ALBUM_TRACK_SORT`,
+  `KEY_ARTIST_TRACK_SORT`, `KEY_GENRE_TRACK_SORT`). Each screen
+  reads on entry, writes on every selection change. Defaults
+  fall through cleanly when the persisted enum value can't be
+  parsed (a renamed/removed sort key is silently ignored).
+- [x] **PlaylistDetail scroll-to-top FAB.** Mirrors the Library
+  Songs and Album detail FAB pattern; appears bottom-right when
+  `firstVisibleItemIndex > 8`, animates the LazyColumn back to
+  position 0. Coexists cleanly with the drag-to-reorder
+  affordance — the FAB is on the parent Box, not the LazyColumn,
+  so a drag never accidentally fires it.
+- [x] **Lyrics sync offset slider.** A new "Sync" text button on
+  the Lyrics screen topbar (only shown when synced lyrics are
+  loaded) opens an AlertDialog with a ±5 second slider in 100 ms
+  steps. Three quick-stops: "BT" pre-sets −250 ms (typical
+  Bluetooth latency), "Reset" zeros, and "+250 ms" mirrors. The
+  offset is global — most drift comes from system-wide audio
+  latency (BT, speakers), not per-track lyric error — and
+  persisted via new `KEY_LYRICS_SYNC_OFFSET`. The synced-lyrics
+  matching logic now subtracts the offset from `positionMs`
+  before lookup so positive values delay the highlight, negative
+  values pull it earlier.
+- [x] **Stats time-window selector.** A row of three FilterChips
+  (7 / 30 / 90 days) sits above the stat tiles. Selection is
+  persisted via `KEY_STATS_WINDOW_DAYS`. The activity timeline,
+  hour histogram, and weekday histogram all re-fetch with the
+  chosen window via the existing `windowDays` parameter on each
+  repository method. The streak stat continues to use a fixed
+  90-day lookback — that tile is documented as a 90-day max
+  regardless of the user's view window.
+- [x] **Backup screen — "Delete all backups".** New top-bar
+  overflow with a single action that opens an AlertDialog and,
+  on confirm, iterates `files` calling `backupService.delete(uri)`
+  on each. Tracks per-file failures and reports
+  "Deleted N of M (X failed)" when partial.
+- [x] **StationDetail scroll-to-top FAB.** Same pattern as the
+  other detail screens: SmallFloatingActionButton wired to the
+  LazyColumn's state, threshold `firstVisibleItemIndex > 8`.
+- [x] **Now Playing — tap position to seek.** The position label
+  beneath the scrubber is now clickable; opens
+  `SeekToTimeDialog` with a TextField pre-filled with the
+  current `M:SS`. Accepts `M:SS`, `H:MM:SS`, or bare seconds via
+  a new `parseSeekInput()` helper. Useful for "skip to 1:23" on
+  long podcasts/sets where the slider's hit zone is ~10 seconds
+  wide.
+
 ---
 
 ## Appendix A — Compose Multiplatform vs native UI: when to fall back

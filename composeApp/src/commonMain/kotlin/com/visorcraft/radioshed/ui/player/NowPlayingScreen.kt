@@ -1267,6 +1267,7 @@ private fun Scrubber(
 ) {
     var isUserScrubbing by remember { mutableStateOf(false) }
     var pendingFraction by remember { mutableFloatStateOf(0f) }
+    var seekDialogOpen by remember { mutableStateOf(false) }
 
     val durationSafe = durationMs.coerceAtLeast(0L)
     val currentFraction = if (durationSafe == 0L) 0f
@@ -1293,11 +1294,18 @@ private fun Scrubber(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
+            // Tap the position label to open a precise jump-to-time
+            // dialog. The slider handles coarse seeks; a typed input
+            // is the right tool for "skip to 1:23" on long
+            // podcasts/sets where the slider's hit zone is ~10s wide.
             Text(
                 text = formatMs(if (isUserScrubbing) (pendingFraction * durationSafe).toLong() else positionMs),
                 style = MaterialTheme.typography.bodySmall,
                 fontFamily = FontFamily.Monospace,
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
+                modifier = Modifier.clickable(enabled = durationSafe > 0L) {
+                    seekDialogOpen = true
+                },
             )
             Text(
                 text = formatMs(durationSafe),
@@ -1307,6 +1315,93 @@ private fun Scrubber(
             )
         }
     }
+
+    if (seekDialogOpen) {
+        SeekToTimeDialog(
+            currentMs = positionMs,
+            durationMs = durationSafe,
+            onDismiss = { seekDialogOpen = false },
+            onConfirm = { targetMs ->
+                seekDialogOpen = false
+                onSeek(targetMs.coerceIn(0L, durationSafe))
+            },
+        )
+    }
+}
+
+/**
+ * Precise seek prompt — accepts `M:SS` / `H:MM:SS` / bare seconds.
+ * Pre-fills with the current position formatted as `M:SS` so the
+ * user can edit incrementally rather than retype. Invalid entries
+ * keep the dialog open with no-op (the user can clear and retry).
+ */
+@Composable
+private fun SeekToTimeDialog(
+    currentMs: Long,
+    durationMs: Long,
+    onDismiss: () -> Unit,
+    onConfirm: (Long) -> Unit,
+) {
+    var input by remember { mutableStateOf(formatMs(currentMs)) }
+    val parsed = remember(input) { parseSeekInput(input) }
+    val confirm: () -> Unit = {
+        parsed?.let { ms -> onConfirm(ms) }
+    }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Seek to time") },
+        text = {
+            Column {
+                Text(
+                    "Track length: ${formatMs(durationMs)}. Accepts " +
+                        "M:SS, H:MM:SS, or seconds.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                )
+                Spacer(Modifier.height(8.dp))
+                androidx.compose.material3.OutlinedTextField(
+                    value = input,
+                    onValueChange = { input = it },
+                    label = { Text("Time") },
+                    singleLine = true,
+                    isError = parsed == null,
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        imeAction = androidx.compose.ui.text.input.ImeAction.Done,
+                    ),
+                    keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                        onDone = { confirm() },
+                    ),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = confirm, enabled = parsed != null) { Text("Seek") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        },
+    )
+}
+
+/**
+ * Parse a user-entered seek target into milliseconds. Supports:
+ *  - Plain seconds:        "83"     → 83_000 ms
+ *  - Minutes:seconds:      "1:23"   → 83_000 ms
+ *  - Hours:minutes:seconds:"1:02:03"→ 3_723_000 ms
+ * Returns null on malformed input. Trailing/leading whitespace OK.
+ */
+internal fun parseSeekInput(raw: String): Long? {
+    val trimmed = raw.trim()
+    if (trimmed.isEmpty()) return null
+    val parts = trimmed.split(":")
+    return runCatching {
+        when (parts.size) {
+            1 -> parts[0].toLong() * 1000L
+            2 -> parts[0].toLong() * 60_000L + parts[1].toLong() * 1000L
+            3 -> parts[0].toLong() * 3_600_000L + parts[1].toLong() * 60_000L + parts[2].toLong() * 1000L
+            else -> return null
+        }.takeIf { it >= 0L }
+    }.getOrNull()
 }
 
 @OptIn(ExperimentalFoundationApi::class)

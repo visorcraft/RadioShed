@@ -102,9 +102,18 @@ fun StatsScreen(
     var weekdayActivity by remember { mutableStateOf<LongArray>(LongArray(7)) }
     var completionStats by remember { mutableStateOf<Pair<Long, Long>>(0L to 0L) }
     var streaks by remember { mutableStateOf<Pair<Int, Int>>(0 to 0) }
+    // Time-window selector. Persisted via SettingsStore so the
+    // user's choice (7 / 30 / 90 days) survives a screen exit.
+    // The streak window stays at 90 regardless — that stat reads
+    // "longest streak in the past 90 days" in copy already, and a
+    // user picking 7 days still wants to see their longer-term
+    // streak record.
+    val settings: com.visorcraft.radioshed.data.SettingsStore = koinInject()
+    var windowDays by remember { mutableStateOf(settings.getStatsWindowDays()) }
+    LaunchedEffect(windowDays) { settings.setStatsWindowDays(windowDays) }
     val scope = rememberCoroutineScope()
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(windowDays) {
         totalMs = stationRepo.totalListenedMs()
         totalPlays = stationRepo.countAllPlays()
         // top track ids → resolve to Track objects via LibraryRepo;
@@ -124,10 +133,13 @@ fun StatsScreen(
             .sortedByDescending { it.stats.playCount }
             .take(5)
         mostSkipped = ratingRepo.mostSkippedTracks(limit = 10L)
-        dailyActivity = stationRepo.dailyActivity(windowDays = 30)
-        hourActivity = stationRepo.playsByHourOfDay(windowDays = 30)
-        weekdayActivity = stationRepo.playsByWeekday(windowDays = 30)
+        dailyActivity = stationRepo.dailyActivity(windowDays = windowDays)
+        hourActivity = stationRepo.playsByHourOfDay(windowDays = windowDays)
+        weekdayActivity = stationRepo.playsByWeekday(windowDays = windowDays)
         completionStats = stationRepo.completionStats()
+        // Streak stays on a fixed 90-day lookback — the
+        // "longest streak" stat reads as a 90-day max regardless
+        // of the user's chosen view window.
         streaks = stationRepo.listeningStreaks(windowDays = 90)
     }
 
@@ -149,6 +161,28 @@ fun StatsScreen(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             item {
+                // Time-window picker. Three stops (7d / 30d / 90d)
+                // cover near-term scrutiny through quarter-level
+                // overview. Wider than 90 starts to lose the chart's
+                // utility (a daily bar across 365 columns is
+                // unreadable on a phone) so we cap there.
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp),
+                ) {
+                    listOf(7, 30, 90).forEach { days ->
+                        androidx.compose.material3.FilterChip(
+                            selected = windowDays == days,
+                            onClick = { windowDays = days },
+                            label = { Text("$days days") },
+                            colors = androidx.compose.material3.FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                            ),
+                        )
+                    }
+                }
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     modifier = Modifier.fillMaxWidth(),
@@ -208,24 +242,21 @@ fun StatsScreen(
             if (dailyActivity.any { it.plays > 0 }) {
                 item {
                     // Concrete date range reads better than a generic
-                    // "Last 30 days" — the user sees exactly which
-                    // days the chart covers ("Apr 4 – May 3"). Re-
-                    // derived against `dailyActivity` so the label
-                    // moves in lock-step with the underlying data
-                    // (the Stats screen's main LaunchedEffect re-
-                    // fetches dailyActivity, which then bumps the
-                    // remember key here too — important for users
-                    // who leave the screen open across midnight).
+                    // "Last N days". Derived against the picker's
+                    // `windowDays` value AND `dailyActivity` so the
+                    // label moves in lock-step with the underlying
+                    // data fetch (important for users who leave the
+                    // screen open across midnight).
                     val DAY_MS_LOCAL = 24L * 60L * 60L * 1000L
-                    val rangeLabel = remember(dailyActivity) {
+                    val rangeLabel = remember(dailyActivity, windowDays) {
                         runCatching {
                             val nowMs = com.visorcraft.radioshed.data.nowMillis()
                             val start = com.visorcraft.radioshed.data.formatShortDate(
-                                nowMs - 29L * DAY_MS_LOCAL,
+                                nowMs - (windowDays - 1).toLong() * DAY_MS_LOCAL,
                             )
                             val end = com.visorcraft.radioshed.data.formatShortDate(nowMs)
                             "$start – $end"
-                        }.getOrDefault("Last 30 days")
+                        }.getOrDefault("Last $windowDays days")
                     }
                     SectionHeader(rangeLabel)
                     Spacer(Modifier.height(4.dp))

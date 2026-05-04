@@ -81,7 +81,14 @@ fun GenreDetailScreen(
     var contextTrackId by remember { mutableStateOf<Long?>(null) }
     var overflowOpen by remember { mutableStateOf(false) }
     var sortMenuOpen by remember { mutableStateOf(false) }
-    var trackSort by remember { mutableStateOf(GenreTrackSort.TitleAsc) }
+    val settings: com.visorcraft.radioshed.data.SettingsStore = koinInject()
+    var trackSort by remember {
+        mutableStateOf(
+            runCatching { GenreTrackSort.valueOf(settings.getGenreTrackSort() ?: "") }
+                .getOrDefault(GenreTrackSort.TitleAsc),
+        )
+    }
+    LaunchedEffect(trackSort) { settings.setGenreTrackSort(trackSort.name) }
     var playCounts by remember { mutableStateOf<Map<Long, Long>>(emptyMap()) }
     LaunchedEffect(tracks) {
         if (tracks.isNotEmpty()) {

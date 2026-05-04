@@ -96,7 +96,14 @@ fun ArtistDetailScreen(
     var contextTrackId by remember { mutableStateOf<Long?>(null) }
     var overflowOpen by remember { mutableStateOf(false) }
     var sortMenuOpen by remember { mutableStateOf(false) }
-    var trackSort by remember { mutableStateOf(ArtistTrackSort.AlbumOrder) }
+    val settings: com.visorcraft.radioshed.data.SettingsStore = koinInject()
+    var trackSort by remember {
+        mutableStateOf(
+            runCatching { ArtistTrackSort.valueOf(settings.getArtistTrackSort() ?: "") }
+                .getOrDefault(ArtistTrackSort.AlbumOrder),
+        )
+    }
+    LaunchedEffect(trackSort) { settings.setArtistTrackSort(trackSort.name) }
     val nowPlaying by audioEngine.nowPlaying.collectAsState()
     val currentTrackId = nowPlaying?.trackId
 

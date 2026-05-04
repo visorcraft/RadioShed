@@ -106,7 +106,14 @@ fun AlbumDetailScreen(
     val currentTrackId = nowPlaying?.trackId
     var overflowOpen by remember { mutableStateOf(false) }
     var sortMenuOpen by remember { mutableStateOf(false) }
-    var trackSort by remember { mutableStateOf(AlbumTrackSort.TrackNumber) }
+    val settings: com.visorcraft.radioshed.data.SettingsStore = koinInject()
+    var trackSort by remember {
+        mutableStateOf(
+            runCatching { AlbumTrackSort.valueOf(settings.getAlbumTrackSort() ?: "") }
+                .getOrDefault(AlbumTrackSort.TrackNumber),
+        )
+    }
+    LaunchedEffect(trackSort) { settings.setAlbumTrackSort(trackSort.name) }
     var massRateConfirm by remember { mutableStateOf<MassRateAction?>(null) }
     val scope = rememberCoroutineScope()
 

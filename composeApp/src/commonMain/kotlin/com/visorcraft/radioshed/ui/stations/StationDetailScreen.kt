@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -147,8 +148,14 @@ fun StationDetailScreen(
             return@Scaffold
         }
 
+        val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+        val showFab by remember {
+            androidx.compose.runtime.derivedStateOf { listState.firstVisibleItemIndex > 8 }
+        }
+        Box(modifier = Modifier.fillMaxSize().padding(padding)) {
         LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(padding),
+            state = listState,
+            modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
@@ -226,6 +233,23 @@ fun StationDetailScreen(
                     )
                 }
             }
+        }
+        if (showFab) {
+            androidx.compose.material3.SmallFloatingActionButton(
+                onClick = {
+                    scope.launch { listState.animateScrollToItem(0) }
+                },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 16.dp, bottom = 16.dp),
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+            ) {
+                Icon(
+                    imageVector = androidx.compose.material.icons.Icons.Filled.KeyboardArrowUp,
+                    contentDescription = "Scroll to top",
+                )
+            }
+        }
         }
     }
 }
