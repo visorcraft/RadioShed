@@ -30,6 +30,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.IconButton
@@ -423,6 +424,18 @@ fun PlaylistsScreen(
                 actionPlaylist = null
                 renamingPlaylist = target
             },
+            onDuplicate = {
+                actionPlaylist = null
+                scope.launch {
+                    // "{name} (copy)" is the standard auto-name. The
+                    // user can rename via long-press → Rename right
+                    // after if they have something specific in mind.
+                    repo.duplicate(
+                        sourceId = target.id,
+                        newName = "${target.name} (copy)",
+                    )
+                }
+            },
             onDelete = {
                 actionPlaylist = null
                 deleteConfirm = target
@@ -487,6 +500,7 @@ private fun PlaylistActionsSheet(
     playlist: Playlist,
     onDismiss: () -> Unit,
     onRename: () -> Unit,
+    onDuplicate: () -> Unit,
     onDelete: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -509,6 +523,22 @@ private fun PlaylistActionsSheet(
                     )
                 },
                 headlineContent = { Text("Rename") },
+            )
+            ListItem(
+                modifier = Modifier.clickable(onClick = onDuplicate),
+                leadingContent = {
+                    Icon(
+                        imageVector = Icons.Filled.ContentCopy,
+                        contentDescription = null,
+                    )
+                },
+                headlineContent = { Text("Duplicate") },
+                supportingContent = {
+                    Text(
+                        "Creates \"${playlist.name} (copy)\" with the same tracks.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                },
             )
             ListItem(
                 modifier = Modifier.clickable(onClick = onDelete),

@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Lyrics
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.FavoriteBorder
@@ -275,6 +276,33 @@ private fun MainStep(
                 enabled = combined != null,
                 onClick = {
                     combined?.let { copyToClipboard(it) }
+                    onDismiss()
+                },
+            )
+            // "Set as ringtone" mirrors the action in TrackInfoDialog
+            // — same RingtoneSetter expect/actual, same Result type.
+            // Surfacing it here lets users set a ringtone without
+            // navigating into Now Playing first. The status pill
+            // lives only in the dialog flow; failures here are
+            // silent (the OS ringtone picker does its own UI).
+            // Locally inject the setter + scope so MainStep doesn't
+            // need new params threaded through the parent.
+            val ringtoneSetter: com.visorcraft.radioshed.source.RingtoneSetter = koinInject()
+            val ringtoneScope = rememberCoroutineScope()
+            ContextActionRow(
+                icon = Icons.Filled.Notifications,
+                label = "Set as ringtone",
+                enabled = track != null,
+                onClick = {
+                    val t = track
+                    if (t != null) {
+                        ringtoneScope.launch {
+                            ringtoneSetter.setAsRingtone(
+                                absolutePath = t.path,
+                                displayName = t.title.ifBlank { t.fileName },
+                            )
+                        }
+                    }
                     onDismiss()
                 },
             )

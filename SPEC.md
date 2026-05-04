@@ -2782,6 +2782,27 @@ gaps. All shipped together as a follow-on pass before batch 15.
   the Most-skipped variant via the existing `playsLabel`
   parameter.
 
+#### Phase 19 polish (continued, batch 17)
+
+- [x] **PlaylistsScreen — Duplicate playlist action.** New
+  `PlaylistRepository.duplicate(sourceId, newName)` runs in a
+  single SQL transaction: insert a new playlist row, then copy
+  every track from the source via `addTrackToPlaylist` in the
+  same order. Description and artwork URI are intentionally not
+  copied (duplication is for "branch and tweak"; artwork is a
+  re-curation decision). The long-press action sheet got a
+  Duplicate row between Rename and Delete that auto-names the
+  new playlist "{source name} (copy)" and runs the transaction;
+  the Flow-backed `observeAll()` lights up the new row in place.
+- [x] **Track context sheet — "Set as ringtone" action.** Mirrors
+  the action that previously lived only in the Track Info dialog,
+  so users can set a ringtone without navigating into Now Playing
+  first. Uses the existing `RingtoneSetter` expect/actual via a
+  Koin inject local to `MainStep` (saving a parameter-thread
+  through the screen-level composable). Status pill stays in the
+  dialog flow; failures here are silent because the OS picker
+  handles its own UI.
+
 ---
 
 ## Appendix A — Compose Multiplatform vs native UI: when to fall back

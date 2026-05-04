@@ -53,6 +53,45 @@ class PlaylistRepository(private val db: RadioShedDatabase) {
         db.playlistsQueries.deletePlaylistById(id)
     }
 
+    /**
+     * Create a new playlist with [newName] and copy every track from
+     * [sourceId] in its current order. Single transaction so a
+     * mid-copy crash leaves no half-populated row in the playlists
+     * table. Returns the new playlist's id.
+     *
+     * The source's description and artwork URI are intentionally NOT
+     * copied — duplication is for "branch this and start tweaking"
+     * use cases where the user is going to want to rename and
+     * re-curate. Auto-naming defaults to "{source name} (copy)" at
+     * the call site if no explicit name is provided.
+     */
+    suspend fun duplicate(sourceId: Long, newName: String): Long = withContext(IODispatcher) {
+        val sourceTracks = db.playlistsQueries
+            .selectTracksInPlaylist(sourceId)
+            .executeAsList()
+            .map { it.toDomain() }
+        val now = nowMillis()
+        var newId = 0L
+        db.transaction {
+            newId = db.playlistsQueries.insertPlaylist(
+                name = newName,
+                description = null,
+                artwork_uri = null,
+                created_at = now,
+                updated_at = now,
+            ).executeAsOne()
+            sourceTracks.forEachIndexed { idx, track ->
+                db.playlistsQueries.addTrackToPlaylist(
+                    playlist_id = newId,
+                    track_id = track.id,
+                    position = idx.toLong(),
+                    added_at = now,
+                )
+            }
+        }
+        newId
+    }
+
     // ---- Playlist tracks ----
 
     suspend fun addTrack(playlistId: Long, trackId: Long, position: Int) =
