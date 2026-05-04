@@ -182,7 +182,11 @@ fun NowPlayingScreen(
     // opted in. Pause/Idle release the flag so the screen times out
     // normally between tracks, mirroring how Spotify / Apple Music
     // behave when the user has tapped "keep screen on".
-    val keepScreenOnPref = remember { settings.getKeepScreenOn() }
+    // Live-observed so toggling the Settings switch takes effect on
+    // the active session. A plain `remember { settings.getKeepScreenOn() }`
+    // reads once at first composition and ignores subsequent writes
+    // — a stale-toggle bug we hit before (see #292's fix-pattern).
+    val keepScreenOnPref by settings.keepScreenOnFlow.collectAsState()
     com.visorcraft.radioshed.ui.util.KeepScreenOn(
         active = keepScreenOnPref && state == com.visorcraft.radioshed.audio.PlayerState.Playing,
     )
@@ -335,6 +339,7 @@ fun NowPlayingScreen(
                                             com.visorcraft.radioshed.stations.StationPlayback.RepeatMode.All
                                     }
                                     stationPlayback.setRepeatMode(next)
+                                    hapticTick()
                                 },
                             ),
                     ) {
@@ -684,6 +689,7 @@ fun NowPlayingScreen(
             OverflowSheet(
                 track = nowPlaying,
                 stationId = currentStation?.id,
+                playbackSpeed = playbackSpeed,
                 onDismiss = { overflowMenuOpen = false },
                 onAddToPlaylist = { tid ->
                     overflowMenuOpen = false
@@ -709,6 +715,10 @@ fun NowPlayingScreen(
                 onTrackInfo = {
                     overflowMenuOpen = false
                     trackInfoOpen = true
+                },
+                onSpeedPicker = {
+                    overflowMenuOpen = false
+                    speedSheetOpen = true
                 },
             )
         }
@@ -854,12 +864,14 @@ fun NowPlayingScreen(
 private fun OverflowSheet(
     track: com.visorcraft.radioshed.audio.Playable?,
     stationId: Long?,
+    playbackSpeed: Float,
     onDismiss: () -> Unit,
     onAddToPlaylist: (Long) -> Unit,
     onGoToAlbum: (Long) -> Unit,
     onGoToArtist: (Long) -> Unit,
     onGoToStation: (Long) -> Unit,
     onTrackInfo: () -> Unit,
+    onSpeedPicker: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
@@ -887,6 +899,17 @@ private fun OverflowSheet(
                 label = "Go to station",
                 enabled = stationId != null,
                 onClick = { stationId?.let(onGoToStation) },
+            )
+            // Playback-speed picker mirrors the wide-screen DropdownMenu
+            // entry. Without this, narrow-screen users (Galaxy Fold cover,
+            // small budget phones <360dp) had no way to reach the speed
+            // sheet because the menu was the only entry point.
+            OverflowSheetItem(
+                icon = Icons.Filled.Speed,
+                label = if (playbackSpeed == 1f) "Speed (1×)"
+                        else "Speed (${formatSpeed(playbackSpeed)}×)",
+                enabled = true,
+                onClick = onSpeedPicker,
             )
             OverflowSheetItem(
                 icon = Icons.Filled.Info,
@@ -2079,11 +2102,22 @@ private fun TrackInfoDialog(
                     // URL-encoder dep into commonMain just for these.
                     val artistForWeb = playable.artist?.takeIf { it.isNotBlank() }
                     fun encodeForUrl(s: String): String = s
+                        // Order matters: % first (so subsequent escapes
+                        // don't double-encode), then literal + (which
+                        // would otherwise survive into the result and
+                        // be parsed as a space when the URL deserialises),
+                        // then space, then path-significant characters.
+                        // / matters for artists like AC/DC — without
+                        // it the URL path parser splits the artist
+                        // name across segments.
                         .replace("%", "%25")
+                        .replace("+", "%2B")
                         .replace(" ", "+")
                         .replace("&", "%26")
                         .replace("#", "%23")
                         .replace("?", "%3F")
+                        .replace("/", "%2F")
+                        .replace("=", "%3D")
                     androidx.compose.material3.OutlinedButton(
                         onClick = {
                             artistForWeb?.let { name ->

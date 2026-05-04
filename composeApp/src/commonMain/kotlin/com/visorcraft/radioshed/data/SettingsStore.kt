@@ -166,8 +166,23 @@ class SettingsStore(private val settings: Settings) {
      * artwork-as-ambient. Off by default to avoid burning battery
      * for a screen the user isn't looking at.
      */
+    /**
+     * Mirrors the [_driveModeFlow] pattern. NowPlayingScreen reads
+     * this as a `collectAsState` so toggling Keep-screen-on from the
+     * Settings tab takes effect on the active session, not just on
+     * the next NowPlaying entry. Without the flow, the screen-flag
+     * would stay stale until some other state change forced a
+     * recompose.
+     */
+    private val _keepScreenOnFlow =
+        kotlinx.coroutines.flow.MutableStateFlow(settings.getBoolean(KEY_KEEP_SCREEN_ON, false))
+    val keepScreenOnFlow: kotlinx.coroutines.flow.StateFlow<Boolean> = _keepScreenOnFlow
+
     fun getKeepScreenOn(): Boolean = settings.getBoolean(KEY_KEEP_SCREEN_ON, false)
-    fun setKeepScreenOn(enabled: Boolean) = settings.putBoolean(KEY_KEEP_SCREEN_ON, enabled)
+    fun setKeepScreenOn(enabled: Boolean) {
+        settings.putBoolean(KEY_KEEP_SCREEN_ON, enabled)
+        _keepScreenOnFlow.value = enabled
+    }
 
     /**
      * Whether LyricsService is allowed to hit LRClib (or other future
@@ -240,6 +255,10 @@ class SettingsStore(private val settings: Settings) {
             KEY_SLEEP_STOP_ON_EXPIRE, KEY_PLAYBACK_SPEED,
             KEY_KEEP_SCREEN_ON, KEY_AUTO_FETCH_LYRICS, KEY_HAPTICS_ENABLED,
         ).forEach { settings.remove(it) }
+        // Reset wipes the underlying entries; mirror flows must
+        // republish so live consumers (NowPlaying for driveMode /
+        // keepScreenOn) see the defaulted values immediately.
+        republishMirrorFlows()
     }
 
     /**
@@ -681,6 +700,23 @@ class SettingsStore(private val settings: Settings) {
                     settings.putFloat(key, value.value)
             }
         }
+        // After bulk restore, republish every StateFlow that mirrors
+        // a settings key. Without this, screens already collecting
+        // the flow (NowPlaying for keepScreenOn / driveMode) see
+        // stale values until app restart — the underlying Settings
+        // object updates but the flow's cached value doesn't.
+        republishMirrorFlows()
+    }
+
+    /**
+     * Re-reads every flow-backed settings key and pushes the current
+     * underlying value through its `MutableStateFlow`. Called after
+     * `restoreFromBackup` and `resetAllUserSettings` so live
+     * consumers don't drift from the underlying store.
+     */
+    private fun republishMirrorFlows() {
+        _driveModeFlow.value = settings.getBoolean(KEY_DRIVE_MODE, false)
+        _keepScreenOnFlow.value = settings.getBoolean(KEY_KEEP_SCREEN_ON, false)
     }
 
     private enum class SettingType { BOOL, STR, INT, LONG, FLOAT }

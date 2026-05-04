@@ -488,6 +488,7 @@ private fun BandSliderRow(
     var pendingValue by remember(authoritativeGain) {
         mutableStateOf(authoritativeGain)
     }
+    val hapticTick = com.visorcraft.radioshed.ui.util.rememberHapticTick()
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -507,6 +508,7 @@ private fun BandSliderRow(
                     onLongClick = {
                         pendingValue = 0f
                         onChange(index, 0f)
+                        hapticTick()
                     },
                 ),
         )

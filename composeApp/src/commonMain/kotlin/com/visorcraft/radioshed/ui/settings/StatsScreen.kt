@@ -270,13 +270,18 @@ fun StatsScreen(
                         )
                     }
                 }
-                if (totalPlays > 0 && windowDays > 0) {
-                    // Avg tracks/day uses the user's chosen window. Two
-                    // decimals when below 10 so a fledgling habit
-                    // (~0.45/day) still shows a meaningful figure;
-                    // integer at higher counts to keep tiles tidy.
+                // Avg tracks/day must use a WINDOWED play count, not
+                // the lifetime totalPlays — otherwise selecting "7
+                // days" with 10k lifetime plays renders "1428.57/day"
+                // which is meaningless. dailyActivity is already
+                // windowed by the same picker, so its sum is the
+                // correct numerator. Two decimals when below 10 so
+                // fledgling habits (~0.45/day) still show; integer at
+                // higher counts to keep tiles tidy.
+                val windowedPlays = dailyActivity.sumOf { it.plays }
+                if (windowedPlays > 0L && windowDays > 0) {
                     Spacer(Modifier.height(12.dp))
-                    val rawAvg = totalPlays.toDouble() / windowDays.toDouble()
+                    val rawAvg = windowedPlays.toDouble() / windowDays.toDouble()
                     val avgLabel = when {
                         rawAvg >= 10.0 -> rawAvg.toInt().toString()
                         else -> {

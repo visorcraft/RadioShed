@@ -2650,6 +2650,58 @@ found a dozen issues. All fixed in this round:
   just the basename. Useful for tag-fix workflows that don't
   want the leading directory tree.
 
+#### Phase 19 polish (continued, batch 14 — peer-review fixes)
+
+A peer-review pass over batches 12–14 surfaced these regressions and
+gaps. All shipped together as a follow-on pass before batch 15.
+
+- [x] **FIX: NowPlaying `keepScreenOnPref` frozen at first composition.**
+  `val keepScreenOnPref = remember { settings.getKeepScreenOn() }`
+  read the pref once at composition and ignored subsequent writes
+  — toggling Keep-screen-on from Settings had no effect on the
+  active session until app restart. Added a `keepScreenOnFlow`
+  `MutableStateFlow` mirror to `SettingsStore` (matching the
+  existing `driveModeFlow` pattern) and switched NowPlayingScreen
+  to `collectAsState` for live updates.
+- [x] **FIX: `restoreFromBackup` and `resetAllUserSettings` bypass
+  StateFlow mirrors.** Both writers `settings.putBoolean(...)`
+  directly, which updates the underlying store but skips the
+  setter side-effect that pushes new values through
+  `_driveModeFlow` / `_keepScreenOnFlow`. Live consumers stayed
+  on stale values until app restart. Added a private
+  `republishMirrorFlows()` helper called at the end of both
+  paths so flow values converge with the store.
+- [x] **FIX: OverflowSheet (narrow screens) missing Playback Speed
+  action.** Wide screens (≥360 dp) reach the speed sheet via the
+  Now Playing DropdownMenu. Narrow screens (Galaxy Fold front
+  cover, small budget phones) had no entry point at all because
+  the menu collapses into `OverflowSheet` and that sheet was
+  shipped without the Speed item. Added a `Speed (N×)` row using
+  `Icons.Filled.Speed`, threaded `playbackSpeed` + `onSpeedPicker`
+  callbacks from the call site.
+- [x] **FIX: Stats "Avg tracks/day" used lifetime denominator.**
+  `totalPlays.toDouble() / windowDays.toDouble()` divides the
+  lifetime play count by the user-selected window — selecting
+  "7 days" with 10 000 lifetime plays produced "1428.57/day".
+  Switched to `windowedPlays = dailyActivity.sumOf { it.plays }`
+  which is already windowed by the same picker, so the rate
+  matches the chart above it.
+- [x] **FIX: EQ band long-press reset missing haptic.** Per the
+  CLAUDE.md "haptics on every long-press" convention. Plumbed
+  `rememberHapticTick()` into `BandSliderRow` and called it
+  alongside the `onChange(index, 0f)` write.
+- [x] **FIX: Now Playing repeat reverse-cycle missing haptic.**
+  Same convention. Long-press now calls `hapticTick()` after
+  the `setRepeatMode(next)` write.
+- [x] **FIX: Track Info `encodeForUrl` swallowed `+` and `/`.**
+  Artist names containing `+` (e.g. "+44") or `/` (e.g. "AC/DC")
+  produced broken URLs — the `+` was interpreted as a space
+  on the receiver side and the `/` was parsed as a path
+  separator. Added `%2B` (literal +), `%2F` (slash), and
+  `%3D` (=) escapes; ordered after `%` itself so we don't
+  double-encode. Affects every web search button (Wikipedia,
+  MusicBrainz, Discogs, YouTube, SoundCloud, Bandcamp).
+
 ---
 
 ## Appendix A — Compose Multiplatform vs native UI: when to fall back
