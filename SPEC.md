@@ -2007,6 +2007,28 @@ than the v2 polish:
   bounds (preserving the existing `(durationMs - 250)` cap on
   forward seeks).
 
+#### Phase 19 polish (continued, batch 6)
+
+- [x] **Library Browser scroll-to-top FAB on every tab.** The
+  Songs tab's back-to-top FAB is now mirrored on the Albums,
+  Artists, and Genres grid tabs via a shared
+  `GridWithBackToTopFab` helper (wraps a LazyVerticalGrid with a
+  Box + SmallFloatingActionButton). Threshold for grids is
+  `firstVisibleItemIndex > 16` since multi-column grids fit more
+  rows on screen.
+- [x] **Search recent — per-entry remove.** Each recent-query
+  AssistChip now carries a trailing close icon (clickable) that
+  drops just that one entry from the persisted list. The "Clear"
+  button next to the section header still nukes everything.
+  Backed by a new `SettingsStore.removeRecentSearch(query)`.
+- [x] **Stats — concrete date range header.** "Last 30 days" was
+  a hardcoded section title; the timeline now shows
+  `"Apr 4 – May 3"` computed from `formatShortDate(nowMs)` and
+  `formatShortDate(nowMs - 29d)`. New expect/actual
+  `formatShortDate(epochMs: Long)` (Android `SimpleDateFormat`,
+  iOS `NSDateFormatter`). Falls back to the prior generic label
+  on any formatter exception.
+
 ---
 
 ## Appendix A — Compose Multiplatform vs native UI: when to fall back

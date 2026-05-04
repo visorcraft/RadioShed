@@ -422,6 +422,20 @@ class SettingsStore(private val settings: Settings) {
 
     fun clearRecentSearches() = settings.remove(KEY_SEARCH_HISTORY)
 
+    /**
+     * Drop a single recent-search entry, leaving the rest. Comparison
+     * is case-insensitive to mirror push semantics — typing the same
+     * query in a different case shouldn't survive a "remove" tap.
+     */
+    fun removeRecentSearch(query: String) {
+        val survivors = getRecentSearches().filterNot { it.equals(query, ignoreCase = true) }
+        if (survivors.isEmpty()) {
+            settings.remove(KEY_SEARCH_HISTORY)
+        } else {
+            settings.putString(KEY_SEARCH_HISTORY, survivors.joinToString("\t"))
+        }
+    }
+
     // ---- Backup integration ----
 
     /**

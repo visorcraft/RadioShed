@@ -9,11 +9,13 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.AssistChip
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.ui.Alignment
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -255,6 +257,10 @@ fun SearchScreen(
                         settings.clearRecentSearches()
                         recentQueries = emptyList()
                     },
+                    onRemoveOne = { q ->
+                        settings.removeRecentSearch(q)
+                        recentQueries = settings.getRecentSearches()
+                    },
                 )
                 isSearching && results.isEmpty -> Text(
                     "Searching…",
@@ -385,6 +391,7 @@ private fun RecentSearchesBlock(
     queries: List<String>,
     onPick: (String) -> Unit,
     onClear: () -> Unit,
+    onRemoveOne: (String) -> Unit,
 ) {
     if (queries.isEmpty()) {
         Text(
@@ -409,8 +416,9 @@ private fun RecentSearchesBlock(
             TextButton(onClick = onClear) { Text("Clear") }
         }
         Spacer(Modifier.height(4.dp))
-        // FlowRow would wrap nicely but adds an extra dep. A horizontal
-        // scrolling Row is good enough for ≤10 chips.
+        // Each chip carries a trailing close icon so users can drop
+        // a single bad query without nuking the whole list. Tapping
+        // the label still re-runs the query as before.
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -421,6 +429,15 @@ private fun RecentSearchesBlock(
                 AssistChip(
                     onClick = { onPick(q) },
                     label = { Text(q) },
+                    trailingIcon = {
+                        androidx.compose.material3.Icon(
+                            imageVector = Icons.Filled.Close,
+                            contentDescription = "Remove from history",
+                            modifier = Modifier
+                                .size(16.dp)
+                                .clickable { onRemoveOne(q) },
+                        )
+                    },
                 )
             }
         }

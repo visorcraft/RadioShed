@@ -207,7 +207,23 @@ fun StatsScreen(
 
             if (dailyActivity.any { it.plays > 0 }) {
                 item {
-                    SectionHeader("Last 30 days")
+                    // Concrete date range reads better than a generic
+                    // "Last 30 days" — the user sees exactly which
+                    // days the chart covers ("Apr 4 – May 3"). Falls
+                    // back to the prior label if formatting fails on
+                    // an unusual locale.
+                    val nowMs = remember { com.visorcraft.radioshed.data.nowMillis() }
+                    val DAY_MS_LOCAL = 24L * 60L * 60L * 1000L
+                    val rangeLabel = remember(nowMs) {
+                        runCatching {
+                            val start = com.visorcraft.radioshed.data.formatShortDate(
+                                nowMs - 29L * DAY_MS_LOCAL,
+                            )
+                            val end = com.visorcraft.radioshed.data.formatShortDate(nowMs)
+                            "$start – $end"
+                        }.getOrDefault("Last 30 days")
+                    }
+                    SectionHeader(rangeLabel)
                     Spacer(Modifier.height(4.dp))
                     ActivityTimeline(dailyActivity)
                     Spacer(Modifier.height(20.dp))

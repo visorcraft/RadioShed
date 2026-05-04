@@ -888,19 +888,23 @@ private fun ArtistList(
     // initial avatar reads cleaner than a generic person icon at every
     // tile. Hash artist name → hue so the same artist is always the same
     // color across sessions.
-    LazyVerticalGrid(
-        columns = GridCells.Adaptive(minSize = 120.dp),
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        gridItems(artists, key = { it.id }) { artist ->
-            ArtistTile(
-                artist = artist,
-                onTap = { onPick(artist) },
-                onLongPress = { onLongPress(artist) },
-            )
+    val gridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
+    GridWithBackToTopFab(state = gridState) {
+        LazyVerticalGrid(
+            state = gridState,
+            columns = GridCells.Adaptive(minSize = 120.dp),
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            gridItems(artists, key = { it.id }) { artist ->
+                ArtistTile(
+                    artist = artist,
+                    onTap = { onPick(artist) },
+                    onLongPress = { onLongPress(artist) },
+                )
+            }
         }
     }
 }
@@ -915,19 +919,23 @@ private fun AlbumList(
         EmptyHint("No albums yet — scan a folder with tagged music to populate.")
         return
     }
-    LazyVerticalGrid(
-        columns = GridCells.Adaptive(minSize = 140.dp),
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        gridItems(albums, key = { it.id }) { album ->
-            AlbumTile(
-                album = album,
-                onTap = { onPick(album) },
-                onLongPress = { onLongPress(album) },
-            )
+    val gridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
+    GridWithBackToTopFab(state = gridState) {
+        LazyVerticalGrid(
+            state = gridState,
+            columns = GridCells.Adaptive(minSize = 140.dp),
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            gridItems(albums, key = { it.id }) { album ->
+                AlbumTile(
+                    album = album,
+                    onTap = { onPick(album) },
+                    onLongPress = { onLongPress(album) },
+                )
+            }
         }
     }
 }
@@ -994,15 +1002,54 @@ private fun GenreList(genres: List<String>, onPick: (String) -> Unit) {
         EmptyHint("No genre tags found — files need a GENRE / TCON ID3 frame.")
         return
     }
-    LazyVerticalGrid(
-        columns = GridCells.Adaptive(minSize = 140.dp),
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        gridItems(genres, key = { it }) { genre ->
-            GenreTile(genre = genre, onTap = { onPick(genre) })
+    val gridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
+    GridWithBackToTopFab(state = gridState) {
+        LazyVerticalGrid(
+            state = gridState,
+            columns = GridCells.Adaptive(minSize = 140.dp),
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            gridItems(genres, key = { it }) { genre ->
+                GenreTile(genre = genre, onTap = { onPick(genre) })
+            }
+        }
+    }
+}
+
+/**
+ * Wraps a LazyVerticalGrid (passed as `content`) with a Back-to-top
+ * FAB that appears once the user has scrolled past the first ~2
+ * viewports of tiles (firstVisibleItemIndex > 16). Tap animates the
+ * scroll back to position 0. Mirrors the FAB in the Songs LazyColumn
+ * for consistent navigation across all four tabs.
+ */
+@Composable
+private fun GridWithBackToTopFab(
+    state: androidx.compose.foundation.lazy.grid.LazyGridState,
+    content: @Composable () -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    val showFab by remember {
+        androidx.compose.runtime.derivedStateOf { state.firstVisibleItemIndex > 16 }
+    }
+    Box(modifier = Modifier.fillMaxSize()) {
+        content()
+        if (showFab) {
+            androidx.compose.material3.SmallFloatingActionButton(
+                onClick = { scope.launch { state.animateScrollToItem(0) } },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 16.dp, bottom = 16.dp),
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.KeyboardArrowUp,
+                    contentDescription = "Scroll to top",
+                )
+            }
         }
     }
 }
