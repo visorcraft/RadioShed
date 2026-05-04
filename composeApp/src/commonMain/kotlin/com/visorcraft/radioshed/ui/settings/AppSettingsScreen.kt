@@ -230,6 +230,22 @@ fun AppSettingsScreen(
                 },
             )
             Spacer(Modifier.height(8.dp))
+            // Now Playing layout selector. Reads/writes
+            // KEY_NOW_PLAYING_LAYOUT directly so a changed value
+            // takes effect on the next NowPlayingScreen entry — the
+            // screen reads the pref once via `remember` so flipping
+            // it mid-session needs a re-entry to apply, which is
+            // fine since the screen rebuilds anyway when the user
+            // navigates back to it.
+            var npLayout by remember { mutableStateOf(settings.getNowPlayingLayout()) }
+            NowPlayingLayoutRow(
+                current = npLayout,
+                onPick = { v ->
+                    npLayout = v
+                    settings.setNowPlayingLayout(v)
+                },
+            )
+            Spacer(Modifier.height(8.dp))
             ToggleRow(
                 title = "Haptic feedback",
                 subtitle = "Subtle vibration on long-press / mode-flip gestures. Off mutes " +
@@ -1721,6 +1737,84 @@ private fun ConnectivityPolicyRow(
                         selected = active,
                         onClick = { if (!active) onPick(policy) },
                         label = { Text(label) },
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Layout picker for the Now Playing screen. Four choices:
+ * Auto (width-based: Compact <600dp, TwoPane 600-1100dp,
+ * TriplePane >=1100dp), or three explicit overrides for users
+ * who want a specific shape regardless of the breakpoint —
+ * dashboard mounts, foldables, etc.
+ *
+ * The TriplePane choice is the SiriusXM-style three-column UX:
+ * stations list on the left, transport in the middle, artwork
+ * + metadata on the right. It's the user's specific feature
+ * request — built as an in-app option rather than CarPlay /
+ * Android Auto integration because both projection platforms
+ * are template-locked and won't render arbitrary layouts.
+ */
+@Composable
+private fun NowPlayingLayoutRow(
+    current: String,
+    onPick: (String) -> Unit,
+) {
+    val options = listOf(
+        "Auto" to "Match the screen width",
+        "Compact" to "Single column — phone portrait",
+        "TwoPane" to "Art + transport — phone landscape",
+        "TriplePane" to "Stations | transport | art — dashboard / foldable / tablet",
+    )
+    val explanation = options.firstOrNull { it.first == current }?.second
+        ?: options.first().second
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+            Text(
+                "Now Playing layout",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                explanation,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+            )
+            Spacer(Modifier.height(10.dp))
+            // FlowRow because four labels — including "TriplePane"
+            // and "Compact" — overflow a single-row Row on narrow
+            // phones. FlowRow wraps to a second row instead of
+            // clipping the trailing chips silently.
+            androidx.compose.foundation.layout.FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                options.forEach { (key, _) ->
+                    val active = key == current
+                    androidx.compose.material3.FilterChip(
+                        selected = active,
+                        onClick = { if (!active) onPick(key) },
+                        label = {
+                            Text(
+                                when (key) {
+                                    "Auto" -> "Auto"
+                                    "Compact" -> "Compact"
+                                    "TwoPane" -> "Two-pane"
+                                    "TriplePane" -> "Three-pane (SXM-style)"
+                                    else -> key
+                                },
+                            )
+                        },
                     )
                 }
             }

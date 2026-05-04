@@ -188,6 +188,23 @@ class SettingsStore(private val settings: Settings) {
     fun getSearchScope(): String = settings.getStringOrNull(KEY_SEARCH_SCOPE) ?: "All"
     fun setSearchScope(name: String) = settings.putString(KEY_SEARCH_SCOPE, name)
 
+    /**
+     * Now Playing layout override. "Auto" picks based on width
+     * (Compact <600dp, TwoPane 600-1100dp, TriplePane >=1100dp);
+     * the other values force a specific layout regardless of
+     * available space — useful when the user mounts a phone in
+     * landscape on a dashboard and wants the SiriusXM-style
+     * three-column view even though the breakpoint hasn't been
+     * crossed. Stored as enum name string; unknown values fall
+     * back to Auto. The TriplePane choice is intentionally
+     * available on every width — it'll squeeze badly on a phone
+     * portrait but the user asked for the option.
+     */
+    fun getNowPlayingLayout(): String =
+        settings.getStringOrNull(KEY_NOW_PLAYING_LAYOUT) ?: "Auto"
+    fun setNowPlayingLayout(name: String) =
+        settings.putString(KEY_NOW_PLAYING_LAYOUT, name)
+
     fun getKeepScreenOn(): Boolean = settings.getBoolean(KEY_KEEP_SCREEN_ON, false)
     fun setKeepScreenOn(enabled: Boolean) {
         settings.putBoolean(KEY_KEEP_SCREEN_ON, enabled)
@@ -264,7 +281,7 @@ class SettingsStore(private val settings: Settings) {
             KEY_STATS_WINDOW_DAYS, KEY_BACKUP_RETENTION,
             KEY_SLEEP_STOP_ON_EXPIRE, KEY_PLAYBACK_SPEED,
             KEY_KEEP_SCREEN_ON, KEY_AUTO_FETCH_LYRICS, KEY_HAPTICS_ENABLED,
-            KEY_SEARCH_SCOPE,
+            KEY_SEARCH_SCOPE, KEY_NOW_PLAYING_LAYOUT,
         ).forEach { settings.remove(it) }
         // Reset wipes the underlying entries; mirror flows must
         // republish so live consumers (NowPlaying for driveMode /
@@ -622,6 +639,7 @@ class SettingsStore(private val settings: Settings) {
             KEY_LIB_ARTIST_SORT, KEY_LIB_ALBUM_SORT, KEY_LIB_GENRE_SORT,
             KEY_FILE_BROWSER_SORT, KEY_SEARCH_SCOPE,
             KEY_ALBUM_TRACK_SORT, KEY_ARTIST_TRACK_SORT, KEY_GENRE_TRACK_SORT,
+            KEY_NOW_PLAYING_LAYOUT,
         ).forEach { key ->
             settings.getStringOrNull(key)?.let {
                 out[key] = com.visorcraft.radioshed.source.BackupSettingValue.Str(it)
@@ -751,7 +769,8 @@ class SettingsStore(private val settings: Settings) {
         KEY_THEME_MODE, KEY_CONNECTIVITY_POLICY,
         KEY_LIB_ARTIST_SORT, KEY_LIB_ALBUM_SORT, KEY_LIB_GENRE_SORT,
         KEY_FILE_BROWSER_SORT, KEY_SEARCH_SCOPE,
-        KEY_ALBUM_TRACK_SORT, KEY_ARTIST_TRACK_SORT, KEY_GENRE_TRACK_SORT -> SettingType.STR
+        KEY_ALBUM_TRACK_SORT, KEY_ARTIST_TRACK_SORT, KEY_GENRE_TRACK_SORT,
+        KEY_NOW_PLAYING_LAYOUT -> SettingType.STR
         KEY_MATERIAL_YOU, KEY_REDUCE_MOTION, KEY_DRIVE_MODE,
         KEY_REPLAY_GAIN, KEY_AUTO_RESUME_STATION, KEY_AUTO_BACKUP,
         KEY_AUTO_RESCAN_ON_LAUNCH, KEY_EQ_ENABLED,
@@ -785,6 +804,7 @@ class SettingsStore(private val settings: Settings) {
         const val KEY_AUTO_FETCH_LYRICS = "lyrics.autoFetchOverNetwork"
         const val KEY_HAPTICS_ENABLED = "ui.hapticsEnabled"
         const val KEY_SEARCH_SCOPE = "ui.search.scope"
+        const val KEY_NOW_PLAYING_LAYOUT = "ui.now_playing.layout"
         const val KEY_CONNECTIVITY_POLICY = "online.connectivityPolicy"
         const val KEY_ONBOARDING_DONE = "onboarding.complete"
         const val KEY_LAST_STATION_ID = "playback.lastStationId"

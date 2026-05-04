@@ -142,6 +142,7 @@ fun NowPlayingScreen(
     ratingRepo: RatingRepository = koinInject(),
     sleepTimer: SleepTimer = koinInject(),
     libraryRepo: LibraryRepository = koinInject(),
+    stationRepo: com.visorcraft.radioshed.data.StationRepository = koinInject(),
     settings: SettingsStore = koinInject(),
 ) {
     // Drive Mode is observed live so a toggle from Settings takes
@@ -256,9 +257,26 @@ fun NowPlayingScreen(
     // 360dp the overflow DropdownMenu submenu items used to clip ("Go
     // to album"/"Go to artist" wrapped or got cut off); we route to a
     // ModalBottomSheet on narrow widths instead.
+    // Now Playing layout preference. "Auto" uses width breakpoints
+    // (Compact <600dp, TriplePane >=1100dp, TwoPane otherwise);
+    // explicit choices force the picked layout regardless of
+    // available width — useful when the user mounts a phone in
+    // landscape on a dashboard and wants the SXM-style three-column
+    // view even though the breakpoint hasn't been crossed.
+    val layoutPref = remember { settings.getNowPlayingLayout() }
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val isNarrow = maxWidth < 360.dp
-        val isCompact = maxWidth < 600.dp
+        val resolvedLayout = when (layoutPref) {
+            "Compact" -> NowPlayingLayoutChoice.Compact
+            "TwoPane" -> NowPlayingLayoutChoice.TwoPane
+            "TriplePane" -> NowPlayingLayoutChoice.TriplePane
+            else -> when {
+                maxWidth < 600.dp -> NowPlayingLayoutChoice.Compact
+                maxWidth >= 1100.dp -> NowPlayingLayoutChoice.TriplePane
+                else -> NowPlayingLayoutChoice.TwoPane
+            }
+        }
+        val isCompact = resolvedLayout == NowPlayingLayoutChoice.Compact
 
     Scaffold(
         topBar = {
@@ -795,7 +813,68 @@ fun NowPlayingScreen(
                 }
             }
 
-            if (isCompact) {
+            if (resolvedLayout == NowPlayingLayoutChoice.TriplePane) {
+                val stations by stationRepo.observeAll().collectAsState(initial = emptyList())
+                TriplePaneLayout(
+                    playable = playable,
+                    state = state,
+                    positionMs = position.currentMs,
+                    durationMs = position.durationMs,
+                    rating = rating,
+                    liked = liked,
+                    volume = userVolume,
+                    accent = accent,
+                    stationName = currentStation?.name,
+                    formatLine = formatLine,
+                    stations = stations,
+                    currentStationId = currentStation?.id,
+                    onStationTap = { id -> scope.launch { stationPlayback.playStation(id) } },
+                    onSeek = { audioEngine.seekTo(it) },
+                    onTogglePlayPause = { audioEngine.togglePlayPause() },
+                    onLongPressTogglePlayPause = {
+                        stationPlayback.toggleShuffle()
+                        hapticTick()
+                    },
+                    onPrev = { stationPlayback.skipPrevious() },
+                    onNext = { stationPlayback.skipNext() },
+                    onSkipFive = { repeat(5) { stationPlayback.skipNext() } },
+                    onRate = { stars ->
+                        scope.launch {
+                            ratingRepo.setRating(playable.trackId, stars)
+                            rating = stars
+                        }
+                    },
+                    onToggleLike = onToggleLike,
+                    onVolumeLive = { stationPlayback.previewUserVolume(it) },
+                    onVolumeCommit = { stationPlayback.commitUserVolume(it) },
+                    preMuteLevel = preMuteLevel,
+                    onPreMuteLevelChange = { preMuteLevel = it },
+                    onDislikeOnStation = {
+                        val stationId = currentStation?.id ?: return@TriplePaneLayout
+                        scope.launch {
+                            ratingRepo.dislikeForStation(playable.trackId, stationId)
+                            stationPlayback.skipNext()
+                        }
+                    },
+                    onTapArtwork = { artworkLightboxOpen = true },
+                    onPinchOpenLyrics = onOpenLyrics,
+                    onTapArtist = {
+                        scope.launch {
+                            libraryRepo.artistsForTrack(playable.trackId)
+                                .firstOrNull()?.id?.let { onOpenArtist(it) }
+                        }
+                    },
+                    onTapAlbum = {
+                        scope.launch {
+                            libraryRepo.getTrackById(playable.trackId)
+                                ?.albumId?.let { onOpenAlbum(it) }
+                        }
+                    },
+                    onTapStation = { currentStation?.id?.let(onOpenStation) },
+                    driveMode = driveMode,
+                    queueProgress = finiteQueueProgress,
+                )
+            } else if (isCompact) {
                 CompactLayout(
                     playable = playable,
                     state = state,
@@ -3121,3 +3200,252 @@ private fun PlaybackSpeedSheet(
 private fun formatSpeed(value: Float): String =
     if (value == value.toInt().toFloat()) value.toInt().toString()
     else value.toString().trimEnd('0').trimEnd('.')
+
+/**
+ * The three Now Playing layout shapes. Selected by a combination of
+ * available width and the user's `KEY_NOW_PLAYING_LAYOUT` override.
+ * The TriplePane variant evokes the SiriusXM in-dash UX: stations
+ * column on the left, transport controls in the middle, artwork +
+ * metadata on the right. Designed for landscape phone-on-dashmount
+ * use rather than typical handheld portrait — looks great on a
+ * Galaxy Fold's unfolded inner display, on a tablet, or on a phone
+ * laid sideways with a USB-C dock.
+ */
+private enum class NowPlayingLayoutChoice { Compact, TwoPane, TriplePane }
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun TriplePaneLayout(
+    playable: com.visorcraft.radioshed.audio.Playable,
+    state: PlayerState,
+    positionMs: Long,
+    durationMs: Long,
+    rating: Double,
+    liked: Boolean,
+    volume: Float,
+    accent: Color,
+    stationName: String?,
+    formatLine: String?,
+    stations: List<com.visorcraft.radioshed.domain.Station>,
+    currentStationId: Long?,
+    onStationTap: (Long) -> Unit,
+    onSeek: (Long) -> Unit,
+    onTogglePlayPause: () -> Unit,
+    onLongPressTogglePlayPause: (() -> Unit)? = null,
+    onPrev: () -> Unit,
+    onNext: () -> Unit,
+    onSkipFive: (() -> Unit)? = null,
+    onRate: (Double) -> Unit,
+    onToggleLike: () -> Unit,
+    onVolumeLive: (Float) -> Unit,
+    onVolumeCommit: (Float) -> Unit,
+    preMuteLevel: Float,
+    onPreMuteLevelChange: (Float) -> Unit,
+    onDislikeOnStation: () -> Unit,
+    onTapArtwork: () -> Unit,
+    onPinchOpenLyrics: () -> Unit,
+    onTapArtist: () -> Unit,
+    onTapAlbum: () -> Unit,
+    onTapStation: () -> Unit,
+    driveMode: Boolean,
+    queueProgress: Pair<Int, Int>? = null,
+) {
+    Row(
+        modifier = Modifier.fillMaxSize().padding(16.dp),
+    ) {
+        // Left third — stations list. Tap a row to switch stations.
+        // Highlights the currently-playing one with the primary
+        // container, mirroring the SXM "Channel List" look.
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight(),
+        ) {
+            Text(
+                text = "Stations",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f),
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            )
+            Spacer(Modifier.height(4.dp))
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                items(
+                    items = stations,
+                    key = { it.id },
+                ) { station ->
+                    TriplePaneStationRow(
+                        name = station.name,
+                        subtitle = station.customSubtitle,
+                        isCurrent = station.id == currentStationId,
+                        onTap = { onStationTap(station.id) },
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.width(16.dp))
+        // Center third — transport. Same building blocks as the
+        // Compact layout but vertically centered in the middle column
+        // so it reads like the SXM "now playing" centerpiece.
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight()
+                .padding(horizontal = 8.dp),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            TrackInfo(
+                playable = playable,
+                stationName = stationName,
+                alignment = Alignment.CenterHorizontally,
+                onTapArtist = onTapArtist,
+                onTapAlbum = onTapAlbum,
+                onTapStation = onTapStation,
+                queueProgress = queueProgress,
+            )
+            Spacer(Modifier.height(20.dp))
+            Scrubber(positionMs, durationMs, onSeek)
+            if (!formatLine.isNullOrBlank()) {
+                Text(
+                    text = formatLine,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontFamily = FontFamily.Monospace,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.55f),
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
+            Spacer(Modifier.height(20.dp))
+            TransportRow(
+                state = state,
+                onTogglePlayPause = onTogglePlayPause,
+                onLongPressTogglePlayPause = onLongPressTogglePlayPause,
+                onPrev = onPrev,
+                onLongPressPrev = { onSeek(0L) },
+                onNext = onNext,
+                onSkipFive = onSkipFive,
+                onReplay = { delta -> onSeek((positionMs - delta).coerceAtLeast(0L)) },
+                onForward = { delta ->
+                    val cap = if (durationMs > 0) (durationMs - 250L).coerceAtLeast(0L)
+                              else Long.MAX_VALUE
+                    onSeek((positionMs + delta).coerceAtMost(cap))
+                },
+                onDislikeOnStation = onDislikeOnStation,
+                driveMode = driveMode,
+            )
+            Spacer(Modifier.height(16.dp))
+            RatingRow(
+                current = rating,
+                liked = liked,
+                onRate = onRate,
+                onToggleLike = onToggleLike,
+            )
+            Spacer(Modifier.height(8.dp))
+            VolumeRow(
+                volume = volume,
+                preMuteLevel = preMuteLevel,
+                onPreMuteLevelChange = onPreMuteLevelChange,
+                onVolumeLive = onVolumeLive,
+                onVolumeCommit = onVolumeCommit,
+            )
+        }
+        Spacer(Modifier.width(16.dp))
+        // Right third — large artwork + track / artist below it,
+        // mirroring SiriusXM's "what's playing right now" panel.
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight(),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            AlbumArtPlaceholder(
+                accent = accent,
+                artworkUri = playable.artworkUri,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .widthIn(max = 420.dp)
+                    .aspectRatio(1f),
+                onTap = onTapArtwork,
+                onPinchOpen = onPinchOpenLyrics,
+            )
+            Spacer(Modifier.height(16.dp))
+            Text(
+                text = playable.title.ifBlank { "Unknown title" },
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onBackground,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center,
+            )
+            playable.artist?.takeIf { it.isNotBlank() }?.let { artist ->
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = artist,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.clickable(onClick = onTapArtist),
+                )
+            }
+            playable.album?.takeIf { it.isNotBlank() }?.let { album ->
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = album,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.clickable(onClick = onTapAlbum),
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun TriplePaneStationRow(
+    name: String,
+    subtitle: String?,
+    isCurrent: Boolean,
+    onTap: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onTap),
+        shape = RoundedCornerShape(8.dp),
+        color = if (isCurrent) MaterialTheme.colorScheme.primaryContainer
+                else MaterialTheme.colorScheme.surface.copy(alpha = 0.4f),
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+        ) {
+            Text(
+                text = name,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = if (isCurrent) MaterialTheme.colorScheme.onPrimaryContainer
+                        else MaterialTheme.colorScheme.onBackground,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            subtitle?.takeIf { it.isNotBlank() }?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (isCurrent) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.75f)
+                            else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.55f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+    }
+}

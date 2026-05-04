@@ -3136,6 +3136,64 @@ across ~30 files) found five real bugs. Each is fixed below. Build
   of the effect body so the label clears immediately on key
   change and only re-populates once the new read returns.
 
+#### Phase 19 polish (continued, batch 25 — three-pane Now Playing)
+
+User-requested SiriusXM-style three-column Now Playing layout
+(stations list / transport / artwork+metadata). Inspired by the
+in-dash SXM UX on Hyundai/Kia QLS infotainment. Build
+`2026-05-04o` → `2026-05-04p`.
+
+Note on scope: this is the **in-app phone UI** layout, not a
+CarPlay or Android Auto template. Both projection platforms
+(CarPlay's audio-app category, Android Auto's MediaBrowserService)
+are template-locked — the platform draws the UI from your data,
+you don't draw arbitrary pixels. The SXM example in Hyundai's
+QLS is rendered by the head unit's native firmware via SXM's
+deep manufacturer-level partnership, not via Android Auto. The
+three-pane layout *here* targets the user's phone screen, which
+shines on a Galaxy Fold 7 unfolded inner display, a tablet, or a
+phone in landscape on a dashboard mount.
+
+- [x] **`KEY_NOW_PLAYING_LAYOUT` setting.** Four values stored
+  in SettingsStore: `Auto` (width-driven: Compact <600dp,
+  TwoPane 600-1100dp, TriplePane >=1100dp), `Compact`,
+  `TwoPane`, `TriplePane`. Auto is the default. Persisted as a
+  string with `SearchScope`-style fallback to "Auto" on unknown
+  values. Wired into `expectedTypeForKey`, `dumpForBackup` (STR
+  list), and `resetAllUserSettings` per the three-place rule.
+- [x] **`TriplePaneLayout` composable.** Three equal-weight
+  columns:
+  - **Left:** "Stations" header + LazyColumn of every station,
+    fed by `stationRepo.observeAll()`. Tap a row to switch
+    stations via `stationPlayback.playStation(id)`. Current
+    station highlights with `primaryContainer`.
+  - **Center:** TrackInfo + Scrubber + format line + TransportRow
+    + RatingRow + VolumeRow — same building blocks as Compact,
+    just centered in the middle column.
+  - **Right:** Big square AlbumArt (`widthIn(max = 420.dp)`) +
+    track title + artist + album, with the title centered and
+    artist/album as tappable links (same routing as the
+    existing TrackInfo subtitle taps).
+- [x] **`NowPlayingLayoutChoice` enum + `BoxWithConstraints`
+  dispatch.** The screen reads `settings.getNowPlayingLayout()`
+  once on entry (pref change requires re-entering Now Playing —
+  fine since it rebuilds on navigation). The dispatch falls
+  through Compact / TwoPane / TriplePane in a `when` rather than
+  the previous binary `if (isCompact)` branch.
+- [x] **AppSettings — "Now Playing layout" picker.** Sits in
+  the Display section right after Drive Mode. Four FilterChips
+  in a FlowRow ("Auto", "Compact", "Two-pane", "Three-pane
+  (SXM-style)") with a one-line subtitle that switches to
+  describe the active mode. The "Three-pane" label is
+  intentionally annotated as SXM-style so users find it under
+  the term they used to ask for it.
+- [x] **`stationRepo` injection on NowPlayingScreen.** New Koin
+  injection (already a `single` in `sharedModule`) lets the
+  triple-pane layout's left column consume the live station
+  list without re-fetching. The other layouts don't reference
+  `stations`, so they pay zero cost — Compose only collects the
+  flow when TriplePane is the resolved layout.
+
 ---
 
 ## Appendix A — Compose Multiplatform vs native UI: when to fall back
