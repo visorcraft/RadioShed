@@ -496,6 +496,22 @@ class StationRepository(private val db: RadioShedDatabase) {
     }
 
     /**
+     * "How many distinct artists / albums have I played?" Joins
+     * station_history through track_artist / track to get reach
+     * counts. Tracks the user has deleted post-listen drop out via
+     * the INNER JOIN — that's intentional: a count of artists I
+     * "still have rows for" is more useful than counting artists
+     * whose tracks no longer exist.
+     */
+    suspend fun distinctArtistsPlayed(): Long = withContext(IODispatcher) {
+        db.stationsQueries.distinctArtistsPlayed().executeAsOne()
+    }
+
+    suspend fun distinctAlbumsPlayed(): Long = withContext(IODispatcher) {
+        db.stationsQueries.distinctAlbumsPlayed().executeAsOne()
+    }
+
+    /**
      * Day-bucketed play activity for the last [windowDays]. Returns a
      * dense list of [windowDays] entries — index 0 is the oldest day,
      * the last index is "today" — so the caller can render a uniform

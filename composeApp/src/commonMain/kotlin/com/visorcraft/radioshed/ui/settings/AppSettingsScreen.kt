@@ -579,6 +579,34 @@ fun AppSettingsScreen(
                     )
                 },
             )
+            Spacer(Modifier.height(8.dp))
+            // Issue tracker link — pairs with Copy-build-info above so
+            // a user filing a bug can grab the build string and jump
+            // straight to GitHub Issues without leaving Settings.
+            AboutLinkRow(
+                title = "Report a bug",
+                subtitle = "github.com/anthropics/radioshed/issues",
+                onClick = {
+                    com.visorcraft.radioshed.source.openWebUrl(
+                        "https://github.com/anthropics/radioshed/issues",
+                    )
+                },
+            )
+            Spacer(Modifier.height(8.dp))
+            // License link rounds out the About section. The repo's
+            // LICENSE file is the canonical source of truth (the
+            // CreditsCard above lists OSS dependencies; this one
+            // links to the proprietary terms governing RadioShed
+            // itself).
+            AboutLinkRow(
+                title = "License",
+                subtitle = "Proprietary — see LICENSE in the repo.",
+                onClick = {
+                    com.visorcraft.radioshed.source.openWebUrl(
+                        "https://github.com/anthropics/radioshed/blob/master/LICENSE",
+                    )
+                },
+            )
             Spacer(Modifier.height(16.dp))
             // Reset to defaults — wipes the user-portable preference
             // keys but leaves library / playlists / ratings / station

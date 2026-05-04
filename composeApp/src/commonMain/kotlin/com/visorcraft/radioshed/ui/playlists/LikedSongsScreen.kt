@@ -102,6 +102,11 @@ fun LikedSongsScreen(
     var searchQuery by remember { mutableStateOf("") }
     var saveAsPlaylistOpen by remember { mutableStateOf(false) }
     var savedPlaylistName by remember { mutableStateOf<String?>(null) }
+    // Confirmation gate for the trailing heart-button. The previous
+    // single-tap-to-unlike behaviour was a stray-finger away from
+    // losing the row with no undo path; this dialog makes the action
+    // intentional. Long-press still goes to the track context sheet.
+    var unlikeConfirm by remember { mutableStateOf<Track?>(null) }
     val likedCount by ratingRepo.observeLikedCount().collectAsState(initial = 0L)
     val nowPlaying by audioEngine.nowPlaying.collectAsState()
     val currentTrackId = nowPlaying?.trackId
@@ -187,7 +192,19 @@ fun LikedSongsScreen(
                     modifier = Modifier
                         .size(56.dp)
                         .clip(RoundedCornerShape(10.dp))
-                        .background(MaterialTheme.colorScheme.primaryContainer),
+                        .background(MaterialTheme.colorScheme.primaryContainer)
+                        // Long-press the header heart for the
+                        // save-as-playlist shortcut, mirroring the
+                        // overflow menu's "Save as playlist…" action
+                        // — useful for keyboard-averse users who
+                        // already know the gesture pattern from
+                        // station tiles + history rows.
+                        .combinedClickable(
+                            onClick = {},
+                            onLongClick = {
+                                if (tracks.isNotEmpty()) saveAsPlaylistOpen = true
+                            },
+                        ),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
@@ -339,9 +356,12 @@ fun LikedSongsScreen(
                                 },
                                 onLongPress = { contextTrackId = track.id },
                                 onUnlike = {
-                                    scope.launch {
-                                        ratingRepo.unlike(track.id)
-                                    }
+                                    // Quick-tap unlike used to fire
+                                    // immediately, which was a one-tap
+                                    // mistake away from losing a row
+                                    // with no undo. Now we route through
+                                    // a confirm dialog.
+                                    unlikeConfirm = track
                                 },
                             )
                         }
@@ -382,6 +402,33 @@ fun LikedSongsScreen(
         TrackContextSheet(
             trackId = id,
             onDismiss = { contextTrackId = null },
+        )
+    }
+
+    unlikeConfirm?.let { target ->
+        AlertDialog(
+            onDismissRequest = { unlikeConfirm = null },
+            title = { Text("Unlike this song?") },
+            text = {
+                Text(
+                    "Removes \"${target.title.ifBlank { target.fileName }}\" " +
+                        "from Liked songs. The track stays in your library.",
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val id = target.id
+                        unlikeConfirm = null
+                        scope.launch { ratingRepo.unlike(id) }
+                    },
+                ) {
+                    Text("Unlike", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { unlikeConfirm = null }) { Text("Cancel") }
+            },
         )
     }
 

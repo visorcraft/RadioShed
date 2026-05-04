@@ -309,23 +309,52 @@ fun NowPlayingScreen(
                                    else MaterialTheme.colorScheme.onSurface,
                         )
                     }
-                    // Repeat-mode cycler. Off → All → One → Off. Visual
-                    // state matches the sleep icon's pattern: dim when
-                    // off, primary tint when on, with the "One" badge
-                    // riding on the icon glyph itself.
-                    IconButton(onClick = { stationPlayback.cycleRepeatMode() }) {
-                        Icon(
-                            imageVector = if (repeatMode == com.visorcraft.radioshed.stations.StationPlayback.RepeatMode.One)
-                                Icons.Filled.RepeatOne else Icons.Filled.Repeat,
-                            contentDescription = when (repeatMode) {
-                                com.visorcraft.radioshed.stations.StationPlayback.RepeatMode.Off -> "Repeat off"
-                                com.visorcraft.radioshed.stations.StationPlayback.RepeatMode.All -> "Repeat all"
-                                com.visorcraft.radioshed.stations.StationPlayback.RepeatMode.One -> "Repeat one"
-                            },
-                            tint = if (repeatMode == com.visorcraft.radioshed.stations.StationPlayback.RepeatMode.Off)
-                                MaterialTheme.colorScheme.onSurface
-                            else MaterialTheme.colorScheme.primary,
-                        )
+                    // Repeat-mode cycler. Tap: Off → All → One → Off.
+                    // Long-press: reverse direction (One → All → Off →
+                    // One). Saves the over-shoot tap when the user
+                    // wants to back out of "Repeat one" without going
+                    // through Off and All again. Surface + combinedClickable
+                    // is the codebase pattern for tap-vs-long-press on
+                    // a single icon (matches the BigIconButton play /
+                    // pause + Stations Home Surprise tile).
+                    androidx.compose.material3.Surface(
+                        color = androidx.compose.ui.graphics.Color.Transparent,
+                        modifier = Modifier
+                            .size(48.dp)
+                            .combinedClickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                                onClick = { stationPlayback.cycleRepeatMode() },
+                                onLongClick = {
+                                    val next = when (repeatMode) {
+                                        com.visorcraft.radioshed.stations.StationPlayback.RepeatMode.Off ->
+                                            com.visorcraft.radioshed.stations.StationPlayback.RepeatMode.One
+                                        com.visorcraft.radioshed.stations.StationPlayback.RepeatMode.All ->
+                                            com.visorcraft.radioshed.stations.StationPlayback.RepeatMode.Off
+                                        com.visorcraft.radioshed.stations.StationPlayback.RepeatMode.One ->
+                                            com.visorcraft.radioshed.stations.StationPlayback.RepeatMode.All
+                                    }
+                                    stationPlayback.setRepeatMode(next)
+                                },
+                            ),
+                    ) {
+                        androidx.compose.foundation.layout.Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier.fillMaxSize(),
+                        ) {
+                            Icon(
+                                imageVector = if (repeatMode == com.visorcraft.radioshed.stations.StationPlayback.RepeatMode.One)
+                                    Icons.Filled.RepeatOne else Icons.Filled.Repeat,
+                                contentDescription = when (repeatMode) {
+                                    com.visorcraft.radioshed.stations.StationPlayback.RepeatMode.Off -> "Repeat off"
+                                    com.visorcraft.radioshed.stations.StationPlayback.RepeatMode.All -> "Repeat all"
+                                    com.visorcraft.radioshed.stations.StationPlayback.RepeatMode.One -> "Repeat one"
+                                },
+                                tint = if (repeatMode == com.visorcraft.radioshed.stations.StationPlayback.RepeatMode.Off)
+                                    MaterialTheme.colorScheme.onSurface
+                                else MaterialTheme.colorScheme.primary,
+                            )
+                        }
                     }
                     val priorityBadgeCount by stationPlayback.priorityCountFlow.collectAsState()
                     androidx.compose.material3.BadgedBox(
@@ -370,6 +399,25 @@ fun NowPlayingScreen(
                         }
                     }
                     Box {
+                        // Long-press shortcut: when idle, arm 30min
+                        // (the median sleep-timer pick); when armed,
+                        // cancel without going through the menu. Tap
+                        // still opens the full menu either way.
+                        Box(
+                            modifier = Modifier.combinedClickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                                onClick = { sleepMenuOpen = true },
+                                onLongClick = {
+                                    if (sleepState is SleepTimer.State.Idle) {
+                                        sleepTimer.start(30L * 60_000L)
+                                    } else {
+                                        sleepTimer.cancel()
+                                    }
+                                    hapticTick()
+                                },
+                            ),
+                        ) {
                         IconButton(onClick = { sleepMenuOpen = true }) {
                             Icon(
                                 imageVector = if (sleepState is SleepTimer.State.Idle)
@@ -379,6 +427,7 @@ fun NowPlayingScreen(
                                     MaterialTheme.colorScheme.onSurface
                                 else MaterialTheme.colorScheme.primary,
                             )
+                        }
                         }
                         SleepTimerMenu(
                             expanded = sleepMenuOpen,
@@ -2092,6 +2141,35 @@ private fun TrackInfoDialog(
                     ) {
                         Text("Search YouTube for track")
                     }
+                    // SoundCloud + Bandcamp round out the indie / DJ-mix /
+                    // unsigned-artist surfaces that MusicBrainz / Discogs
+                    // miss. Both use straightforward search-form URLs;
+                    // SoundCloud's `/search?q=` and Bandcamp's
+                    // `/search?q=` accept percent-encoded queries.
+                    // Artist-only when present, falls back to the title
+                    // for lone-track searches (some Bandcamp listings
+                    // are by track title only).
+                    val artistOrTitle = artistForWeb ?: t.title.ifBlank { t.fileName }
+                    androidx.compose.material3.OutlinedButton(
+                        onClick = {
+                            com.visorcraft.radioshed.source.openWebUrl(
+                                "https://soundcloud.com/search?q=${encodeForUrl(artistOrTitle)}",
+                            )
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Search SoundCloud")
+                    }
+                    androidx.compose.material3.OutlinedButton(
+                        onClick = {
+                            com.visorcraft.radioshed.source.openWebUrl(
+                                "https://bandcamp.com/search?q=${encodeForUrl(artistOrTitle)}",
+                            )
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Search Bandcamp")
+                    }
                     Spacer(Modifier.height(4.dp))
                     InfoLine("Title", t.title)
                     // Artist + Album rows: tappable when the host
@@ -2150,10 +2228,21 @@ private fun TrackInfoDialog(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable {
-                                copyToClipboard(t.path)
-                                ringtoneStatus = "Path copied to clipboard."
-                            },
+                            .combinedClickable(
+                                onClick = {
+                                    copyToClipboard(t.path)
+                                    ringtoneStatus = "Path copied to clipboard."
+                                },
+                                // Long-press the path row copies just
+                                // the file name (basename). Useful for
+                                // pasting into a tag-fix workflow that
+                                // doesn't want the leading directory
+                                // tree.
+                                onLongClick = {
+                                    copyToClipboard(t.fileName)
+                                    ringtoneStatus = "File name copied to clipboard."
+                                },
+                            ),
                     ) {
                         Box(modifier = Modifier.weight(1f)) {
                             InfoLine("Path", t.path, monospace = true)
@@ -2523,9 +2612,11 @@ private fun SleepTimerMenu(
             HorizontalDivider()
         }
         // Discrete durations covering common use cases (commute,
-        // before-bed). Skipping anything > 60 min — for longer "playlists"
-        // the queue itself naturally bounds runtime.
-        listOf(5L, 15L, 30L, 45L, 60L).forEach { mins ->
+        // before-bed). 10 covers a quick "just one more EP side";
+        // 90 catches the longer commute / "rest of the album" run.
+        // Skipping anything > 90 min — for longer playlists, the
+        // queue itself naturally bounds runtime.
+        listOf(5L, 10L, 15L, 30L, 45L, 60L, 90L).forEach { mins ->
             DropdownMenuItem(
                 text = { Text("$mins minutes") },
                 onClick = { onPickMinutes(mins) },

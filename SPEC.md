@@ -2583,6 +2583,73 @@ found a dozen issues. All fixed in this round:
   on each other otherwise). Aggregate status string echoes back
   the per-cache counts.
 
+#### Phase 19 polish (continued, batch 14)
+
+- [x] **Track Info — SoundCloud + Bandcamp search buttons.** Two
+  more web search rows alongside Wikipedia / MusicBrainz / Discogs
+  / YouTube. SoundCloud's `/search?q=` and Bandcamp's `/search?q=`
+  accept the same percent-encoded `encodeForUrl` payload. Use the
+  artist tag when present, otherwise fall back to the track title
+  (some Bandcamp listings are by track title only).
+- [x] **History — Clear last 30 days.** Closes the parity gap with
+  the time-window filter chips. Same monotonic-cutoff +
+  trim-confirm flow as the existing 1h / 24h / 7d options.
+- [x] **Liked Songs — confirm before unlike.** The trailing heart
+  button used to fire `ratingRepo.unlike` on a single tap with no
+  undo. Now routes through an AlertDialog showing the track title
+  ("Unlike \"Title\"?") with an error-tinted Unlike button. Long-
+  press still goes to the track context sheet (full action menu).
+- [x] **Now Playing — long-press repeat → reverse cycle.** Tap is
+  unchanged (Off → All → One). Long-press inverts the direction
+  (One → All → Off → One), saving the over-shoot tap when the
+  user wants to back out of "Repeat one." Switched the underlying
+  IconButton to a `Surface(48dp) + combinedClickable` with
+  `indication = null` — the codebase pattern for tap-vs-long-press
+  on a single icon, since nesting clickable IconButtons inside a
+  parent combinedClickable double-fires per #404.
+- [x] **Stats — Distinct artists / albums tile.** New SQL
+  `Stations.sq distinctArtistsPlayed / distinctAlbumsPlayed`
+  joining station_history through track_artist / track. Renders
+  as a two-tile row below the streak / listening-since rows so
+  the user reads "breadth" alongside "depth". INNER JOIN is
+  intentional — tracks deleted post-listen drop out rather than
+  being re-attributed to NULL.
+- [x] **Sleep timer — 10 + 90 minute options.** Adds 10 (quick
+  EP-side) and 90 (long commute / album side) to the existing
+  5/15/30/45/60 list. Capping at 90 still — beyond that the
+  queue's natural length is the better runtime bound.
+- [x] **App Settings — Report a bug + License rows.** Two new
+  AboutLinkRows under About; one opens `radioshed/issues`, the
+  other opens `LICENSE` on master. Pairs with the existing Copy-
+  build-info row so a bug-reporter can grab the build string and
+  jump straight to the issue tracker.
+- [x] **PlaylistsScreen — filter-aware subtitle.** TopAppBar
+  subtitle now reads "M of N playlists" while the filter is
+  active, falling back to the lifetime "N playlists · M tracks"
+  when the filter is empty. Mid-search the visible-count
+  matters more than the lifetime track total.
+- [x] **Now Playing — sleep timer icon long-press.** Long-press
+  the bedtime icon arms a 30-min timer (the median pick) when
+  idle, or cancels the running timer otherwise. Tap still opens
+  the full menu either way. Saves a multi-step tap-tap-tap on
+  the most common sleep-timer flows.
+- [x] **Liked Songs — long-press header heart → Save as playlist.**
+  Mirrors the overflow menu's "Save as playlist…" action. The
+  56-dp header tile got a `combinedClickable` with `onClick = {}`
+  (so taps don't intercept) and `onLongClick` opening the
+  existing save-as dialog. No-op when there are zero liked
+  tracks.
+- [x] **History — tap summary to copy.** The summary surface
+  (plays / listened / avg-per-day) became `clickable`; tap
+  copies the formatted "{plays} plays · {listened} · {avg}/day"
+  string to the clipboard. Single-tap is fine here — the row is
+  purely informational, no other gesture to collide with.
+- [x] **Track Info — long-press path row to copy file name.**
+  The existing path row used a single `clickable` to copy the
+  full path; switched to `combinedClickable` so long-press copies
+  just the basename. Useful for tag-fix workflows that don't
+  want the leading directory tree.
+
 ---
 
 ## Appendix A — Compose Multiplatform vs native UI: when to fall back

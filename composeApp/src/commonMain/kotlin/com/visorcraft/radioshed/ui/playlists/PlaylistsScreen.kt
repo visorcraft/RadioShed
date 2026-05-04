@@ -172,11 +172,22 @@ fun PlaylistsScreen(
                     Column {
                         Text("Playlists")
                         if (playlists.isNotEmpty()) {
-                            Text(
-                                text = "${playlists.size} playlist" +
+                            // When the filter is active, subtitle
+                            // reflects the visible-count vs total —
+                            // matters more to the user mid-search than
+                            // the lifetime track total. Empty filter
+                            // falls back to the standard summary.
+                            val subtitle = if (listFilter.isNotBlank()) {
+                                "${filteredPlaylists.size} of ${playlists.size} " +
+                                    (if (playlists.size == 1) "playlist" else "playlists")
+                            } else {
+                                "${playlists.size} playlist" +
                                     (if (playlists.size == 1) "" else "s") +
                                     " · $totalTrackCount track" +
-                                    (if (totalTrackCount == 1L) "" else "s"),
+                                    (if (totalTrackCount == 1L) "" else "s")
+                            }
+                            Text(
+                                text = subtitle,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurface
                                     .copy(alpha = 0.6f),

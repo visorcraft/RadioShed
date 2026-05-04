@@ -267,6 +267,22 @@ SELECT COUNT(*) FROM station_history;
 earliestPlayedAt:
 SELECT MIN(played_at) AS earliest_ms FROM station_history;
 
+-- Distinct artist / album reach across all of station_history. The
+-- track_id column joins to library tables for the artist/album
+-- resolution; tracks deleted from the library after their history
+-- row was recorded simply drop out (LEFT JOIN would over-count
+-- by re-attributing them to NULL, so INNER JOIN is intentional).
+distinctArtistsPlayed:
+SELECT COUNT(DISTINCT ta.artist_id) AS distinct_artists
+FROM station_history sh
+JOIN track_artist ta ON ta.track_id = sh.track_id;
+
+distinctAlbumsPlayed:
+SELECT COUNT(DISTINCT t.album_id) AS distinct_albums
+FROM station_history sh
+JOIN track t ON t.id = sh.track_id
+WHERE t.album_id IS NOT NULL;
+
 -- Daily play counts within a rolling window. ?1 is "now" in epoch
 -- ms, ?2 is the cutoff (now - windowMs). Returns one row per day
 -- with at least one play, with days_ago=0 = today's bucket. The

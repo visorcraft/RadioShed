@@ -178,6 +178,18 @@ fun HistoryScreen(
                                     trimConfirm = cutoff to "the last 7 days"
                                 },
                             )
+                            // 30d closes the parity gap with the time
+                            // filter chip row (which has 30d). Same
+                            // monotonic-cutoff + confirm flow.
+                            DropdownMenuItem(
+                                text = { Text("Clear last 30 days") },
+                                enabled = entries.isNotEmpty(),
+                                onClick = {
+                                    menuOpen = false
+                                    val cutoff = nowMillis() - 30L * 24L * 60L * 60L * 1000L
+                                    trimConfirm = cutoff to "the last 30 days"
+                                },
+                            )
                             DropdownMenuItem(
                                 text = { Text("Clear all history") },
                                 enabled = entries.isNotEmpty(),
@@ -400,13 +412,28 @@ fun HistoryScreen(
                 ) {
                     summary?.let { (plays, listenedMs, avgPerDay) ->
                         item(key = "summary") {
+                            // Tap-to-copy lets users paste their
+                            // listening summary into a journal / chat
+                            // without having to retype the three
+                            // numbers. Single-tap because the row's
+                            // only purpose is informational — no
+                            // collision with another gesture.
+                            val copyToClipboard = com.visorcraft
+                                .radioshed.ui.util.rememberCopyToClipboard()
+                            val summaryText = "$plays play" +
+                                (if (plays == 1) "" else "s") +
+                                " · ${formatHistoryListened(listenedMs)}" +
+                                " · ${"%.1f/day".format(avgPerDay)}"
                             Surface(
                                 color = MaterialTheme.colorScheme.surfaceVariant
                                     .copy(alpha = 0.45f),
                                 shape = RoundedCornerShape(10.dp),
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                                    .clickable {
+                                        copyToClipboard(summaryText)
+                                    },
                             ) {
                                 Row(
                                     modifier = Modifier.padding(

@@ -123,10 +123,18 @@ fun StatsScreen(
     // much listening lifetime is captured. Independent of windowDays
     // — this is a lifetime stat, not a window stat.
     var listeningSinceMs by remember { mutableStateOf<Long?>(null) }
+    // Distinct-reach counters. Lifetime stats — independent of
+    // windowDays. Surfaced as a "you've heard X artists across Y
+    // albums" tile so the user reads "breadth" rather than just
+    // "depth" (Most-played top-N already covers depth).
+    var distinctArtists by remember { mutableStateOf(0L) }
+    var distinctAlbums by remember { mutableStateOf(0L) }
     LaunchedEffect(windowDays) {
         totalMs = stationRepo.totalListenedMs()
         totalPlays = stationRepo.countAllPlays()
         listeningSinceMs = stationRepo.earliestPlayedAt()
+        distinctArtists = stationRepo.distinctArtistsPlayed()
+        distinctAlbums = stationRepo.distinctAlbumsPlayed()
         // Last-7-days vs the prior 7. Both are inclusive of "now",
         // exclusive of the lower bound, so the boundary
         // overlaps cleanly. Returns null when last week had zero
@@ -329,6 +337,24 @@ fun StatsScreen(
                         StatTile(
                             label = "Days tracked",
                             value = daysAgo.toString(),
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+                if (distinctArtists > 0L || distinctAlbums > 0L) {
+                    Spacer(Modifier.height(12.dp))
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        StatTile(
+                            label = "Distinct artists",
+                            value = distinctArtists.toString(),
+                            modifier = Modifier.weight(1f),
+                        )
+                        StatTile(
+                            label = "Distinct albums",
+                            value = distinctAlbums.toString(),
                             modifier = Modifier.weight(1f),
                         )
                     }
