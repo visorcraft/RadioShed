@@ -3283,6 +3283,50 @@ flagged. PlaybackQueue and BackupService came back clean. Build
   partially-tagged compilation albums; on rescan they'll now
   pick up covers that were silently dropped on prior passes.
 
+#### Phase 19 audit follow-up (deep audit fix sweep, repos pass)
+
+A second round of deep-audit found two more real bugs in
+repository-layer write paths that hadn't been individually
+audited. Both fix data-consistency issues. Build `2026-05-04r`
+→ `2026-05-04s`.
+
+- [x] **FIX (data consistency): StationRepository.clearAllHistory
+  was non-atomic.** The "Clear listening history" action wiped
+  `station_history` and reset every station's denormalized
+  `play_count` / `total_listen_ms` counters as **two separate
+  SQL statements** with no surrounding transaction. A process
+  kill between them left history empty but station play counts
+  stale, breaking the Stats screen's Top Stations tile until
+  the user played enough music to overwrite the gap. The
+  single-station `resetStationStats` was already wrapped in a
+  transaction; matched the pattern here. The all-history wipe
+  is now atomic via `db.stationsQueries.transaction { ... }`.
+- [x] **FIX (playlist order corruption): TOCTOU between
+  `trackCount` + `addTrack(position = count)`.** Three call
+  sites (AddToPlaylistSheet, TrackContextSheet, and
+  CollectionContextSheets' bulk add) read the playlist's current
+  track count, then inserted a new row at `position = count`
+  in two separate suspend calls. Two near-simultaneous adds
+  both observed the same count, both inserted at the same
+  position, and SQLite's `playlist_track` table has no UNIQUE
+  constraint on position — the playlist now had duplicate
+  position values and an arbitrary visible order, with a gap
+  one position higher. Added two atomic helpers to
+  `PlaylistRepository`:
+  - `appendTrack(playlistId, trackId)` — wraps count + insert
+    in a single transaction so concurrent appends serialize on
+    the SQLite write lock.
+  - `appendTracks(playlistId, trackIds)` — bulk variant that
+    reads the count once at the top of the transaction and
+    increments a local position counter through the inserts.
+    Eliminates the partial-import-on-process-kill failure mode
+    where adding an album would leave half its tracks in the
+    playlist if the OS killed the process mid-loop.
+  All three call sites now use the appropriate atomic helper.
+  The "Create new playlist + add this track" path in
+  TrackContextSheet still uses `addTrack(position = 0)`
+  directly because the playlist is freshly empty there.
+
 ---
 
 ## Appendix A — Compose Multiplatform vs native UI: when to fall back
