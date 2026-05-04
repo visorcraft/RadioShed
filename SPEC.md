@@ -2979,6 +2979,38 @@ copies on tap (or long-press, where the tap was already taken).
   long-press that copies `"M:SS / M:SS"` to the clipboard. Tap
   behavior is unchanged.
 
+#### Phase 19 polish (continued, batch 21)
+
+Build date `2026-05-04k` → `2026-05-04l`. Mix of debug-friendly
+copy actions, a much-asked-for volume mute toggle, and a single
+new web-search affordance.
+
+- [x] **Crash log — Copy actions on toolbar + per-row.**
+  Pairs with the existing Share button. Toolbar's `ContentCopy`
+  bundles every recorded entry into one delimited dump; each
+  row has its own `ContentCopy` for triaging a specific entry
+  without copying the whole list. Same `toShareText()` formatter
+  as Share — body matches what would land in the share sheet.
+- [x] **Now Playing volume icon → mute toggle.** Tapping the
+  speaker icon at the left of the volume slider now toggles
+  mute. Pre-mute level is snapshotted so a second tap restores
+  exactly where you were; if the user drags the slider while
+  muted that drag becomes the new "unmute" target. Defaults to
+  0.6 on first run when no prior level has ever been recorded.
+- [x] **Now Playing — Tap "from $stationName" → open Station
+  detail.** Subtitle now renders as a primary-tinted, tappable
+  text routing through the existing `onOpenStation(id)`
+  callback (same path as the overflow's "Go to station"
+  action). Pads horizontally so the tap target is finger-sized
+  rather than a 1-line bare Text.
+- [x] **Track Info dialog — "Search Wikipedia for album"
+  button.** Joins the existing artist/MusicBrainz/Discogs/
+  YouTube/SoundCloud/Bandcamp web-search row. The query
+  pattern `"$album $artist album"` (or `"$album album"` when
+  artist is unknown) reliably lands on the album's Wikipedia
+  page rather than the disambiguation page that bare titles
+  like "Greatest Hits" produce.
+
 ---
 
 ## Appendix A — Compose Multiplatform vs native UI: when to fall back

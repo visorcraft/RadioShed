@@ -834,6 +834,9 @@ fun NowPlayingScreen(
                                 ?.albumId?.let { onOpenAlbum(it) }
                         }
                     },
+                    onTapStation = {
+                        currentStation?.id?.let(onOpenStation)
+                    },
                     driveMode = driveMode,
                     queueProgress = finiteQueueProgress,
                 )
@@ -886,6 +889,9 @@ fun NowPlayingScreen(
                             libraryRepo.getTrackById(playable.trackId)
                                 ?.albumId?.let { onOpenAlbum(it) }
                         }
+                    },
+                    onTapStation = {
+                        currentStation?.id?.let(onOpenStation)
                     },
                     driveMode = driveMode,
                     queueProgress = finiteQueueProgress,
@@ -1021,6 +1027,7 @@ private fun CompactLayout(
     onPinchOpenLyrics: () -> Unit,
     onTapArtist: () -> Unit,
     onTapAlbum: () -> Unit,
+    onTapStation: () -> Unit,
     driveMode: Boolean,
     queueProgress: Pair<Int, Int>? = null,
 ) {
@@ -1045,6 +1052,7 @@ private fun CompactLayout(
             alignment = Alignment.CenterHorizontally,
             onTapArtist = onTapArtist,
             onTapAlbum = onTapAlbum,
+            onTapStation = onTapStation,
             queueProgress = queueProgress,
         )
         Spacer(Modifier.height(16.dp))
@@ -1115,6 +1123,7 @@ private fun TwoPaneLayout(
     onPinchOpenLyrics: () -> Unit,
     onTapArtist: () -> Unit,
     onTapAlbum: () -> Unit,
+    onTapStation: () -> Unit,
     driveMode: Boolean,
     queueProgress: Pair<Int, Int>? = null,
 ) {
@@ -1158,6 +1167,7 @@ private fun TwoPaneLayout(
                 alignment = Alignment.Start,
                 onTapArtist = onTapArtist,
                 onTapAlbum = onTapAlbum,
+                onTapStation = onTapStation,
                 queueProgress = queueProgress,
             )
             Spacer(Modifier.height(24.dp))
@@ -1387,6 +1397,7 @@ private fun TrackInfo(
     alignment: Alignment.Horizontal,
     onTapArtist: () -> Unit = {},
     onTapAlbum: () -> Unit = {},
+    onTapStation: () -> Unit = {},
     queueProgress: Pair<Int, Int>? = null,
 ) {
     Column(horizontalAlignment = alignment, modifier = Modifier.fillMaxWidth()) {
@@ -1454,8 +1465,11 @@ private fun TrackInfo(
             Text(
                 text = "from $stationName",
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f),
                 textAlign = if (alignment == Alignment.CenterHorizontally) TextAlign.Center else TextAlign.Start,
+                modifier = Modifier
+                    .clickable(onClick = onTapStation)
+                    .padding(horizontal = 4.dp, vertical = 2.dp),
             )
         }
         // Track N of M chip — only shown when we're playing a finite
@@ -1968,6 +1982,13 @@ private fun VolumeRow(
     var dragging by remember { mutableStateOf(false) }
     var pending by remember { mutableFloatStateOf(volume) }
     val display = if (dragging) pending else volume
+    // Volume snapshot for the mute toggle. When the user taps the
+    // icon to mute, we stash the pre-mute level here so a second tap
+    // restores it. If they then drag the slider while muted we drop
+    // the snapshot — the new manual level becomes the new "unmute"
+    // target. Defaults to 0.6 so unmuting from a fresh-install state
+    // (no previous level recorded) lands at a reasonable value.
+    var preMuteLevel by remember { mutableFloatStateOf(0.6f) }
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -1979,7 +2000,20 @@ private fun VolumeRow(
                 else -> Icons.AutoMirrored.Filled.VolumeUp
             },
             contentDescription = "Volume",
-            modifier = Modifier.size(20.dp),
+            modifier = Modifier
+                .size(20.dp)
+                .clickable {
+                    val muted = volume < 0.02f
+                    if (muted) {
+                        val target = preMuteLevel.coerceAtLeast(0.1f)
+                        onVolumeLive(target)
+                        onVolumeCommit(target)
+                    } else {
+                        preMuteLevel = volume
+                        onVolumeLive(0f)
+                        onVolumeCommit(0f)
+                    }
+                },
             tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
         )
         Spacer(Modifier.width(8.dp))
@@ -2233,6 +2267,29 @@ private fun TrackInfoDialog(
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Text("Search Wikipedia for artist")
+                    }
+                    // Album-scoped Wikipedia. Disambiguating an album
+                    // page with the artist name pulls the right hit
+                    // (Wikipedia indexes most album titles under the
+                    // artist) — bare album titles like "Greatest Hits"
+                    // would otherwise return the disambig page first.
+                    val albumForWeb = playable.album?.takeIf { it.isNotBlank() }
+                    if (albumForWeb != null) {
+                        androidx.compose.material3.OutlinedButton(
+                            onClick = {
+                                val q = if (artistForWeb != null) {
+                                    "$albumForWeb $artistForWeb album"
+                                } else {
+                                    "$albumForWeb album"
+                                }
+                                com.visorcraft.radioshed.source.openWebUrl(
+                                    "https://en.wikipedia.org/wiki/Special:Search?search=${encodeForUrl(q)}",
+                                )
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text("Search Wikipedia for album")
+                        }
                     }
                     androidx.compose.material3.OutlinedButton(
                         onClick = {

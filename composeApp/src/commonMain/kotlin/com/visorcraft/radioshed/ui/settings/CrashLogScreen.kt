@@ -16,6 +16,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -73,6 +74,15 @@ fun CrashLogScreen(
                 title = { Text("Crash log") },
                 navigationIcon = { TextButton(onClick = onBack) { Text("Back") } },
                 actions = {
+                    val copyAll = com.visorcraft.radioshed.ui.util.rememberCopyToClipboard()
+                    IconButton(
+                        enabled = entries.isNotEmpty(),
+                        onClick = {
+                            copyAll(entries.joinToString("\n\n---\n\n") { it.toShareText() })
+                        },
+                    ) {
+                        Icon(Icons.Filled.ContentCopy, contentDescription = "Copy all")
+                    }
                     IconButton(
                         enabled = entries.isNotEmpty(),
                         onClick = {
@@ -107,6 +117,7 @@ fun CrashLogScreen(
                 )
             }
         } else {
+            val rowCopy = com.visorcraft.radioshed.ui.util.rememberCopyToClipboard()
             LazyColumn(
                 modifier = Modifier.fillMaxSize().padding(padding),
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
@@ -128,6 +139,7 @@ fun CrashLogScreen(
                                 )
                             }
                         },
+                        onCopy = { rowCopy(entry.toShareText()) },
                     )
                 }
             }
@@ -141,6 +153,7 @@ private fun CrashLogRow(
     expanded: Boolean,
     onToggle: () -> Unit,
     onShare: () -> Unit,
+    onCopy: () -> Unit,
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -161,6 +174,9 @@ private fun CrashLogRow(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                     )
+                }
+                IconButton(onClick = onCopy) {
+                    Icon(Icons.Filled.ContentCopy, contentDescription = "Copy entry")
                 }
                 IconButton(onClick = onShare) {
                     Icon(Icons.Filled.Share, contentDescription = "Share entry")
