@@ -21,3 +21,17 @@ fun rememberCopyToClipboard(): (String) -> Unit {
     val clipboard = LocalClipboardManager.current
     return { text -> clipboard.setText(AnnotatedString(text)) }
 }
+
+/**
+ * Compose-friendly clipboard read. Returns a `() -> String?` that
+ * yields the current clipboard text or null when empty / unsupported.
+ * Used by paste-into-search-field affordances. Same deprecation
+ * suppress as the write side — when the suspend `LocalClipboard` API
+ * gains a commonMain `ClipEntry` constructor we can migrate both at
+ * once.
+ */
+@Composable
+fun rememberPasteFromClipboard(): () -> String? {
+    val clipboard = LocalClipboardManager.current
+    return { clipboard.getText()?.text?.takeIf { it.isNotBlank() } }
+}

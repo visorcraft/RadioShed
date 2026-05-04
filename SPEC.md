@@ -2930,6 +2930,55 @@ states. Build date `2026-05-04i` → `2026-05-04j`.
   station tap was the user signaling "narrow by station, drop
   the broad text filter."
 
+#### Phase 19 polish (continued, batch 20)
+
+A copy-friction follow-up to batch 19. Build date `2026-05-04j` →
+`2026-05-04k`. Theme: every header / summary / position label that
+previously rendered useful text but no clipboard affordance now
+copies on tap (or long-press, where the tap was already taken).
+
+- [x] **Track context sheet — "Copy file path" action.**
+  Pairs with the existing Track Info dialog action — long-press
+  any track row anywhere in the app, get the raw filesystem path
+  on the clipboard for use in tag editors / Syncthing / desktop
+  workflows.
+- [x] **Stats — "Copy" action in TopAppBar.** Packages
+  Total listened / Tracks played / Avg per day / Streak into a
+  multi-line text block ready to paste into a journal or chat.
+  Window-aware: respects the 7d/30d/90d chip selection.
+- [x] **Search — paste-from-clipboard button.** New
+  `rememberPasteFromClipboard()` helper alongside the existing
+  copy. The Search box's empty-state trailing icons now show
+  `ContentPaste` next to the existing voice mic so the user can
+  pull a song title straight from a chat without retyping.
+- [x] **Backup — sort menu (newest / oldest / largest /
+  smallest).** Surfaces in the existing TopAppBar overflow above
+  "Delete all backups", with a leading checkmark on the active
+  mode. Sort applies to the in-memory list only; on-disk order
+  is unchanged.
+- [x] **PlaylistDetail — "Copy summary" overflow action.**
+  Renders `"{Name} — N tracks · {h}h {m}m"` (or `Nm` when under
+  an hour) and writes to clipboard. Sits at the top of the
+  existing sort/Export overflow menu.
+- [x] **Album / Artist / Genre detail — header subtitle tap to
+  copy.** Tapping the under-title metadata row (year · N tracks
+  · runtime, or N albums · N tracks · runtime, or N tracks)
+  copies a one-line summary prefixed with the name. Matches the
+  existing "tap to copy" pattern from AppSettings library-stats
+  and Stats summary.
+- [x] **Now Playing — Track Info "Copy as Markdown" button.**
+  Sits below the existing "Copy artist – title" outlined button
+  in the Track Info dialog. Builds a fenced Markdown block with
+  bold labels for Track / Artist / Album / Format / Duration /
+  Bitrate / Sample rate / Track # / BPM — anything the dialog
+  already had. Pastes cleanly into Obsidian or any chat that
+  renders Markdown.
+- [x] **Now Playing — long-press position label → copy
+  "elapsed / total".** Position label was already tap-to-open
+  the seek dialog (batch 8); this adds a `combinedClickable`
+  long-press that copies `"M:SS / M:SS"` to the clipboard. Tap
+  behavior is unchanged.
+
 ---
 
 ## Appendix A — Compose Multiplatform vs native UI: when to fall back

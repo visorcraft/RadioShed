@@ -177,11 +177,34 @@ fun StatsScreen(
         streaks = stationRepo.listeningStreaks(windowDays = 90)
     }
 
+    val summaryClipboard = com.visorcraft.radioshed.ui.util.rememberCopyToClipboard()
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Listening stats") },
                 navigationIcon = { TextButton(onClick = onBack) { Text("Back") } },
+                actions = {
+                    // "Copy summary" packages the at-a-glance stats
+                    // (Total listened, Tracks played, Avg/day, Streak)
+                    // into one multiline string suitable for
+                    // pasting into a journal / chat / bug report.
+                    // Just the headline tiles — top artists/albums
+                    // are too long for a clipboard-friendly summary.
+                    TextButton(onClick = {
+                        val avg = if (windowDays > 0) totalMs / windowDays else 0L
+                        val streakLine = if (streaks.second > 0) {
+                            "Current streak: ${streaks.first} day${if (streaks.first == 1) "" else "s"} · longest ${streaks.second}"
+                        } else ""
+                        val text = buildString {
+                            appendLine("RadioShed — last $windowDays days")
+                            appendLine("Total listened: ${formatTotalDuration(totalMs)}")
+                            appendLine("Tracks played (lifetime): $totalPlays")
+                            appendLine("Avg/day: ${formatTotalDuration(avg)}")
+                            if (streakLine.isNotEmpty()) appendLine(streakLine)
+                        }.trimEnd()
+                        summaryClipboard(text)
+                    }) { Text("Copy") }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface,
                 ),

@@ -306,6 +306,20 @@ private fun MainStep(
                     onDismiss()
                 },
             )
+            // Copy raw file path — handy for debugging, sharing the
+            // path with another app (e.g. a tag editor on desktop via
+            // Syncthing), or pasting into the file manager search.
+            // Already exists on Track Info dialog but the long-press
+            // sheet is faster for this use case.
+            ContextActionRow(
+                icon = Icons.Filled.ContentCopy,
+                label = "Copy file path",
+                enabled = track != null,
+                onClick = {
+                    track?.path?.let { copyToClipboard(it) }
+                    onDismiss()
+                },
+            )
         }
         // Global dislike — "never play this anywhere" — sits at the
         // bottom because it's a destructive-ish action distinct from

@@ -118,6 +118,29 @@ fun PlaylistDetailScreen(
                             expanded = menuOpen,
                             onDismissRequest = { menuOpen = false },
                         ) {
+                            val summaryClipboard = com.visorcraft.radioshed.ui.util
+                                .rememberCopyToClipboard()
+                            DropdownMenuItem(
+                                text = { Text("Copy summary") },
+                                enabled = playlist != null,
+                                onClick = {
+                                    menuOpen = false
+                                    val totalMs = tracks.sumOf { it.durationMs }
+                                    val name = playlist?.name ?: "Playlist"
+                                    val mins = totalMs / 60_000L
+                                    val hrs = mins / 60L
+                                    val durLabel = if (hrs > 0) {
+                                        "${hrs}h ${mins % 60L}m"
+                                    } else {
+                                        "${mins}m"
+                                    }
+                                    summaryClipboard(
+                                        "$name — ${tracks.size} track" +
+                                            (if (tracks.size == 1) "" else "s") +
+                                            " · $durLabel"
+                                    )
+                                },
+                            )
                             DropdownMenuItem(
                                 text = { Text("Export as .m3u…") },
                                 enabled = tracks.isNotEmpty(),

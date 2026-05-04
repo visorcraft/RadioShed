@@ -226,10 +226,14 @@ fun ArtistDetailScreen(
                     append(" · ").append(formatArtistRuntime(totalRuntimeMs))
                 }
             }
+            val copySummary = com.visorcraft.radioshed.ui.util.rememberCopyToClipboard()
             Text(
                 text = subtitle,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                modifier = Modifier.clickable {
+                    copySummary("${a.name} — $subtitle")
+                },
             )
 
             Spacer(Modifier.height(12.dp))

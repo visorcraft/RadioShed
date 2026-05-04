@@ -1512,14 +1512,21 @@ private fun Scrubber(
             // dialog. The slider handles coarse seeks; a typed input
             // is the right tool for "skip to 1:23" on long
             // podcasts/sets where the slider's hit zone is ~10s wide.
+            val positionClipboard = com.visorcraft.radioshed.ui.util.rememberCopyToClipboard()
             Text(
                 text = formatMs(if (isUserScrubbing) (pendingFraction * durationSafe).toLong() else positionMs),
                 style = MaterialTheme.typography.bodySmall,
                 fontFamily = FontFamily.Monospace,
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
-                modifier = Modifier.clickable(enabled = durationSafe > 0L) {
-                    seekDialogOpen = true
-                },
+                modifier = Modifier.combinedClickable(
+                    enabled = durationSafe > 0L,
+                    onClick = { seekDialogOpen = true },
+                    onLongClick = {
+                        val elapsed = formatMs(positionMs)
+                        val total = formatMs(durationSafe)
+                        positionClipboard("$elapsed / $total")
+                    },
+                ),
             )
             Text(
                 text = formatMs(durationSafe),
@@ -2151,6 +2158,38 @@ private fun TrackInfoDialog(
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Text("Copy artist – title")
+                    }
+                    // Markdown export — packages every visible field
+                    // into a fenced block with bold labels, suitable
+                    // for pasting into Obsidian / a chat that renders
+                    // Markdown / a README. Picks up artist + album
+                    // names from the resolved metadata so labels read
+                    // correctly even when the file's path is opaque.
+                    androidx.compose.material3.OutlinedButton(
+                        onClick = {
+                            val md = buildString {
+                                appendLine("**Track:** ${t.title.ifBlank { t.fileName }}")
+                                playable.artist?.takeIf { it.isNotBlank() }?.let {
+                                    appendLine("**Artist:** $it")
+                                }
+                                playable.album?.takeIf { it.isNotBlank() }?.let {
+                                    appendLine("**Album:** $it")
+                                }
+                                appendLine("**Format:** ${t.format.uppercase()}")
+                                appendLine("**Duration:** ${formatMs(t.durationMs)}")
+                                t.bitrateKbps?.let { appendLine("**Bitrate:** $it kbps") }
+                                t.sampleRateHz?.let {
+                                    appendLine("**Sample rate:** ${"%.1f".format(it / 1000.0)} kHz")
+                                }
+                                t.trackNumber?.let { appendLine("**Track #:** $it") }
+                                t.bpm?.let { appendLine("**BPM:** ${"%.1f".format(it)}") }
+                            }.trimEnd()
+                            copyToClipboard(md)
+                            ringtoneStatus = "Copied Track Info as Markdown."
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Copy as Markdown")
                     }
                     // Web look-ups. Each opens the system browser at a
                     // search-form URL for the relevant service so the

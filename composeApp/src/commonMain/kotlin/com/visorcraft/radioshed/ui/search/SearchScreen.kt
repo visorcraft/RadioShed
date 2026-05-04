@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material3.AssistChip
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.ui.Alignment
@@ -196,7 +197,11 @@ fun SearchScreen(
                     // wipe — clear is the more frequent action once
                     // the user has started typing. Voice mic is
                     // shown only on an empty field, where it's the
-                    // most useful affordance anyway.
+                    // most useful affordance anyway. Paste-from-
+                    // clipboard sits alongside voice on the empty
+                    // state — useful when a friend texts "have you
+                    // heard X?" and the user wants to pull the
+                    // title straight from chat.
                     if (query.isNotEmpty()) {
                         androidx.compose.material3.IconButton(onClick = { query = "" }) {
                             androidx.compose.material3.Icon(
@@ -204,12 +209,25 @@ fun SearchScreen(
                                 contentDescription = "Clear search",
                             )
                         }
-                    } else if (com.visorcraft.radioshed.ui.util.supportsVoiceInput()) {
-                        androidx.compose.material3.IconButton(onClick = { voicePicker() }) {
-                            androidx.compose.material3.Icon(
-                                imageVector = Icons.Filled.Mic,
-                                contentDescription = "Voice search",
-                            )
+                    } else {
+                        Row {
+                            val pasteFromClipboard = com.visorcraft.radioshed.ui.util.rememberPasteFromClipboard()
+                            androidx.compose.material3.IconButton(onClick = {
+                                pasteFromClipboard()?.let { query = it.trim() }
+                            }) {
+                                androidx.compose.material3.Icon(
+                                    imageVector = Icons.Filled.ContentPaste,
+                                    contentDescription = "Paste from clipboard",
+                                )
+                            }
+                            if (com.visorcraft.radioshed.ui.util.supportsVoiceInput()) {
+                                androidx.compose.material3.IconButton(onClick = { voicePicker() }) {
+                                    androidx.compose.material3.Icon(
+                                        imageVector = Icons.Filled.Mic,
+                                        contentDescription = "Voice search",
+                                    )
+                                }
+                            }
                         }
                     }
                 },

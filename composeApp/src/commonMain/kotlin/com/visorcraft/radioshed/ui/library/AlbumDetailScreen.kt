@@ -471,10 +471,15 @@ private fun AlbumMeta(
             append(" · ").append(formatRuntime(totalRuntimeMs))
         }
     }
+    val copySummary = com.visorcraft.radioshed.ui.util.rememberCopyToClipboard()
     Text(
         text = subtitle,
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+        modifier = Modifier.clickable {
+            val artistPart = artist?.name?.let { " · $it" } ?: ""
+            copySummary("${album.title}$artistPart — $subtitle")
+        },
     )
 }
 

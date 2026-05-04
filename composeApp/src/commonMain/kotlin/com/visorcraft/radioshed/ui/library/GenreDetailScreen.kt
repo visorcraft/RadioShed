@@ -186,10 +186,15 @@ fun GenreDetailScreen(
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.SemiBold,
             )
+            val genreSummary = "${tracks.size} track${if (tracks.size == 1) "" else "s"}"
+            val copySummary = com.visorcraft.radioshed.ui.util.rememberCopyToClipboard()
             Text(
-                "${tracks.size} track${if (tracks.size == 1) "" else "s"}",
+                genreSummary,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                modifier = Modifier.clickable {
+                    copySummary("$genre — $genreSummary")
+                },
             )
             Spacer(Modifier.height(12.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

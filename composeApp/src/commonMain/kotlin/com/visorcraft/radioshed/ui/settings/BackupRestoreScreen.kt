@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Backup
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FileOpen
 import androidx.compose.material.icons.filled.MoreVert
@@ -78,6 +79,7 @@ fun BackupRestoreScreen(
     var deleteAllConfirm by remember { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
     var detailsOpen by remember { mutableStateOf<BackupFile?>(null) }
+    var sortMode by remember { mutableStateOf(BackupSortMode.NewestFirst) }
 
     suspend fun reload() {
         files = backupService.listBackups()
@@ -101,6 +103,58 @@ fun BackupRestoreScreen(
                             expanded = menuOpen,
                             onDismissRequest = { menuOpen = false },
                         ) {
+                            // Sort sub-section. Each entry shows a leading
+                            // checkmark on the active mode so the user
+                            // can see which sort is currently applied.
+                            androidx.compose.material3.DropdownMenuItem(
+                                text = { Text("Sort: Newest first") },
+                                leadingIcon = {
+                                    if (sortMode == BackupSortMode.NewestFirst) {
+                                        Icon(Icons.Filled.Check, contentDescription = null)
+                                    }
+                                },
+                                onClick = {
+                                    menuOpen = false
+                                    sortMode = BackupSortMode.NewestFirst
+                                },
+                            )
+                            androidx.compose.material3.DropdownMenuItem(
+                                text = { Text("Sort: Oldest first") },
+                                leadingIcon = {
+                                    if (sortMode == BackupSortMode.OldestFirst) {
+                                        Icon(Icons.Filled.Check, contentDescription = null)
+                                    }
+                                },
+                                onClick = {
+                                    menuOpen = false
+                                    sortMode = BackupSortMode.OldestFirst
+                                },
+                            )
+                            androidx.compose.material3.DropdownMenuItem(
+                                text = { Text("Sort: Largest first") },
+                                leadingIcon = {
+                                    if (sortMode == BackupSortMode.LargestFirst) {
+                                        Icon(Icons.Filled.Check, contentDescription = null)
+                                    }
+                                },
+                                onClick = {
+                                    menuOpen = false
+                                    sortMode = BackupSortMode.LargestFirst
+                                },
+                            )
+                            androidx.compose.material3.DropdownMenuItem(
+                                text = { Text("Sort: Smallest first") },
+                                leadingIcon = {
+                                    if (sortMode == BackupSortMode.SmallestFirst) {
+                                        Icon(Icons.Filled.Check, contentDescription = null)
+                                    }
+                                },
+                                onClick = {
+                                    menuOpen = false
+                                    sortMode = BackupSortMode.SmallestFirst
+                                },
+                            )
+                            androidx.compose.material3.HorizontalDivider()
                             androidx.compose.material3.DropdownMenuItem(
                                 text = { Text("Delete all backups") },
                                 enabled = files.isNotEmpty() && !working,
@@ -221,11 +275,19 @@ fun BackupRestoreScreen(
                     )
                 }
             } else {
+                val sortedFiles = remember(files, sortMode) {
+                    when (sortMode) {
+                        BackupSortMode.NewestFirst -> files.sortedByDescending { it.createdAt }
+                        BackupSortMode.OldestFirst -> files.sortedBy { it.createdAt }
+                        BackupSortMode.LargestFirst -> files.sortedByDescending { it.sizeBytes }
+                        BackupSortMode.SmallestFirst -> files.sortedBy { it.sizeBytes }
+                    }
+                }
                 LazyColumn(
                     contentPadding = PaddingValues(vertical = 4.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    items(files, key = { it.uri }) { file ->
+                    items(sortedFiles, key = { it.uri }) { file ->
                         BackupRow(
                             file = file,
                             onRestore = { restoreConfirm = file },
@@ -594,4 +656,11 @@ private fun formatBytes(bytes: Long): String = when {
     bytes < 1024 -> "$bytes B"
     bytes < 1024 * 1024 -> "${bytes / 1024} KB"
     else -> "${bytes / (1024 * 1024)} MB"
+}
+
+private enum class BackupSortMode {
+    NewestFirst,
+    OldestFirst,
+    LargestFirst,
+    SmallestFirst,
 }
