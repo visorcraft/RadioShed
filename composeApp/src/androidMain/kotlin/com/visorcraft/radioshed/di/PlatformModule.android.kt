@@ -33,6 +33,8 @@ import com.visorcraft.radioshed.source.AndroidListenBrainzClient
 import com.visorcraft.radioshed.source.MusicBrainzClient
 import com.visorcraft.radioshed.source.WikipediaBioFetcher
 import com.visorcraft.radioshed.source.ListenBrainzClient
+import com.visorcraft.radioshed.source.AndroidSubsonicClient
+import com.visorcraft.radioshed.source.SubsonicClient
 import com.visorcraft.radioshed.source.ArtworkPersister
 import com.visorcraft.radioshed.source.BackupSharer
 import com.visorcraft.radioshed.source.BackupStorage
@@ -74,6 +76,7 @@ actual val platformModule: Module = module {
     single<MusicBrainzClient> { AndroidMusicBrainzClient() }
     single<WikipediaBioFetcher> { AndroidWikipediaBioFetcher() }
     single<ListenBrainzClient> { AndroidListenBrainzClient() }
+    single<SubsonicClient> { AndroidSubsonicClient() }
     single<ArtworkPersister> { AndroidArtworkPersister(androidContext()) }
     single<CoverArtFetcher> { AndroidCoverArtFetcher() }
     single<ConnectivityChecker> { AndroidConnectivityChecker(androidContext()) }

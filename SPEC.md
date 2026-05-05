@@ -3643,6 +3643,65 @@ the user's own ListenBrainz token).
   Last.fm convention, only completed plays scrobble — skipped
   plays don't.
 
+#### Phase 19 polish (continued, batch 16 — Subsonic source)
+
+Build `2026-05-04x` → `2026-05-04y`. First cloud-streaming source —
+unlocks Subsonic, Navidrome, Airsonic, OpenSubsonic, Funkwhale (with
+Subsonic compat), Astiga, Supysonic, Madsonic, etc., from one client.
+Single shippable feature; the full Phase 11 multi-source matrix
+remains deferred (each cloud / network source is its own multi-day
+chunk; Subsonic was picked because it's the most-deployed and has
+the cleanest interop story).
+
+- [x] **`SubsonicClient` interface (commonMain) + Android impl
+  (Phase 11 cloud sources).** Token-based auth per Subsonic API
+  1.13+: each call regenerates a 12-char salt and sends
+  `t = md5(password + salt)` so the cleartext password never
+  leaves the device. Exposes ping (server-version probe),
+  getArtists (flattened across the server's alphabetical
+  index-letter groupings), getAlbumsForArtist, getSongs, plus
+  URL builders for cover art and stream endpoints. JSON envelope
+  parsing (`{"subsonic-response": {...}}`) handled in one place.
+  iOS gets `NullSubsonicClient` until Mac access lands.
+- [x] **Settings → Subsonic / Navidrome cloud library row.** New
+  `SubsonicConfigRow` composable hosts the URL + username +
+  password dialog with **Test & save** button — pings the
+  server before persisting credentials so a typo gets caught
+  immediately rather than failing on first browse. Surfaces the
+  server's reported product (Navidrome, Airsonic, etc.) +
+  version on success. Tapping the row when configured opens the
+  browse screen; tapping when unconfigured opens the dialog.
+  `KEY_SUBSONIC_URL`, `KEY_SUBSONIC_USERNAME`, `KEY_SUBSONIC_PASSWORD`
+  added to SettingsStore. Password is excluded from backups
+  (credential); URL + username are included so a new device
+  round-trips most of the connection setup.
+- [x] **`SubsonicBrowseScreen` — three-level drill-down.** Artists
+  → albums per artist → songs per album. Filter field on the
+  artist + album levels (client-side; server-side search is
+  deferred). Album rows show year + track count + cover art via
+  Coil (passed an auth-embedded `getCoverArt` URL). Tapping a
+  song calls `audioEngine.play(Playable(uri = streamUrl, ...))`
+  — ExoPlayer's default DataSource opens the HTTPS audio
+  resource directly, so cloud playback uses the same
+  MediaSession / lock-screen tile / notification controls as
+  local playback. Track id `-1L` flags the play as ad-hoc;
+  cloud tracks don't seed queues, get added to playlists, or
+  scrobble (yet). Connectivity-policy-aware loading state +
+  empty-state messaging.
+- [x] **App.kt route + AppScreen.SubsonicBrowse data object.**
+  Reachable from Settings → Subsonic row; `PlatformBackHandler`
+  pops the drill-down stack, then back to Settings.
+
+Known limitations of v1, surfaced in code comments:
+- One-track-at-a-time. No queue / Up Next / skip-next from cloud
+  until cloud tracks are persisted to a remote-track schema with
+  a `source` discriminator. That's the deferred follow-up — adds
+  station integration, Liked Songs across local + cloud, and
+  proper queue handoff at album end.
+- No download-for-offline. Stream URL is consumed live.
+- No server-side playlists, starred items, scrobble-to-server,
+  podcasts, internet radio, share endpoints. All deferred.
+
 ---
 
 ## Appendix A — Compose Multiplatform vs native UI: when to fall back

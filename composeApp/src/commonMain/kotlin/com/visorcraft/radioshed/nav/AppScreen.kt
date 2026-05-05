@@ -128,4 +128,14 @@ sealed interface AppScreen {
      * row to keep regular users out.
      */
     data object DbBrowser : AppScreen
+
+    /**
+     * Subsonic-protocol cloud-music browser. Reachable from Settings
+     * → Cloud sources → Subsonic, once the user has filled in
+     * server URL + credentials. Drills artists → albums → songs;
+     * tap a song to stream it through the existing AudioEngine
+     * (ExoPlayer handles HTTPS audio URLs natively, so no special
+     * playback path is needed for cloud tracks).
+     */
+    data object SubsonicBrowse : AppScreen
 }

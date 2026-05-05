@@ -93,6 +93,7 @@ fun AppSettingsScreen(
     onOpenCrashLog: () -> Unit = {},
     onOpenSyncthingWizard: () -> Unit = {},
     onOpenDbBrowser: () -> Unit = {},
+    onOpenSubsonic: () -> Unit = {},
     settings: SettingsStore = koinInject(),
     artworkSync: MissingArtworkSync = koinInject(),
     lyricsCache: com.visorcraft.radioshed.data.LyricsCacheRepository = koinInject(),
@@ -366,6 +367,8 @@ fun AppSettingsScreen(
             )
             Spacer(Modifier.height(8.dp))
             ListenBrainzRow(settings = settings)
+            Spacer(Modifier.height(8.dp))
+            SubsonicConfigRow(settings = settings, onOpenBrowse = onOpenSubsonic)
             Spacer(Modifier.height(8.dp))
             ToggleRow(
                 title = "Sleep timer stops playback",
@@ -2240,6 +2243,142 @@ private fun ListenBrainzRow(settings: SettingsStore) {
                         modifier = Modifier.fillMaxWidth(),
                     )
                     validation?.let {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            it,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
+            },
+        )
+    }
+}
+
+@Composable
+private fun SubsonicConfigRow(
+    settings: SettingsStore,
+    onOpenBrowse: () -> Unit,
+) {
+    var url by remember { mutableStateOf(settings.getSubsonicUrl()) }
+    var username by remember { mutableStateOf(settings.getSubsonicUsername()) }
+    var password by remember { mutableStateOf(settings.getSubsonicPassword()) }
+    var dialogOpen by remember { mutableStateOf(false) }
+    val client: com.visorcraft.radioshed.source.SubsonicClient = koinInject()
+    val scope = rememberCoroutineScope()
+    var status by remember { mutableStateOf<String?>(null) }
+    val configured = url.isNotBlank() && username.isNotBlank() && password.isNotBlank()
+
+    Column {
+        NavRow(
+            title = "Subsonic / Navidrome cloud library",
+            subtitle = if (configured) {
+                "Connected to ${url.removePrefix("https://").removePrefix("http://").take(40)}"
+            } else {
+                "Stream from your own server. Tap to configure."
+            },
+            onClick = {
+                if (configured) onOpenBrowse() else dialogOpen = true
+            },
+        )
+        if (configured) {
+            Surface(
+                modifier = Modifier.fillMaxWidth().clickable { dialogOpen = true },
+                color = MaterialTheme.colorScheme.surface,
+            ) {
+                Text(
+                    text = "Edit server config",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                )
+            }
+        }
+    }
+
+    if (dialogOpen) {
+        var draftUrl by remember { mutableStateOf(url) }
+        var draftUser by remember { mutableStateOf(username) }
+        var draftPass by remember { mutableStateOf(password) }
+        var testing by remember { mutableStateOf(false) }
+        AlertDialog(
+            onDismissRequest = { dialogOpen = false },
+            confirmButton = {
+                TextButton(
+                    enabled = !testing,
+                    onClick = {
+                        testing = true
+                        status = "Testing connection…"
+                        scope.launch {
+                            val server = com.visorcraft.radioshed.source.SubsonicServer(
+                                baseUrl = draftUrl.trim().trimEnd('/'),
+                                username = draftUser.trim(),
+                                password = draftPass,
+                            )
+                            val result = client.ping(server)
+                            if (result == null) {
+                                status = "Couldn't connect. Verify URL, " +
+                                    "username, password, and that the server is " +
+                                    "reachable from this device."
+                            } else {
+                                settings.setSubsonicUrl(draftUrl)
+                                settings.setSubsonicUsername(draftUser)
+                                settings.setSubsonicPassword(draftPass)
+                                url = settings.getSubsonicUrl()
+                                username = settings.getSubsonicUsername()
+                                password = settings.getSubsonicPassword()
+                                status = "Connected to ${result.product} v${result.version}."
+                                dialogOpen = false
+                            }
+                            testing = false
+                        }
+                    },
+                ) { Text(if (testing) "Testing…" else "Test & save") }
+            },
+            dismissButton = {
+                TextButton(onClick = { dialogOpen = false }) { Text("Cancel") }
+            },
+            title = { Text("Subsonic server") },
+            text = {
+                Column {
+                    Text(
+                        "Works with Subsonic, Navidrome, Airsonic, " +
+                            "OpenSubsonic, Funkwhale (with Subsonic-compat), " +
+                            "Astiga, and any other Subsonic-API server. " +
+                            "Token auth — your password is hashed locally and " +
+                            "never sent in cleartext.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = draftUrl,
+                        onValueChange = { draftUrl = it },
+                        label = { Text("Server URL") },
+                        placeholder = { Text("https://music.example.com") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = draftUser,
+                        onValueChange = { draftUser = it },
+                        label = { Text("Username") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = draftPass,
+                        onValueChange = { draftPass = it },
+                        label = { Text("Password") },
+                        singleLine = true,
+                        visualTransformation =
+                            androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    status?.let {
                         Spacer(Modifier.height(8.dp))
                         Text(
                             it,

@@ -263,6 +263,36 @@ class SettingsStore(private val settings: Settings) {
         else settings.putString(KEY_LISTENBRAINZ_TOKEN, token.trim())
     }
 
+    // Subsonic server config — URL/username get backed up so a new
+    // device round-trips the connection setup; password is treated
+    // as a credential and excluded from the bundle. The user
+    // re-enters it once after restore. Same trust posture as the
+    // ListenBrainz token.
+    fun getSubsonicUrl(): String = settings.getStringOrNull(KEY_SUBSONIC_URL).orEmpty()
+    fun setSubsonicUrl(url: String) {
+        val trimmed = url.trim().trimEnd('/')
+        if (trimmed.isBlank()) settings.remove(KEY_SUBSONIC_URL)
+        else settings.putString(KEY_SUBSONIC_URL, trimmed)
+    }
+    fun getSubsonicUsername(): String =
+        settings.getStringOrNull(KEY_SUBSONIC_USERNAME).orEmpty()
+    fun setSubsonicUsername(username: String) {
+        val trimmed = username.trim()
+        if (trimmed.isBlank()) settings.remove(KEY_SUBSONIC_USERNAME)
+        else settings.putString(KEY_SUBSONIC_USERNAME, trimmed)
+    }
+    fun getSubsonicPassword(): String =
+        settings.getStringOrNull(KEY_SUBSONIC_PASSWORD).orEmpty()
+    fun setSubsonicPassword(password: String) {
+        if (password.isBlank()) settings.remove(KEY_SUBSONIC_PASSWORD)
+        else settings.putString(KEY_SUBSONIC_PASSWORD, password)
+    }
+    /** True when the user has filled in URL + username + password. */
+    fun hasSubsonicConfig(): Boolean =
+        getSubsonicUrl().isNotBlank() &&
+            getSubsonicUsername().isNotBlank() &&
+            getSubsonicPassword().isNotBlank()
+
     /**
      * Playback rate multiplier. Persisted across sessions so audiobook
      * / podcast users don't have to reset to their preferred speed
@@ -848,6 +878,9 @@ class SettingsStore(private val settings: Settings) {
         const val KEY_HAPTICS_ENABLED = "ui.hapticsEnabled"
         const val KEY_LISTENBRAINZ_ENABLED = "scrobble.listenbrainz.enabled"
         const val KEY_LISTENBRAINZ_TOKEN = "scrobble.listenbrainz.token"
+        const val KEY_SUBSONIC_URL = "cloud.subsonic.url"
+        const val KEY_SUBSONIC_USERNAME = "cloud.subsonic.username"
+        const val KEY_SUBSONIC_PASSWORD = "cloud.subsonic.password"
         const val KEY_SEARCH_SCOPE = "ui.search.scope"
         const val KEY_NOW_PLAYING_LAYOUT = "ui.now_playing.layout"
         const val KEY_CONNECTIVITY_POLICY = "online.connectivityPolicy"

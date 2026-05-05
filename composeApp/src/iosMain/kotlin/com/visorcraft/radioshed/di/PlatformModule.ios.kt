@@ -39,6 +39,8 @@ import com.visorcraft.radioshed.source.WikipediaBioFetcher
 import com.visorcraft.radioshed.source.NullWikipediaBioFetcher
 import com.visorcraft.radioshed.source.ListenBrainzClient
 import com.visorcraft.radioshed.source.NullListenBrainzClient
+import com.visorcraft.radioshed.source.SubsonicClient
+import com.visorcraft.radioshed.source.NullSubsonicClient
 import com.visorcraft.radioshed.source.BackupSharer
 import com.visorcraft.radioshed.source.BackupStorage
 import com.visorcraft.radioshed.source.ConnectivityChecker
@@ -69,6 +71,7 @@ actual val platformModule: Module = module {
     single<MusicBrainzClient> { NullMusicBrainzClient() }
     single<WikipediaBioFetcher> { NullWikipediaBioFetcher() }
     single<ListenBrainzClient> { NullListenBrainzClient() }
+    single<SubsonicClient> { NullSubsonicClient() }
     single<ArtworkPersister> { IosArtworkPersister() }
     single<CoverArtFetcher> { NullCoverArtFetcher() }
     single<ConnectivityChecker> { IosConnectivityChecker() }

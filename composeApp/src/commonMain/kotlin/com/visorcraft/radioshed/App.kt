@@ -343,6 +343,13 @@ fun App(
                         )
                     }
 
+                    AppScreen.SubsonicBrowse -> {
+                        PlatformBackHandler { current = AppScreen.AppSettings }
+                        com.visorcraft.radioshed.ui.cloud.SubsonicBrowseScreen(
+                            onBack = { current = AppScreen.AppSettings },
+                        )
+                    }
+
                     AppScreen.AppSettings -> {
                         PlatformBackHandler { current = AppScreen.Home }
                         AppSettingsScreen(
@@ -361,6 +368,7 @@ fun App(
                             onOpenCrashLog = { current = AppScreen.CrashLog },
                             onOpenSyncthingWizard = { current = AppScreen.SyncthingWizard },
                             onOpenDbBrowser = { current = AppScreen.DbBrowser },
+                            onOpenSubsonic = { current = AppScreen.SubsonicBrowse },
                         )
                     }
 
