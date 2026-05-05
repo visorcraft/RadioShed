@@ -49,7 +49,9 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.visorcraft.radioshed.data.FolderRepository
+import com.visorcraft.radioshed.data.LibraryRepository
 import com.visorcraft.radioshed.domain.Folder
+import com.visorcraft.radioshed.source.matchesGlob
 import com.visorcraft.radioshed.permissions.StoragePermissions
 import com.visorcraft.radioshed.scanner.ScanProgress
 import com.visorcraft.radioshed.scanner.Scanner
@@ -68,7 +70,9 @@ import org.koin.compose.koinInject
 @Composable
 fun LibrarySettingsScreen(
     onBack: () -> Unit,
+    onOpenDuplicates: () -> Unit = {},
     folderRepo: FolderRepository = koinInject(),
+    libraryRepo: LibraryRepository = koinInject(),
     scanner: Scanner = koinInject(),
     permissions: StoragePermissions = koinInject(),
     storageVolumes: StorageVolumes = koinInject(),
@@ -247,6 +251,38 @@ fun LibrarySettingsScreen(
                     color = MaterialTheme.colorScheme.error,
                 )
             }
+
+            // Library tools section. Adds entries that don't fit the
+            // per-folder workflow above — currently the duplicate
+            // finder. Power-user features that affect the library as
+            // a whole live here.
+            Spacer(Modifier.height(24.dp))
+            Text(
+                "Library tools",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
+                fontWeight = FontWeight.SemiBold,
+            )
+            Spacer(Modifier.height(8.dp))
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onOpenDuplicates),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                shape = RoundedCornerShape(8.dp),
+            ) {
+                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                    Text(
+                        "Find duplicate tracks",
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                    Text(
+                        "Group tracks by tag fuzz — surfaces re-rips and accidental re-imports.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                    )
+                }
+            }
         }
     }
 
@@ -274,6 +310,8 @@ fun LibrarySettingsScreen(
     editingFolder?.let { folder ->
         EditFolderDialog(
             folder = folder,
+            libraryRepo = libraryRepo,
+            scope = scope,
             onDismiss = { editingFolder = null },
             onSave = { newName, includeGlobs, excludeGlobs ->
                 scope.launch {
@@ -627,6 +665,8 @@ private fun VolumeChip(
 @Composable
 private fun EditFolderDialog(
     folder: Folder,
+    libraryRepo: LibraryRepository,
+    scope: kotlinx.coroutines.CoroutineScope,
     onDismiss: () -> Unit,
     onSave: (
         displayName: String,
@@ -712,10 +752,178 @@ private fun EditFolderDialog(
                     maxLines = 4,
                     modifier = Modifier.fillMaxWidth(),
                 )
+
+                // "Test rule" affordance — runs the in-edit globs
+                // against the actual indexed tracks under this folder
+                // (relative to the folder's URI root) and shows
+                // counts + sample paths for each bucket. Lets users
+                // verify a glob does what they expect before saving
+                // and triggering a rescan, which is the only way to
+                // know if a destructive exclude pattern is correct
+                // otherwise.
+                Spacer(Modifier.height(12.dp))
+                GlobPreviewPanel(
+                    folderUri = folder.uri,
+                    includeGlobs = newIncludes,
+                    excludeGlobs = newExcludes,
+                    libraryRepo = libraryRepo,
+                    scope = scope,
+                )
             }
         },
     )
 }
+
+@Composable
+private fun GlobPreviewPanel(
+    folderUri: String,
+    includeGlobs: List<String>,
+    excludeGlobs: List<String>,
+    libraryRepo: LibraryRepository,
+    scope: kotlinx.coroutines.CoroutineScope,
+) {
+    var preview by remember { mutableStateOf<GlobPreview?>(null) }
+    var loading by remember { mutableStateOf(false) }
+    val canRun = includeGlobs.isNotEmpty() || excludeGlobs.isNotEmpty()
+
+    Column {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            TextButton(
+                enabled = canRun && !loading,
+                onClick = {
+                    loading = true
+                    preview = null
+                    scope.launch {
+                        runCatching {
+                            kotlinx.coroutines.withContext(
+                                kotlinx.coroutines.Dispatchers.Default,
+                            ) {
+                                // Scope to this folder by path-prefix
+                                // (no track→folder FK exists in the
+                                // schema); cheap on the typical
+                                // <10k-track library.
+                                val tracks = libraryRepo
+                                    .listAvailableTracks(limit = 100_000L, offset = 0L)
+                                    .filter { it.path.startsWith(folderUri) }
+                                val excludedSamples = mutableListOf<String>()
+                                val notIncludedSamples = mutableListOf<String>()
+                                var excludedCount = 0
+                                var notIncludedCount = 0
+                                var keptCount = 0
+                                for (t in tracks) {
+                                    val rel = t.path
+                                        .removePrefix(folderUri)
+                                        .trimStart('/')
+                                    val excludeHit = excludeGlobs.any {
+                                        matchesGlob(rel, it)
+                                    }
+                                    val includePass = includeGlobs.isEmpty() ||
+                                        includeGlobs.any { matchesGlob(rel, it) }
+                                    when {
+                                        excludeHit -> {
+                                            excludedCount += 1
+                                            if (excludedSamples.size < 10) {
+                                                excludedSamples += rel
+                                            }
+                                        }
+                                        !includePass -> {
+                                            notIncludedCount += 1
+                                            if (notIncludedSamples.size < 10) {
+                                                notIncludedSamples += rel
+                                            }
+                                        }
+                                        else -> keptCount += 1
+                                    }
+                                }
+                                GlobPreview(
+                                    totalChecked = tracks.size,
+                                    excludedCount = excludedCount,
+                                    notIncludedCount = notIncludedCount,
+                                    excludedSamples = excludedSamples,
+                                    notIncludedSamples = notIncludedSamples,
+                                    keptCount = keptCount,
+                                )
+                            }
+                        }.onSuccess { preview = it }
+                            .onFailure { preview = null }
+                        loading = false
+                    }
+                },
+            ) { Text(if (loading) "Testing…" else "Test rule") }
+            if (preview != null) {
+                TextButton(onClick = { preview = null }) { Text("Hide") }
+            }
+        }
+        preview?.let { p ->
+            Spacer(Modifier.height(4.dp))
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    val filteredTotal = p.excludedCount + p.notIncludedCount
+                    Text(
+                        text = "${p.keptCount} kept · $filteredTotal filtered (of ${p.totalChecked} indexed)",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    if (p.excludedSamples.isNotEmpty()) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            "Excluded by exclude patterns:",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                        )
+                        p.excludedSamples.forEach {
+                            Text(
+                                text = "• $it",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontFamily = FontFamily.Monospace,
+                                maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                    if (p.notIncludedSamples.isNotEmpty()) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            "Filtered out by include patterns:",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                        )
+                        p.notIncludedSamples.forEach {
+                            Text(
+                                text = "• $it",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontFamily = FontFamily.Monospace,
+                                maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                    if (p.excludedSamples.isEmpty() && p.notIncludedSamples.isEmpty()) {
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "No tracks would be filtered.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+private data class GlobPreview(
+    val totalChecked: Int,
+    val excludedCount: Int,
+    val notIncludedCount: Int,
+    val excludedSamples: List<String>,
+    val notIncludedSamples: List<String>,
+    val keptCount: Int,
+)
 
 private fun ScanProgress.toLine(): String = when (this) {
     is ScanProgress.Started -> "Scanning…"

@@ -88,25 +88,6 @@ class AndroidFileEnumerator : FileEnumerator {
     }.getOrNull()
 }
 
-// Minimal glob matcher: supports a single asterisk (any chars except slash),
-// double-asterisk (any chars including slash), and ? (one char). Sufficient
-// for the include/exclude patterns we accept from users (e.g. "Music/**",
-// "Spoken Word/**").
-internal fun matchesGlob(path: String, glob: String): Boolean {
-    val regex = StringBuilder("^")
-    var i = 0
-    while (i < glob.length) {
-        val c = glob[i]
-        when {
-            c == '*' && i + 1 < glob.length && glob[i + 1] == '*' -> {
-                regex.append(".*"); i += 2
-            }
-            c == '*' -> { regex.append("[^/]*"); i += 1 }
-            c == '?' -> { regex.append("[^/]"); i += 1 }
-            c in ".()+|^$@%{}[]\\" -> { regex.append('\\').append(c); i += 1 }
-            else -> { regex.append(c); i += 1 }
-        }
-    }
-    regex.append("$")
-    return Regex(regex.toString()).matches(path)
-}
+// matchesGlob lives in commonMain (source/GlobMatcher.kt) so the
+// scanner and the EditFolderDialog "Test rule" affordance share
+// the same implementation. See that file for syntax docs.

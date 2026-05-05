@@ -24,6 +24,7 @@ import com.visorcraft.radioshed.source.AndroidFolderRevealer
 import com.visorcraft.radioshed.source.AndroidLocalLyricsLoader
 import com.visorcraft.radioshed.source.AndroidLyricsFetcher
 import com.visorcraft.radioshed.source.AndroidTagReader
+import com.visorcraft.radioshed.source.AndroidTagWriter
 import com.visorcraft.radioshed.source.ArtworkPersister
 import com.visorcraft.radioshed.source.BackupSharer
 import com.visorcraft.radioshed.source.BackupStorage
@@ -44,6 +45,7 @@ import com.visorcraft.radioshed.source.LocalLyricsLoader
 import com.visorcraft.radioshed.source.LyricsFetcher
 import com.visorcraft.radioshed.source.StorageVolumes
 import com.visorcraft.radioshed.source.TagReader
+import com.visorcraft.radioshed.source.TagWriter
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.module.Module
 import org.koin.dsl.module
@@ -59,6 +61,7 @@ actual val platformModule: Module = module {
     // Phase 3: scanner platform impls
     single<FileEnumerator> { AndroidFileEnumerator() }
     single<TagReader> { AndroidTagReader() }
+    single<TagWriter> { AndroidTagWriter() }
     single<ArtworkPersister> { AndroidArtworkPersister(androidContext()) }
     single<CoverArtFetcher> { AndroidCoverArtFetcher() }
     single<ConnectivityChecker> { AndroidConnectivityChecker(androidContext()) }

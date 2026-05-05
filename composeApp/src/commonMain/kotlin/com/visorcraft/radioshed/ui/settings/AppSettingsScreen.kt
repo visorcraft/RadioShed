@@ -90,6 +90,7 @@ fun AppSettingsScreen(
     onOpenHistory: () -> Unit = {},
     onOpenCrashLog: () -> Unit = {},
     onOpenSyncthingWizard: () -> Unit = {},
+    onOpenDbBrowser: () -> Unit = {},
     settings: SettingsStore = koinInject(),
     artworkSync: MissingArtworkSync = koinInject(),
     lyricsCache: com.visorcraft.radioshed.data.LyricsCacheRepository = koinInject(),
@@ -612,10 +613,18 @@ fun AppSettingsScreen(
 
             // ---- About ----
             SectionHeader("About")
+            // The version row doubles as a hidden affordance: long-press
+            // to open the read-only DB-stats screen. Lets a developer
+            // (or a user filing a bug) inspect row counts without an
+            // adb pull, but keeps the surface invisible to casual users.
             Text(
                 "RadioShed v${BuildInfo.VERSION_NAME} · built ${BuildInfo.BUILD_DATE}",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f),
+                modifier = Modifier.combinedClickable(
+                    onClick = {},
+                    onLongClick = onOpenDbBrowser,
+                ),
             )
             Text(
                 "Your music turned into stations. No subscriptions, no telemetry, internet optional.",

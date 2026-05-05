@@ -315,7 +315,32 @@ fun App(
 
                     AppScreen.LibrarySettings -> {
                         PlatformBackHandler { current = AppScreen.Library }
-                        LibrarySettingsScreen(onBack = { current = AppScreen.Library })
+                        LibrarySettingsScreen(
+                            onBack = { current = AppScreen.Library },
+                            onOpenDuplicates = { current = AppScreen.LibraryDuplicates },
+                        )
+                    }
+
+                    AppScreen.LibraryDuplicates -> {
+                        PlatformBackHandler { current = AppScreen.LibrarySettings }
+                        com.visorcraft.radioshed.ui.library.LibraryDuplicatesScreen(
+                            onBack = { current = AppScreen.LibrarySettings },
+                            onTrackClick = { track ->
+                                // Open the file's parent folder in the
+                                // built-in browser so the user can
+                                // inspect / move / delete it manually.
+                                val parent = track.path.substringBeforeLast('/')
+                                    .ifBlank { track.path }
+                                current = AppScreen.FolderBrowser(parent)
+                            },
+                        )
+                    }
+
+                    AppScreen.DbBrowser -> {
+                        PlatformBackHandler { current = AppScreen.AppSettings }
+                        com.visorcraft.radioshed.ui.settings.DbBrowserScreen(
+                            onBack = { current = AppScreen.AppSettings },
+                        )
                     }
 
                     AppScreen.AppSettings -> {
@@ -335,6 +360,7 @@ fun App(
                             onOpenHistory = { current = AppScreen.History },
                             onOpenCrashLog = { current = AppScreen.CrashLog },
                             onOpenSyncthingWizard = { current = AppScreen.SyncthingWizard },
+                            onOpenDbBrowser = { current = AppScreen.DbBrowser },
                         )
                     }
 

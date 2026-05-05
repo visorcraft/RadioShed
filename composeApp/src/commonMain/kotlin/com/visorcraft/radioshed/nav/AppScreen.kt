@@ -110,4 +110,22 @@ sealed interface AppScreen {
      * Samsung's stock My Files app).
      */
     data class FolderBrowser(val initialPath: String) : AppScreen
+
+    /**
+     * Library tools — duplicate-track detector. Walks the indexed
+     * library and groups tracks by tag-fuzz key (lowercased
+     * artist + title + duration-rounded-to-second) to surface likely
+     * duplicates. Read-only; the user manually decides what to do
+     * about each group.
+     */
+    data object LibraryDuplicates : AppScreen
+
+    /**
+     * Developer tool — read-only DB browser. Lists tables and lets
+     * the user page through rows. Useful for diagnosing scanner /
+     * playback / migration weirdness without an `adb pull` of the
+     * SQLite file. Hidden behind a long-press on the About → version
+     * row to keep regular users out.
+     */
+    data object DbBrowser : AppScreen
 }

@@ -3472,6 +3472,70 @@ findings; all shipped here. Build `2026-05-04t` → `2026-05-04u`.
   bulk lookup, plus pre-resolved year-filter into a `Map<Long,
   Int?>`. Single-DB-hit per query path now.
 
+#### Phase 19 polish (continued, batch 13 — power-user features)
+
+After clearing the audit-fix backlog, started chipping at the
+deferred power-user list. Build `2026-05-04u` → `2026-05-04v`. Four
+features shipped in this batch — the rest of the deferred list is
+either Mac-blocked (iOS impl, CarPlay) or multi-day work
+(Crossfade, Cast, AI DJ, cloud sources).
+
+- [x] **Path-glob exclude tester (Phase 13 power tools).** Edit
+  Folder dialog now has a "Test rule" affordance that runs the
+  in-edit include/exclude globs against the actual indexed tracks
+  under that folder and shows kept-vs-filtered counts plus up to
+  10 example paths from each filtered bucket. Lets users verify a
+  glob does what they expect *before* saving and triggering the
+  destructive rescan. The matcher itself moved out of
+  `AndroidFileEnumerator` into `commonMain/source/GlobMatcher.kt`
+  so the tester and the scanner share identical semantics — a
+  divergent test-only matcher would give users false confidence.
+- [x] **Duplicate detection UI (Phase 13 power tools, read-only).**
+  New screen `LibraryDuplicatesScreen` reachable from Library
+  Settings → "Find duplicate tracks". Groups tracks by tag-fuzz key
+  (lowercased primary-artist + title + duration rounded to seconds)
+  and surfaces groups with >1 entry, sorted by group size. Per-row
+  shows file path, album, duration, file size; tap → opens the
+  file's parent folder in the in-app browser. Header shows total
+  group count + estimated wasted bytes (sum of all-but-largest copy
+  in each group). No delete action — a naive "delete duplicate"
+  flow risks nuking the keeper copy of a "duplicate" that's
+  actually a remaster vs. original; user picks manually via the
+  folder browser.
+- [x] **DB browser (read-only) at Settings → About.** New
+  `DbBrowserScreen` lists row counts for tracks / artists / albums
+  / albums-missing-artwork / folders / stations / station plays /
+  playlists / liked tracks / backups. Reached via long-press on the
+  version row in About — keeps the surface invisible to casual
+  users. Counts only — full row inspection would need exposing the
+  SQLDelight driver for ad-hoc SELECTs and is the deferred "raw SQL
+  console" feature. Each count wrapped in `runCatching` so a single
+  missing migration doesn't blank the whole screen.
+- [x] **Tag editor — single-track basic fields (Phase 13 power
+  tools).** Track Info dialog now has an "Edit tags…" button that
+  opens `EditTagsDialog` — title / artist / album / album artist /
+  genre / year / track # / disc #. Writes via the new `TagWriter`
+  abstraction (Android impl uses jaudiotagger and writes ID3v2,
+  Vorbis, MP4 atoms; iOS stub returns failure pending Mac-side
+  AVAsset mutator work). After a successful write the dialog
+  triggers an automatic rescan of the track's parent folder so the
+  library DB picks up the new metadata; the Track Info dialog
+  re-fetches its row via a `refreshTick` bump so the user sees the
+  new values immediately rather than after a close-reopen. Failure
+  modes (read-only mount, format unsupported) surface as a status
+  banner inside the dialog. Out of scope for v1: multi-value tags,
+  custom TXXX/Vorbis/iTunes atoms, lyrics writes, replay-gain —
+  those collapse to first-value during scan and are tracked under
+  the deferred "advanced tag editor".
+
+#### Phase 19 polish (continued, batch 13 — gotchas)
+
+- KDoc comments cannot contain a literal `**` followed by `/` —
+  Kotlin's parser treats it as the comment terminator. Hit this in
+  `GlobMatcher.kt` when the doc tried to show an example glob with
+  the recursive-wildcard syntax. Worked around by writing
+  "(double-star)/Spoken Word/(double-star)" in the doc with a note.
+
 ---
 
 ## Appendix A — Compose Multiplatform vs native UI: when to fall back

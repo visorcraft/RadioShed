@@ -2222,7 +2222,13 @@ private fun TrackInfoDialog(
     }
     var genres by remember { mutableStateOf<List<String>>(emptyList()) }
     var primaryArtistId by remember { mutableStateOf<Long?>(null) }
-    LaunchedEffect(playable.trackId) {
+    var showEditTags by remember { mutableStateOf(false) }
+    // Bumped after a successful tag-edit save so the LaunchedEffect
+    // below re-fetches the track row + stats; otherwise the dialog
+    // would still show the pre-edit values until the user closed and
+    // re-opened it.
+    var refreshTick by remember { mutableStateOf(0) }
+    LaunchedEffect(playable.trackId, refreshTick) {
         track = libraryRepo.getTrackById(playable.trackId)
         stats = stationRepo.historyStatsForTrack(playable.trackId)
         genres = libraryRepo.tagsForTrack(playable.trackId)
@@ -2324,6 +2330,18 @@ private fun TrackInfoDialog(
                         ) {
                             Text("Share")
                         }
+                    }
+                    // Tag editor — opens a dialog that writes ID3 /
+                    // Vorbis / MP4 frames directly to the file via
+                    // jaudiotagger and triggers a folder rescan on
+                    // success. Sits below the main action row to keep
+                    // the most-used buttons visually primary.
+                    Spacer(Modifier.height(4.dp))
+                    androidx.compose.material3.OutlinedButton(
+                        onClick = { showEditTags = true },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Edit tags…")
                     }
                     Spacer(Modifier.height(4.dp))
                     // One-tap "Artist – Title" copy. Useful for
@@ -2668,6 +2686,21 @@ private fun TrackInfoDialog(
             }
         },
     )
+
+    val tEdit = track
+    if (showEditTags && tEdit != null) {
+        com.visorcraft.radioshed.ui.library.EditTagsDialog(
+            track = tEdit,
+            onDismiss = { showEditTags = false },
+            onSaved = {
+                // Bump the refresh tick so the dialog re-fetches the
+                // track row + stats and renders the new title /
+                // artist / album immediately rather than waiting for
+                // the user to close-and-reopen the dialog.
+                refreshTick += 1
+            },
+        )
+    }
 }
 
 /** Bytes → human-readable size: "12.3 MB" / "942 KB" / "8 B". */

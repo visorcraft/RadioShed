@@ -30,6 +30,7 @@ import com.visorcraft.radioshed.source.PlaylistExporter
 import com.visorcraft.radioshed.source.RingtoneSetter
 import com.visorcraft.radioshed.source.TrackSharer
 import com.visorcraft.radioshed.source.IosTagReader
+import com.visorcraft.radioshed.source.IosTagWriter
 import com.visorcraft.radioshed.source.BackupSharer
 import com.visorcraft.radioshed.source.BackupStorage
 import com.visorcraft.radioshed.source.ConnectivityChecker
@@ -43,6 +44,7 @@ import com.visorcraft.radioshed.source.NullLocalLyricsLoader
 import com.visorcraft.radioshed.source.NullLyricsFetcher
 import com.visorcraft.radioshed.source.StorageVolumes
 import com.visorcraft.radioshed.source.TagReader
+import com.visorcraft.radioshed.source.TagWriter
 import org.koin.core.module.Module
 import org.koin.dsl.module
 import platform.Foundation.NSUserDefaults
@@ -54,6 +56,7 @@ actual val platformModule: Module = module {
     // Phase 3: scanner platform impls (stubs until Mac-side iOS work lands)
     single<FileEnumerator> { IosFileEnumerator() }
     single<TagReader> { IosTagReader() }
+    single<TagWriter> { IosTagWriter() }
     single<ArtworkPersister> { IosArtworkPersister() }
     single<CoverArtFetcher> { NullCoverArtFetcher() }
     single<ConnectivityChecker> { IosConnectivityChecker() }
