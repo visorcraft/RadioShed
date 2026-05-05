@@ -101,7 +101,12 @@ $RECYCLE.BIN/
 *.swo
 
 # ---- Claude Code local state ----
-.claude/settings.local.json
+# Whole `.claude/` is local — settings.local.json, scheduled_tasks.lock,
+# transcripts, agent runtime state. CLAUDE.md at the repo root is the
+# project instructions doc and stays tracked separately.
+.claude/
+# Codex CLI's per-project state directory (sibling to .claude/).
+.codex/
 
 # ---- Logs / temp ----
 *.log

@@ -54,15 +54,28 @@ fun App(
     backupService: BackupService = koinInject(),
     presetSeeder: PresetSeeder = koinInject(),
 ) {
-    // Live-mutable theme mode: read once from the persisted setting, then
-    // hold in state so the AppSettingsScreen picker can re-theme the whole
-    // app instantly when the user changes it (no app restart needed).
+    // Live-mutable theme inputs: read once from the persisted settings,
+    // then hold in state so the AppSettingsScreen picker can re-theme
+    // the whole app instantly when the user changes anything (no app
+    // restart needed). All four values are passed both into
+    // RadioShedTheme below and into AppSettingsScreen far below for
+    // round-tripping.
     var themeMode by remember { mutableStateOf(settings.getThemeMode()) }
-    var materialYou by remember { mutableStateOf(settings.getMaterialYouEnabled()) }
+    var colorSource by remember {
+        mutableStateOf(settings.getThemeColorSource())
+    }
+    var themeSeed by remember {
+        mutableStateOf(androidx.compose.ui.graphics.Color(settings.getThemeSeedArgb()))
+    }
+    var accentSeed by remember {
+        mutableStateOf(androidx.compose.ui.graphics.Color(settings.getAccentSeedArgb()))
+    }
     var fontScale by remember { mutableStateOf(settings.getFontScale()) }
     RadioShedTheme(
         mode = themeMode,
-        useMaterialYou = materialYou,
+        colorSource = colorSource,
+        themeSeed = themeSeed,
+        accentSeed = accentSeed,
         fontScale = fontScale,
     ) {
         // Determine the initial screen exactly once per app launch.
@@ -356,8 +369,12 @@ fun App(
                             onBack = { current = AppScreen.Home },
                             currentThemeMode = themeMode,
                             onThemeModeChange = { themeMode = it },
-                            currentMaterialYou = materialYou,
-                            onMaterialYouChange = { materialYou = it },
+                            currentColorSource = colorSource,
+                            onColorSourceChange = { colorSource = it },
+                            currentThemeSeed = themeSeed,
+                            onThemeSeedChange = { themeSeed = it },
+                            currentAccentSeed = accentSeed,
+                            onAccentSeedChange = { accentSeed = it },
                             currentFontScale = fontScale,
                             onFontScaleChange = { fontScale = it },
                             onOpenEqualizer = { current = AppScreen.Equalizer },

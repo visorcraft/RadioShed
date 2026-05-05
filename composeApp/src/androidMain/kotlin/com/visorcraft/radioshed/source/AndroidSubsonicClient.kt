@@ -146,26 +146,40 @@ class AndroidSubsonicClient : SubsonicClient {
         endpoint: String,
         extraParams: String = "",
     ): String? {
+        val base = normalizeBase(server.baseUrl)
+        // Subsonic needs an absolute http(s) base URL. Bail early when
+        // the field is empty / scheme-less so the "user hit Test &
+        // save before typing anything" path returns a clean null
+        // (which the UI surfaces as a connection failure) instead of
+        // crashing the process via MalformedURLException out of the
+        // URL constructor on the IO worker.
+        if (!base.startsWith("http://") && !base.startsWith("https://")) {
+            return null
+        }
         val (params, _) = authParams(server)
         val combined = if (extraParams.isEmpty()) params else "$extraParams&$params"
-        val urlString = "${normalizeBase(server.baseUrl)}/rest/$endpoint?$combined"
-        val url = URL(urlString)
-        val conn = (url.openConnection() as HttpURLConnection).apply {
-            requestMethod = "GET"
-            instanceFollowRedirects = true
-            connectTimeout = CONNECT_TIMEOUT_MS
-            readTimeout = READ_TIMEOUT_MS
-            setRequestProperty("User-Agent", USER_AGENT)
-            setRequestProperty("Accept", "application/json")
-        }
+        val urlString = "$base/rest/$endpoint?$combined"
         return try {
-            val code = conn.responseCode
-            if (code !in 200..299) return null
-            conn.inputStream.use { it.readBytes() }.decodeToString()
+            val conn = (URL(urlString).openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                instanceFollowRedirects = true
+                connectTimeout = CONNECT_TIMEOUT_MS
+                readTimeout = READ_TIMEOUT_MS
+                setRequestProperty("User-Agent", USER_AGENT)
+                setRequestProperty("Accept", "application/json")
+            }
+            try {
+                val code = conn.responseCode
+                if (code !in 200..299) null
+                else conn.inputStream.use { it.readBytes() }.decodeToString()
+            } finally {
+                conn.disconnect()
+            }
         } catch (e: java.io.IOException) {
+            // Covers MalformedURLException (still possible if the URL
+            // passes the prefix check but is otherwise unparseable),
+            // connect/read timeouts, and the generic IO failures.
             null
-        } finally {
-            conn.disconnect()
         }
     }
 

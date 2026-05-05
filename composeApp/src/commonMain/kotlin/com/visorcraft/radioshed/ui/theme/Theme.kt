@@ -7,6 +7,9 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.ui.graphics.Color
+import com.materialkolor.rememberDynamicColorScheme
+import com.visorcraft.radioshed.data.ThemeColorSource
 
 private val LightColors = lightColorScheme(
     primary = LightPrimary,
@@ -52,7 +55,9 @@ enum class ThemeMode { System, Light, Dark, Amoled }
 @Composable
 fun RadioShedTheme(
     mode: ThemeMode = ThemeMode.System,
-    useMaterialYou: Boolean = false,
+    colorSource: ThemeColorSource = ThemeColorSource.Brand,
+    themeSeed: Color = Color(0xFFB04E00),
+    accentSeed: Color = Color(0xFF765849),
     fontScale: Float = 1f,
     content: @Composable () -> Unit,
 ) {
@@ -68,17 +73,57 @@ fun RadioShedTheme(
         ThemeMode.Dark -> DarkColors
         ThemeMode.Amoled -> AmoledColors
     }
-    // Material You: ask the platform for the wallpaper-derived scheme.
-    // When AMOLED is selected, force the dynamic background/surface to
-    // pure black so the AMOLED preference still wins over the
-    // wallpaper palette (the user explicitly opted into true black).
-    val materialYou = if (useMaterialYou) dynamicColorScheme(isDark) else null
+    // Material You source: pull the platform's wallpaper-extracted
+    // palette via the expect/actual `dynamicColorScheme` (Android 12+
+    // returns non-null, everything else null → fall through to brand).
+    val materialYou = if (colorSource == ThemeColorSource.MaterialYou) {
+        dynamicColorScheme(isDark)
+    } else {
+        null
+    }
+    // Custom-seed source: derive a full Material 3 ColorScheme from
+    // the user's primary seed via materialKolor (same algorithm as
+    // wallpaper extraction), then derive a second scheme from the
+    // accent seed and overlay only the secondary + tertiary roles.
+    // The two-scheme overlay gives the user real "primary vs accent"
+    // control without the contrast pitfalls of hand-picking each role.
+    val custom = if (colorSource == ThemeColorSource.Custom) {
+        val primaryScheme = rememberDynamicColorScheme(
+            seedColor = themeSeed,
+            isDark = isDark,
+        )
+        val accentScheme = rememberDynamicColorScheme(
+            seedColor = accentSeed,
+            isDark = isDark,
+        )
+        primaryScheme.copy(
+            secondary = accentScheme.primary,
+            onSecondary = accentScheme.onPrimary,
+            secondaryContainer = accentScheme.primaryContainer,
+            onSecondaryContainer = accentScheme.onPrimaryContainer,
+            tertiary = accentScheme.tertiary,
+            onTertiary = accentScheme.onTertiary,
+            tertiaryContainer = accentScheme.tertiaryContainer,
+            onTertiaryContainer = accentScheme.onTertiaryContainer,
+        )
+    } else {
+        null
+    }
+    // AMOLED override: regardless of source, force background +
+    // surface to pure black when the user picked AMOLED — the
+    // explicit "true black" preference outranks the source palette's
+    // typical near-black surface.
     val colors = when {
         materialYou != null && mode == ThemeMode.Amoled -> materialYou.copy(
             background = AmoledBackground,
             surface = AmoledSurface,
         )
         materialYou != null -> materialYou
+        custom != null && mode == ThemeMode.Amoled -> custom.copy(
+            background = AmoledBackground,
+            surface = AmoledSurface,
+        )
+        custom != null -> custom
         else -> brandColors
     }
     // Apply the user's app-wide font scale on top of Material's

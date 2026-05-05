@@ -64,6 +64,12 @@ kotlin {
             implementation(libs.koin.core)
             implementation(libs.koin.compose)
 
+            // Material 3 dynamic colour from a user-picked seed.
+            // Drives Settings → Theme color so the user gets the
+            // accessibility-correct Material You algorithm without
+            // having to use their wallpaper as the seed source.
+            implementation(libs.material.kolor)
+
             // Settings
             implementation(libs.multiplatformSettings.noArg)
             implementation(libs.multiplatformSettings.coroutines)

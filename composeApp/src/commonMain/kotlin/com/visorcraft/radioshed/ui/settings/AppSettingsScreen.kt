@@ -51,12 +51,16 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.visorcraft.radioshed.BuildInfo
 import com.visorcraft.radioshed.data.SettingsStore
+import com.visorcraft.radioshed.data.ThemeColorSource
 import com.visorcraft.radioshed.source.MissingArtworkSync
+import com.visorcraft.radioshed.ui.theme.ColorPicker
 import com.visorcraft.radioshed.ui.theme.ThemeMode
 import com.visorcraft.radioshed.ui.theme.supportsMaterialYou
 import kotlinx.coroutines.Job
@@ -81,8 +85,15 @@ fun AppSettingsScreen(
     onBack: () -> Unit,
     currentThemeMode: ThemeMode,
     onThemeModeChange: (ThemeMode) -> Unit,
-    currentMaterialYou: Boolean = false,
-    onMaterialYouChange: (Boolean) -> Unit = {},
+    currentColorSource: com.visorcraft.radioshed.data.ThemeColorSource =
+        com.visorcraft.radioshed.data.ThemeColorSource.Brand,
+    onColorSourceChange: (com.visorcraft.radioshed.data.ThemeColorSource) -> Unit = {},
+    currentThemeSeed: androidx.compose.ui.graphics.Color =
+        androidx.compose.ui.graphics.Color(0xFFB04E00),
+    onThemeSeedChange: (androidx.compose.ui.graphics.Color) -> Unit = {},
+    currentAccentSeed: androidx.compose.ui.graphics.Color =
+        androidx.compose.ui.graphics.Color(0xFF765849),
+    onAccentSeedChange: (androidx.compose.ui.graphics.Color) -> Unit = {},
     currentFontScale: Float = 1f,
     onFontScaleChange: (Float) -> Unit = {},
     onOpenEqualizer: () -> Unit = {},
@@ -185,20 +196,24 @@ fun AppSettingsScreen(
                     settings.setThemeMode(mode)
                 },
             )
-            if (supportsMaterialYou()) {
-                Spacer(Modifier.height(8.dp))
-                ToggleRow(
-                    title = "Material You",
-                    subtitle = "Tint the app with colours derived from your wallpaper " +
-                        "(Android 12+). Off uses the brand amber palette. AMOLED " +
-                        "still wins for surface/background when paired.",
-                    checked = currentMaterialYou,
-                    onCheckedChange = { v ->
-                        onMaterialYouChange(v)
-                        settings.setMaterialYouEnabled(v)
-                    },
-                )
-            }
+            Spacer(Modifier.height(8.dp))
+            ThemeColorSourceSection(
+                source = currentColorSource,
+                onSourceChange = { src ->
+                    onColorSourceChange(src)
+                    settings.setThemeColorSource(src)
+                },
+                themeSeed = currentThemeSeed,
+                onThemeSeedChange = { c ->
+                    onThemeSeedChange(c)
+                    settings.setThemeSeedArgb(c.toArgb())
+                },
+                accentSeed = currentAccentSeed,
+                onAccentSeedChange = { c ->
+                    onAccentSeedChange(c)
+                    settings.setAccentSeedArgb(c.toArgb())
+                },
+            )
 
             Spacer(Modifier.height(16.dp))
 
@@ -643,21 +658,11 @@ fun AppSettingsScreen(
             Spacer(Modifier.height(12.dp))
             CreditsCard()
             Spacer(Modifier.height(12.dp))
-            // Source-URL + copy-build-info pair. Browser opens via the
-            // openWebUrl expect/actual, clipboard write goes through
+            // Copy-build-info pair. Clipboard write goes through
             // rememberCopyToClipboard for parity with the rest of
-            // the app's copy actions.
+            // the app's copy actions; the user pastes the resulting
+            // build string into the bug-report email below.
             val aboutCopy = com.visorcraft.radioshed.ui.util.rememberCopyToClipboard()
-            AboutLinkRow(
-                title = "Source",
-                subtitle = "github.com/anthropics/radioshed",
-                onClick = {
-                    com.visorcraft.radioshed.source.openWebUrl(
-                        "https://github.com/anthropics/radioshed",
-                    )
-                },
-            )
-            Spacer(Modifier.height(8.dp))
             AboutLinkRow(
                 title = "Copy build info",
                 subtitle = "Useful for bug reports.",
@@ -670,15 +675,18 @@ fun AppSettingsScreen(
                 },
             )
             Spacer(Modifier.height(8.dp))
-            // Issue tracker link — pairs with Copy-build-info above so
-            // a user filing a bug can grab the build string and jump
-            // straight to GitHub Issues without leaving Settings.
+            // Bug report link — opens the user's default email client
+            // pre-addressed to the developer. Pairs with Copy-build-info
+            // above so the reporter can paste the build string into the
+            // body. mailto: URIs go through openWebUrl (Intent.ACTION_VIEW
+            // on Android, UIApplication.openURL on iOS — both resolve
+            // mailto: to the system mail handler).
             AboutLinkRow(
                 title = "Report a bug",
-                subtitle = "github.com/anthropics/radioshed/issues",
+                subtitle = "thomas@visorcraft.com",
                 onClick = {
                     com.visorcraft.radioshed.source.openWebUrl(
-                        "https://github.com/anthropics/radioshed/issues",
+                        "mailto:thomas@visorcraft.com",
                     )
                 },
             )
@@ -760,7 +768,13 @@ fun AppSettingsScreen(
                     autoFetchLyrics = settings.getAutoFetchLyrics()
                     hapticsEnabled = settings.getHapticsEnabled()
                     onThemeModeChange(settings.getThemeMode())
-                    onMaterialYouChange(settings.getMaterialYouEnabled())
+                    onColorSourceChange(settings.getThemeColorSource())
+                    onThemeSeedChange(
+                        androidx.compose.ui.graphics.Color(settings.getThemeSeedArgb()),
+                    )
+                    onAccentSeedChange(
+                        androidx.compose.ui.graphics.Color(settings.getAccentSeedArgb()),
+                    )
                     onFontScaleChange(settings.getFontScale())
                 }) {
                     Text("Reset", color = MaterialTheme.colorScheme.error)
@@ -1822,7 +1836,7 @@ private fun NowPlayingLayoutRow(
                                     "Auto" -> "Auto"
                                     "Compact" -> "Compact"
                                     "TwoPane" -> "Two-pane"
-                                    "TriplePane" -> "Three-pane (SXM-style)"
+                                    "TriplePane" -> "Three-pane"
                                     else -> key
                                 },
                             )
@@ -2308,30 +2322,47 @@ private fun SubsonicConfigRow(
                 TextButton(
                     enabled = !testing,
                     onClick = {
-                        testing = true
-                        status = "Testing connection…"
-                        scope.launch {
-                            val server = com.visorcraft.radioshed.source.SubsonicServer(
-                                baseUrl = draftUrl.trim().trimEnd('/'),
-                                username = draftUser.trim(),
-                                password = draftPass,
-                            )
-                            val result = client.ping(server)
-                            if (result == null) {
-                                status = "Couldn't connect. Verify URL, " +
-                                    "username, password, and that the server is " +
-                                    "reachable from this device."
-                            } else {
-                                settings.setSubsonicUrl(draftUrl)
-                                settings.setSubsonicUsername(draftUser)
-                                settings.setSubsonicPassword(draftPass)
-                                url = settings.getSubsonicUrl()
-                                username = settings.getSubsonicUsername()
-                                password = settings.getSubsonicPassword()
-                                status = "Connected to ${result.product} v${result.version}."
-                                dialogOpen = false
+                        val u = draftUrl.trim().trimEnd('/')
+                        val user = draftUser.trim()
+                        val pass = draftPass
+                        // Front-load validation so an empty-dialog tap
+                        // gets a specific message instead of the
+                        // generic "couldn't connect" — and so the
+                        // client never sees an obviously-bad input.
+                        when {
+                            u.isBlank() || user.isBlank() || pass.isBlank() -> {
+                                status = "URL, username, and password are required."
                             }
-                            testing = false
+                            !u.startsWith("http://") && !u.startsWith("https://") -> {
+                                status = "URL must start with http:// or https://"
+                            }
+                            else -> {
+                                testing = true
+                                status = "Testing connection…"
+                                scope.launch {
+                                    val server = com.visorcraft.radioshed.source.SubsonicServer(
+                                        baseUrl = u,
+                                        username = user,
+                                        password = pass,
+                                    )
+                                    val result = client.ping(server)
+                                    if (result == null) {
+                                        status = "Couldn't connect. Verify URL, " +
+                                            "username, password, and that the server is " +
+                                            "reachable from this device."
+                                    } else {
+                                        settings.setSubsonicUrl(u)
+                                        settings.setSubsonicUsername(user)
+                                        settings.setSubsonicPassword(pass)
+                                        url = settings.getSubsonicUrl()
+                                        username = settings.getSubsonicUsername()
+                                        password = settings.getSubsonicPassword()
+                                        status = "Connected to ${result.product} v${result.version}."
+                                        dialogOpen = false
+                                    }
+                                    testing = false
+                                }
+                            }
                         }
                     },
                 ) { Text(if (testing) "Testing…" else "Test & save") }
@@ -2390,4 +2421,225 @@ private fun SubsonicConfigRow(
             },
         )
     }
+}
+
+/**
+ * Theme-color block under Appearance. Three-way source selector
+ * (Brand / Custom / Material You) with the latter only shown on
+ * platforms where the wallpaper-extracted scheme is available. When
+ * Custom is active, two rows expose the primary + accent seed
+ * pickers; tapping either opens an AlertDialog hosting [ColorPicker].
+ *
+ * Wires writes through both the parent's `on*Change` callbacks
+ * (so the live theme re-renders without an app restart) AND through
+ * `SettingsStore` (so the value persists). The two are intentionally
+ * kept distinct: the callback drives the UI, the SettingsStore call
+ * survives process death.
+ */
+@Composable
+private fun ThemeColorSourceSection(
+    source: ThemeColorSource,
+    onSourceChange: (ThemeColorSource) -> Unit,
+    themeSeed: Color,
+    onThemeSeedChange: (Color) -> Unit,
+    accentSeed: Color,
+    onAccentSeedChange: (Color) -> Unit,
+) {
+    var primaryDialogOpen by remember { mutableStateOf(false) }
+    var accentDialogOpen by remember { mutableStateOf(false) }
+    val youAvailable = supportsMaterialYou()
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            "Theme color",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Text(
+            "Pick a seed and the app derives a full Material 3 palette " +
+                "around it (primary, accent, container, on-* — all " +
+                "contrast-checked). Material You uses your wallpaper.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+        )
+        // Source selector — three pill chips in a row.
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ColorSourceChip(
+                label = "Default",
+                selected = source == ThemeColorSource.Brand,
+                onClick = { onSourceChange(ThemeColorSource.Brand) },
+                modifier = Modifier.weight(1f),
+            )
+            ColorSourceChip(
+                label = "Custom",
+                selected = source == ThemeColorSource.Custom,
+                onClick = { onSourceChange(ThemeColorSource.Custom) },
+                modifier = Modifier.weight(1f),
+            )
+            if (youAvailable) {
+                ColorSourceChip(
+                    label = "Material You",
+                    selected = source == ThemeColorSource.MaterialYou,
+                    onClick = { onSourceChange(ThemeColorSource.MaterialYou) },
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+        if (source == ThemeColorSource.Custom) {
+            ColorSeedRow(
+                title = "Primary color",
+                subtitle = "Drives buttons, top-bar tint, the main accents.",
+                color = themeSeed,
+                onClick = { primaryDialogOpen = true },
+            )
+            ColorSeedRow(
+                title = "Accent color",
+                subtitle = "Drives chips, FAB, secondary surfaces.",
+                color = accentSeed,
+                onClick = { accentDialogOpen = true },
+            )
+        }
+    }
+
+    if (primaryDialogOpen) {
+        ColorPickerDialog(
+            title = "Primary color",
+            initial = themeSeed,
+            onDismiss = { primaryDialogOpen = false },
+            onConfirm = {
+                onThemeSeedChange(it)
+                primaryDialogOpen = false
+            },
+        )
+    }
+    if (accentDialogOpen) {
+        ColorPickerDialog(
+            title = "Accent color",
+            initial = accentSeed,
+            onDismiss = { accentDialogOpen = false },
+            onConfirm = {
+                onAccentSeedChange(it)
+                accentDialogOpen = false
+            },
+        )
+    }
+}
+
+@Composable
+private fun ColorSourceChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier
+            .clickable(onClick = onClick)
+            .border(
+                width = if (selected) 2.dp else 1.dp,
+                color = if (selected) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+                },
+                shape = RoundedCornerShape(20.dp),
+            ),
+        shape = RoundedCornerShape(20.dp),
+        color = if (selected) {
+            MaterialTheme.colorScheme.primaryContainer
+        } else {
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+        },
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelLarge,
+            color = if (selected) {
+                MaterialTheme.colorScheme.onPrimaryContainer
+            } else {
+                MaterialTheme.colorScheme.onSurface
+            },
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 10.dp, horizontal = 8.dp),
+        )
+    }
+}
+
+@Composable
+private fun ColorSeedRow(
+    title: String,
+    subtitle: String,
+    color: Color,
+    onClick: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+        shape = RoundedCornerShape(12.dp),
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    title,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                )
+            }
+            Spacer(Modifier.size(12.dp))
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .background(color, CircleShape)
+                    .border(
+                        width = 1.dp,
+                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
+                        shape = CircleShape,
+                    ),
+            )
+        }
+    }
+}
+
+@Composable
+private fun ColorPickerDialog(
+    title: String,
+    initial: Color,
+    onDismiss: () -> Unit,
+    onConfirm: (Color) -> Unit,
+) {
+    // Track the in-flight picker color separately from `initial` so
+    // Cancel really does revert. Confirm hands the value back to the
+    // parent which writes it through SettingsStore + lifts state.
+    var picked by remember(initial) { mutableStateOf(initial) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            ColorPicker(
+                initial = initial,
+                onColorChange = { picked = it },
+                modifier = Modifier.fillMaxWidth(),
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(picked) }) { Text("Save") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        },
+    )
 }

@@ -14,6 +14,25 @@ import com.visorcraft.radioshed.ui.theme.ThemeMode
 data class CustomEqPreset(val name: String, val gainsDb: List<Float>)
 
 /**
+ * Where the app draws its Material 3 ColorScheme from. Three modes:
+ *  - [Brand]      : the static amber/orange tube-radio palette baked
+ *                   into `ui/theme/Color.kt`. The original look.
+ *  - [Custom]     : user-picked seed color(s) → ColorScheme derived
+ *                   via materialKolor's `rememberDynamicColorScheme`.
+ *                   Same algorithm Material You uses on wallpaper
+ *                   extraction; the user picks the seed instead.
+ *  - [MaterialYou]: Android 12+ wallpaper-extracted palette via the
+ *                   platform `dynamicColorScheme(...)` actual.
+ *                   Equivalent to the old `useMaterialYou = true` path.
+ *
+ * Persisted as the enum's name string. Pre-existing builds carrying
+ * the legacy `KEY_MATERIAL_YOU` boolean are migrated implicitly: when
+ * the new key is unset, [SettingsStore.getThemeColorSource] returns
+ * [MaterialYou] iff that bool was true, otherwise [Brand].
+ */
+enum class ThemeColorSource { Brand, Custom, MaterialYou }
+
+/**
  * Versioned envelope for the EQ preset import/export JSON. Bumped
  * whenever the format breaks compatibility — readers reject any
  * version they don't know how to interpret rather than silently
@@ -42,6 +61,63 @@ class SettingsStore(private val settings: Settings) {
 
     fun getMaterialYouEnabled(): Boolean = settings.getBoolean(KEY_MATERIAL_YOU, false)
     fun setMaterialYouEnabled(enabled: Boolean) = settings.putBoolean(KEY_MATERIAL_YOU, enabled)
+
+    /**
+     * Where the ColorScheme comes from — see [ThemeColorSource] for the
+     * three options. When the new key is absent (fresh install OR
+     * upgrade from a build that only knew `KEY_MATERIAL_YOU`), fall
+     * back to the legacy bool: `true` → [ThemeColorSource.MaterialYou],
+     * `false` → [ThemeColorSource.Brand]. This makes the upgrade
+     * silent — users who had Material You on stay on Material You.
+     */
+    fun getThemeColorSource(): ThemeColorSource {
+        val raw = settings.getStringOrNull(KEY_THEME_COLOR_SOURCE)
+        if (raw != null) {
+            return runCatching { ThemeColorSource.valueOf(raw) }
+                .getOrDefault(ThemeColorSource.Brand)
+        }
+        return if (settings.getBoolean(KEY_MATERIAL_YOU, false)) {
+            ThemeColorSource.MaterialYou
+        } else {
+            ThemeColorSource.Brand
+        }
+    }
+
+    fun setThemeColorSource(source: ThemeColorSource) {
+        settings.putString(KEY_THEME_COLOR_SOURCE, source.name)
+        // Keep the legacy bool in sync so any code path still reading
+        // it (and any pre-migration backup) sees a consistent value.
+        // Once `KEY_MATERIAL_YOU` is removed, drop this line.
+        settings.putBoolean(KEY_MATERIAL_YOU, source == ThemeColorSource.MaterialYou)
+    }
+
+    /**
+     * Primary seed color for [ThemeColorSource.Custom]. Stored as the
+     * 32-bit ARGB int — the high byte is the alpha channel and is
+     * always 0xFF for an opaque seed. Default is the brand orange
+     * (`LightPrimary` in `ui/theme/Color.kt`) so a user who flips to
+     * Custom without picking sees the original colour, not a sudden
+     * white-on-white surprise.
+     */
+    fun getThemeSeedArgb(): Int =
+        settings.getInt(KEY_THEME_SEED, DEFAULT_THEME_SEED_ARGB)
+
+    fun setThemeSeedArgb(argb: Int) {
+        settings.putInt(KEY_THEME_SEED, argb)
+    }
+
+    /**
+     * Accent seed for [ThemeColorSource.Custom]. Drives Material's
+     * secondary + tertiary roles (chip selection, FAB tint, secondary
+     * surfaces). Default is the brand secondary brown so the
+     * out-of-box Custom look mirrors Brand until the user picks.
+     */
+    fun getAccentSeedArgb(): Int =
+        settings.getInt(KEY_ACCENT_SEED, DEFAULT_ACCENT_SEED_ARGB)
+
+    fun setAccentSeedArgb(argb: Int) {
+        settings.putInt(KEY_ACCENT_SEED, argb)
+    }
 
     /**
      * In-app user volume scalar (0..1). Multiplies on top of any
@@ -330,7 +406,9 @@ class SettingsStore(private val settings: Settings) {
      */
     fun resetAllUserSettings() {
         listOf(
-            KEY_THEME_MODE, KEY_MATERIAL_YOU, KEY_USER_VOLUME,
+            KEY_THEME_MODE, KEY_MATERIAL_YOU,
+            KEY_THEME_COLOR_SOURCE, KEY_THEME_SEED, KEY_ACCENT_SEED,
+            KEY_USER_VOLUME,
             KEY_REDUCE_MOTION, KEY_FONT_SCALE, KEY_STATIONS_TILE_SIZE,
             KEY_STATIONS_HIDE_BUILTINS, KEY_CONNECTIVITY_POLICY,
             KEY_LIB_TAB, KEY_LIB_SONG_SORT, KEY_LIB_ARTIST_SORT,
@@ -708,6 +786,7 @@ class SettingsStore(private val settings: Settings) {
             // string and the next call decodes it. Without this,
             // backups silently dropped pinned bookmarks.
             KEY_FILE_BROWSER_PINS,
+            KEY_THEME_COLOR_SOURCE,
         ).forEach { key ->
             settings.getStringOrNull(key)?.let {
                 out[key] = com.visorcraft.radioshed.source.BackupSettingValue.Str(it)
@@ -748,6 +827,10 @@ class SettingsStore(private val settings: Settings) {
             KEY_END_FADE_SEC, KEY_STATIONS_TILE_SIZE,
             KEY_LYRICS_SYNC_OFFSET, KEY_STATS_WINDOW_DAYS,
             KEY_BACKUP_RETENTION,
+            // ARGB-packed Int seed colours. Persisting them as Int
+            // round-trips identically through Settings on both
+            // platforms (no float-rounding on the alpha byte).
+            KEY_THEME_SEED, KEY_ACCENT_SEED,
         ).forEach { key ->
             if (settings.hasKey(key)) {
                 out[key] = com.visorcraft.radioshed.source.BackupSettingValue.IntValue(
@@ -842,7 +925,8 @@ class SettingsStore(private val settings: Settings) {
         KEY_FILE_BROWSER_SORT, KEY_SEARCH_SCOPE,
         KEY_ALBUM_TRACK_SORT, KEY_ARTIST_TRACK_SORT, KEY_GENRE_TRACK_SORT,
         KEY_NOW_PLAYING_LAYOUT,
-        KEY_FILE_BROWSER_PINS -> SettingType.STR
+        KEY_FILE_BROWSER_PINS,
+        KEY_THEME_COLOR_SOURCE -> SettingType.STR
         KEY_MATERIAL_YOU, KEY_REDUCE_MOTION, KEY_DRIVE_MODE,
         KEY_REPLAY_GAIN, KEY_AUTO_RESUME_STATION, KEY_AUTO_BACKUP,
         KEY_AUTO_RESCAN_ON_LAUNCH, KEY_EQ_ENABLED,
@@ -853,13 +937,28 @@ class SettingsStore(private val settings: Settings) {
         KEY_FONT_SCALE, KEY_LYRICS_SCALE, KEY_PLAYBACK_SPEED -> SettingType.FLOAT
         KEY_END_FADE_SEC, KEY_STATIONS_TILE_SIZE,
         KEY_LYRICS_SYNC_OFFSET, KEY_STATS_WINDOW_DAYS,
-        KEY_BACKUP_RETENTION -> SettingType.INT
+        KEY_BACKUP_RETENTION,
+        KEY_THEME_SEED, KEY_ACCENT_SEED -> SettingType.INT
         else -> null
     }
 
     private companion object {
         const val KEY_THEME_MODE = "ui.themeMode"
         const val KEY_MATERIAL_YOU = "ui.materialYou"
+        const val KEY_THEME_COLOR_SOURCE = "ui.themeColorSource"
+        const val KEY_THEME_SEED = "ui.themeSeedArgb"
+        const val KEY_ACCENT_SEED = "ui.accentSeedArgb"
+
+        // Brand defaults — match `LightPrimary` / `LightSecondary` in
+        // `ui/theme/Color.kt`. Pre-set on the Custom path so flipping
+        // the source picker doesn't dump the user onto a stark white
+        // theme until they've opened the wheel.
+        // 0xFFB04E00 / 0xFF765849 are positive when interpreted as
+        // unsigned but exceed `Int.MAX_VALUE` — the explicit `.toInt()`
+        // forces sign-extension so we round-trip cleanly through
+        // Settings.putInt without a "literal out of range" diagnostic.
+        const val DEFAULT_THEME_SEED_ARGB: Int = 0xFFB04E00.toInt()
+        const val DEFAULT_ACCENT_SEED_ARGB: Int = 0xFF765849.toInt()
         const val KEY_USER_VOLUME = "audio.userVolume"
         const val KEY_REDUCE_MOTION = "ui.reduceMotion"
         const val KEY_FONT_SCALE = "ui.fontScale"
