@@ -950,15 +950,16 @@ class SettingsStore(private val settings: Settings) {
         const val KEY_ACCENT_SEED = "ui.accentSeedArgb"
 
         // Brand defaults — match `LightPrimary` / `LightSecondary` in
-        // `ui/theme/Color.kt`. Pre-set on the Custom path so flipping
-        // the source picker doesn't dump the user onto a stark white
-        // theme until they've opened the wheel.
-        // 0xFFB04E00 / 0xFF765849 are positive when interpreted as
-        // unsigned but exceed `Int.MAX_VALUE` — the explicit `.toInt()`
-        // forces sign-extension so we round-trip cleanly through
-        // Settings.putInt without a "literal out of range" diagnostic.
-        const val DEFAULT_THEME_SEED_ARGB: Int = 0xFFB04E00.toInt()
-        const val DEFAULT_ACCENT_SEED_ARGB: Int = 0xFF765849.toInt()
+        // `ui/theme/Color.kt` (Material 3 baseline Blue). Pre-set on
+        // the Custom path so flipping the source picker doesn't dump
+        // the user onto a stark white theme until they've opened the
+        // wheel.
+        // The values exceed `Int.MAX_VALUE` when interpreted as
+        // unsigned — the explicit `.toInt()` forces sign-extension so
+        // we round-trip cleanly through Settings.putInt without a
+        // "literal out of range" diagnostic.
+        const val DEFAULT_THEME_SEED_ARGB: Int = 0xFF0061A4.toInt()
+        const val DEFAULT_ACCENT_SEED_ARGB: Int = 0xFF535F70.toInt()
         const val KEY_USER_VOLUME = "audio.userVolume"
         const val KEY_REDUCE_MOTION = "ui.reduceMotion"
         const val KEY_FONT_SCALE = "ui.fontScale"

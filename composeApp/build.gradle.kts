@@ -1,3 +1,4 @@
+import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -19,6 +20,19 @@ kotlin {
     androidTarget {
         compilerOptions {
             jvmTarget.set(JvmTarget.JVM_11)
+        }
+    }
+
+    // Desktop / JVM target. Source set is `desktopMain` (the JVM target
+    // is named "desktop" so the corresponding source set follows that
+    // convention). Bytecode targets JVM 17 to match the Gradle/AGP
+    // toolchain — desktop has no constrained class-file requirement
+    // like Android's VERSION_11. The `compose.desktop.application`
+    // block at the bottom of this file wires the entry point and
+    // distribution formats.
+    jvm("desktop") {
+        compilerOptions {
+            jvmTarget.set(JvmTarget.JVM_17)
         }
     }
 
@@ -110,6 +124,39 @@ kotlin {
         iosMain.dependencies {
             implementation(libs.sqldelight.nativeDriver)
         }
+
+        val desktopMain by getting {
+            dependencies {
+                // Compose desktop runtime — provides Window, application,
+                // Swing-based MenuBar, file dialogs, etc.
+                implementation(compose.desktop.currentOs)
+                implementation(compose.uiTooling)
+
+                // SQLDelight JDBC driver for the desktop DB. Stores at
+                // jdbc:sqlite:%APPDATA%/RadioShed/radioshed.db (per the
+                // path computed in DatabaseDriverFactory.desktop.kt).
+                implementation(libs.sqldelight.sqliteDriver)
+
+                // Tag reader — pure-JVM library, identical to what the
+                // Android scanner uses. Lifts ID3, Vorbis, M4A, FLAC,
+                // APE — same coverage on desktop as on Android.
+                implementation(libs.jaudiotagger)
+
+                // VLCJ: Java bindings for libvlc. Plays virtually every
+                // format (MP3/FLAC/Opus/ALAC/WMA/APE/DSD) without
+                // pulling decoders into the project ourselves. Requires
+                // a libvlc install on the host — `nativediscovery`
+                // searches typical Windows / macOS / Linux paths and
+                // surfaces a clear error when it can't find one.
+                implementation(libs.vlcj)
+
+                // Coroutines Swing dispatcher — used by AudioEngine to
+                // route VLCJ media-event callbacks (which fire on
+                // VLCJ's own threads) onto the Compose UI thread when
+                // updating StateFlows that drive the player UI.
+                implementation(libs.kotlinx.coroutines.swing)
+            }
+        }
     }
 }
 
@@ -159,6 +206,28 @@ sqldelight {
             // requires re-stating the prior schema at the top of
             // each .sqm — meaningful refactor tracked in SPEC
             // Phase 18.
+        }
+    }
+}
+
+// Compose desktop entry point + distribution. Run with
+// `./gradlew :composeApp:run` for live development; package an
+// installer with `./gradlew :composeApp:packageDistributionForCurrentOS`.
+compose.desktop {
+    application {
+        mainClass = "com.visorcraft.radioshed.MainKt"
+        nativeDistributions {
+            targetFormats(TargetFormat.Msi, TargetFormat.Dmg, TargetFormat.Deb)
+            packageName = "RadioShed"
+            // Compose Desktop's per-OS validators reject MAJOR=0
+            // (DMG specifically requires MAJOR > 0). The user-facing
+            // BuildInfo.VERSION_NAME is still "0.1.0"; this is just
+            // the installer/distribution version which the OS bumps
+            // around per-update.
+            packageVersion = "1.0.0"
+            description = "Local-first cross-platform music app."
+            copyright = "© Visorcraft. Proprietary."
+            vendor = "Visorcraft"
         }
     }
 }

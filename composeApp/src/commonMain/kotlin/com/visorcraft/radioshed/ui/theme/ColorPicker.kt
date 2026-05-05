@@ -293,15 +293,15 @@ fun ColorPicker(
     }
 }
 
-/** Curated quick-pick swatches. Spans the hue wheel with one
- *  desaturated neutral at the start. */
+/** Curated quick-pick swatches. Spans the hue wheel with the brand
+ *  blue at the front so taps in order land at the default. */
 val DefaultColorPresets: List<Color> = listOf(
+    Color(0xFF0061A4), // RadioShed brand blue (Material 3 Blue)
     Color(0xFF6750A4), // Material You purple
-    Color(0xFFB04E00), // RadioShed brand orange
     Color(0xFFD32F2F), // red
     Color(0xFFE91E63), // pink
     Color(0xFF7B1FA2), // deep purple
-    Color(0xFF1976D2), // blue
+    Color(0xFFB04E00), // amber (legacy brand)
     Color(0xFF00897B), // teal
     Color(0xFF388E3C), // green
 )

@@ -26,6 +26,10 @@ multiplatformSettings = "1.3.0"
 # that SQLDelight's AndroidSqliteDriver needs.
 requerySqliteAndroid = "3.45.0"
 sqldelight = "2.1.0"
+# VLCJ — Java bindings for libvlc. 4.10.x requires Java 17+ and works
+# with libvlc 3.0.x on Windows / macOS / Linux. Used only by the
+# desktop target's AudioEngine; never linked into the Android APK.
+vlcj = "4.10.1"
 
 [libraries]
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
@@ -78,6 +82,13 @@ multiplatformSettings-coroutines = { module = "com.russhwolf:multiplatform-setti
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinxSerialization" }
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinxCoroutines" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "kotlinxCoroutines" }
+# Swing dispatcher — used by AudioEngineDesktop to marshal VLCJ media
+# callbacks back onto the Compose UI thread.
+kotlinx-coroutines-swing = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-swing", version.ref = "kotlinxCoroutines" }
+
+# VLCJ — desktop audio backend. JNA-based; needs a libvlc install
+# discovered at startup via `NativeDiscovery().discover()`.
+vlcj = { module = "uk.co.caprica:vlcj", version.ref = "vlcj" }
 
 # ---- Phase 3: scanner ----
 jaudiotagger = { module = "net.jthink:jaudiotagger", version.ref = "jaudiotagger" }

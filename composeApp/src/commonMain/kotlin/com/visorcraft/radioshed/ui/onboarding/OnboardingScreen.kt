@@ -88,7 +88,9 @@ fun OnboardingScreen(
     val scope = rememberCoroutineScope()
     val initiallyGranted = remember { permissions.hasAllFilesAccess() }
     var step by remember { mutableStateOf(OnboardingStep.Welcome) }
-    var folderPath by remember { mutableStateOf("/storage/emulated/0/Music") }
+    var folderPath by remember {
+        mutableStateOf(com.visorcraft.radioshed.source.defaultMusicFolderPath())
+    }
     var folderName by remember { mutableStateOf("Music") }
     // Tracks whether the user has manually edited the display-name
     // field. Default name is "Music" (a real folder name on most
@@ -567,7 +569,7 @@ private fun FolderStep(
 ) {
     var browserOpen by remember { mutableStateOf(false) }
     val bodyCopy = "Tap Browse to pick a folder, or type a path manually if you know it. " +
-        "Most music libraries live under /storage/emulated/0/Music or on an SD card."
+        "Most music libraries live in your Music folder."
 
     if (isWide) {
         TwoPaneStep(

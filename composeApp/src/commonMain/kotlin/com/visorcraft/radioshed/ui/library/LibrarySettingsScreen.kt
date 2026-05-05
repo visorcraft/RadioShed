@@ -533,7 +533,7 @@ private fun AddFolderDialog(
     val defaultPath = remember(volumes) {
         volumes.firstOrNull { it.isRemovable }?.let { "${it.path}/Music" }
             ?: volumes.firstOrNull { it.isPrimary }?.let { "${it.path}/Music" }
-            ?: "/storage/emulated/0/Music"
+            ?: com.visorcraft.radioshed.source.defaultMusicFolderPath()
     }
     var path by remember { mutableStateOf(defaultPath) }
     var name by remember { mutableStateOf("") }

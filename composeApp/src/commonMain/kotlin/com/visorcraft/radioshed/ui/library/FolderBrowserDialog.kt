@@ -2,6 +2,7 @@ package com.visorcraft.radioshed.ui.library
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
@@ -66,6 +68,13 @@ fun FolderBrowserDialog(
     var currentPath by remember { mutableStateOf(initialPath) }
     var entries by remember { mutableStateOf<List<DiscoveredFolder>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
+    // Quick-jump bookmarks (Home/Music/Downloads + drive letters on
+    // Windows). Loaded once on first show and reused on every
+    // navigation so the chips don't disappear mid-browse.
+    var bookmarks by remember { mutableStateOf<List<DiscoveredFolder>>(emptyList()) }
+    LaunchedEffect(Unit) {
+        bookmarks = fileBrowser.commonLocations()
+    }
 
     LaunchedEffect(currentPath) {
         loading = true
@@ -114,6 +123,27 @@ fun FolderBrowserDialog(
                     )
                 }
 
+                // Quick-jump chip row — drive letters / Home / Music
+                // shortcuts so users on Windows don't have to click
+                // Up repeatedly to escape `~/Music` and reach `D:\`.
+                // Hidden when the platform reports no bookmarks.
+                if (bookmarks.isNotEmpty()) {
+                    Spacer(Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        bookmarks.forEach { bm ->
+                            QuickJumpChip(
+                                label = bm.name,
+                                onClick = { currentPath = bm.path },
+                            )
+                        }
+                    }
+                }
+
                 Spacer(Modifier.height(8.dp))
 
                 // Folder list. Constrained height so the dialog doesn't grow
@@ -148,6 +178,23 @@ fun FolderBrowserDialog(
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
+}
+
+@Composable
+private fun QuickJumpChip(label: String, onClick: () -> Unit) {
+    Surface(
+        modifier = Modifier.clickable(onClick = onClick),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.primaryContainer,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onPrimaryContainer,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+        )
+    }
 }
 
 @Composable
