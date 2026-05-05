@@ -27,9 +27,11 @@ import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.NightsStay
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -362,6 +364,8 @@ fun AppSettingsScreen(
                     settings.setAutoFetchLyrics(v)
                 },
             )
+            Spacer(Modifier.height(8.dp))
+            ListenBrainzRow(settings = settings)
             Spacer(Modifier.height(8.dp))
             ToggleRow(
                 title = "Sleep timer stops playback",
@@ -2148,5 +2152,103 @@ private fun GenerateDecadeStationsRow(
                 enabled = !working,
             ) { Text(if (working) "Working…" else "Generate") }
         }
+    }
+}
+
+@Composable
+private fun ListenBrainzRow(settings: SettingsStore) {
+    var enabled by remember { mutableStateOf(settings.getListenBrainzEnabled()) }
+    var token by remember { mutableStateOf(settings.getListenBrainzToken()) }
+    var dialogOpen by remember { mutableStateOf(false) }
+    val client: com.visorcraft.radioshed.source.ListenBrainzClient = koinInject()
+    val scope = rememberCoroutineScope()
+    var validation by remember { mutableStateOf<String?>(null) }
+
+    Column {
+        ToggleRow(
+            title = "ListenBrainz scrobbling",
+            subtitle = if (token.isBlank()) {
+                "Send completed plays to your ListenBrainz profile. Tap to add token."
+            } else {
+                "Scrobbling enabled. Token: " + token.take(8) + "..."
+            },
+            checked = enabled,
+            onCheckedChange = { v ->
+                enabled = v
+                settings.setListenBrainzEnabled(v)
+                if (v && token.isBlank()) dialogOpen = true
+            },
+        )
+        Surface(
+            modifier = Modifier.fillMaxWidth().clickable { dialogOpen = true },
+            color = MaterialTheme.colorScheme.surface,
+        ) {
+            Text(
+                text = if (token.isBlank()) "Add token..." else "Edit token / replace",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            )
+        }
+    }
+
+    if (dialogOpen) {
+        var pasted by remember { mutableStateOf(token) }
+        var validating by remember { mutableStateOf(false) }
+        AlertDialog(
+            onDismissRequest = { dialogOpen = false },
+            confirmButton = {
+                TextButton(
+                    enabled = !validating,
+                    onClick = {
+                        validating = true
+                        validation = "Validating..."
+                        scope.launch {
+                            val ok = if (pasted.isBlank()) true else client.validateToken(pasted)
+                            validation = when {
+                                pasted.isBlank() -> "Token cleared."
+                                ok -> "Token validated."
+                                else -> "Token rejected by ListenBrainz."
+                            }
+                            if (pasted.isBlank() || ok) {
+                                settings.setListenBrainzToken(pasted)
+                                token = pasted
+                                dialogOpen = false
+                            }
+                            validating = false
+                        }
+                    },
+                ) { Text(if (validating) "Validating..." else "Save") }
+            },
+            dismissButton = {
+                TextButton(onClick = { dialogOpen = false }) { Text("Cancel") }
+            },
+            title = { Text("ListenBrainz token") },
+            text = {
+                Column {
+                    Text(
+                        "Get your token from listenbrainz.org user settings. Pasted tokens are validated against the API before saving so you do not ship a typo to every scrobble.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = pasted,
+                        onValueChange = { pasted = it },
+                        placeholder = { Text("xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    validation?.let {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            it,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
+            },
+        )
     }
 }

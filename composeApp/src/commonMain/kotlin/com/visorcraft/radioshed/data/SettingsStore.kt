@@ -246,6 +246,23 @@ class SettingsStore(private val settings: Settings) {
     fun setHapticsEnabled(enabled: Boolean) =
         settings.putBoolean(KEY_HAPTICS_ENABLED, enabled)
 
+    // ListenBrainz scrobbling — opt-in. Token comes from
+    // listenbrainz.org/profile/ and is opaque to us; we just round-
+    // trip it as the Authorization header on submit-listens calls.
+    // Stored as a plain string in shared prefs — same trust boundary
+    // as every other user secret on the device. Documented in
+    // FAQ.md and USER_GUIDE.md.
+    fun getListenBrainzEnabled(): Boolean =
+        settings.getBoolean(KEY_LISTENBRAINZ_ENABLED, false)
+    fun setListenBrainzEnabled(enabled: Boolean) =
+        settings.putBoolean(KEY_LISTENBRAINZ_ENABLED, enabled)
+    fun getListenBrainzToken(): String =
+        settings.getStringOrNull(KEY_LISTENBRAINZ_TOKEN).orEmpty()
+    fun setListenBrainzToken(token: String) {
+        if (token.isBlank()) settings.remove(KEY_LISTENBRAINZ_TOKEN)
+        else settings.putString(KEY_LISTENBRAINZ_TOKEN, token.trim())
+    }
+
     /**
      * Playback rate multiplier. Persisted across sessions so audiobook
      * / podcast users don't have to reset to their preferred speed
@@ -676,6 +693,7 @@ class SettingsStore(private val settings: Settings) {
             KEY_AUTO_RESCAN_ON_LAUNCH, KEY_EQ_ENABLED,
             KEY_STATIONS_HIDE_BUILTINS, KEY_SLEEP_STOP_ON_EXPIRE,
             KEY_KEEP_SCREEN_ON, KEY_AUTO_FETCH_LYRICS, KEY_HAPTICS_ENABLED,
+            KEY_LISTENBRAINZ_ENABLED,
         ).forEach { key ->
             if (settings.hasKey(key)) {
                 out[key] = com.visorcraft.radioshed.source.BackupSettingValue.Bool(
@@ -799,7 +817,8 @@ class SettingsStore(private val settings: Settings) {
         KEY_REPLAY_GAIN, KEY_AUTO_RESUME_STATION, KEY_AUTO_BACKUP,
         KEY_AUTO_RESCAN_ON_LAUNCH, KEY_EQ_ENABLED,
         KEY_STATIONS_HIDE_BUILTINS, KEY_SLEEP_STOP_ON_EXPIRE,
-        KEY_KEEP_SCREEN_ON, KEY_AUTO_FETCH_LYRICS, KEY_HAPTICS_ENABLED -> SettingType.BOOL
+        KEY_KEEP_SCREEN_ON, KEY_AUTO_FETCH_LYRICS, KEY_HAPTICS_ENABLED,
+        KEY_LISTENBRAINZ_ENABLED -> SettingType.BOOL
         KEY_USER_VOLUME, KEY_REPLAY_GAIN_PREAMP,
         KEY_FONT_SCALE, KEY_LYRICS_SCALE, KEY_PLAYBACK_SPEED -> SettingType.FLOAT
         KEY_END_FADE_SEC, KEY_STATIONS_TILE_SIZE,
@@ -827,6 +846,8 @@ class SettingsStore(private val settings: Settings) {
         const val KEY_KEEP_SCREEN_ON = "ui.keepScreenOn"
         const val KEY_AUTO_FETCH_LYRICS = "lyrics.autoFetchOverNetwork"
         const val KEY_HAPTICS_ENABLED = "ui.hapticsEnabled"
+        const val KEY_LISTENBRAINZ_ENABLED = "scrobble.listenbrainz.enabled"
+        const val KEY_LISTENBRAINZ_TOKEN = "scrobble.listenbrainz.token"
         const val KEY_SEARCH_SCOPE = "ui.search.scope"
         const val KEY_NOW_PLAYING_LAYOUT = "ui.now_playing.layout"
         const val KEY_CONNECTIVITY_POLICY = "online.connectivityPolicy"

@@ -3583,6 +3583,66 @@ that were tracked in Phase 17 release prep but never written.
   empty DB browser, device migration walkthrough, bug-report
   flow, proprietary-licence rationale.
 
+#### Phase 19 polish (continued, batch 15 — power-user network features)
+
+Build `2026-05-04w` → `2026-05-04x`. Five power-user features off
+the deferred list, all pure Android (no Mac, no API keys except
+the user's own ListenBrainz token).
+
+- [x] **Equalizer APO `.txt` config import (Phase 7 power tools).**
+  New `commonMain/audio/ApoConfig.kt` parses AutoEQ-style APO files
+  (`Filter 1: ON PK Fc 105 Hz Gain -2.5 dB Q 0.71` plus `Preamp:`).
+  Lucene-style escaping in field handling. Settings → Equalizer →
+  "Import APO…" opens a paste dialog; on Apply the config is mapped
+  onto our 5-band fixed-frequency layout via log-frequency-distance
+  nearest-neighbour matching, and the pre-amp value is wired
+  through `ReplayGainPreampDb`. Non-PK filters (LSC/HSC/LPF/HPF/NO)
+  surface in the result count so the user knows shelves/notches
+  were skipped.
+- [x] **AutoEQ bundled headphone library (Phase 7 power tools).**
+  `BundledHeadphonePresets.kt` hardcodes ~30 commonly-asked
+  headphones with their AutoEQ-derived 10-band graphic-EQ data
+  (Sennheiser HD600/HD650/HD800S/Momentum 4, Sony WH-1000XM4/M5,
+  AirPods Pro 2 / AirPods Max, Beats Studio 3/Pro, AKG K371/K712,
+  Moondrop Aria/Blessing 2, 7Hz Zero, ATH-M50x, DT 770/990,
+  HiFiMan HE400se/Sundara, Bose QC45/QC Ultra, Galaxy Buds 2 Pro,
+  Pixel Buds Pro, Pi 7 S2, Marshall Sport 850, Campfire Audio
+  Helios/Andromeda, DCA Stealth, Audeze LCD-X). Settings →
+  Equalizer → "Headphones…" opens a filterable picker; tapping
+  applies gains + pre-amp through the same path as APO import.
+- [x] **MusicBrainz lookup client (Phase 11 source modules,
+  artwork pipeline assist).** `commonMain/source/MusicBrainzClient.kt`
+  interface with Android impl using the public `ws/2` endpoint —
+  no API key required, just the User-Agent identification rule.
+  Lucene-syntax queries with proper escaping. Resolves
+  release-group + artist MBIDs for downstream uses (Cover Art
+  Archive lookups when path-suffix artwork match misses,
+  and the Wikidata bridge for richer artist info).
+  iOS gets `NullMusicBrainzClient`.
+- [x] **Wikipedia artist bio auto-fetch on Track Info (Phase 11
+  source modules).** Wikipedia REST summary endpoint
+  (`/api/rest_v1/page/summary/<title>`) — no API key — returns
+  pre-extracted lead paragraphs without HTML clutter. Track Info
+  dialog auto-fetches when the artist name is non-blank and the
+  Connectivity policy allows; renders the bio + "Wikipedia"
+  link below the genre/format rows. Disambiguation pages return
+  null (no clean answer is better than the wrong answer; a
+  candidate-picker UX is deferred). iOS gets a null stub.
+- [x] **ListenBrainz scrobble client (Phase 11 source modules).**
+  Token-based scrobbling via `api.listenbrainz.org/1/submit-listens`.
+  Settings → Auto-fetch lyrics → ListenBrainz row (toggle +
+  "Add token…" affordance) hosts the user's personal token
+  pasted from listenbrainz.org/profile. Token is validated
+  against `/1/validate-token` before saving so a typo doesn't
+  ship to every scrobble. Token is NOT included in backups —
+  it's a credential, the user re-pastes after restore — but the
+  enabled flag is. `StationPlayback.recordPreviousIfAny` fires a
+  scrobble per completed play (>= COMPLETION_FRACTION of duration),
+  Connectivity-policy-gated, with the unix-seconds `listened_at`
+  derived from `trackStartedAtMs / 1000`. Per ListenBrainz /
+  Last.fm convention, only completed plays scrobble — skipped
+  plays don't.
+
 ---
 
 ## Appendix A — Compose Multiplatform vs native UI: when to fall back

@@ -33,6 +33,12 @@ import com.visorcraft.radioshed.source.IosTagReader
 import com.visorcraft.radioshed.source.IosTagWriter
 import com.visorcraft.radioshed.source.BackupPackager
 import com.visorcraft.radioshed.source.NullBackupPackager
+import com.visorcraft.radioshed.source.MusicBrainzClient
+import com.visorcraft.radioshed.source.NullMusicBrainzClient
+import com.visorcraft.radioshed.source.WikipediaBioFetcher
+import com.visorcraft.radioshed.source.NullWikipediaBioFetcher
+import com.visorcraft.radioshed.source.ListenBrainzClient
+import com.visorcraft.radioshed.source.NullListenBrainzClient
 import com.visorcraft.radioshed.source.BackupSharer
 import com.visorcraft.radioshed.source.BackupStorage
 import com.visorcraft.radioshed.source.ConnectivityChecker
@@ -60,6 +66,9 @@ actual val platformModule: Module = module {
     single<TagReader> { IosTagReader() }
     single<TagWriter> { IosTagWriter() }
     single<BackupPackager> { NullBackupPackager() }
+    single<MusicBrainzClient> { NullMusicBrainzClient() }
+    single<WikipediaBioFetcher> { NullWikipediaBioFetcher() }
+    single<ListenBrainzClient> { NullListenBrainzClient() }
     single<ArtworkPersister> { IosArtworkPersister() }
     single<CoverArtFetcher> { NullCoverArtFetcher() }
     single<ConnectivityChecker> { IosConnectivityChecker() }

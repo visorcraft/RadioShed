@@ -2223,6 +2223,11 @@ private fun TrackInfoDialog(
     var genres by remember { mutableStateOf<List<String>>(emptyList()) }
     var primaryArtistId by remember { mutableStateOf<Long?>(null) }
     var showEditTags by remember { mutableStateOf(false) }
+    var artistBio by remember {
+        mutableStateOf<com.visorcraft.radioshed.source.WikipediaSummary?>(null)
+    }
+    val wikipediaFetcher: com.visorcraft.radioshed.source.WikipediaBioFetcher = koinInject()
+    val networkPolicy: com.visorcraft.radioshed.source.NetworkPolicyGate = koinInject()
     // Bumped after a successful tag-edit save so the LaunchedEffect
     // below re-fetches the track row + stats; otherwise the dialog
     // would still show the pre-edit values until the user closed and
@@ -2237,6 +2242,18 @@ private fun TrackInfoDialog(
             .filter { it.isNotBlank() }
             .distinct()
         primaryArtistId = libraryRepo.artistsForTrack(playable.trackId).firstOrNull()?.id
+        // Auto-fetch Wikipedia lead-paragraph artist bio. Gated by
+        // the Connectivity policy + auto-fetch toggle so a user on
+        // Always/Wi-Fi/Never gets the right behaviour without
+        // re-checking. Disambiguation pages and 404s surface as
+        // null and we just don't render the bio panel.
+        artistBio = null
+        val artistName = playable.artist?.takeIf { it.isNotBlank() }
+        if (artistName != null && networkPolicy.allowAutomaticFetch()) {
+            artistBio = runCatching {
+                wikipediaFetcher.fetchSummary(artistName)
+            }.getOrNull()
+        }
     }
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
@@ -2566,6 +2583,31 @@ private fun TrackInfoDialog(
                     }
                     if (genres.isNotEmpty()) {
                         InfoLine("Genre", genres.joinToString(", "))
+                    }
+                    artistBio?.let { bio ->
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            "About ${bio.title}",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        Text(
+                            text = bio.extract,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
+                            maxLines = 8,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = "Wikipedia",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.clickable {
+                                com.visorcraft.radioshed.source.openWebUrl(bio.pageUrl)
+                            },
+                        )
+                        Spacer(Modifier.height(4.dp))
                     }
                     // Spec rows are tappable-to-copy. Useful when a
                     // user wants to drop "FLAC · 44.1 kHz · 1024 kbps"

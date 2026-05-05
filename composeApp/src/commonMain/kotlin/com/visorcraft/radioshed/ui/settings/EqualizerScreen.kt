@@ -9,7 +9,10 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.clickable
 import androidx.compose.material3.AssistChip
@@ -75,6 +78,8 @@ fun EqualizerScreen(
     var saveDialogOpen by remember { mutableStateOf(false) }
     var deleteCandidate by remember { mutableStateOf<CustomEqPreset?>(null) }
     var importStatus by remember { mutableStateOf<String?>(null) }
+    var apoImportOpen by remember { mutableStateOf(false) }
+    var headphonePickerOpen by remember { mutableStateOf(false) }
     // A/B compare state — `abSnapshot` stashes the user's
     // pre-comparison band gains (the "A" side); `abPresetGains`
     // captures the just-applied preset gains (the "B" side) so the
@@ -330,6 +335,26 @@ fun EqualizerScreen(
                 }
             }
 
+            // Headphone preset + APO import row. Two outlined buttons —
+            // "Headphones…" opens a list of bundled AutoEQ-derived
+            // tunings; "Import APO…" accepts a paste of a Filter line
+            // config. Both end up applying gains via [applyGains] and
+            // updating the pre-amp via SettingsStore so the existing
+            // pre-amp slider reflects the change.
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                androidx.compose.material3.OutlinedButton(
+                    onClick = { headphonePickerOpen = true },
+                    enabled = available,
+                    modifier = Modifier.weight(1f),
+                ) { Text("Headphones…") }
+                androidx.compose.material3.OutlinedButton(
+                    onClick = { apoImportOpen = true },
+                    enabled = available,
+                    modifier = Modifier.weight(1f),
+                ) { Text("Import APO…") }
+            }
+
             Spacer(Modifier.height(24.dp))
 
             BandSliders(
@@ -419,6 +444,208 @@ fun EqualizerScreen(
             },
         )
     }
+
+    if (apoImportOpen) {
+        ApoImportDialog(
+            targetCenters = eq.bandFrequenciesHz,
+            onDismiss = { apoImportOpen = false },
+            onApply = { mapped ->
+                clearAB()
+                applyGains(mapped.gains.toList())
+                if (mapped.preampDb != 0.0) {
+                    settings.setReplayGainPreampDb(mapped.preampDb.toFloat())
+                }
+                val skipped = if (mapped.unsupportedFilters > 0) {
+                    " (${mapped.unsupportedFilters} non-PK filter${
+                        if (mapped.unsupportedFilters == 1) "" else "s"
+                    } skipped)"
+                } else {
+                    ""
+                }
+                importStatus = "Applied APO config: ${mapped.sourceBandCount} band${
+                    if (mapped.sourceBandCount == 1) "" else "s"
+                }$skipped."
+                apoImportOpen = false
+            },
+        )
+    }
+
+    if (headphonePickerOpen) {
+        HeadphonePickerDialog(
+            targetCenters = eq.bandFrequenciesHz,
+            onDismiss = { headphonePickerOpen = false },
+            onPick = { preset, gains ->
+                clearAB()
+                applyGains(gains.toList())
+                if (preset.preampDb != 0.0) {
+                    settings.setReplayGainPreampDb(preset.preampDb.toFloat())
+                }
+                importStatus = "Applied ${preset.brand} ${preset.name}."
+                headphonePickerOpen = false
+            },
+        )
+    }
+}
+
+@Composable
+private fun ApoImportDialog(
+    targetCenters: List<Int>,
+    onDismiss: () -> Unit,
+    onApply: (com.visorcraft.radioshed.audio.ApoConfig.MappedApo) -> Unit,
+) {
+    var text by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(
+                enabled = text.isNotBlank(),
+                onClick = {
+                    val mapped = com.visorcraft.radioshed.audio.ApoConfig
+                        .parseAndMap(text, targetCenters)
+                    if (mapped == null) {
+                        error = "Couldn't find any usable filter lines. " +
+                            "Expected format: Filter 1: ON PK Fc 105 Hz Gain -2.5 dB Q 0.71"
+                    } else {
+                        error = null
+                        onApply(mapped)
+                    }
+                },
+            ) { Text("Apply") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        },
+        title = { Text("Import APO config") },
+        text = {
+            Column {
+                Text(
+                    "Paste an Equalizer APO config (e.g. AutoEQ output). " +
+                        "Only PK (peaking) filters are applied; shelves and " +
+                        "notches are skipped because the system EQ can't " +
+                        "represent them.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = {
+                        text = it
+                        error = null
+                    },
+                    placeholder = {
+                        Text(
+                            "Preamp: -6.7 dB\nFilter 1: ON PK Fc 105 Hz Gain -2.5 dB Q 0.71\n…",
+                        )
+                    },
+                    singleLine = false,
+                    minLines = 6,
+                    maxLines = 10,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                error?.let {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+        },
+    )
+}
+
+@Composable
+private fun HeadphonePickerDialog(
+    targetCenters: List<Int>,
+    onDismiss: () -> Unit,
+    onPick: (
+        com.visorcraft.radioshed.audio.HeadphonePreset,
+        FloatArray,
+    ) -> Unit,
+) {
+    var query by remember { mutableStateOf("") }
+    val all = remember {
+        com.visorcraft.radioshed.audio.BundledHeadphonePresets.all
+    }
+    val filtered = remember(query) {
+        if (query.isBlank()) all
+        else all.filter {
+            "${it.brand} ${it.name}".contains(query, ignoreCase = true)
+        }
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Close") }
+        },
+        title = { Text("Headphone presets") },
+        text = {
+            Column {
+                Text(
+                    "Curated AutoEQ-derived tunings. Tap to apply. " +
+                        "Pre-amp is applied to ReplayGain headroom slider.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    placeholder = { Text("Filter…") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(8.dp))
+                LazyColumn(
+                    modifier = Modifier.fillMaxWidth().heightIn(max = 360.dp),
+                ) {
+                    items(
+                        filtered,
+                        key = { "${it.brand}|${it.name}" },
+                    ) { preset ->
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    val gains = com.visorcraft.radioshed.audio.ApoConfig
+                                        .mapToBands(preset.bands, targetCenters)
+                                    onPick(preset, gains)
+                                }
+                                .padding(vertical = 4.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Text(
+                                    text = "${preset.brand} ${preset.name}",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium,
+                                )
+                                Text(
+                                    text = "Pre-amp: ${preset.preampDb} dB",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                                )
+                            }
+                        }
+                    }
+                    if (filtered.isEmpty()) {
+                        item {
+                            Text(
+                                "No matches.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                                modifier = Modifier.padding(8.dp),
+                            )
+                        }
+                    }
+                }
+            }
+        },
+    )
 }
 
 @Composable
