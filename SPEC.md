@@ -3536,6 +3536,53 @@ either Mac-blocked (iOS impl, CarPlay) or multi-day work
   the recursive-wildcard syntax. Worked around by writing
   "(double-star)/Spoken Word/(double-star)" in the doc with a note.
 
+#### Phase 19 polish (continued, batch 14 — backup zip + docs)
+
+Build `2026-05-04v` → `2026-05-04w`. Three deferred items shipped:
+zipped backup format with artwork bundling, plus the two docs files
+that were tracked in Phase 17 release prep but never written.
+
+- [x] **Backup zip writer + artwork bundling (Phase 13 power tools).**
+  New `BackupPackager` interface (commonMain) with Android impl
+  using `java.util.zip` and an iOS `NullBackupPackager` stub. Exports
+  produce `.rsbak` files: a zip containing `manifest.json` (the
+  existing JSON bundle, unchanged) plus `artwork/<sha256>` blobs
+  (snapshotted from `ArtworkPersister.listBlobs()`). Restore
+  auto-detects format via the standard PKZip magic (`PK\x03\x04`)
+  on the first 4 bytes; legacy `.json` bundles still parse via the
+  unchanged code path. `ArtworkPersister` gained `listBlobs()` and
+  `restoreBlobs(name → bytes)` with default no-op impls so the
+  iOS stub Just Works. Restore unpacks the artwork blobs back to
+  the same content-addressed slots before applying the manifest, so
+  on a fresh install the user's library paints with its original
+  cover art instead of refetching from Cover Art Archive (which
+  the user may have disabled via Connectivity policy). The Restore
+  picker accepts `*/*` MIME so both `.rsbak` and `.json` show up
+  in the system file picker; the sharer picks `application/zip` vs
+  `application/json` based on extension. Filename sanitisation
+  rejects `..`, absolute paths, and dotfile names on the restore
+  path — defence-in-depth against zip-slip even though the Android
+  packager strips these on the way in too.
+- [x] **USER_GUIDE.md — comprehensive feature docs.** Top-level
+  reference for every user-facing surface: onboarding, library,
+  folder management, glob patterns, Library Browser, Find
+  duplicates, Tag editor, Now Playing, Up Next, playback rules,
+  sleep timer, Drive Mode, Stations, lyrics, EQ, backup format,
+  file manager, search + DSL, stats, history, theme, the hidden
+  DB-stats screen, privacy posture, troubleshooting pointer.
+  Anchored to SPEC sections where relevant.
+- [x] **FAQ.md — common confusion points.** Sixteen entries
+  covering the most-likely user blockers: missing tracks after
+  scan, OEM permission auto-revoke, tag edits not surfacing,
+  glob path semantics, notification heart state on older builds,
+  pinned-bookmarks cap, lyrics filename matching, duplicate
+  detector limits, empty Stations Home on older skip-tour,
+  forward-compat of old `.json` backups vs new `.rsbak`,
+  deleted-from-disk tracks, Drive Mode auto-trigger status,
+  backup file location, `manifest.json` inside `.rsbak`,
+  empty DB browser, device migration walkthrough, bug-report
+  flow, proprietary-licence rationale.
+
 ---
 
 ## Appendix A — Compose Multiplatform vs native UI: when to fall back

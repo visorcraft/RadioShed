@@ -32,4 +32,29 @@ interface ArtworkPersister {
      * at deleted files.
      */
     suspend fun clearAll(): Int
+
+    /**
+     * Enumerate every persisted blob as `(filename, bytes)`. Default
+     * impl returns empty for platforms that don't implement filesystem
+     * walks yet (iOS). Filename is the on-disk basename — typically
+     * `<sha256>.<ext>` — and round-trips via [restoreBlobs] back to
+     * the same content-addressed slot.
+     *
+     * Used by [BackupService] to snapshot the artwork cache into a
+     * `.rsbak` zip alongside the JSON manifest. A backup with no
+     * artwork falls back to the JSON-only format.
+     */
+    suspend fun listBlobs(): List<Pair<String, ByteArray>> = emptyList()
+
+    /**
+     * Restore previously-bundled blobs back to disk under the same
+     * filenames they were saved under. Returns the number of blobs
+     * actually written. Implementations MUST sanitise filenames to
+     * reject any path that tries to escape the artwork dir
+     * (`/foo`, `../etc/passwd`, etc).
+     *
+     * Default impl is a no-op for platforms that don't yet implement
+     * blob restore (iOS today).
+     */
+    suspend fun restoreBlobs(blobs: Map<String, ByteArray>): Int = 0
 }

@@ -31,6 +31,8 @@ import com.visorcraft.radioshed.source.RingtoneSetter
 import com.visorcraft.radioshed.source.TrackSharer
 import com.visorcraft.radioshed.source.IosTagReader
 import com.visorcraft.radioshed.source.IosTagWriter
+import com.visorcraft.radioshed.source.BackupPackager
+import com.visorcraft.radioshed.source.NullBackupPackager
 import com.visorcraft.radioshed.source.BackupSharer
 import com.visorcraft.radioshed.source.BackupStorage
 import com.visorcraft.radioshed.source.ConnectivityChecker
@@ -57,6 +59,7 @@ actual val platformModule: Module = module {
     single<FileEnumerator> { IosFileEnumerator() }
     single<TagReader> { IosTagReader() }
     single<TagWriter> { IosTagWriter() }
+    single<BackupPackager> { NullBackupPackager() }
     single<ArtworkPersister> { IosArtworkPersister() }
     single<CoverArtFetcher> { NullCoverArtFetcher() }
     single<ConnectivityChecker> { IosConnectivityChecker() }

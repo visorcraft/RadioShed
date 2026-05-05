@@ -234,7 +234,13 @@ fun BackupRestoreScreen(
                     }
                 }
                 OutlinedButton(
-                    onClick = { pickFile("application/json") },
+                    // `*/*` lets the picker show both `.json` (legacy)
+                    // and `.rsbak` (zipped, with artwork). Restricting to
+                    // a single MIME would hide one or the other in the
+                    // system picker. BackupService.restoreFromBytes
+                    // detects the format from the leading bytes, so any
+                    // file the user chooses gets routed correctly.
+                    onClick = { pickFile("*/*") },
                     enabled = !working,
                     modifier = Modifier.weight(1f),
                 ) {

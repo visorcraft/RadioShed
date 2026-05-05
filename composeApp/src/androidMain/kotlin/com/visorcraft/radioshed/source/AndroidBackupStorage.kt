@@ -24,7 +24,14 @@ class AndroidBackupStorage(private val context: Context) : BackupStorage {
     }
 
     override suspend fun list(): List<BackupFile> = withContext(IODispatcher) {
-        backupDir.listFiles { f -> f.isFile && f.extension == "json" }
+        backupDir.listFiles { f ->
+            // `.rsbak` is the new zip-bundled format (manifest.json +
+            // artwork blobs). `.json` is the legacy plain-bundle format
+            // we still produce when the platform packager is null.
+            // Keep both so a user with mixed backups in their dir sees
+            // them all in the Restore picker.
+            f.isFile && (f.extension == "json" || f.extension == "rsbak")
+        }
             ?.map { f ->
                 BackupFile(
                     uri = "file://${f.absolutePath}",

@@ -72,8 +72,15 @@ val sharedModule: Module = module {
     // Lyrics: cache + fetcher + local sidecar loader, orchestrated by LyricsService.
     single { LyricsService(get(), get(), get(), get(), get(), get()) }
 
-    // Backup & restore: JSON dumps of stations + playlists + ratings.
-    single { BackupService(get(), get(), get(), get(), get(), get()) }
+    // Backup & restore: zipped bundles (manifest.json + artwork blobs)
+    // on Android, plain-JSON fallback elsewhere. The packager + artwork
+    // persister come from the platform module — packager is null on iOS,
+    // which makes export silently fall back to JSON-only output.
+    single {
+        BackupService(
+            get(), get(), get(), get(), get(), get(), get(), get(),
+        )
+    }
 
     // Phase 5: stations engine. AudioEngine comes from platformModule.
     single { SourceRuleEvaluator(get(), get(), get()) }

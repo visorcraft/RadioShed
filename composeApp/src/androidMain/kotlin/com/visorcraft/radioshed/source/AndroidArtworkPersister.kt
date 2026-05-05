@@ -62,6 +62,53 @@ class AndroidArtworkPersister(private val context: Context) : ArtworkPersister {
         }.getOrNull()
     }
 
+    override suspend fun listBlobs(): List<Pair<String, ByteArray>> =
+        withContext(IODispatcher) {
+            val files = artworkDir.listFiles() ?: return@withContext emptyList()
+            files.asSequence()
+                .filter { it.isFile && !it.name.endsWith(".tmp") }
+                .mapNotNull { f ->
+                    runCatching { f.name to f.readBytes() }.getOrNull()
+                }
+                .toList()
+        }
+
+    override suspend fun restoreBlobs(blobs: Map<String, ByteArray>): Int =
+        withContext(IODispatcher) {
+            // Sanity-filter the entry names so a malicious bundle can't
+            // escape the artwork dir with `..` or absolute paths. The
+            // Android packager does the same upstream; this is the
+            // belt-and-suspenders second guard.
+            var written = 0
+            for ((name, bytes) in blobs) {
+                val safeName = name.substringAfterLast('/')
+                if (safeName.isBlank() ||
+                    safeName.contains("..") ||
+                    safeName.startsWith(".")
+                ) {
+                    continue
+                }
+                runCatching {
+                    val target = File(artworkDir, safeName)
+                    // Skip if already on disk with matching size — same
+                    // content-addressed slot, no point overwriting.
+                    if (target.exists() && target.length().toInt() == bytes.size) {
+                        return@runCatching
+                    }
+                    val tmp = File(artworkDir, "$safeName.tmp")
+                    try {
+                        tmp.writeBytes(bytes)
+                        if (tmp.renameTo(target)) {
+                            written += 1
+                        }
+                    } finally {
+                        if (tmp.exists()) tmp.delete()
+                    }
+                }
+            }
+            written
+        }
+
     override suspend fun clearAll(): Int = withContext(IODispatcher) {
         // listFiles() can return null on a freshly-created dir or
         // a permissions edge case; treat that as zero. We delete

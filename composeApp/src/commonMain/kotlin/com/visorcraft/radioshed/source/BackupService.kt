@@ -36,6 +36,8 @@ class BackupService(
     private val ratingRepo: RatingRepository,
     private val libraryRepo: LibraryRepository,
     private val settings: SettingsStore,
+    private val packager: BackupPackager,
+    private val artworkPersister: ArtworkPersister,
 ) {
 
     suspend fun listBackups(): List<BackupFile> = storage.list()
@@ -112,8 +114,25 @@ class BackupService(
             customEqPresets = customEqPresets,
         )
         val json = RadioShedJson.encodeToString(bundle)
-        val filename = "radioshed-backup-${nowMillis()}.json"
-        val file = storage.write(filename, json.encodeToByteArray())
+        val jsonBytes = json.encodeToByteArray()
+        // Try the zipped `.rsbak` format first — it bundles artwork
+        // alongside the manifest so a fresh install fully reconstructs
+        // the user's library look-and-feel rather than re-fetching every
+        // album cover from Cover Art Archive (which the user might have
+        // disabled via Connectivity policy). Falls back to plain JSON
+        // if the platform doesn't ship a packager (iOS today) or if
+        // packing failed for any reason.
+        val artworkBlobs: Map<String, ByteArray> = runCatching {
+            artworkPersister.listBlobs()
+                .associate { (name, bytes) -> "artwork/$name" to bytes }
+        }.getOrDefault(emptyMap())
+        val zipped = packager.pack(jsonBytes, artworkBlobs)
+        val (filename, payload) = if (zipped != null) {
+            "radioshed-backup-${nowMillis()}.rsbak" to zipped
+        } else {
+            "radioshed-backup-${nowMillis()}.json" to jsonBytes
+        }
+        val file = storage.write(filename, payload)
             ?: return ExportResult.Failed("Couldn't write backup file.")
 
         // Prune older backups to a small cap so the directory doesn't
@@ -172,8 +191,17 @@ class BackupService(
     }
 
     suspend fun previewFromBytes(bytes: ByteArray): BundlePreview? {
+        // Auto-detect zip vs plain JSON. previewFromBytes / restoreFromBytes
+        // both run through this branch so any caller — Backup screen,
+        // system file picker, share-sheet import — gets the same
+        // format-agnostic behaviour.
+        val manifestBytes = if (looksLikeZip(bytes)) {
+            packager.unpack(bytes)?.manifestJson ?: return null
+        } else {
+            bytes
+        }
         val bundle = runCatching {
-            RadioShedJson.decodeFromString<BackupBundle>(bytes.decodeToString())
+            RadioShedJson.decodeFromString<BackupBundle>(manifestBytes.decodeToString())
         }.getOrNull() ?: return null
         return BundlePreview(
             version = bundle.version,
@@ -210,10 +238,31 @@ class BackupService(
      * as [restore]; just skips the storage.read step.
      */
     suspend fun restoreFromBytes(bytes: ByteArray): RestoreResult {
+        // Detect zip vs plain JSON. The zip path also restores artwork
+        // blobs alongside the manifest, so a fresh-install restore can
+        // paint the library with its original cover art instead of
+        // refetching from Cover Art Archive (which the user may have
+        // disabled via Connectivity policy).
+        val (manifestBytes, artworkBlobs) = if (looksLikeZip(bytes)) {
+            val unpacked = packager.unpack(bytes)
+                ?: return RestoreResult.Failed(
+                    "Backup file is a zip but couldn't be opened.",
+                )
+            unpacked.manifestJson to unpacked.blobs
+        } else {
+            bytes to emptyMap()
+        }
         val bundle = runCatching {
-            RadioShedJson.decodeFromString<BackupBundle>(bytes.decodeToString())
+            RadioShedJson.decodeFromString<BackupBundle>(manifestBytes.decodeToString())
         }.getOrElse {
             return RestoreResult.Failed("Backup file is corrupted: ${it.message ?: "decode failed"}")
+        }
+        if (artworkBlobs.isNotEmpty()) {
+            // Strip the `artwork/` prefix so each entry restores under
+            // its content-addressed basename — same shape the persister
+            // wrote it with originally.
+            val flat = artworkBlobs.mapKeys { it.key.removePrefix("artwork/") }
+            runCatching { artworkPersister.restoreBlobs(flat) }
         }
         if (bundle.version < 1 || bundle.version > BackupBundle.CURRENT_VERSION) {
             return RestoreResult.Failed(

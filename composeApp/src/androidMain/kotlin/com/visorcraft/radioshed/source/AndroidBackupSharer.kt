@@ -29,8 +29,15 @@ class AndroidBackupSharer(private val context: Context) : BackupSharer {
             val authority = "${context.packageName}.fileprovider"
             val contentUri = FileProvider.getUriForFile(context, authority, onDisk)
 
+            // MIME picks: `.rsbak` is a zip → `application/zip`, `.json`
+            // → `application/json`. Wrong MIME doesn't break the share
+            // sheet but it's surfaced in the receiving app's picker
+            // (Gmail labels by MIME, Files-by-Google chooses default
+            // openers by it), so it's worth getting right.
+            val mime = if (onDisk.extension == "rsbak") "application/zip"
+                       else "application/json"
             val intent = Intent(Intent.ACTION_SEND).apply {
-                type = "application/json"
+                type = mime
                 putExtra(Intent.EXTRA_STREAM, contentUri)
                 putExtra(Intent.EXTRA_SUBJECT, "RadioShed backup")
                 putExtra(Intent.EXTRA_TITLE, file.displayName)

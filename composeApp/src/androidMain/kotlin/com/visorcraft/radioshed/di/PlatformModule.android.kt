@@ -25,6 +25,8 @@ import com.visorcraft.radioshed.source.AndroidLocalLyricsLoader
 import com.visorcraft.radioshed.source.AndroidLyricsFetcher
 import com.visorcraft.radioshed.source.AndroidTagReader
 import com.visorcraft.radioshed.source.AndroidTagWriter
+import com.visorcraft.radioshed.source.AndroidBackupPackager
+import com.visorcraft.radioshed.source.BackupPackager
 import com.visorcraft.radioshed.source.ArtworkPersister
 import com.visorcraft.radioshed.source.BackupSharer
 import com.visorcraft.radioshed.source.BackupStorage
@@ -62,6 +64,7 @@ actual val platformModule: Module = module {
     single<FileEnumerator> { AndroidFileEnumerator() }
     single<TagReader> { AndroidTagReader() }
     single<TagWriter> { AndroidTagWriter() }
+    single<BackupPackager> { AndroidBackupPackager() }
     single<ArtworkPersister> { AndroidArtworkPersister(androidContext()) }
     single<CoverArtFetcher> { AndroidCoverArtFetcher() }
     single<ConnectivityChecker> { AndroidConnectivityChecker(androidContext()) }
