@@ -91,6 +91,20 @@ class LyricsCacheRepository(private val db: RadioShedDatabase) {
     }
 
     /**
+     * Track IDs that need a lyrics sweep — never fetched, OR cached
+     * as a stale `lrclib:miss` (older than [missOlderThanMs]). The
+     * caller normally passes `now - 30 days` so the negative-cache
+     * TTL is honoured: tracks recently confirmed-missing are skipped,
+     * tracks marked miss long enough ago that LRClib may have added
+     * them are retried.
+     */
+    suspend fun trackIdsMissingLyrics(missOlderThanMs: Long): List<Long> =
+        withContext(IODispatcher) {
+            db.cachesQueries.selectTrackIdsMissingLyrics(missOlderThanMs)
+                .executeAsList()
+        }
+
+    /**
      * User-supplied (artist, title) override for a track's lyrics
      * search. When set, [LyricsService] uses it as the first
      * candidate before falling through to tag-derived variations.

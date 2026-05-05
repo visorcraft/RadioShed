@@ -531,8 +531,10 @@ private fun AddFolderDialog(
     // inserted an SD card → that's almost certainly what they want), then
     // primary internal storage's Music, then the legacy fallback.
     val defaultPath = remember(volumes) {
-        volumes.firstOrNull { it.isRemovable }?.let { "${it.path}/Music" }
-            ?: volumes.firstOrNull { it.isPrimary }?.let { "${it.path}/Music" }
+        volumes.firstOrNull { it.isRemovable }
+            ?.let { com.visorcraft.radioshed.source.joinPath(it.path, "Music") }
+            ?: volumes.firstOrNull { it.isPrimary }
+                ?.let { com.visorcraft.radioshed.source.joinPath(it.path, "Music") }
             ?: com.visorcraft.radioshed.source.defaultMusicFolderPath()
     }
     var path by remember { mutableStateOf(defaultPath) }

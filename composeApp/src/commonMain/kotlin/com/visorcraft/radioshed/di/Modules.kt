@@ -22,6 +22,7 @@ import com.visorcraft.radioshed.scanner.Scanner
 import com.visorcraft.radioshed.source.BackupService
 import com.visorcraft.radioshed.source.LyricsService
 import com.visorcraft.radioshed.source.MissingArtworkSync
+import com.visorcraft.radioshed.source.MissingLyricsSync
 import com.visorcraft.radioshed.source.NetworkPolicyGate
 import com.visorcraft.radioshed.stations.PresetSeeder
 import com.visorcraft.radioshed.stations.SourceRuleEvaluator
@@ -65,6 +66,11 @@ val sharedModule: Module = module {
     // Cover Art Archive sweep. CoverArtFetcher is platform-specific
     // (Android uses HttpURLConnection; iOS is a Null stub for now).
     single { MissingArtworkSync(get(), get(), get(), get()) }
+
+    // LRClib lyrics sweep — same shape as MissingArtworkSync but
+    // routes through LyricsService.resolve so the existing local-
+    // sidecar-then-network flow + cache management is reused.
+    single { MissingLyricsSync(get(), get(), get()) }
 
     // Sleep timer — singleton so multiple UI surfaces observe the same state.
     single { SleepTimer(get(), get()) }

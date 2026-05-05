@@ -10,3 +10,5 @@ private class DesktopPlatform : Platform {
 }
 
 actual fun getPlatform(): Platform = DesktopPlatform()
+
+actual val isDesktopHost: Boolean = true

@@ -96,7 +96,11 @@ class AudioEngineDesktop : AudioEngine {
                 scope.launch { skipNext() }
             }
             override fun error(mediaPlayer: MediaPlayer) {
-                _state.value = PlayerState.Error("VLC reported playback error.")
+                val attempted = _nowPlaying.value?.uri
+                System.err.println("AudioEngineDesktop: error event for uri=$attempted")
+                _state.value = PlayerState.Error(
+                    "VLC reported playback error for ${attempted?.substringAfterLast('\\') ?: "track"}.",
+                )
             }
             override fun timeChanged(mediaPlayer: MediaPlayer, newTime: Long) {
                 _position.value = Position(
@@ -118,22 +122,31 @@ class AudioEngineDesktop : AudioEngine {
     }
 
     private fun resolveMrl(uri: String): String {
-        // VLC accepts file:// MRLs and bare file paths. For absolute
-        // local paths on Windows (`C:\Music\song.mp3`) we wrap in a
-        // file:// URL so VLC treats it as a local file and not a
-        // network resource.
-        if (uri.startsWith("http://", ignoreCase = true) ||
-            uri.startsWith("https://", ignoreCase = true) ||
-            uri.startsWith("file:")
-        ) return uri
-        return File(uri).toURI().toString()
+        // VLC accepts file:// MRLs, bare local paths, AND raw UNC
+        // paths (`\\server\share\file.mp3`). The instinct to convert
+        // local paths into a `file://` URL via `File.toURI()` actually
+        // breaks UNC: `File("\\\\host\\share\\f").toURI().toString()`
+        // produces `file:////host/share/f` (4 slashes), which libvlc
+        // parses by stripping the `file://` prefix and then handing
+        // the remaining `//host/share/f` to its filesystem demuxer
+        // — that ends up as the single-backslash path `\host\share\f`,
+        // which Windows networking can't resolve. Just pass the raw
+        // path through; VLC opens local + UNC + remote alike from a
+        // bare string.
+        return uri
     }
 
     override fun play(playable: Playable) {
         val p = ensurePlayer() ?: return
         _nowPlaying.value = playable
         _state.value = PlayerState.Buffering
-        p.media().play(resolveMrl(playable.uri))
+        val mrl = resolveMrl(playable.uri)
+        // Log to stderr so the gradle :run console captures what we
+        // sent libvlc — invaluable when a track refuses to play and
+        // the user reports "VLC reported playback error" without any
+        // way to know what URI was attempted.
+        System.err.println("AudioEngineDesktop: play($mrl)")
+        p.media().play(mrl)
     }
 
     override fun playQueue(items: List<Playable>, startIndex: Int) {

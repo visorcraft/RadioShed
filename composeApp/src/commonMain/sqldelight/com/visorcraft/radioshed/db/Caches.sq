@@ -86,6 +86,23 @@ DELETE FROM lyrics_cache WHERE track_id = ?;
 deleteAllLyrics:
 DELETE FROM lyrics_cache;
 
+-- Find every available track that has no lyrics cached at all, OR a
+-- "lrclib:miss" entry older than the supplied threshold. The threshold
+-- is the negative-cache TTL boundary (caller computes `now - 30 days`)
+-- so a sweep doesn't keep re-asking LRClib for tracks confirmed-not-
+-- present in the last month — but it WILL retry tracks that were
+-- marked miss long enough ago for LRClib to have potentially added
+-- them. Used by `MissingLyricsSync.sweep`.
+selectTrackIdsMissingLyrics:
+SELECT track.id FROM track
+LEFT JOIN lyrics_cache ON track.id = lyrics_cache.track_id
+WHERE track.is_available = 1
+  AND (
+    lyrics_cache.track_id IS NULL
+    OR (lyrics_cache.source = 'lrclib:miss' AND lyrics_cache.fetched_at < ?)
+  )
+ORDER BY track.id;
+
 -- ==== Lyrics query override ====
 
 putLyricsOverride:

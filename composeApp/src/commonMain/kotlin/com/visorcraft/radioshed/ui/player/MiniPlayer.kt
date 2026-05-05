@@ -29,11 +29,12 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import com.visorcraft.radioshed.isDesktopHost
+import com.visorcraft.radioshed.ui.util.TooltipIconButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -78,6 +79,10 @@ fun MiniPlayer(
     val state by audioEngine.state.collectAsState()
     val position by audioEngine.position.collectAsState()
     val sleepState by sleepTimer.state.collectAsState()
+    // Desktop-only inline volume slider state. On Android the
+    // hardware volume rocker handles this; surfacing an in-app
+    // slider on top would crowd the bar without adding value.
+    val userVolume by stationPlayback.userVolume.collectAsState()
     // Keyed alongside playable.trackId / state below so the "Next:"
     // peek refreshes whenever the priority queue mutates (e.g., the
     // user adds a track via Play next while paused). Without this
@@ -232,6 +237,16 @@ fun MiniPlayer(
                 // the badge gets a fixed width and the title
                 // truncates cleanly when space is tight.
                 SleepTimerBadge(sleepState)
+                // Desktop volume control. Visible only on desktop —
+                // on touch builds the OS volume keys are the natural
+                // affordance, and an inline slider would conflict
+                // with the swipe-to-skip gesture handler above.
+                if (isDesktopHost) {
+                    DesktopVolumeControl(
+                        volume = userVolume,
+                        onChange = { stationPlayback.setUserVolume(it) },
+                    )
+                }
                 // Skip prev/next bypass the MediaController and call
                 // StationPlayback / AudioEngine.seekTo directly. The
                 // MediaController-based path filters these commands
@@ -351,8 +366,10 @@ private fun TransportIconButton(
     // Pixel, Noto on Samsung, SF Pro on iOS) — the original Unicode-glyph
     // approach broke on Samsung Noto where U+23F8 PAUSE has different
     // vertical metrics from ⏮/⏭ and got clipped at the bottom. The
-    // contentDescription drives accessibility; the icon drives visuals.
-    IconButton(
+    // contentDescription drives accessibility AND the desktop hover
+    // tooltip; the icon drives visuals.
+    TooltipIconButton(
+        tooltip = contentDesc,
         onClick = onClick,
         modifier = Modifier
             .size(48.dp)

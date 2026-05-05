@@ -14,6 +14,13 @@ class DesktopFileBrowser : FileBrowser {
 
     override suspend fun listSubdirectories(path: String): List<DiscoveredFolder> =
         withContext(IODispatcher) {
+            // Empty path = synthetic "This PC" / Computer root. Lists
+            // every filesystem root the JVM advertises (drive letters
+            // on Windows, `/` on POSIX). The caller renders this as
+            // the top-level view; the breadcrumb shows "This PC".
+            if (path.isEmpty()) {
+                return@withContext computerRootEntries()
+            }
             runCatching {
                 val dir = File(path)
                 if (!dir.isDirectory) return@runCatching emptyList<DiscoveredFolder>()
@@ -26,6 +33,26 @@ class DesktopFileBrowser : FileBrowser {
                     ?: emptyList()
             }.getOrDefault(emptyList())
         }
+
+    /**
+     * Pseudo-folder list for the synthetic "This PC" root. Each drive
+     * is rendered with its label (`Drive C:`, etc.) and absolute
+     * path. Doesn't probe network shares — those need a UNC path
+     * which the user pastes into the dialog's path field directly.
+     */
+    private fun computerRootEntries(): List<DiscoveredFolder> {
+        val isWindows = System.getProperty("os.name").orEmpty().lowercase()
+            .contains("win")
+        return File.listRoots().orEmpty().map { root ->
+            val abs = root.absolutePath
+            val label = if (isWindows) {
+                "Drive ${abs.removeSuffix("\\").uppercase()}"
+            } else {
+                abs
+            }
+            DiscoveredFolder(name = label, path = abs)
+        }
+    }
 
     override suspend fun listEntries(path: String): List<DirectoryEntry> =
         withContext(IODispatcher) {
@@ -110,11 +137,24 @@ class DesktopFileBrowser : FileBrowser {
         } else {
             emptyList()
         }
-        return homeBookmarks + driveBookmarks
+        // "This PC" chip teleports to the synthetic Computer view
+        // (path = ""), where the folder list is every drive root
+        // and the user can paste a UNC / network path into the
+        // dialog's path field. Surfaced first so it's always one
+        // tap away regardless of how deep the user has navigated.
+        val computer = DiscoveredFolder(name = "This PC", path = "")
+        return listOf(computer) + homeBookmarks + driveBookmarks
     }
 
     override fun parentOf(path: String): String? {
-        val parent = File(path).parentFile ?: return null
-        return parent.absolutePath
+        // Empty path is the synthetic "This PC" view — already at
+        // the top, no parent.
+        if (path.isEmpty()) return null
+        val parent = File(path).parentFile?.absolutePath
+        // A drive root on Windows (`C:\`) reports null as its
+        // parent. Surface the empty-path Computer view as the next
+        // level up so the user can hop laterally to D: / E: / a
+        // network share via the dialog's path field.
+        return parent ?: ""
     }
 }

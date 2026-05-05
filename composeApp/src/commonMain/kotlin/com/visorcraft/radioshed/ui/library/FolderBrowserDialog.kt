@@ -16,15 +16,19 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Computer
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -38,6 +42,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.visorcraft.radioshed.source.DiscoveredFolder
@@ -76,6 +81,18 @@ fun FolderBrowserDialog(
         bookmarks = fileBrowser.commonLocations()
     }
 
+    // Editable path field state. Mirrors `currentPath` whenever
+    // navigation comes from elsewhere (chip / Up / folder tap), but
+    // is decoupled when the user types so each keystroke doesn't
+    // trigger a navigation. Pressing Go (or Enter) commits the
+    // typed string to `currentPath`. UNC paths (`\\server\share`)
+    // and any absolute path the user pastes work as-is — we hand
+    // the raw string to `File(path).listFiles()`.
+    var pathInput by remember { mutableStateOf(initialPath) }
+    LaunchedEffect(currentPath) {
+        pathInput = currentPath
+    }
+
     LaunchedEffect(currentPath) {
         loading = true
         entries = fileBrowser.listSubdirectories(currentPath)
@@ -89,6 +106,34 @@ fun FolderBrowserDialog(
         title = { Text("Browse folders") },
         text = {
             Column {
+                // Editable path field. Take any input — drive root
+                // (`D:\`), absolute path, or UNC share
+                // (`\\server\music`). Enter or Go commits.
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    OutlinedTextField(
+                        value = pathInput,
+                        onValueChange = { pathInput = it },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                        placeholder = { Text("Path or \\\\server\\share") },
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
+                        keyboardActions = KeyboardActions(
+                            onGo = { currentPath = pathInput.trim() },
+                            onDone = { currentPath = pathInput.trim() },
+                            onSend = { currentPath = pathInput.trim() },
+                        ),
+                    )
+                    Spacer(Modifier.size(8.dp))
+                    Button(onClick = { currentPath = pathInput.trim() }) {
+                        Text("Go")
+                    }
+                }
+
+                Spacer(Modifier.height(8.dp))
+
                 // Breadcrumb-style header: up affordance + current path
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -112,15 +157,35 @@ fun FolderBrowserDialog(
                         }
                         Spacer(Modifier.size(8.dp))
                     }
-                    Text(
-                        text = currentPath,
-                        style = MaterialTheme.typography.bodySmall,
-                        fontFamily = FontFamily.Monospace,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f),
-                    )
+                    if (currentPath.isEmpty()) {
+                        // Synthetic Computer / "This PC" view —
+                        // listSubdirectories("") returns drive roots
+                        // and the breadcrumb shows a friendly label
+                        // instead of the empty string.
+                        Icon(
+                            imageVector = Icons.Filled.Computer,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                        )
+                        Spacer(Modifier.size(6.dp))
+                        Text(
+                            text = "This PC",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                            modifier = Modifier.weight(1f),
+                        )
+                    } else {
+                        Text(
+                            text = currentPath,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontFamily = FontFamily.Monospace,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
                 }
 
                 // Quick-jump chip row — drive letters / Home / Music

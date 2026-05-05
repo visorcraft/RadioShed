@@ -330,8 +330,40 @@ fun NowPlayingScreen(
                         Text("Close")
                     }
                 },
-                actions = {
-                    IconButton(onClick = onOpenLyrics) {
+                actions = { /* moved to Scaffold bottomBar — see below */ },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                ),
+            )
+        },
+        bottomBar = {
+            // Action bar — moved from the topBar so users coming from
+            // the main page (where the MiniPlayer lives at the bottom)
+            // don't have their navigation jump to the top mid-flight.
+            // All secondary actions (Volume on desktop, Lyrics,
+            // Shuffle, Repeat, Queue, Sleep, More) right-aligned.
+            androidx.compose.material3.Surface(
+                color = MaterialTheme.colorScheme.surface,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 4.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (com.visorcraft.radioshed.isDesktopHost) {
+                        com.visorcraft.radioshed.ui.player.DesktopVolumeControl(
+                            volume = userVolume,
+                            onChange = { stationPlayback.setUserVolume(it) },
+                            sliderWidth = 90.dp,
+                        )
+                    }
+                    com.visorcraft.radioshed.ui.util.TooltipIconButton(
+                        tooltip = "Lyrics",
+                        onClick = onOpenLyrics,
+                    ) {
                         Icon(
                             imageVector = Icons.Filled.Lyrics,
                             contentDescription = "Lyrics",
@@ -344,7 +376,10 @@ fun NowPlayingScreen(
                     // change. The on-state glyph (ShuffleOn) carries a
                     // dot indicator so colour-blind users can read it
                     // without relying on the primary tint alone.
-                    IconButton(onClick = { stationPlayback.toggleShuffle() }) {
+                    com.visorcraft.radioshed.ui.util.TooltipIconButton(
+                        tooltip = if (shuffleSession) "Shuffle on" else "Shuffle off",
+                        onClick = { stationPlayback.toggleShuffle() },
+                    ) {
                         Icon(
                             imageVector = if (shuffleSession) Icons.Filled.ShuffleOn
                                           else Icons.Filled.Shuffle,
@@ -361,6 +396,12 @@ fun NowPlayingScreen(
                     // is the codebase pattern for tap-vs-long-press on
                     // a single icon (matches the BigIconButton play /
                     // pause + Stations Home Surprise tile).
+                    val repeatTooltip = when (repeatMode) {
+                        com.visorcraft.radioshed.stations.StationPlayback.RepeatMode.Off -> "Repeat off"
+                        com.visorcraft.radioshed.stations.StationPlayback.RepeatMode.All -> "Repeat all"
+                        com.visorcraft.radioshed.stations.StationPlayback.RepeatMode.One -> "Repeat one"
+                    }
+                    com.visorcraft.radioshed.ui.util.Tooltipped(tooltip = repeatTooltip) {
                     androidx.compose.material3.Surface(
                         color = androidx.compose.ui.graphics.Color.Transparent,
                         modifier = Modifier
@@ -390,17 +431,14 @@ fun NowPlayingScreen(
                             Icon(
                                 imageVector = if (repeatMode == com.visorcraft.radioshed.stations.StationPlayback.RepeatMode.One)
                                     Icons.Filled.RepeatOne else Icons.Filled.Repeat,
-                                contentDescription = when (repeatMode) {
-                                    com.visorcraft.radioshed.stations.StationPlayback.RepeatMode.Off -> "Repeat off"
-                                    com.visorcraft.radioshed.stations.StationPlayback.RepeatMode.All -> "Repeat all"
-                                    com.visorcraft.radioshed.stations.StationPlayback.RepeatMode.One -> "Repeat one"
-                                },
+                                contentDescription = repeatTooltip,
                                 tint = if (repeatMode == com.visorcraft.radioshed.stations.StationPlayback.RepeatMode.Off)
                                     MaterialTheme.colorScheme.onSurface
                                 else MaterialTheme.colorScheme.primary,
                             )
                         }
                     }
+                    } // close Tooltipped(repeatTooltip)
                     val priorityBadgeCount by stationPlayback.priorityCountFlow.collectAsState()
                     androidx.compose.material3.BadgedBox(
                         badge = {
@@ -435,7 +473,10 @@ fun NowPlayingScreen(
                             )
                             .semantics { contentDescription = "Queue" },
                     ) {
-                        IconButton(onClick = { queueSheetOpen = true }) {
+                        com.visorcraft.radioshed.ui.util.TooltipIconButton(
+                            tooltip = "Queue",
+                            onClick = { queueSheetOpen = true },
+                        ) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.QueueMusic,
                                 contentDescription = null,
@@ -463,7 +504,10 @@ fun NowPlayingScreen(
                                 },
                             ),
                         ) {
-                        IconButton(onClick = { sleepMenuOpen = true }) {
+                        com.visorcraft.radioshed.ui.util.TooltipIconButton(
+                            tooltip = "Sleep timer",
+                            onClick = { sleepMenuOpen = true },
+                        ) {
                             Icon(
                                 imageVector = if (sleepState is SleepTimer.State.Idle)
                                     Icons.Outlined.Bedtime else Icons.Filled.Bedtime,
@@ -497,7 +541,10 @@ fun NowPlayingScreen(
                         )
                     }
                     Box {
-                        IconButton(onClick = { overflowMenuOpen = true }) {
+                        com.visorcraft.radioshed.ui.util.TooltipIconButton(
+                            tooltip = "More",
+                            onClick = { overflowMenuOpen = true },
+                        ) {
                             Icon(
                                 imageVector = Icons.Filled.MoreVert,
                                 contentDescription = "More",
@@ -590,11 +637,8 @@ fun NowPlayingScreen(
                             }
                         }
                     }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                ),
-            )
+                }
+            }
         },
         containerColor = MaterialTheme.colorScheme.background,
     ) { padding ->
@@ -1223,14 +1267,20 @@ private fun CompactLayout(
             onRate = onRate,
             onToggleLike = onToggleLike,
         )
-        Spacer(Modifier.height(8.dp))
-        VolumeRow(
-            volume = volume,
-            preMuteLevel = preMuteLevel,
-            onPreMuteLevelChange = onPreMuteLevelChange,
-            onVolumeLive = onVolumeLive,
-            onVolumeCommit = onVolumeCommit,
-        )
+        // In-content VolumeRow is hidden on desktop — the top-bar
+        // DesktopVolumeControl is the canonical surface there. Keeps
+        // the touch UX (Android / iOS) where the user has no
+        // hardware-key-free path to volume below the rating row.
+        if (!com.visorcraft.radioshed.isDesktopHost) {
+            Spacer(Modifier.height(8.dp))
+            VolumeRow(
+                volume = volume,
+                preMuteLevel = preMuteLevel,
+                onPreMuteLevelChange = onPreMuteLevelChange,
+                onVolumeLive = onVolumeLive,
+                onVolumeCommit = onVolumeCommit,
+            )
+        }
     }
 }
 
@@ -1345,14 +1395,16 @@ private fun TwoPaneLayout(
                 onRate = onRate,
                 onToggleLike = onToggleLike,
             )
-            Spacer(Modifier.height(8.dp))
-            VolumeRow(
-                volume = volume,
-                preMuteLevel = preMuteLevel,
-                onPreMuteLevelChange = onPreMuteLevelChange,
-                onVolumeLive = onVolumeLive,
-                onVolumeCommit = onVolumeCommit,
-            )
+            if (!com.visorcraft.radioshed.isDesktopHost) {
+                Spacer(Modifier.height(8.dp))
+                VolumeRow(
+                    volume = volume,
+                    preMuteLevel = preMuteLevel,
+                    onPreMuteLevelChange = onPreMuteLevelChange,
+                    onVolumeLive = onVolumeLive,
+                    onVolumeCommit = onVolumeCommit,
+                )
+            }
         }
     }
 }
@@ -1980,8 +2032,12 @@ private fun BigIconButton(
     // Vector icons everywhere — see MiniPlayer.TransportIconButton for why
     // we don't use Unicode media glyphs (Samsung Noto vs Roboto vs SF Pro
     // render U+23F8 with different metrics; vector icons are font-free).
+    // The Tooltipped wrapper is no-op on touch builds and adds the
+    // hover tooltip on desktop, so every transport button gets one
+    // for free.
     if (onLongClick == null) {
-        IconButton(
+        com.visorcraft.radioshed.ui.util.TooltipIconButton(
+            tooltip = description,
             onClick = onClick,
             modifier = Modifier
                 .size(buttonSize)
@@ -1999,6 +2055,7 @@ private fun BigIconButton(
         // Surface + combinedClickable when we need both gestures. The
         // hit-target stays the same `buttonSize` so the visual layout
         // doesn't shift when long-press is wired in.
+        com.visorcraft.radioshed.ui.util.Tooltipped(tooltip = description) {
         Surface(
             color = Color.Transparent,
             modifier = Modifier
@@ -2022,6 +2079,7 @@ private fun BigIconButton(
                 )
             }
         }
+        } // close Tooltipped(description)
     }
 }
 
@@ -2048,7 +2106,11 @@ private fun RatingRow(
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        IconButton(onClick = onToggleLike, modifier = Modifier.size(48.dp)) {
+        com.visorcraft.radioshed.ui.util.TooltipIconButton(
+            tooltip = if (liked) "Unlike" else "Like",
+            onClick = onToggleLike,
+            modifier = Modifier.size(48.dp),
+        ) {
             Icon(
                 imageVector = if (liked) Icons.Filled.Favorite
                               else Icons.Outlined.FavoriteBorder,
@@ -3075,7 +3137,8 @@ private fun QueueTrackRow(
             )
         }
         if (onRemove != null) {
-            IconButton(
+            com.visorcraft.radioshed.ui.util.TooltipIconButton(
+                tooltip = "Remove from queue",
                 onClick = onRemove,
                 modifier = Modifier.size(36.dp),
             ) {
@@ -3445,14 +3508,16 @@ private fun TriplePaneLayout(
                 onRate = onRate,
                 onToggleLike = onToggleLike,
             )
-            Spacer(Modifier.height(8.dp))
-            VolumeRow(
-                volume = volume,
-                preMuteLevel = preMuteLevel,
-                onPreMuteLevelChange = onPreMuteLevelChange,
-                onVolumeLive = onVolumeLive,
-                onVolumeCommit = onVolumeCommit,
-            )
+            if (!com.visorcraft.radioshed.isDesktopHost) {
+                Spacer(Modifier.height(8.dp))
+                VolumeRow(
+                    volume = volume,
+                    preMuteLevel = preMuteLevel,
+                    onPreMuteLevelChange = onPreMuteLevelChange,
+                    onVolumeLive = onVolumeLive,
+                    onVolumeCommit = onVolumeCommit,
+                )
+            }
         }
         Spacer(Modifier.width(16.dp))
         // Right third — large artwork + track / artist below it,

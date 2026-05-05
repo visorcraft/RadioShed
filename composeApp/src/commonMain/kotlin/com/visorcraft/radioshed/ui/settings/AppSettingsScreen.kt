@@ -60,6 +60,7 @@ import com.visorcraft.radioshed.BuildInfo
 import com.visorcraft.radioshed.data.SettingsStore
 import com.visorcraft.radioshed.data.ThemeColorSource
 import com.visorcraft.radioshed.source.MissingArtworkSync
+import com.visorcraft.radioshed.source.MissingLyricsSync
 import com.visorcraft.radioshed.ui.theme.ColorPicker
 import com.visorcraft.radioshed.ui.theme.ThemeMode
 import com.visorcraft.radioshed.ui.theme.supportsMaterialYou
@@ -107,6 +108,7 @@ fun AppSettingsScreen(
     onOpenSubsonic: () -> Unit = {},
     settings: SettingsStore = koinInject(),
     artworkSync: MissingArtworkSync = koinInject(),
+    lyricsSync: MissingLyricsSync = koinInject(),
     lyricsCache: com.visorcraft.radioshed.data.LyricsCacheRepository = koinInject(),
 ) {
     // Hold each toggle as compose state. The previous comment said
@@ -152,6 +154,8 @@ fun AppSettingsScreen(
     }
     var artworkState by remember { mutableStateOf<ArtworkSyncState>(ArtworkSyncState.Idle) }
     var artworkJob by remember { mutableStateOf<Job?>(null) }
+    var lyricsState by remember { mutableStateOf<LyricsSyncState>(LyricsSyncState.Idle) }
+    var lyricsJob by remember { mutableStateOf<Job?>(null) }
     val scope = rememberCoroutineScope()
 
     Scaffold(
@@ -471,6 +475,21 @@ fun AppSettingsScreen(
                     artworkJob?.cancel()
                     artworkJob = null
                     artworkState = ArtworkSyncState.Idle
+                },
+            )
+
+            Spacer(Modifier.height(8.dp))
+            LyricsSyncCard(
+                state = lyricsState,
+                onStart = {
+                    lyricsJob = scope.launch {
+                        lyricsSync.sweep().collect { p -> lyricsState = lyricsState.advance(p) }
+                    }
+                },
+                onCancel = {
+                    lyricsJob?.cancel()
+                    lyricsJob = null
+                    lyricsState = LyricsSyncState.Idle
                 },
             )
 
@@ -1632,6 +1651,127 @@ private fun ArtworkSyncCard(
                     }
                 }
                 is ArtworkSyncState.Blocked -> {
+                    Text(
+                        "Connectivity policy blocks the sweep. Set Settings → " +
+                            "Connectivity to Always or Wi-Fi only and try again.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Mirror of [ArtworkSyncState] for the lyrics sweep. Same shape so
+ * the card composables stay structurally identical — only the
+ * progress event source differs.
+ */
+private sealed interface LyricsSyncState {
+    object Idle : LyricsSyncState
+    data class Running(val index: Int, val total: Int, val found: Int) : LyricsSyncState
+    data class Done(val found: Int, val missing: Int, val failed: Int) : LyricsSyncState
+    object Blocked : LyricsSyncState
+}
+
+private fun LyricsSyncState.advance(p: MissingLyricsSync.Progress): LyricsSyncState = when (p) {
+    is MissingLyricsSync.Progress.Started -> LyricsSyncState.Running(0, p.total, 0)
+    is MissingLyricsSync.Progress.Fetching -> {
+        val cur = (this as? LyricsSyncState.Running) ?: LyricsSyncState.Running(0, p.total, 0)
+        cur.copy(index = p.index, total = p.total)
+    }
+    is MissingLyricsSync.Progress.Found -> {
+        val cur = (this as? LyricsSyncState.Running) ?: return this
+        cur.copy(found = cur.found + 1)
+    }
+    is MissingLyricsSync.Progress.Missing,
+    is MissingLyricsSync.Progress.Failed -> this
+    is MissingLyricsSync.Progress.Completed ->
+        LyricsSyncState.Done(found = p.found, missing = p.missing, failed = p.failed)
+    is MissingLyricsSync.Progress.PolicyBlocked -> LyricsSyncState.Blocked
+}
+
+@Composable
+private fun LyricsSyncCard(
+    state: LyricsSyncState,
+    onStart: () -> Unit,
+    onCancel: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+        shape = RoundedCornerShape(12.dp),
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .background(MaterialTheme.colorScheme.surface, CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.CloudDownload,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                        tint = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+                Spacer(Modifier.size(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Fetch missing lyrics",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        "Looks for sidecar `.lrc` files alongside each track, then " +
+                            "queries LRClib for anything still missing. Skips tracks " +
+                            "confirmed not-on-LRClib in the last 30 days.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
+
+            when (state) {
+                is LyricsSyncState.Idle -> {
+                    Button(onClick = onStart, modifier = Modifier.fillMaxWidth()) {
+                        Text("Start sweep")
+                    }
+                }
+                is LyricsSyncState.Running -> {
+                    val pct = if (state.total > 0) state.index.toFloat() / state.total else 0f
+                    LinearProgressIndicator(
+                        progress = { pct },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "${state.index + 1} of ${state.total} — found ${state.found}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    TextButton(onClick = onCancel) { Text("Cancel") }
+                }
+                is LyricsSyncState.Done -> {
+                    Text(
+                        "Found ${state.found}, missing ${state.missing}" +
+                            (if (state.failed > 0) ", failed ${state.failed}" else ""),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Button(onClick = onStart, modifier = Modifier.fillMaxWidth()) {
+                        Text("Sweep again")
+                    }
+                }
+                is LyricsSyncState.Blocked -> {
                     Text(
                         "Connectivity policy blocks the sweep. Set Settings → " +
                             "Connectivity to Always or Wi-Fi only and try again.",

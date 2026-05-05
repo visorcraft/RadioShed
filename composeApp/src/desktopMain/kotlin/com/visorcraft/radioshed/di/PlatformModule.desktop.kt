@@ -40,10 +40,10 @@ import com.visorcraft.radioshed.source.MusicBrainzClient
 import com.visorcraft.radioshed.source.NullBackupPackager
 import com.visorcraft.radioshed.source.NullBackupSharer
 import com.visorcraft.radioshed.source.NullBackupStorage
+import com.visorcraft.radioshed.source.DesktopLocalLyricsLoader
+import com.visorcraft.radioshed.source.DesktopLyricsFetcher
 import com.visorcraft.radioshed.source.NullCoverArtFetcher
 import com.visorcraft.radioshed.source.NullListenBrainzClient
-import com.visorcraft.radioshed.source.NullLocalLyricsLoader
-import com.visorcraft.radioshed.source.NullLyricsFetcher
 import com.visorcraft.radioshed.source.NullMusicBrainzClient
 import com.visorcraft.radioshed.source.NullSubsonicClient
 import com.visorcraft.radioshed.source.NullWikipediaBioFetcher
@@ -90,8 +90,8 @@ actual val platformModule: Module = module {
     single<ArtworkPersister> { DesktopArtworkPersister() }
     single<CoverArtFetcher> { NullCoverArtFetcher() }
     single<ConnectivityChecker> { DesktopConnectivityChecker() }
-    single<LyricsFetcher> { NullLyricsFetcher() }
-    single<LocalLyricsLoader> { NullLocalLyricsLoader() }
+    single<LyricsFetcher> { DesktopLyricsFetcher() }
+    single<LocalLyricsLoader> { DesktopLocalLyricsLoader() }
     single<BackupStorage> { NullBackupStorage() }
     single<BackupSharer> { NullBackupSharer() }
     single<FileBrowser> { DesktopFileBrowser() }
