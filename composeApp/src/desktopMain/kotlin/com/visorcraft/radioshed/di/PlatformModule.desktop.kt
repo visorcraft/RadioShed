@@ -17,6 +17,9 @@ import com.visorcraft.radioshed.source.BackupStorage
 import com.visorcraft.radioshed.source.ConnectivityChecker
 import com.visorcraft.radioshed.source.CoverArtFetcher
 import com.visorcraft.radioshed.source.DesktopArtworkPersister
+import com.visorcraft.radioshed.source.DesktopBackupPackager
+import com.visorcraft.radioshed.source.DesktopBackupSharer
+import com.visorcraft.radioshed.source.DesktopBackupStorage
 import com.visorcraft.radioshed.source.DesktopConnectivityChecker
 import com.visorcraft.radioshed.source.DesktopCrashLogReader
 import com.visorcraft.radioshed.source.DesktopCrashLogSharer
@@ -37,9 +40,6 @@ import com.visorcraft.radioshed.source.ListenBrainzClient
 import com.visorcraft.radioshed.source.LocalLyricsLoader
 import com.visorcraft.radioshed.source.LyricsFetcher
 import com.visorcraft.radioshed.source.MusicBrainzClient
-import com.visorcraft.radioshed.source.NullBackupPackager
-import com.visorcraft.radioshed.source.NullBackupSharer
-import com.visorcraft.radioshed.source.NullBackupStorage
 import com.visorcraft.radioshed.source.DesktopLocalLyricsLoader
 import com.visorcraft.radioshed.source.DesktopLyricsFetcher
 import com.visorcraft.radioshed.source.NullCoverArtFetcher
@@ -82,7 +82,7 @@ actual val platformModule: Module = module {
     single<FileEnumerator> { DesktopFileEnumerator() }
     single<TagReader> { DesktopTagReader() }
     single<TagWriter> { DesktopTagWriter() }
-    single<BackupPackager> { NullBackupPackager() }
+    single<BackupPackager> { DesktopBackupPackager() }
     single<MusicBrainzClient> { NullMusicBrainzClient() }
     single<WikipediaBioFetcher> { NullWikipediaBioFetcher() }
     single<ListenBrainzClient> { NullListenBrainzClient() }
@@ -92,8 +92,8 @@ actual val platformModule: Module = module {
     single<ConnectivityChecker> { DesktopConnectivityChecker() }
     single<LyricsFetcher> { DesktopLyricsFetcher() }
     single<LocalLyricsLoader> { DesktopLocalLyricsLoader() }
-    single<BackupStorage> { NullBackupStorage() }
-    single<BackupSharer> { NullBackupSharer() }
+    single<BackupStorage> { DesktopBackupStorage() }
+    single<BackupSharer> { DesktopBackupSharer() }
     single<FileBrowser> { DesktopFileBrowser() }
     single<FolderRevealer> { DesktopFolderRevealer() }
     single<RingtoneSetter> { DesktopRingtoneSetter() }

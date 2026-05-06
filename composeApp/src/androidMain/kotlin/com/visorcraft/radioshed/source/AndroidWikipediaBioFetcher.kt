@@ -5,7 +5,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.net.HttpURLConnection
-import java.net.URL
+import java.net.URI
 import java.net.URLEncoder
 
 /**
@@ -40,7 +40,7 @@ class AndroidWikipediaBioFetcher : WikipediaBioFetcher {
             val encoded = URLEncoder.encode(pageTitle, "UTF-8")
                 .replace("+", "%20")
                 .replace("%5F", "_")
-            val url = URL("$WP_BASE/api/rest_v1/page/summary/$encoded")
+            val url = URI("$WP_BASE/api/rest_v1/page/summary/$encoded").toURL()
             val conn = (url.openConnection() as HttpURLConnection).apply {
                 requestMethod = "GET"
                 instanceFollowRedirects = true

@@ -5,7 +5,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.net.HttpURLConnection
-import java.net.URL
+import java.net.URI
 import java.net.URLEncoder
 
 /**
@@ -37,7 +37,10 @@ class DesktopLyricsFetcher : LyricsFetcher {
                 append("&duration=").append(it)
             }
         }
-        val url = URL("$LRCLIB_BASE/api/get?$params")
+        // URI(...).toURL() over the deprecated URL(String) constructor
+        // — same wire behaviour, but URI is the modern parsing layer
+        // and gives us deterministic encoding semantics.
+        val url = URI("$LRCLIB_BASE/api/get?$params").toURL()
         val conn = (url.openConnection() as HttpURLConnection).apply {
             requestMethod = "GET"
             instanceFollowRedirects = true

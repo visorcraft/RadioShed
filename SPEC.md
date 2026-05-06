@@ -3702,6 +3702,101 @@ Known limitations of v1, surfaced in code comments:
 - No server-side playlists, starred items, scrobble-to-server,
   podcasts, internet radio, share endpoints. All deferred.
 
+#### Phase 19 polish (continued, batch 17 — desktop port + bug-fix sweep)
+
+Build `2026-05-04y` → `2026-05-06a`. The Windows desktop spike landed
+plus a "fix them all" pass over the known pre-existing bugs. Two
+threads packaged together because most of the desktop work *is* the
+fix for the platform-peer Null stubs left behind during the spike.
+
+Desktop platform peers (real impls, replacing Null stubs in
+`PlatformModule.desktop.kt`):
+
+- [x] **`DesktopTagWriter` (Phase 7 tag editing on desktop).**
+  jaudiotagger-backed write path mirroring `AndroidTagWriter` —
+  applies `TagPatch` (title/artist/album/year/genre, plus optional
+  rating + composer + comment) atomically per file via
+  `AudioFileIO.write`. Same Vorbis / ID3v2 / MP4 dispatch logic;
+  shares the `escapeForFrame`/normalisation helpers.
+- [x] **`DesktopBackupStorage` (Phase 12 backup/restore on desktop).**
+  Reads/writes `.rsbak` / `.json` bundles under
+  `appAppDataDir()/backups/` via the same tmp-rename pattern as
+  Android. Returns `file://` URIs so the restore reader and sharer
+  consume one URI shape across platforms.
+- [x] **`DesktopBackupPackager`.** java.util.zip-backed, byte-for-byte
+  parity with `AndroidBackupPackager` (manifest-first ordering,
+  zip-slip guard rejecting `..` / absolute paths, default DEFLATE
+  level). A `.rsbak` produced on phone unpacks correctly on
+  desktop and vice versa.
+- [x] **`DesktopBackupSharer`.** AWT `FileDialog(SAVE)` lets the user
+  pick a target dir (USB stick, Dropbox folder, network share)
+  and copies the bundle there. Cancel returns false; identical
+  contract to `AndroidBackupSharer` so the Restore screen logic
+  is unchanged.
+- [x] **`DesktopPlaylistExporter` + `DesktopHistoryExporter`.** AWT
+  save dialog → write `.m3u` / `.csv` to user-chosen path. Same
+  `#EXTM3U` + `#EXTINF` format and same RFC-4180 CSV column layout
+  as the Android exporters so a sheet/playlist built against either
+  export keeps working on the other platform.
+
+Bug fixes (the "fix them all" pass):
+
+- [x] **Repeat-off infinite-loop fix
+  (`PlaybackQueue.next(allowWrap)` + tests).** Sequential queue
+  exhaustion was unreachable: `(cursor + 1) % pool.size` always
+  wrapped, so a single-track queue with Repeat=Off looped forever
+  instead of stopping at end of pool. Added an `allowWrap`
+  parameter to `PlaybackQueue.next()` defaulting to `true`;
+  `StationPlayback.advanceToNext()` now passes `allowWrap = (
+  repeatMode == RepeatMode.All)`. Two regression tests in
+  `PlaybackQueueTest` cover the multi-track-stops and
+  single-track-stops paths.
+- [x] **Path-handling sweep (`parentPath()` / `joinPath()`).** New
+  separator-agnostic helpers in `source/PathJoin.kt` replace
+  `track.path.substringBeforeLast('/')` and `"$base/$name"` string
+  concat across `App.kt`, `OnboardingScreen`, `LibrarySettingsScreen`,
+  Track-Info "Open folder", and the desktop file browser. Fixes
+  `D:\/Music` placeholder + Open-Folder showing `/` on Windows. New
+  `expect val defaultMusicFolderPath()` resolves a sane platform
+  default for first-run Onboarding.
+- [x] **Backup-format key parity audit.** `KEY_SUBSONIC_URL` and
+  `KEY_SUBSONIC_USERNAME` were missing from `dumpForBackup` /
+  `expectedTypeForKey` / `resetAllUserSettings`. Added (STR
+  bucket); password + LB token still excluded as credentials.
+  `KEY_FILE_BROWSER_PINS` and `KEY_LISTENBRAINZ_ENABLED` added to
+  `resetAllUserSettings`. Restore round-trip now covers every
+  non-credential setting.
+- [x] **Android Auto handshake fix
+  (`DEFAULT_SESSION_AND_LIBRARY_COMMANDS`).** The Auto bind was
+  silently being denied because `RadioShedMediaSessionService`
+  granted only `DEFAULT_SESSION_COMMANDS` — the legacy
+  MediaBrowserCompat bridge needs `LIBRARY_GET_LIBRARY_ROOT` to
+  return the browse root. Switched to the combined constant.
+  Library / Albums / Artists / RecentlyPlayed / Search browse
+  branches added, plus `onSearch` + `onGetSearchResult`. Star
+  button now cycles 0→5 with displayName `★ N/5` so it visibly
+  reacts on the head-unit screen.
+- [x] **`URL("...")` deprecation cleanup.** Six Android source
+  clients (`AndroidCoverArtFetcher`, `AndroidLyricsFetcher`,
+  `AndroidListenBrainzClient`, `AndroidWikipediaBioFetcher`,
+  `AndroidSubsonicClient`, `AndroidMusicBrainzClient`) plus
+  `DesktopLyricsFetcher` migrated to `URI(...).toURL()`. Same
+  HTTP semantics, no more JDK-21 deprecation warning noise.
+- [x] **Subsonic empty-input guard.** `httpGetJson` bails early
+  when `baseUrl` lacks an `http(s)://` scheme so "Test & save"
+  on a blank field returns a clean null instead of crashing the
+  IO worker via `MalformedURLException`.
+
+Known gaps still deferred:
+- iOS implementation pass (needs Mac access).
+- Phase 18 verifyMigrations refactor (large schema risk; tracked).
+- Media3 1.7+ bump.
+- Scanner + tag + lyrics deduplication into a shared JVM source set
+  (currently Android and Desktop carry parallel impls of the same
+  jaudiotagger code).
+- Tooltip mechanical sweep across the remaining ~62 IconButton call
+  sites.
+
 ---
 
 ## Appendix A — Compose Multiplatform vs native UI: when to fall back

@@ -3,7 +3,7 @@ package com.visorcraft.radioshed.source
 import com.visorcraft.radioshed.data.IODispatcher
 import kotlinx.coroutines.withContext
 import java.net.HttpURLConnection
-import java.net.URL
+import java.net.URI
 
 /**
  * Cover Art Archive client. Uses [HttpURLConnection] from the JDK rather
@@ -27,7 +27,7 @@ class AndroidCoverArtFetcher : CoverArtFetcher {
 
     override suspend fun fetchByReleaseMbid(mbid: String): ByteArray? = withContext(IODispatcher) {
         if (mbid.isBlank()) return@withContext null
-        val url = URL("$CAA_BASE/release/$mbid/front-$SIZE_PX")
+        val url = URI("$CAA_BASE/release/$mbid/front-$SIZE_PX").toURL()
         runCatching {
             val conn = (url.openConnection() as HttpURLConnection).apply {
                 requestMethod = "GET"

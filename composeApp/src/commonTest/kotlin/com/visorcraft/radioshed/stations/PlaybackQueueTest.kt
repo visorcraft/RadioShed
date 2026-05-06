@@ -48,6 +48,36 @@ class PlaybackQueueTest {
     }
 
     @Test
+    fun sequential_stops_after_last_when_wrap_disabled() {
+        // Regression: Repeat = Off used to behave the same as Repeat
+        // = All because nextSequential's `(cursor + 1) % size` always
+        // wrapped. The user-facing symptom was a single track played
+        // via `playTracks(listOf(track))` looping forever despite the
+        // toggle reading "Repeat off".
+        val tracks = (1L..3L).map(::track)
+        val q = PlaybackQueue(
+            tracks,
+            PlaybackRule(order = PlayOrder.Sequential),
+        )
+        assertEquals(1L, q.next(allowWrap = false)?.id)
+        assertEquals(2L, q.next(allowWrap = false)?.id)
+        assertEquals(3L, q.next(allowWrap = false)?.id)
+        assertNull(q.next(allowWrap = false))
+    }
+
+    @Test
+    fun sequential_single_track_stops_when_wrap_disabled() {
+        // The single-track case the original bug report hit head-on.
+        val tracks = listOf(track(1L))
+        val q = PlaybackQueue(
+            tracks,
+            PlaybackRule(order = PlayOrder.Sequential),
+        )
+        assertEquals(1L, q.next(allowWrap = false)?.id)
+        assertNull(q.next(allowWrap = false))
+    }
+
+    @Test
     fun smart_shuffle_avoids_recent_within_depth() {
         // 5 tracks, no-repeat depth 3, pin random for determinism
         val tracks = (1L..5L).map(::track)

@@ -39,7 +39,7 @@ fun TooltipIconButton(
     }
     val state = rememberTooltipState()
     TooltipBox(
-        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(),
         tooltip = { PlainTooltip { Text(tooltip) } },
         state = state,
     ) {
@@ -70,7 +70,7 @@ fun Tooltipped(
     }
     val state = rememberTooltipState()
     TooltipBox(
-        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(),
         tooltip = { PlainTooltip { Text(tooltip) } },
         state = state,
     ) { content() }

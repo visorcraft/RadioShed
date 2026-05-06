@@ -5,7 +5,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.net.HttpURLConnection
-import java.net.URL
+import java.net.URI
 import java.net.URLEncoder
 
 /**
@@ -62,7 +62,7 @@ class AndroidMusicBrainzClient : MusicBrainzClient {
         }
 
     private suspend fun httpGet(url: String): String? = withContext(IODispatcher) {
-        val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+        val conn = (URI(url).toURL().openConnection() as HttpURLConnection).apply {
             requestMethod = "GET"
             instanceFollowRedirects = true
             connectTimeout = CONNECT_TIMEOUT_MS

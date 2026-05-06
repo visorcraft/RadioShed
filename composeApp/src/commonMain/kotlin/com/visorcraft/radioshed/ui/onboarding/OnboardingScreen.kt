@@ -663,7 +663,12 @@ private fun FolderStep(
         // so the user sees neighbors of the pre-fill (e.g. opens at
         // /storage/emulated/0 with /Music, /Pictures, /Download visible
         // as options).
-        val startPath = folderPath.substringBeforeLast('/').ifBlank { "/storage" }
+        // parentPath is separator-agnostic — handles `/` AND `\` so a
+        // Windows path like `C:\Music\Foo` opens the browser at
+        // `C:\Music`. Falls back to the platform-aware default music
+        // folder when the user hasn't typed anything resolvable yet.
+        val startPath = com.visorcraft.radioshed.source.parentPath(folderPath)
+            .ifBlank { com.visorcraft.radioshed.source.defaultMusicFolderPath() }
         FolderBrowserDialog(
             initialPath = startPath,
             onSelect = { picked ->

@@ -5,7 +5,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.net.HttpURLConnection
-import java.net.URL
+import java.net.URI
 
 /**
  * ListenBrainz scrobbling over plain HTTPS POST. Same JDK-only HTTP
@@ -65,7 +65,7 @@ class AndroidListenBrainzClient : ListenBrainzClient {
             }
         """.trimIndent()
 
-        val url = URL("$LB_BASE/1/submit-listens")
+        val url = URI("$LB_BASE/1/submit-listens").toURL()
         val conn = (url.openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
             doOutput = true
@@ -89,7 +89,7 @@ class AndroidListenBrainzClient : ListenBrainzClient {
 
     override suspend fun validateToken(token: String): Boolean = withContext(IODispatcher) {
         if (token.isBlank()) return@withContext false
-        val url = URL("$LB_BASE/1/validate-token")
+        val url = URI("$LB_BASE/1/validate-token").toURL()
         val conn = (url.openConnection() as HttpURLConnection).apply {
             requestMethod = "GET"
             connectTimeout = CONNECT_TIMEOUT_MS

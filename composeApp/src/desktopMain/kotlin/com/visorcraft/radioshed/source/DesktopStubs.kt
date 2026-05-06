@@ -28,19 +28,6 @@ class DesktopTrackSharer : TrackSharer {
     override suspend fun share(absolutePath: String, displayName: String): Boolean = false
 }
 
-/** No-op — exporting a playlist needs a save-as dialog wired up. */
-class DesktopPlaylistExporter : PlaylistExporter {
-    override suspend fun exportM3u(
-        playlistName: String,
-        entries: List<M3uEntry>,
-    ): Boolean = false
-}
-
-/** No-op — exporting history needs a save-as dialog wired up. */
-class DesktopHistoryExporter : HistoryExporter {
-    override suspend fun exportCsv(rows: List<HistoryCsvRow>): Boolean = false
-}
-
 /** No-op — desktop has no equivalent of Android ApplicationExitInfo. */
 class DesktopCrashLogReader : CrashLogReader {
     override suspend fun recentEntries(limit: Int): List<CrashLogEntry> = emptyList()
@@ -51,13 +38,3 @@ class DesktopCrashLogSharer : CrashLogSharer {
     override suspend fun share(subject: String, body: String): Boolean = false
 }
 
-/**
- * No-op TagWriter — full editing is deferred to the same pass that
- * implements iOS tag writing. Returns a generic failure so the UI's
- * "Save tags" path surfaces a clear "not supported on this platform"
- * message rather than appearing to succeed silently.
- */
-class DesktopTagWriter : TagWriter {
-    override suspend fun write(uri: String, patch: TagPatch): Result<Unit> =
-        Result.failure(UnsupportedOperationException("Tag writing isn't supported on desktop yet."))
-}

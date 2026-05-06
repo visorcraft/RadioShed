@@ -5,7 +5,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.net.HttpURLConnection
-import java.net.URL
+import java.net.URI
 import java.net.URLEncoder
 import java.security.MessageDigest
 import kotlin.random.Random
@@ -160,7 +160,7 @@ class AndroidSubsonicClient : SubsonicClient {
         val combined = if (extraParams.isEmpty()) params else "$extraParams&$params"
         val urlString = "$base/rest/$endpoint?$combined"
         return try {
-            val conn = (URL(urlString).openConnection() as HttpURLConnection).apply {
+            val conn = (URI(urlString).toURL().openConnection() as HttpURLConnection).apply {
                 requestMethod = "GET"
                 instanceFollowRedirects = true
                 connectTimeout = CONNECT_TIMEOUT_MS

@@ -867,8 +867,17 @@ class StationPlayback(
 
     private fun advanceToNext() {
         val q = queue ?: return
-        val next = q.next() ?: run {
-            // Queue exhausted (all dislikes, or empty candidates). Stop.
+        // allowWrap = Repeat All. Repeat Off / Repeat One both produce
+        // allowWrap=false here — One short-circuits in the init block
+        // before reaching advanceToNext, so this only fires for Off
+        // and All. The previous default (always wrap) made Sequential
+        // 1-track ad-hoc plays loop forever even with Repeat = Off;
+        // differentiating the two finally honours the user-facing
+        // Repeat toggle.
+        val allowWrap = _repeatMode.value == RepeatMode.All
+        val next = q.next(allowWrap = allowWrap) ?: run {
+            // Queue exhausted (all dislikes, empty candidates, OR
+            // Sequential reached its last track with Repeat = Off).
             audioEngine.stop()
             return
         }

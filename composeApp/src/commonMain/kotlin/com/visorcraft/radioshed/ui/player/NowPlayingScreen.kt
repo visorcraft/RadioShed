@@ -74,6 +74,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
@@ -2340,7 +2341,14 @@ private fun TrackInfoDialog(
                         // own UI so behavior is consistent across
                         // OEMs and we don't depend on a third-party
                         // app at all.
-                        val parent = t.path.substringBeforeLast('/', "/")
+                        // parentPath() is separator-agnostic — handles
+                        // POSIX `/` AND Windows `\` so an "Open folder"
+                        // tap on desktop lands the user in the song's
+                        // real directory rather than the filesystem
+                        // root. (Pre-fix: the substringBeforeLast('/')
+                        // path returned the default "/" on Windows
+                        // because Windows paths contain no '/'.)
+                        val parent = com.visorcraft.radioshed.source.parentPath(t.path)
                             .ifBlank { "/" }
                         onDismiss()
                         onOpenFolder(parent)
@@ -2357,7 +2365,18 @@ private fun TrackInfoDialog(
             if (t == null) {
                 Text("Loading…", style = MaterialTheme.typography.bodyMedium)
             } else {
-                Column(verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(4.dp)) {
+                // verticalScroll: Material 3's AlertDialog text slot
+                // doesn't auto-scroll on desktop when the body
+                // overflows the dialog's max height. The Path row
+                // lives at the bottom of a long Column (ringtone /
+                // share buttons, MBID rows, history stats, lyrics
+                // overrides, …) so on a tall body it would silently
+                // clip — which is what produced the "filepath isn't
+                // shown on Windows" report.
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(4.dp),
+                ) {
                     ringtoneStatus?.let { msg ->
                         Text(
                             text = msg,
@@ -3413,10 +3432,22 @@ private fun TriplePaneLayout(
         // Left third — stations list. Tap a row to switch stations.
         // Highlights the currently-playing one with the primary
         // container, mirroring the SXM "Channel List" look.
+        //
+        // Vertically centered: with a small built-in station list
+        // (the default presets) the column would otherwise top-pin
+        // the label while the centre + right columns are vertically
+        // centred — visually unbalanced. Arrangement.Center pulls
+        // the (label + list) pair toward the middle when they're
+        // shorter than the column. Once the user has enough stations
+        // for the LazyColumn to fill the height, the wrap-content
+        // height is bounded by the column max and the list scrolls
+        // normally (Center arrangement is a no-op when children
+        // already fill the axis).
         Column(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxHeight(),
+            verticalArrangement = Arrangement.Center,
         ) {
             Text(
                 text = "Stations",
@@ -3427,7 +3458,13 @@ private fun TriplePaneLayout(
             )
             Spacer(Modifier.height(4.dp))
             LazyColumn(
-                modifier = Modifier.fillMaxSize(),
+                // wrapContentHeight (the LazyColumn's default sizing
+                // along its main axis) lets it shrink to the actual
+                // station count while still being capped at the
+                // parent Column's max height — so a 100-station
+                // library still scrolls inside the column rather
+                // than overflowing.
+                modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 items(

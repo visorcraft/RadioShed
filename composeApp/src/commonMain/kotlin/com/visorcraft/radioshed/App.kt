@@ -342,7 +342,8 @@ fun App(
                                 // Open the file's parent folder in the
                                 // built-in browser so the user can
                                 // inspect / move / delete it manually.
-                                val parent = track.path.substringBeforeLast('/')
+                                val parent = com.visorcraft.radioshed.source
+                                    .parentPath(track.path)
                                     .ifBlank { track.path }
                                 current = AppScreen.FolderBrowser(parent)
                             },

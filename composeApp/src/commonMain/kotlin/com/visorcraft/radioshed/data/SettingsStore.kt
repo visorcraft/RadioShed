@@ -413,6 +413,7 @@ class SettingsStore(private val settings: Settings) {
             KEY_STATIONS_HIDE_BUILTINS, KEY_CONNECTIVITY_POLICY,
             KEY_LIB_TAB, KEY_LIB_SONG_SORT, KEY_LIB_ARTIST_SORT,
             KEY_LIB_ALBUM_SORT, KEY_LIB_GENRE_SORT, KEY_FILE_BROWSER_SORT,
+            KEY_FILE_BROWSER_PINS,
             KEY_EQ_ENABLED, KEY_REPLAY_GAIN, KEY_REPLAY_GAIN_PREAMP,
             KEY_AUTO_RESUME_STATION, KEY_AUTO_BACKUP,
             KEY_AUTO_RESCAN_ON_LAUNCH, KEY_END_FADE_SEC, KEY_LYRICS_SCALE,
@@ -421,7 +422,15 @@ class SettingsStore(private val settings: Settings) {
             KEY_STATS_WINDOW_DAYS, KEY_BACKUP_RETENTION,
             KEY_SLEEP_STOP_ON_EXPIRE, KEY_PLAYBACK_SPEED,
             KEY_KEEP_SCREEN_ON, KEY_AUTO_FETCH_LYRICS, KEY_HAPTICS_ENABLED,
+            KEY_LISTENBRAINZ_ENABLED,
             KEY_SEARCH_SCOPE, KEY_NOW_PLAYING_LAYOUT,
+            // Cloud connection setup is part of the user-portable
+            // surface (round-trips via backup, see dumpForBackup), so
+            // a "reset all settings" wipes it too. Credentials
+            // (KEY_SUBSONIC_PASSWORD / KEY_LISTENBRAINZ_TOKEN) are NOT
+            // touched here — those are managed via the per-source
+            // sign-out affordances in their respective settings rows.
+            KEY_SUBSONIC_URL, KEY_SUBSONIC_USERNAME,
         ).forEach { settings.remove(it) }
         // Reset wipes the underlying entries; mirror flows must
         // republish so live consumers (NowPlaying for driveMode /
@@ -787,6 +796,16 @@ class SettingsStore(private val settings: Settings) {
             // backups silently dropped pinned bookmarks.
             KEY_FILE_BROWSER_PINS,
             KEY_THEME_COLOR_SOURCE,
+            // Subsonic server URL + username — non-credential
+            // connection setup. Round-tripping these saves the user
+            // re-typing the server URL and username on a new device;
+            // KEY_SUBSONIC_PASSWORD is intentionally NOT in any of
+            // the dump buckets because shipping credentials in a
+            // backup bundle that lives on disk / sharing UIs is a
+            // bad idea. The user re-enters the password once after
+            // restore and the rest of the connection works.
+            // Same rationale for KEY_LISTENBRAINZ_TOKEN — excluded.
+            KEY_SUBSONIC_URL, KEY_SUBSONIC_USERNAME,
         ).forEach { key ->
             settings.getStringOrNull(key)?.let {
                 out[key] = com.visorcraft.radioshed.source.BackupSettingValue.Str(it)
@@ -926,7 +945,8 @@ class SettingsStore(private val settings: Settings) {
         KEY_ALBUM_TRACK_SORT, KEY_ARTIST_TRACK_SORT, KEY_GENRE_TRACK_SORT,
         KEY_NOW_PLAYING_LAYOUT,
         KEY_FILE_BROWSER_PINS,
-        KEY_THEME_COLOR_SOURCE -> SettingType.STR
+        KEY_THEME_COLOR_SOURCE,
+        KEY_SUBSONIC_URL, KEY_SUBSONIC_USERNAME -> SettingType.STR
         KEY_MATERIAL_YOU, KEY_REDUCE_MOTION, KEY_DRIVE_MODE,
         KEY_REPLAY_GAIN, KEY_AUTO_RESUME_STATION, KEY_AUTO_BACKUP,
         KEY_AUTO_RESCAN_ON_LAUNCH, KEY_EQ_ENABLED,

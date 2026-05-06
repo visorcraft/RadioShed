@@ -605,7 +605,10 @@ private fun AddFolderDialog(
         // user sees neighbors of whatever's pre-filled (e.g. if they tapped
         // the SD card chip, /Music auto-fills, browser opens at the SD root
         // showing /Music alongside /Pictures, /Downloads, etc.).
-        val startPath = path.substringBeforeLast('/').ifBlank { "/storage" }
+        // parentPath handles both `/` and `\`; the literal `/storage`
+        // fallback was Android-only and meaningless on desktop.
+        val startPath = com.visorcraft.radioshed.source.parentPath(path)
+            .ifBlank { com.visorcraft.radioshed.source.defaultMusicFolderPath() }
         FolderBrowserDialog(
             initialPath = startPath,
             onSelect = { picked ->

@@ -111,9 +111,26 @@ class PlaybackQueue(
 
     val candidateCount: Int get() = candidates.size
 
-    /** Pick the next track, advancing internal state. Returns null if no
-     *  candidates remain (after dislikes are filtered). */
-    fun next(): Track? {
+    /**
+     * Pick the next track, advancing internal state. Returns null if no
+     * candidates remain (after dislikes are filtered) OR when [allowWrap]
+     * is false and a Sequential queue has played its last track.
+     *
+     * [allowWrap] defaults to true for backwards compatibility with the
+     * smart-shuffle / station call sites (stations are infinite by
+     * design and should never stop). Ad-hoc playback paths (Library →
+     * tap track / album / artist, Search result, AA Library / Recently
+     * Played selection — all of which use Sequential rules) pass
+     * `allowWrap = repeatMode == RepeatMode.All` so a finite list stops
+     * after the last track unless the user has Repeat All on. Without
+     * this gate, a 1-track ad-hoc play looped forever even with
+     * Repeat = Off, since `(cursor + 1) % size` always wrapped to 0.
+     *
+     * Smart-shuffle and weighted-random play orders ignore [allowWrap]
+     * — those modes are only used by stations and are meant to keep
+     * picking indefinitely from the candidate pool.
+     */
+    fun next(allowWrap: Boolean = true): Track? {
         // Priority items always come first — even if the candidate pool
         // is empty (e.g., last station candidate just played), a queued
         // "Play next" track still resolves.
@@ -124,7 +141,7 @@ class PlaybackQueue(
         }
         if (candidates.isEmpty()) return null
         return when (rule.order) {
-            PlayOrder.Sequential -> nextSequential(candidates)
+            PlayOrder.Sequential -> nextSequential(candidates, allowWrap)
             PlayOrder.Shuffle, PlayOrder.SmartShuffle, PlayOrder.WeightedRandom ->
                 nextSmartShuffle(candidates)
         }
@@ -195,9 +212,17 @@ class PlaybackQueue(
         priority.add(to, track)
     }
 
-    private fun nextSequential(pool: List<Track>): Track {
-        val track = pool[sequentialCursor.coerceIn(0, pool.size - 1)]
-        sequentialCursor = (sequentialCursor + 1) % pool.size
+    private fun nextSequential(pool: List<Track>, allowWrap: Boolean): Track? {
+        // `sequentialCursor >= pool.size` is the post-end sentinel: the
+        // previous call returned the last track and bumped the cursor
+        // past the end. Wrap or stop based on allowWrap.
+        if (sequentialCursor >= pool.size) {
+            if (!allowWrap) return null
+            sequentialCursor = 0
+        }
+        val track = pool[sequentialCursor]
+        val nextCursor = sequentialCursor + 1
+        sequentialCursor = if (nextCursor >= pool.size && allowWrap) 0 else nextCursor
         recordPlayed(track.id, track.albumId, primaryArtistOf(track))
         return track
     }
