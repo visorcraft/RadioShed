@@ -2,6 +2,7 @@ package com.visorcraft.radioshed.audio
 
 import android.content.Intent
 import android.os.Bundle
+import android.util.Log
 import android.view.KeyEvent
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -91,6 +92,7 @@ class RadioShedMediaSessionService : MediaLibraryService() {
     private val libraryCallback = RadioShedLibraryCallback()
 
     override fun onCreate() {
+        Log.i(TAG, "onCreate: starting service pid=${android.os.Process.myPid()}")
         super.onCreate()
         val attributes = AudioAttributes.Builder()
             .setUsage(C.USAGE_MEDIA)
@@ -168,8 +170,10 @@ class RadioShedMediaSessionService : MediaLibraryService() {
             }
         })
 
+        Log.i(TAG, "onCreate: building MediaLibrarySession")
         librarySession = MediaLibrarySession.Builder(this, player, libraryCallback)
             .build()
+        Log.i(TAG, "onCreate: MediaLibrarySession built; token=${librarySession?.token}")
         // Hand the live session back to the callback so it can update
         // the custom layout (heart state, repeat/shuffle glyph) when
         // the user taps an action or playback state changes. Using a
@@ -216,8 +220,12 @@ class RadioShedMediaSessionService : MediaLibraryService() {
         setMediaNotificationProvider(notificationProvider)
     }
 
-    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? =
-        librarySession
+    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? {
+        val pkg = controllerInfo.packageName
+        val session = librarySession
+        Log.i(TAG, "onGetSession: caller=$pkg session=${if (session == null) "null" else "ok"}")
+        return session
+    }
 
     override fun onTaskRemoved(rootIntent: android.content.Intent?) {
         // Standard music-app behavior: if music is actively playing when the
@@ -240,6 +248,7 @@ class RadioShedMediaSessionService : MediaLibraryService() {
     }
 
     override fun onDestroy() {
+        Log.i(TAG, "onDestroy: tearing down service")
         // Tear down the equalizer + sleep timer FIRST. The equalizer
         // holds a native AudioEffect reference scoped to ExoPlayer's
         // audio session; releasing the player without first releasing
@@ -305,10 +314,25 @@ class RadioShedMediaSessionService : MediaLibraryService() {
 
         fun attach(session: MediaLibrarySession?) {
             attachedSession = session
-            // Kick a first refresh so the layout reflects the current
-            // track's like state on cold start, not just after the
-            // first transition.
-            refreshCustomLayout()
+            // Intentionally NOT calling refreshCustomLayout() here.
+            //
+            // Doing so during the service's onCreate (immediately
+            // after MediaLibrarySession.Builder().build() returns)
+            // pushes a setCustomLayout to the session before any
+            // controller has connected, and on Android Auto in
+            // particular that left the MediaBrowser bridge in a state
+            // where the subsequent MediaBrowserCompat connect from
+            // AA's GH.MediaBCConnection failed with onConnectFailed
+            // → AA's "RadioShed doesn't seem to be working right now."
+            //
+            // The initial layout each controller sees is already
+            // wired through onConnect's
+            // `AcceptedResultBuilder.setCustomLayout(buildCustomLayout())`,
+            // so Auto / lock-screen / in-app each get the right
+            // layout on connect. Subsequent refreshes (track change,
+            // tap toggles) come from onMediaItemTransition /
+            // onCustomCommand handlers below — those run after a
+            // controller is already in place, which is safe.
         }
 
         fun detach() {
@@ -402,6 +426,11 @@ class RadioShedMediaSessionService : MediaLibraryService() {
             session: MediaSession,
             controller: MediaSession.ControllerInfo,
         ): MediaSession.ConnectionResult {
+            Log.i(
+                TAG,
+                "onConnect: caller=${controller.packageName} uid=${controller.uid} " +
+                    "controllerType=${controller.controllerVersion}",
+            )
             val playerCommands = MediaSession.ConnectionResult.DEFAULT_PLAYER_COMMANDS
                 .buildUpon()
                 .add(Player.COMMAND_SEEK_TO_NEXT)
@@ -415,7 +444,18 @@ class RadioShedMediaSessionService : MediaLibraryService() {
             // (and the lock-screen / notification expanded layout) via
             // setCustomLayout. Auto's media layout reserves slots beside
             // the transport controls for app-defined CommandButtons.
-            val sessionCommands = MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS
+            //
+            // CRUCIAL: this is a MediaLibrarySession, so the base must
+            // be DEFAULT_SESSION_AND_LIBRARY_COMMANDS — DEFAULT_SESSION_COMMANDS
+            // alone strips the library-access commands like
+            // COMMAND_CODE_LIBRARY_GET_LIBRARY_ROOT, which the legacy
+            // MediaBrowserService bridge to Android Auto checks BEFORE
+            // delegating to our onGetLibraryRoot. Stripping that command
+            // is what produced AA's "RadioShed doesn't seem to be
+            // working right now" — the framework returned "No root for
+            // client com.google.android.projection.gearhead" without
+            // ever calling our callback.
+            val sessionCommands = MediaSession.ConnectionResult.DEFAULT_SESSION_AND_LIBRARY_COMMANDS
                 .buildUpon()
                 .add(SessionCommand(ACTION_TOGGLE_STAR, Bundle.EMPTY))
                 .add(SessionCommand(ACTION_DISLIKE_ON_STATION, Bundle.EMPTY))
@@ -424,10 +464,14 @@ class RadioShedMediaSessionService : MediaLibraryService() {
                 .add(SessionCommand(ACTION_TOGGLE_SHUFFLE, Bundle.EMPTY))
                 .build()
 
+            val layout = runCatching { buildCustomLayout() }
+                .onFailure { Log.e(TAG, "onConnect: buildCustomLayout failed", it) }
+                .getOrDefault(ImmutableList.of())
+            Log.i(TAG, "onConnect: accepting with ${layout.size} custom layout buttons")
             return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
                 .setAvailablePlayerCommands(playerCommands)
                 .setAvailableSessionCommands(sessionCommands)
-                .setCustomLayout(buildCustomLayout())
+                .setCustomLayout(layout)
                 .build()
         }
 
@@ -446,16 +490,17 @@ class RadioShedMediaSessionService : MediaLibraryService() {
         private fun buildCustomLayout(): ImmutableList<CommandButton> {
             val heartIcon = if (currentTrackLiked) R.drawable.ic_radioshed_heart
                             else R.drawable.ic_radioshed_heart_outline
-            val player = attachedSession?.player
-            val repeatMode = player?.repeatMode ?: Player.REPEAT_MODE_OFF
-            val repeatIcon = when (repeatMode) {
-                Player.REPEAT_MODE_ONE -> R.drawable.ic_radioshed_repeat_one
-                Player.REPEAT_MODE_ALL -> R.drawable.ic_radioshed_repeat_all
-                else -> R.drawable.ic_radioshed_repeat_off
-            }
-            val shuffleOn = player?.shuffleModeEnabled == true
-            val shuffleIcon = if (shuffleOn) R.drawable.ic_radioshed_shuffle_on
-                              else R.drawable.ic_radioshed_shuffle_off
+            // Conservative 3-button layout — Android Auto's NowPlaying
+            // template renders 2-3 secondary actions reliably; pushing
+            // 5 (heart + shuffle + repeat + star + dislike) was
+            // correlated with the AA regression where the head unit
+            // showed "RadioShed doesn't seem to be working right now"
+            // instead of the player surface. Repeat + shuffle remain
+            // accessible on AA via the framework's own
+            // Player.COMMAND_SET_REPEAT_MODE / SHUFFLE_MODE rendering,
+            // so dropping them from the custom layout doesn't lose
+            // functionality on the car screen — only the explicit
+            // glyph slots we owned in the notification.
 
             val heartButton = CommandButton.Builder()
                 .setSessionCommand(SessionCommand(ACTION_TOGGLE_LIKE, Bundle.EMPTY))
@@ -472,29 +517,9 @@ class RadioShedMediaSessionService : MediaLibraryService() {
                 .setDisplayName("Dislike")
                 .setIconResId(R.drawable.ic_radioshed_thumb_down)
                 .build()
-            val repeatButton = CommandButton.Builder()
-                .setSessionCommand(SessionCommand(ACTION_CYCLE_REPEAT, Bundle.EMPTY))
-                .setDisplayName(
-                    when (repeatMode) {
-                        Player.REPEAT_MODE_ONE -> "Repeat one"
-                        Player.REPEAT_MODE_ALL -> "Repeat all"
-                        else -> "Repeat off"
-                    },
-                )
-                .setIconResId(repeatIcon)
-                .build()
-            val shuffleButton = CommandButton.Builder()
-                .setSessionCommand(SessionCommand(ACTION_TOGGLE_SHUFFLE, Bundle.EMPTY))
-                .setDisplayName(if (shuffleOn) "Shuffle on" else "Shuffle off")
-                .setIconResId(shuffleIcon)
-                .build()
 
-            // Order tuned for Auto's two-row template: most-used first
-            // (heart, then mode toggles, then per-station feedback).
             return ImmutableList.of(
                 heartButton,
-                shuffleButton,
-                repeatButton,
                 starButton,
                 dislikeButton,
             )
@@ -514,30 +539,42 @@ class RadioShedMediaSessionService : MediaLibraryService() {
          * is cheap.
          */
         fun refreshCustomLayout() {
-            val session = attachedSession ?: return
-            // Phase 1: synchronous re-emit using cached like state.
-            session.setCustomLayout(buildCustomLayout())
-            // Phase 2: async like-state refresh, then re-emit if it
-            // changed. Track id -1 (ad-hoc playback) skips the lookup.
-            val trackId = session.player.currentMediaItem?.mediaId?.toLongOrNull()
-            if (trackId == null || trackId < 0L) {
-                if (currentTrackLiked) {
-                    currentTrackLiked = false
-                    session.setCustomLayout(buildCustomLayout())
+            // Defensive runCatching: a throw here from buildCustomLayout
+            // (missing drawable, NPE on attachedSession.player during a
+            // tear-down race) was previously bubbling up and killing
+            // the MediaLibrarySession before AA could finish its
+            // handshake — which is what produced AA's generic
+            // "RadioShed doesn't seem to be working right now" instead
+            // of a real player surface. Swallowing the throw keeps
+            // the session alive; the worst case is the layout doesn't
+            // refresh, which is far less bad than the service dying.
+            // Logged at error rather than silently swallowed so we
+            // can see the actual cause if it ever fires again.
+            runCatching {
+                val session = attachedSession ?: return@runCatching
+                session.setCustomLayout(buildCustomLayout())
+                val trackId = session.player.currentMediaItem?.mediaId?.toLongOrNull()
+                if (trackId == null || trackId < 0L) {
+                    if (currentTrackLiked) {
+                        currentTrackLiked = false
+                        session.setCustomLayout(buildCustomLayout())
+                    }
+                    return@runCatching
                 }
-                return
-            }
-            scope.launch {
-                runCatching {
-                    val ratingRepo = GlobalContext.get().get<RatingRepository>()
-                    val liked = ratingRepo.isLiked(trackId)
-                    if (liked != currentTrackLiked) {
-                        currentTrackLiked = liked
-                        // Guard against races with detach() — re-read
-                        // the field rather than reusing `session`.
-                        attachedSession?.setCustomLayout(buildCustomLayout())
+                scope.launch {
+                    runCatching {
+                        val ratingRepo = GlobalContext.get().get<RatingRepository>()
+                        val liked = ratingRepo.isLiked(trackId)
+                        if (liked != currentTrackLiked) {
+                            currentTrackLiked = liked
+                            attachedSession?.setCustomLayout(buildCustomLayout())
+                        }
+                    }.onFailure {
+                        Log.e(TAG, "refreshCustomLayout: like-state lookup failed", it)
                     }
                 }
+            }.onFailure {
+                Log.e(TAG, "refreshCustomLayout: failed", it)
             }
         }
 
@@ -641,14 +678,41 @@ class RadioShedMediaSessionService : MediaLibraryService() {
             browser: MediaSession.ControllerInfo,
             params: LibraryParams?,
         ): ListenableFuture<LibraryResult<MediaItem>> {
-            val root = browseableItem(
-                mediaId = MEDIA_ID_ROOT,
-                title = "RadioShed",
+            Log.i(
+                TAG,
+                "onGetLibraryRoot: caller=${browser.packageName} " +
+                    "isRecent=${params?.isRecent} isOffline=${params?.isOffline} " +
+                    "isSuggested=${params?.isSuggested}",
             )
-            return Futures.immediateFuture(LibraryResult.ofItem(root, params))
+            return runCatching {
+                val root = browseableItem(
+                    mediaId = MEDIA_ID_ROOT,
+                    title = "RadioShed",
+                )
+                Futures.immediateFuture(LibraryResult.ofItem(root, params))
+            }.getOrElse {
+                Log.e(TAG, "onGetLibraryRoot: failed", it)
+                Futures.immediateFuture(LibraryResult.ofError(LibraryResult.RESULT_ERROR_UNKNOWN))
+            }
         }
 
         override fun onGetChildren(
+            session: MediaLibrarySession,
+            browser: MediaSession.ControllerInfo,
+            parentId: String,
+            page: Int,
+            pageSize: Int,
+            params: LibraryParams?,
+        ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> {
+            Log.i(
+                TAG,
+                "onGetChildren: caller=${browser.packageName} parentId=$parentId " +
+                    "page=$page pageSize=$pageSize",
+            )
+            return onGetChildrenInner(session, browser, parentId, page, pageSize, params)
+        }
+
+        private fun onGetChildrenInner(
             session: MediaLibrarySession,
             browser: MediaSession.ControllerInfo,
             parentId: String,
@@ -785,6 +849,10 @@ class RadioShedMediaSessionService : MediaLibraryService() {
         .build()
 
     private companion object {
+        /** Single greppable tag for the AA / lock-screen / Bluetooth
+         *  handshake debugging. Pull with:
+         *    `adb logcat -s RadioShedMS:V` */
+        const val TAG = "RadioShedMS"
         const val MEDIA_ID_ROOT = "root"
         const val MEDIA_ID_STATIONS = "stations"
         const val MEDIA_ID_STATION_PREFIX = "station_"
