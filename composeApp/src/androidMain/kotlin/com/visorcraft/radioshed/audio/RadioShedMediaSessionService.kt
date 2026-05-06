@@ -305,6 +305,13 @@ class RadioShedMediaSessionService : MediaLibraryService() {
         @Volatile
         private var currentTrackLiked: Boolean = false
 
+        // Live star rating for the currently-playing track (0..5,
+        // rounded from the underlying Double). Drives the AA Star
+        // button's displayName so taps cycle visibly through the
+        // rating range instead of silently flipping 0↔5.
+        @Volatile
+        private var currentTrackRating: Int = 0
+
         // Session reference for setCustomLayout updates. Held weakly
         // through attach/detach so [onDestroy] can null this out
         // before releasing the actual session, preventing late-arriving
@@ -507,9 +514,19 @@ class RadioShedMediaSessionService : MediaLibraryService() {
                 .setDisplayName(if (currentTrackLiked) "Unlike" else "Like")
                 .setIconResId(heartIcon)
                 .build()
+            // displayName carries the live N/5 so the user sees
+            // each tap. AA's CommandButton API doesn't support a
+            // dynamic icon swap based on rating without shipping
+            // 6 different drawables, so labelling is the cheapest
+            // win.
+            val starLabel = if (currentTrackRating <= 0) {
+                "Rate"
+            } else {
+                "★ $currentTrackRating/5"
+            }
             val starButton = CommandButton.Builder()
                 .setSessionCommand(SessionCommand(ACTION_TOGGLE_STAR, Bundle.EMPTY))
-                .setDisplayName("Star")
+                .setDisplayName(starLabel)
                 .setIconResId(R.drawable.ic_radioshed_star)
                 .build()
             val dislikeButton = CommandButton.Builder()
@@ -555,8 +572,9 @@ class RadioShedMediaSessionService : MediaLibraryService() {
                 session.setCustomLayout(buildCustomLayout())
                 val trackId = session.player.currentMediaItem?.mediaId?.toLongOrNull()
                 if (trackId == null || trackId < 0L) {
-                    if (currentTrackLiked) {
+                    if (currentTrackLiked || currentTrackRating != 0) {
                         currentTrackLiked = false
+                        currentTrackRating = 0
                         session.setCustomLayout(buildCustomLayout())
                     }
                     return@runCatching
@@ -565,12 +583,17 @@ class RadioShedMediaSessionService : MediaLibraryService() {
                     runCatching {
                         val ratingRepo = GlobalContext.get().get<RatingRepository>()
                         val liked = ratingRepo.isLiked(trackId)
-                        if (liked != currentTrackLiked) {
+                        val rating = (ratingRepo.getRating(trackId) ?: 0.0)
+                        val ratingInt = kotlin.math.round(rating).toInt().coerceIn(0, 5)
+                        val likedChanged = liked != currentTrackLiked
+                        val ratingChanged = ratingInt != currentTrackRating
+                        if (likedChanged || ratingChanged) {
                             currentTrackLiked = liked
+                            currentTrackRating = ratingInt
                             attachedSession?.setCustomLayout(buildCustomLayout())
                         }
                     }.onFailure {
-                        Log.e(TAG, "refreshCustomLayout: like-state lookup failed", it)
+                        Log.e(TAG, "refreshCustomLayout: track-state lookup failed", it)
                     }
                 }
             }.onFailure {
@@ -626,8 +649,19 @@ class RadioShedMediaSessionService : MediaLibraryService() {
                         runCatching {
                             val ratingRepo = GlobalContext.get().get<RatingRepository>()
                             val current = ratingRepo.getRating(trackId) ?: 0.0
-                            val next = if (current >= 4.5) 0.0 else 5.0
-                            ratingRepo.setRating(trackId, next)
+                            // Cycle through 0 → 1 → 2 → 3 → 4 → 5 →
+                            // 0 so each tap moves one star and the
+                            // user can dial in any rating from AA
+                            // without expanding to the phone app. The
+                            // half-star precision the in-app rating
+                            // row exposes is intentionally not
+                            // surfaced here — fewer states to spin
+                            // through while driving.
+                            val rounded = kotlin.math.round(current).toInt().coerceIn(0, 5)
+                            val next = if (rounded >= 5) 0 else rounded + 1
+                            ratingRepo.setRating(trackId, next.toDouble())
+                            currentTrackRating = next
+                            attachedSession?.setCustomLayout(buildCustomLayout())
                         }
                     }
                     Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
@@ -721,15 +755,185 @@ class RadioShedMediaSessionService : MediaLibraryService() {
             params: LibraryParams?,
         ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> = when (parentId) {
             MEDIA_ID_ROOT -> {
-                // Single category for now: "Stations". Library / Recently
-                // Played / Search lands in a follow-up.
-                val stations = browseableItem(
-                    mediaId = MEDIA_ID_STATIONS,
-                    title = "Stations",
-                )
+                // Three top-level browse buckets, mirroring the
+                // phone app's mental model as closely as a flat
+                // browse tree allows: Stations (the curated mixes
+                // the app is built around), Library (the raw
+                // collection — songs / albums / artists), and
+                // Recently Played (the just-listened list pulled
+                // from station_history).
+                //
+                // Search is intentionally NOT a separate browse
+                // category — Android Auto routes voice queries
+                // through Google Assistant which fires
+                // onSearch(query) on the MediaLibrarySession.
+                // Surfacing a redundant "Search" tile would clutter
+                // the surface for no functional gain. Settings
+                // also doesn't appear: head-unit users configure
+                // RadioShed on the phone, not behind the wheel.
+                val stations = browseableItem(MEDIA_ID_STATIONS, "Stations")
+                val library = browseableItem(MEDIA_ID_LIBRARY, "Library")
+                val recents = browseableItem(MEDIA_ID_RECENTLY_PLAYED, "Recently Played")
                 Futures.immediateFuture(
-                    LibraryResult.ofItemList(ImmutableList.of(stations), params),
+                    LibraryResult.ofItemList(
+                        ImmutableList.of(stations, library, recents),
+                        params,
+                    ),
                 )
+            }
+            MEDIA_ID_LIBRARY -> {
+                // Library subcategories. Each is a browseable folder
+                // the user drills into. Songs lists tracks
+                // alphabetically; Albums and Artists list collections
+                // that, when tapped, play the whole album / discography
+                // (no drill-down — head-unit users want one tap to
+                // music, not three).
+                val songs = browseableItem(MEDIA_ID_LIBRARY_SONGS, "Songs")
+                val albums = browseableItem(MEDIA_ID_LIBRARY_ALBUMS, "Albums")
+                val artists = browseableItem(MEDIA_ID_LIBRARY_ARTISTS, "Artists")
+                Futures.immediateFuture(
+                    LibraryResult.ofItemList(
+                        ImmutableList.of(songs, albums, artists),
+                        params,
+                    ),
+                )
+            }
+            MEDIA_ID_LIBRARY_SONGS -> {
+                // First N tracks alphabetically. Capped because AA's
+                // browse list isn't the right surface for a 10k-track
+                // library — large libraries should reach for
+                // Stations or Recently Played instead, where the
+                // smart-query filtering keeps things bounded.
+                val future = SettableFuture.create<LibraryResult<ImmutableList<MediaItem>>>()
+                scope.launch {
+                    runCatching {
+                        val libraryRepo = GlobalContext.get().get<
+                            com.visorcraft.radioshed.data.LibraryRepository
+                        >()
+                        val tracks = libraryRepo.listAvailableTracks(
+                            limit = AA_BROWSE_TRACK_LIMIT,
+                            offset = 0L,
+                        ).sortedBy { it.title.lowercase() }
+                        val items = tracks.map { track ->
+                            playableItem(
+                                mediaId = MEDIA_ID_TRACK_PREFIX + track.id,
+                                title = track.title.ifBlank { track.fileName },
+                                subtitle = null,
+                            )
+                        }
+                        future.set(LibraryResult.ofItemList(
+                            ImmutableList.copyOf(items),
+                            params,
+                        ))
+                    }.onFailure {
+                        Log.e(TAG, "onGetChildren songs: failed", it)
+                        future.set(LibraryResult.ofError(LibraryResult.RESULT_ERROR_UNKNOWN))
+                    }
+                }
+                future
+            }
+            MEDIA_ID_LIBRARY_ALBUMS -> {
+                // Each album is a single playable row — tap plays the
+                // whole album from track 1 (alphabetical-by-disc-or-
+                // track-number ordering owned by tracksForAlbum). No
+                // drill-down: AA's UX guideline is to keep "tap → music"
+                // to one gesture so the user can keep eyes on the road.
+                val future = SettableFuture.create<LibraryResult<ImmutableList<MediaItem>>>()
+                scope.launch {
+                    runCatching {
+                        val libraryRepo = GlobalContext.get().get<
+                            com.visorcraft.radioshed.data.LibraryRepository
+                        >()
+                        val albums = libraryRepo.observeAlbums().first()
+                            .sortedBy { it.title.lowercase() }
+                            .take(AA_BROWSE_TRACK_LIMIT.toInt())
+                        val items = albums.map { album ->
+                            playableItem(
+                                mediaId = MEDIA_ID_ALBUM_PREFIX + album.id,
+                                title = album.title.ifBlank { "Unknown album" },
+                                subtitle = null,
+                            )
+                        }
+                        future.set(LibraryResult.ofItemList(
+                            ImmutableList.copyOf(items),
+                            params,
+                        ))
+                    }.onFailure {
+                        Log.e(TAG, "onGetChildren albums: failed", it)
+                        future.set(LibraryResult.ofError(LibraryResult.RESULT_ERROR_UNKNOWN))
+                    }
+                }
+                future
+            }
+            MEDIA_ID_LIBRARY_ARTISTS -> {
+                // Each artist is a single playable row — tap plays
+                // every available track tagged to that artist. Same
+                // single-tap rationale as albums.
+                val future = SettableFuture.create<LibraryResult<ImmutableList<MediaItem>>>()
+                scope.launch {
+                    runCatching {
+                        val libraryRepo = GlobalContext.get().get<
+                            com.visorcraft.radioshed.data.LibraryRepository
+                        >()
+                        val artists = libraryRepo.observeArtists().first()
+                            .sortedBy { it.name.lowercase() }
+                            .take(AA_BROWSE_TRACK_LIMIT.toInt())
+                        val items = artists.map { artist ->
+                            playableItem(
+                                mediaId = MEDIA_ID_ARTIST_PREFIX + artist.id,
+                                title = artist.name.ifBlank { "Unknown artist" },
+                                subtitle = null,
+                            )
+                        }
+                        future.set(LibraryResult.ofItemList(
+                            ImmutableList.copyOf(items),
+                            params,
+                        ))
+                    }.onFailure {
+                        Log.e(TAG, "onGetChildren artists: failed", it)
+                        future.set(LibraryResult.ofError(LibraryResult.RESULT_ERROR_UNKNOWN))
+                    }
+                }
+                future
+            }
+            MEDIA_ID_RECENTLY_PLAYED -> {
+                // Newest-first, dedup'd by trackId. Pulls from
+                // station_history (covers any in-app or AA
+                // playback) and resolves each id against
+                // LibraryRepository so we render the live track
+                // metadata, not a stale snapshot from history.
+                val future = SettableFuture.create<LibraryResult<ImmutableList<MediaItem>>>()
+                scope.launch {
+                    runCatching {
+                        val stationRepo = GlobalContext.get().get<StationRepository>()
+                        val libraryRepo = GlobalContext.get().get<
+                            com.visorcraft.radioshed.data.LibraryRepository
+                        >()
+                        val history = stationRepo.allHistory(limit = 60L)
+                        val seen = mutableSetOf<Long>()
+                        val tracks = mutableListOf<com.visorcraft.radioshed.domain.Track>()
+                        for (entry in history) {
+                            if (!seen.add(entry.trackId)) continue
+                            libraryRepo.getTrackById(entry.trackId)?.let { tracks += it }
+                            if (tracks.size >= AA_RECENTLY_PLAYED_LIMIT) break
+                        }
+                        val items = tracks.map { track ->
+                            playableItem(
+                                mediaId = MEDIA_ID_TRACK_PREFIX + track.id,
+                                title = track.title.ifBlank { track.fileName },
+                                subtitle = null,
+                            )
+                        }
+                        future.set(LibraryResult.ofItemList(
+                            ImmutableList.copyOf(items),
+                            params,
+                        ))
+                    }.onFailure {
+                        Log.e(TAG, "onGetChildren recently played: failed", it)
+                        future.set(LibraryResult.ofError(LibraryResult.RESULT_ERROR_UNKNOWN))
+                    }
+                }
+                future
             }
             MEDIA_ID_STATIONS -> {
                 // Snapshot the station list from the repo. observeAll() is a
@@ -759,6 +963,107 @@ class RadioShedMediaSessionService : MediaLibraryService() {
                 Futures.immediateFuture(
                     LibraryResult.ofError(LibraryResult.RESULT_ERROR_BAD_VALUE),
                 )
+        }
+
+        /**
+         * Voice search. Android Auto / Google Assistant fires this
+         * when the user says "Hey Google, play <X> on RadioShed" or
+         * uses the search field on AA's media surface. The contract
+         * is two-step: [onSearch] kicks off the work and pings the
+         * caller via [MediaLibrarySession.notifySearchResultChanged]
+         * when results are ready; the caller then issues
+         * [onGetSearchResult] to actually pull the matched
+         * MediaItems.
+         *
+         * We delegate to the in-app [SearchRepository.searchAll]
+         * which runs three concurrent SQL queries (tracks / albums /
+         * artists). Result ordering on the AA surface puts tracks
+         * first because that's the most-likely-correct interpretation
+         * of "play X" — voice queries usually target a song.
+         */
+        override fun onSearch(
+            session: MediaLibrarySession,
+            browser: MediaSession.ControllerInfo,
+            query: String,
+            params: LibraryParams?,
+        ): ListenableFuture<LibraryResult<Void>> {
+            Log.i(TAG, "onSearch: query='$query' caller=${browser.packageName}")
+            val future = SettableFuture.create<LibraryResult<Void>>()
+            scope.launch {
+                runCatching {
+                    val searchRepo = GlobalContext.get().get<
+                        com.visorcraft.radioshed.data.SearchRepository
+                    >()
+                    val results = searchRepo.searchAll(query, limitPerCategory = 20L)
+                    val total = results.tracks.size +
+                        results.albums.size +
+                        results.artists.size
+                    session.notifySearchResultChanged(browser, query, total, params)
+                    future.set(LibraryResult.ofVoid(params))
+                }.onFailure {
+                    Log.e(TAG, "onSearch: failed", it)
+                    future.set(LibraryResult.ofError(LibraryResult.RESULT_ERROR_UNKNOWN))
+                }
+            }
+            return future
+        }
+
+        override fun onGetSearchResult(
+            session: MediaLibrarySession,
+            browser: MediaSession.ControllerInfo,
+            query: String,
+            page: Int,
+            pageSize: Int,
+            params: LibraryParams?,
+        ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> {
+            Log.i(
+                TAG,
+                "onGetSearchResult: query='$query' caller=${browser.packageName} " +
+                    "page=$page pageSize=$pageSize",
+            )
+            val future = SettableFuture.create<LibraryResult<ImmutableList<MediaItem>>>()
+            scope.launch {
+                runCatching {
+                    val searchRepo = GlobalContext.get().get<
+                        com.visorcraft.radioshed.data.SearchRepository
+                    >()
+                    val results = searchRepo.searchAll(query, limitPerCategory = 20L)
+                    val items = mutableListOf<MediaItem>()
+                    // Tracks first — the most-common voice-search target
+                    // ("play <song>") and AA's autoplay path picks the
+                    // first item by default, so a track top-hit means
+                    // immediate playback.
+                    for (track in results.tracks) {
+                        items += playableItem(
+                            mediaId = MEDIA_ID_TRACK_PREFIX + track.id,
+                            title = track.title.ifBlank { track.fileName },
+                            subtitle = null,
+                        )
+                    }
+                    for (album in results.albums) {
+                        items += playableItem(
+                            mediaId = MEDIA_ID_ALBUM_PREFIX + album.id,
+                            title = "Album: ${album.title}",
+                            subtitle = null,
+                        )
+                    }
+                    for (artist in results.artists) {
+                        items += playableItem(
+                            mediaId = MEDIA_ID_ARTIST_PREFIX + artist.id,
+                            title = "Artist: ${artist.name}",
+                            subtitle = null,
+                        )
+                    }
+                    future.set(LibraryResult.ofItemList(
+                        ImmutableList.copyOf(items),
+                        params,
+                    ))
+                }.onFailure {
+                    Log.e(TAG, "onGetSearchResult: failed", it)
+                    future.set(LibraryResult.ofError(LibraryResult.RESULT_ERROR_UNKNOWN))
+                }
+            }
+            return future
         }
 
         /**
@@ -796,6 +1101,101 @@ class RadioShedMediaSessionService : MediaLibraryService() {
                 }
                 // Keep the player's queue untouched — StationPlayback will
                 // populate it via the in-app controller momentarily.
+                return Futures.immediateFuture(
+                    MediaSession.MediaItemsWithStartPosition(
+                        ImmutableList.of(),
+                        C.INDEX_UNSET,
+                        C.TIME_UNSET,
+                    ),
+                )
+            }
+
+            // Track items from Library / Recently Played: AA tapped
+            // a single song. Resolve the trackId, build a one-track
+            // queue, and route through StationPlayback so the
+            // existing queue / shuffle / repeat machinery owns the
+            // session — same intercept pattern as stations above.
+            val firstTrackId = mediaItems
+                .firstOrNull { it.mediaId.startsWith(MEDIA_ID_TRACK_PREFIX) }
+                ?.mediaId
+                ?.removePrefix(MEDIA_ID_TRACK_PREFIX)
+                ?.toLongOrNull()
+
+            if (firstTrackId != null) {
+                scope.launch {
+                    runCatching {
+                        val libraryRepo = GlobalContext.get().get<
+                            com.visorcraft.radioshed.data.LibraryRepository
+                        >()
+                        val track = libraryRepo.getTrackById(firstTrackId)
+                            ?: return@runCatching
+                        GlobalContext.get().get<StationPlayback>()
+                            .playTracks(listOf(track), startIndex = 0)
+                    }
+                }
+                return Futures.immediateFuture(
+                    MediaSession.MediaItemsWithStartPosition(
+                        ImmutableList.of(),
+                        C.INDEX_UNSET,
+                        C.TIME_UNSET,
+                    ),
+                )
+            }
+
+            // Album row tap → load every track on the album and
+            // play them in their natural disc / track order.
+            val firstAlbumId = mediaItems
+                .firstOrNull { it.mediaId.startsWith(MEDIA_ID_ALBUM_PREFIX) }
+                ?.mediaId
+                ?.removePrefix(MEDIA_ID_ALBUM_PREFIX)
+                ?.toLongOrNull()
+
+            if (firstAlbumId != null) {
+                scope.launch {
+                    runCatching {
+                        val libraryRepo = GlobalContext.get().get<
+                            com.visorcraft.radioshed.data.LibraryRepository
+                        >()
+                        val tracks = libraryRepo.tracksForAlbum(firstAlbumId)
+                        if (tracks.isNotEmpty()) {
+                            GlobalContext.get().get<StationPlayback>()
+                                .playTracks(tracks, startIndex = 0)
+                        }
+                    }
+                }
+                return Futures.immediateFuture(
+                    MediaSession.MediaItemsWithStartPosition(
+                        ImmutableList.of(),
+                        C.INDEX_UNSET,
+                        C.TIME_UNSET,
+                    ),
+                )
+            }
+
+            // Artist row tap → play every available track tagged
+            // to that artist. tracksForArtist returns the existing
+            // canonical sort (album → disc → track number); good
+            // enough for an artist-level shuffle replacement
+            // without us having to ship a "play artist" station.
+            val firstArtistId = mediaItems
+                .firstOrNull { it.mediaId.startsWith(MEDIA_ID_ARTIST_PREFIX) }
+                ?.mediaId
+                ?.removePrefix(MEDIA_ID_ARTIST_PREFIX)
+                ?.toLongOrNull()
+
+            if (firstArtistId != null) {
+                scope.launch {
+                    runCatching {
+                        val libraryRepo = GlobalContext.get().get<
+                            com.visorcraft.radioshed.data.LibraryRepository
+                        >()
+                        val tracks = libraryRepo.tracksForArtist(firstArtistId)
+                        if (tracks.isNotEmpty()) {
+                            GlobalContext.get().get<StationPlayback>()
+                                .playTracks(tracks, startIndex = 0)
+                        }
+                    }
+                }
                 return Futures.immediateFuture(
                     MediaSession.MediaItemsWithStartPosition(
                         ImmutableList.of(),
@@ -855,6 +1255,22 @@ class RadioShedMediaSessionService : MediaLibraryService() {
         const val TAG = "RadioShedMS"
         const val MEDIA_ID_ROOT = "root"
         const val MEDIA_ID_STATIONS = "stations"
+        const val MEDIA_ID_LIBRARY = "library"
+        const val MEDIA_ID_LIBRARY_SONGS = "library/songs"
+        const val MEDIA_ID_LIBRARY_ALBUMS = "library/albums"
+        const val MEDIA_ID_LIBRARY_ARTISTS = "library/artists"
+        const val MEDIA_ID_RECENTLY_PLAYED = "recently_played"
+        const val MEDIA_ID_TRACK_PREFIX = "track_"
+        const val MEDIA_ID_ALBUM_PREFIX = "album_"
+        const val MEDIA_ID_ARTIST_PREFIX = "artist_"
+
+        /** Cap on Library → Songs items returned to AA. Beyond this
+         *  the user is better served by Stations (smart-query
+         *  filtering) or Recently Played (already bounded). */
+        const val AA_BROWSE_TRACK_LIMIT = 200L
+
+        /** Recently-played list size after dedup. */
+        const val AA_RECENTLY_PLAYED_LIMIT = 30
         const val MEDIA_ID_STATION_PREFIX = "station_"
 
         // Custom action ids used by the Android Auto layout. Values are

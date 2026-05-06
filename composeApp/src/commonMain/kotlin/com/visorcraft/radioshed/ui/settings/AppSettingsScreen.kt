@@ -1955,6 +1955,18 @@ private fun NowPlayingLayoutRow(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
             )
+            Spacer(Modifier.height(2.dp))
+            // Carve-out so users don't expect this to drive Android
+            // Auto / CarPlay layouts — those head-unit surfaces are
+            // template-rendered by the OS, not by this app, and we
+            // can't choose between Compact / TwoPane / TriplePane
+            // there.
+            Text(
+                "Affects the in-app screen only — Android Auto's layout is " +
+                    "rendered by the OS and isn't selectable from here.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
+            )
             Spacer(Modifier.height(10.dp))
             // FlowRow because four labels — including "TriplePane"
             // and "Compact" — overflow a single-row Row on narrow
