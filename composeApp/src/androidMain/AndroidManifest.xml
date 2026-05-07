@@ -79,6 +79,21 @@
                 <data android:mimeType="application/x-flac" />
             </intent-filter>
 
+            <!-- Google Assistant / Voice Actions: declares this app as a
+                 routable target for "Hey Google, play X on RadioShed".
+                 Without this filter Assistant decides up-front that we're
+                 not a voice-action-capable platform and surfaces "can't
+                 play music on Radio Shed because it's not a supported
+                 platform" — even with a fully-functional MediaLibrarySession
+                 + SEARCH_SUPPORTED browse-root flag underneath. The
+                 filter is a discovery hook; the spoken query lands on
+                 MainActivity.handleSearchIntent() which resolves it via
+                 SearchRepository and starts playback. -->
+            <intent-filter>
+                <action android:name="android.media.action.MEDIA_PLAY_FROM_SEARCH" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+
             <!-- Some file managers (older ES-style ones especially) pass
                  the file via path-only without a MIME, relying on extension
                  sniffing. Declare common audio extensions explicitly so we
