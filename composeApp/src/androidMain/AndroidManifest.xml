@@ -145,7 +145,7 @@
              The authority must match the one we build into the URI in
              BackupRestoreScreen. -->
         <provider
-            android:name="androidx.core.content.FileProvider"
+            android:name=".source.RadioShedFileProvider"
             android:authorities="${applicationId}.fileprovider"
             android:exported="false"
             android:grantUriPermissions="true">

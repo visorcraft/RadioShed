@@ -228,6 +228,14 @@ compose.desktop {
             description = "Local-first cross-platform music app."
             copyright = "© Visorcraft. Proprietary."
             vendor = "Visorcraft"
+            // jlink-bundled JRE modules. The default runtime image is
+            // minimal and excludes java.sql, but our desktop SQLDelight
+            // driver (JdbcSqliteDriver) calls java.sql.DriverManager
+            // to register the sqlite-jdbc driver — without this, the
+            // distributable launcher dies on first DB access with
+            // "java/sql/DriverManager NoClassDefFoundError". java.naming
+            // is a transitive requirement of java.sql.
+            modules("java.sql", "java.naming")
         }
     }
 }

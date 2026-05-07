@@ -31,8 +31,44 @@ class SearchRepository(private val db: RadioShedDatabase) {
         } else {
             withContext(IODispatcher) {
                 val pattern = query.toLikePattern() ?: return@withContext emptyList()
-                db.libraryQueries.searchTracksByTitleLike(pattern, limit)
-                    .executeAsList().map { it.toDomain() }
+                // Free text matches against title OR primary-artist name
+                // OR album title — the three columns the filter chip
+                // hint ("Title, artist, or album") promises. Title-only
+                // was a regression: typing the artist name then finding
+                // only the tracks whose *title* happened to repeat that
+                // name (feat. credits) felt broken — see "search 'roddy
+                // ricch' missed 'The Box'". Fan-out is three indexed
+                // LIKE queries deduped by track id; cheap up to the
+                // ~10k-track LIKE ceiling already documented for v1.
+                val titleIds = db.libraryQueries.searchTracksByTitleLike(pattern, limit)
+                    .executeAsList().map { it.id }
+                val artistIds = db.libraryQueries.searchArtistsByNameLike(pattern, limit)
+                    .executeAsList()
+                    .flatMap { artist ->
+                        db.libraryQueries.selectTracksByArtist(artist.id)
+                            .executeAsList().map { it.id }
+                    }
+                val albumIds = db.libraryQueries.searchAlbumsByTitleLike(pattern, limit)
+                    .executeAsList()
+                    .flatMap { album ->
+                        db.libraryQueries.selectTracksByAlbum(album.id)
+                            .executeAsList().map { it.id }
+                    }
+                val merged = LinkedHashSet<Long>(titleIds.size + artistIds.size + albumIds.size)
+                merged.addAll(titleIds)
+                merged.addAll(artistIds)
+                merged.addAll(albumIds)
+                if (merged.isEmpty()) return@withContext emptyList()
+                val capped = merged.take(limit.toInt())
+                db.libraryQueries.selectTracksByIds(capped)
+                    .executeAsList()
+                    .map { it.toDomain() }
+                    // Re-apply the merge order (LIKE on title first,
+                    // then artist matches, then album matches) so
+                    // "best-match" results bubble to the top — the
+                    // selectTracksByIds query returns rows in id order,
+                    // not match-priority order.
+                    .sortedBy { capped.indexOf(it.id) }
             }
         }
     }

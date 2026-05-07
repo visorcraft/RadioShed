@@ -2,8 +2,11 @@ package com.visorcraft.radioshed.audio
 
 import android.content.Intent
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.view.KeyEvent
+import android.widget.Toast
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -514,11 +517,18 @@ class RadioShedMediaSessionService : MediaLibraryService() {
                 .setDisplayName(if (currentTrackLiked) "Unlike" else "Like")
                 .setIconResId(heartIcon)
                 .build()
-            // displayName carries the live N/5 so the user sees
-            // each tap. AA's CommandButton API doesn't support a
-            // dynamic icon swap based on rating without shipping
-            // 6 different drawables, so labelling is the cheapest
-            // win.
+            // Filled-vs-outline star is the cheap way to give visible
+            // feedback for the cycling rating without shipping six
+            // per-rating drawables. The displayName carries the
+            // precise "★ N/5" for TalkBack and the few hosts that do
+            // surface labels, but most AA NowPlaying renders only the
+            // icon — so the binary filled/outline state is what
+            // actually communicates "your tap registered".
+            val starIcon = if (currentTrackRating > 0) {
+                R.drawable.ic_radioshed_star
+            } else {
+                R.drawable.ic_radioshed_star_outline
+            }
             val starLabel = if (currentTrackRating <= 0) {
                 "Rate"
             } else {
@@ -527,7 +537,7 @@ class RadioShedMediaSessionService : MediaLibraryService() {
             val starButton = CommandButton.Builder()
                 .setSessionCommand(SessionCommand(ACTION_TOGGLE_STAR, Bundle.EMPTY))
                 .setDisplayName(starLabel)
-                .setIconResId(R.drawable.ic_radioshed_star)
+                .setIconResId(starIcon)
                 .build()
             val dislikeButton = CommandButton.Builder()
                 .setSessionCommand(SessionCommand(ACTION_DISLIKE_ON_STATION, Bundle.EMPTY))
@@ -535,10 +545,17 @@ class RadioShedMediaSessionService : MediaLibraryService() {
                 .setIconResId(R.drawable.ic_radioshed_thumb_down)
                 .build()
 
+            // Order matters: Auto's Now Playing template caps the
+            // visible custom buttons at 2-3 depending on the head
+            // unit. Putting the high-utility binary actions (Like,
+            // Dislike) first guarantees they survive the cap; the
+            // multi-step Star rating is third because it's the least
+            // important driving-context action and the easiest to
+            // sacrifice when a head unit only renders two slots.
             return ImmutableList.of(
                 heartButton,
-                starButton,
                 dislikeButton,
+                starButton,
             )
         }
 
@@ -614,6 +631,15 @@ class RadioShedMediaSessionService : MediaLibraryService() {
             customCommand: SessionCommand,
             args: Bundle,
         ): ListenableFuture<SessionResult> {
+            // Trace every receipt so future "the AA button did nothing"
+            // reports can be diagnosed from logcat without instrumenting
+            // each handler individually. caller=packageName disambiguates
+            // taps from Auto vs the in-app controller vs Bluetooth AVRCP.
+            Log.i(
+                TAG,
+                "onCustomCommand: action=${customCommand.customAction} " +
+                    "caller=${controller.packageName}",
+            )
             val player = session.player
             // Repeat/shuffle don't need a track id — they apply to the
             // player as a whole. Handle them before the trackId guard
@@ -662,6 +688,23 @@ class RadioShedMediaSessionService : MediaLibraryService() {
                             ratingRepo.setRating(trackId, next.toDouble())
                             currentTrackRating = next
                             attachedSession?.setCustomLayout(buildCustomLayout())
+                            // Audible confirmation. The icon swap
+                            // (filled ↔ outline) covers the binary
+                            // state but doesn't tell the driver which
+                            // tap of the cycle they're on; a brief
+                            // toast does. Auto routes Toasts from the
+                            // playing media app to a head-unit-side
+                            // notification overlay, which is exactly
+                            // the at-a-glance feedback the driver
+                            // needs without taking eyes off the road.
+                            // Posted on the main thread because Toast
+                            // requires a Looper.
+                            val msg = if (next == 0) "Rating cleared" else "Rated $next/5"
+                            Handler(Looper.getMainLooper()).post {
+                                Toast.makeText(applicationContext, msg, Toast.LENGTH_SHORT).show()
+                            }
+                        }.onFailure {
+                            Log.e(TAG, "ACTION_TOGGLE_STAR: rating update failed", it)
                         }
                     }
                     Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
@@ -723,7 +766,27 @@ class RadioShedMediaSessionService : MediaLibraryService() {
                     mediaId = MEDIA_ID_ROOT,
                     title = "RadioShed",
                 )
-                Futures.immediateFuture(LibraryResult.ofItem(root, params))
+                // Declare to Auto / Google Assistant that voice search
+                // works against this library. Without
+                // SEARCH_SUPPORTED=true Assistant decides up-front
+                // that we don't handle voice queries and surfaces
+                // "can't play music on Radio Shed because it's not a
+                // supported platform" — without ever calling
+                // onSetMediaItems with the spoken query. The other
+                // flags advertise support for the related
+                // browse-/search-style features so AA picks the right
+                // surface chrome.
+                val rootExtras = android.os.Bundle().apply {
+                    putBoolean("android.media.browse.SEARCH_SUPPORTED", true)
+                    putBoolean("android.media.browse.CONTENT_STYLE_SUPPORTED", true)
+                }
+                val outParams = MediaLibraryService.LibraryParams.Builder()
+                    .setExtras(rootExtras)
+                    .setRecent(params?.isRecent == true)
+                    .setOffline(params?.isOffline == true)
+                    .setSuggested(params?.isSuggested == true)
+                    .build()
+                Futures.immediateFuture(LibraryResult.ofItem(root, outParams))
             }.getOrElse {
                 Log.e(TAG, "onGetLibraryRoot: failed", it)
                 Futures.immediateFuture(LibraryResult.ofError(LibraryResult.RESULT_ERROR_UNKNOWN))
@@ -1087,6 +1150,199 @@ class RadioShedMediaSessionService : MediaLibraryService() {
             startIndex: Int,
             startPositionMs: Long,
         ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> {
+            // Voice-search route ("Hey Google, play X on RadioShed").
+            // Google Assistant builds a single MediaItem whose
+            // requestMetadata.searchQuery carries the spoken query
+            // string and a structured extras Bundle (per the long-
+            // standing MediaStore.EXTRA_MEDIA_FOCUS / _ARTIST /
+            // _ALBUM / _TITLE convention forwarded through Media3).
+            // Without this branch we'd fall through to the prefix
+            // dispatchers, see no station/track/album/artist prefix,
+            // and hand the URI-less item to the player — which is
+            // what produced Assistant's "check the application for
+            // errors" toast pre-fix.
+            //
+            // Earlier free-text-only handling let "play a song by
+            // Black Pink" land on the wrong artist because the noisy
+            // verb tokens ("play", "song", "by") matched unrelated
+            // titles via LIKE. Switching to the structured extras
+            // when present (artist focus → search artists only,
+            // album focus → search albums only, etc.) avoids that
+            // class of mis-route entirely.
+            // Tighter voice-detection: only trigger when searchQuery
+            // is non-blank. Triggering on bare extras (no
+            // searchQuery) was over-aggressive — AA also sends
+            // browse-style setMediaItems with extras-but-no-query,
+            // and intercepting those broke the MediaController's
+            // expected flow → Assistant surfaced "can't play music
+            // on Radio Shed because it's not a supported platform".
+            val voiceItem = mediaItems.firstOrNull { item ->
+                !item.requestMetadata.searchQuery.isNullOrBlank()
+            }
+            if (voiceItem != null) {
+                val rm = voiceItem.requestMetadata
+                val rawQuery = rm.searchQuery?.toString().orEmpty()
+                val extras = rm.extras
+                val focus = extras?.getString(EXTRA_MEDIA_FOCUS)
+                val artistExtra = extras?.getString(EXTRA_MEDIA_ARTIST)
+                val albumExtra = extras?.getString(EXTRA_MEDIA_ALBUM)
+                val titleExtra = extras?.getString(EXTRA_MEDIA_TITLE)
+                val genreExtra = extras?.getString(EXTRA_MEDIA_GENRE)
+                Log.i(
+                    TAG,
+                    "onSetMediaItems: voice search " +
+                        "caller=${controller.packageName} " +
+                        "query='$rawQuery' focus='$focus' " +
+                        "artist='$artistExtra' album='$albumExtra' " +
+                        "title='$titleExtra' genre='$genreExtra'",
+                )
+                scope.launch {
+                    runCatching {
+                        val searchRepo = GlobalContext.get().get<
+                            com.visorcraft.radioshed.data.SearchRepository
+                        >()
+                        val libraryRepo = GlobalContext.get().get<
+                            com.visorcraft.radioshed.data.LibraryRepository
+                        >()
+                        val playback = GlobalContext.get().get<StationPlayback>()
+
+                        // Focus-driven dispatch. The MIME-type strings
+                        // are the legacy MediaStore "vnd.android.cursor.item/<thing>"
+                        // tokens that have been the Assistant ↔ media-app
+                        // contract since the original Voice Actions API.
+                        suspend fun playArtistByName(name: String): Boolean {
+                            val artists = searchRepo.searchArtists(name, limit = 5)
+                            val artist = artists.firstOrNull() ?: return false
+                            val tracks = libraryRepo.tracksForArtist(artist.id)
+                            if (tracks.isEmpty()) return false
+                            playback.playTracks(tracks, startIndex = 0)
+                            return true
+                        }
+                        suspend fun playAlbumByTitle(name: String): Boolean {
+                            val albums = searchRepo.searchAlbums(name, limit = 5)
+                            val album = albums.firstOrNull() ?: return false
+                            val tracks = libraryRepo.tracksForAlbum(album.id)
+                            if (tracks.isEmpty()) return false
+                            playback.playTracks(tracks, startIndex = 0)
+                            return true
+                        }
+                        suspend fun playTrackByTitle(name: String): Boolean {
+                            val tracks = searchRepo.searchTracks(name, limit = 5)
+                            if (tracks.isEmpty()) return false
+                            playback.playTracks(tracks, startIndex = 0)
+                            return true
+                        }
+
+                        val handled = when {
+                            // Artist focus: ignore the noisy
+                            // free-text query and use the structured
+                            // artist name directly.
+                            focus == FOCUS_ARTIST && !artistExtra.isNullOrBlank() ->
+                                playArtistByName(artistExtra)
+                            focus == FOCUS_ALBUM && !albumExtra.isNullOrBlank() ->
+                                playAlbumByTitle(albumExtra)
+                            // Title focus often comes paired with an
+                            // artist hint — searchTracks already
+                            // searches across title/artist/album so
+                            // a combined phrase still works, but the
+                            // bare title is the most precise input.
+                            focus == FOCUS_AUDIO && !titleExtra.isNullOrBlank() ->
+                                playTrackByTitle(titleExtra)
+                            // Genre focus: pick a few tracks tagged
+                            // with the genre via the DSL path.
+                            focus == FOCUS_GENRE && !genreExtra.isNullOrBlank() -> {
+                                val tracks = searchRepo
+                                    .searchTracks("genre:${'$'}genreExtra", limit = 50)
+                                if (tracks.isEmpty()) {
+                                    false
+                                } else {
+                                    playback.playTracks(tracks, startIndex = 0)
+                                    true
+                                }
+                            }
+                            // Common case: structured extras present
+                            // even without a focus (e.g. "play music
+                            // by X" sometimes only fills artistExtra).
+                            !artistExtra.isNullOrBlank() ->
+                                playArtistByName(artistExtra)
+                            !albumExtra.isNullOrBlank() ->
+                                playAlbumByTitle(albumExtra)
+                            !titleExtra.isNullOrBlank() ->
+                                playTrackByTitle(titleExtra)
+                            // Plain free-text fallback. This is the
+                            // path that lit up the wrong-artist bug
+                            // when "play a song by Black Pink" came
+                            // through verbatim. Strip the leading
+                            // verb/article tokens before searching so
+                            // `searchAll` LIKE-matches against
+                            // meaningful nouns only. The list mirrors
+                            // the prefixes Assistant transcribes.
+                            rawQuery.isNotBlank() -> {
+                                val cleaned = rawQuery
+                                    .removePrefixToken("play")
+                                    .removePrefixToken("listen to")
+                                    .removePrefixToken("a song by")
+                                    .removePrefixToken("song by")
+                                    .removePrefixToken("songs by")
+                                    .removePrefixToken("music by")
+                                    .removePrefixToken("the song")
+                                    .removePrefixToken("a song")
+                                    .removePrefixToken("song")
+                                    .trim()
+                                val results = searchRepo.searchAll(
+                                    cleaned.ifBlank { rawQuery },
+                                    limitPerCategory = 20L,
+                                )
+                                when {
+                                    results.artists.isNotEmpty() -> {
+                                        val tracks = libraryRepo
+                                            .tracksForArtist(results.artists.first().id)
+                                        if (tracks.isNotEmpty()) {
+                                            playback.playTracks(tracks, startIndex = 0)
+                                            true
+                                        } else false
+                                    }
+                                    results.tracks.isNotEmpty() -> {
+                                        playback.playTracks(results.tracks, startIndex = 0)
+                                        true
+                                    }
+                                    results.albums.isNotEmpty() -> {
+                                        val tracks = libraryRepo
+                                            .tracksForAlbum(results.albums.first().id)
+                                        if (tracks.isNotEmpty()) {
+                                            playback.playTracks(tracks, startIndex = 0)
+                                            true
+                                        } else false
+                                    }
+                                    else -> false
+                                }
+                            }
+                            else -> false
+                        }
+                        if (!handled) {
+                            Log.i(
+                                TAG,
+                                "voice search: no match for query='$rawQuery' " +
+                                    "artist='$artistExtra' album='$albumExtra' " +
+                                    "title='$titleExtra'",
+                            )
+                        }
+                    }.onFailure {
+                        Log.e(TAG, "voice search failed", it)
+                    }
+                }
+                // Empty queue + INDEX_UNSET tells the player not to
+                // touch its current items — StationPlayback will push
+                // real tracks in via the in-app controller in a moment.
+                return Futures.immediateFuture(
+                    MediaSession.MediaItemsWithStartPosition(
+                        ImmutableList.of(),
+                        C.INDEX_UNSET,
+                        C.TIME_UNSET,
+                    ),
+                )
+            }
+
             val firstStationId = mediaItems
                 .firstOrNull { it.mediaId.startsWith(MEDIA_ID_STATION_PREFIX) }
                 ?.mediaId
@@ -1287,5 +1543,42 @@ class RadioShedMediaSessionService : MediaLibraryService() {
         // notifications. Notification id is unique within our app.
         const val NOTIFICATION_ID = 0xCAFE  // 51966
         const val NOTIFICATION_CHANNEL_ID = "radioshed.playback"
+
+        // Google Assistant voice-search extras. These match the
+        // long-standing MediaStore.EXTRA_MEDIA_* / EXTRA_MEDIA_FOCUS
+        // string constants — Assistant continues to forward voice
+        // queries through this Bundle even after the public
+        // MediaSessionCompat.Callback.onPlayFromSearch path was
+        // superseded by Media3's RequestMetadata. We hardcode the
+        // string keys (rather than reference MediaStore.EXTRA_*)
+        // to keep this file decoupled from the MediaStore API
+        // surface — the contract is the string value, not the
+        // constant.
+        const val EXTRA_MEDIA_FOCUS = "android.intent.extra.focus"
+        const val EXTRA_MEDIA_ARTIST = "android.intent.extra.artist"
+        const val EXTRA_MEDIA_ALBUM = "android.intent.extra.album"
+        const val EXTRA_MEDIA_TITLE = "android.intent.extra.title"
+        const val EXTRA_MEDIA_GENRE = "android.intent.extra.genre"
+
+        // EXTRA_MEDIA_FOCUS values — the legacy
+        // "vnd.android.cursor.item/<x>" MIME-type tokens Assistant
+        // uses to declare what it thinks the user asked for.
+        const val FOCUS_ARTIST = "vnd.android.cursor.item/artist"
+        const val FOCUS_ALBUM = "vnd.android.cursor.item/album"
+        const val FOCUS_AUDIO = "vnd.android.cursor.item/audio"
+        const val FOCUS_GENRE = "vnd.android.cursor.item/genre"
     }
+}
+
+/**
+ * Strip a leading filler-token phrase (case-insensitive, trimmed) from
+ * a transcribed voice query. The match is whole-word — `removePrefixToken("song")`
+ * strips "song " from "song by foo" but leaves "songbird foo" alone.
+ */
+private fun String.removePrefixToken(token: String): String {
+    val trimmed = this.trimStart()
+    if (!trimmed.startsWith(token, ignoreCase = true)) return this
+    val rest = trimmed.substring(token.length)
+    if (rest.isNotEmpty() && !rest[0].isWhitespace()) return this
+    return rest.trimStart()
 }

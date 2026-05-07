@@ -2,6 +2,9 @@ package com.visorcraft.radioshed.audio
 
 import android.content.ComponentName
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.util.Log
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
@@ -148,7 +151,7 @@ class AudioEngineAndroid(private val appContext: Context) : AudioEngine {
     override fun play(playable: Playable) {
         scope.launch {
             val c = awaitControllerOrSurface() ?: return@launch
-            c.setMediaItem(playable.toMediaItem())
+            c.setMediaItem(playable.toMediaItem(appContext))
             c.prepare()
             c.play()
             _nowPlaying.value = playable
@@ -160,7 +163,11 @@ class AudioEngineAndroid(private val appContext: Context) : AudioEngine {
         val safeIndex = startIndex.coerceIn(0, items.size - 1)
         scope.launch {
             val c = awaitControllerOrSurface() ?: return@launch
-            c.setMediaItems(items.map { it.toMediaItem() }, safeIndex, /* startPositionMs = */ 0L)
+            c.setMediaItems(
+                items.map { it.toMediaItem(appContext) },
+                safeIndex,
+                /* startPositionMs = */ 0L,
+            )
             c.prepare()
             c.play()
             _nowPlaying.value = items[safeIndex]
@@ -254,7 +261,7 @@ class AudioEngineAndroid(private val appContext: Context) : AudioEngine {
 
 // ---- Mappers ----
 
-private fun Playable.toMediaItem(): MediaItem {
+private fun Playable.toMediaItem(appContext: Context): MediaItem {
     val builder = MediaItem.Builder()
         .setUri(uri)
         .setMediaId(trackId.toString())
@@ -264,21 +271,27 @@ private fun Playable.toMediaItem(): MediaItem {
                 .setArtist(artist)
                 .setAlbumTitle(album)
                 .also { mb ->
-                    // Two artwork channels:
-                    //   - setArtworkUri: for in-app surfaces (Coil, Now
-                    //     Playing, MiniPlayer). They run in our own
-                    //     process and can read file:// from our filesDir.
-                    //   - setArtworkData: for OUT-OF-PROCESS consumers
-                    //     (Android Auto, Bluetooth AVRCP cover art, the
-                    //     system lock-screen on some OEMs). Auto's
-                    //     process can't read our private filesDir, so a
-                    //     file:// URI alone leaves it with a blank cover.
-                    //     Embedding the bytes in the metadata blob fixes
-                    //     this — the bytes round-trip through Media3's
-                    //     IPC parcels and Auto renders them directly.
+                    // Two artwork channels covering both consumers:
+                    //   - setArtworkUri: a content:// URI surfaced via
+                    //     FileProvider so out-of-process consumers
+                    //     (Android Auto, Bluetooth AVRCP cover art,
+                    //     system lock screen) can fetch the full-fidelity
+                    //     image directly. Their processes can't read
+                    //     file:// from our private filesDir; a content://
+                    //     URI is the canonical bridge.
+                    //   - setArtworkData: downscaled 512px JPEG bytes
+                    //     parceled inline as a fallback for hosts that
+                    //     don't follow the URI (some BT AVRCP stacks,
+                    //     legacy AA versions).
+                    // In-app surfaces (Coil in MiniPlayer / NowPlaying)
+                    // continue to read the original file:// URI from
+                    // [Playable.artworkUri] directly — they don't go
+                    // through MediaMetadata.
                     val uriString = artworkUri
                     if (uriString != null) {
-                        mb.setArtworkUri(android.net.Uri.parse(uriString))
+                        val publicUri = artworkContentUri(appContext, uriString)
+                            ?: android.net.Uri.parse(uriString)
+                        mb.setArtworkUri(publicUri)
                         readArtworkBytes(uriString)?.let { bytes ->
                             mb.setArtworkData(
                                 bytes,
@@ -303,26 +316,149 @@ private fun Playable.toMediaItem(): MediaItem {
 }
 
 /**
- * Read the artwork bytes referenced by [uriString] for inline embedding
- * in a MediaMetadata. We only handle `file://` URIs — that's everything
- * AndroidArtworkPersister produces. Returns null on any failure (file
- * missing, IO error, oversize), and the caller falls back to URI-only.
+ * Read + downscale the artwork referenced by [uriString] for inline
+ * embedding in a MediaMetadata. We only handle `file://` URIs —
+ * that's everything AndroidArtworkPersister produces. Returns null on
+ * any failure (file missing, IO error, decode failure), and the
+ * caller falls back to URI-only.
  *
- * Size cap: Android Auto's IPC parcel has practical limits (~1 MB) for
- * MediaMetadata. Our CAA + embedded artworks are typically 50-150 KB
- * which is well under, but we cap defensively at 512 KB to avoid a
- * theoretical TransactionTooLargeException with very large embedded art.
+ * Why downscale instead of pass-through: Android Auto's IPC parcel has
+ * a hard ~1 MB cap for MediaMetadata payloads, and embedded MP3 cover
+ * art frequently ships at 1500-3000 px / 1-3 MB. The previous
+ * "reject anything over 512 KB" path silently produced no-art on AA
+ * for those tracks (the most common case for ID3v2 APIC frames from
+ * iTunes-era libraries). Recompressing to 512×512 JPEG @ 85% quality
+ * lands at ~30-80 KB regardless of source — well under the IPC cap,
+ * and AA renders this size at full fidelity since its NowPlaying
+ * artwork slot is ~600 px on most head units.
+ *
+ * Done synchronously on the calling thread because [toMediaItem] is
+ * already off the main thread (called from the binder/coroutine path
+ * around `setMediaItem`). Decode of a typical 2000×2000 JPEG runs in
+ * 30-80 ms which is acceptable per track switch.
  */
 private fun readArtworkBytes(uriString: String): ByteArray? = runCatching {
-    if (!uriString.startsWith("file://")) return@runCatching null
+    if (!uriString.startsWith("file://")) {
+        Log.i(TAG_ART, "skip: not file:// uri ($uriString)")
+        return@runCatching null
+    }
     val path = android.net.Uri.parse(uriString).path ?: return@runCatching null
     val file = java.io.File(path)
-    if (!file.exists() || !file.canRead()) return@runCatching null
-    if (file.length() > MAX_ARTWORK_BYTES) return@runCatching null
-    file.readBytes()
+    if (!file.exists() || !file.canRead()) {
+        Log.i(TAG_ART, "skip: file missing or unreadable ($path)")
+        return@runCatching null
+    }
+
+    // Two-pass decode — first an inJustDecodeBounds probe to read the
+    // dimensions without allocating the pixel buffer, then a real
+    // decode at an inSampleSize that fits the target box. Avoids
+    // allocating a 4000×4000 Bitmap into RAM on hi-res cover art.
+    val probe = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeFile(path, probe)
+    if (probe.outWidth <= 0 || probe.outHeight <= 0) {
+        Log.i(TAG_ART, "skip: decoder reported zero dimensions ($path)")
+        return@runCatching null
+    }
+    var sample = 1
+    val maxOf2 = maxOf(probe.outWidth, probe.outHeight)
+    while (maxOf2 / sample > ART_TARGET_PX * 2) sample *= 2
+
+    val opts = BitmapFactory.Options().apply { inSampleSize = sample }
+    val raw = BitmapFactory.decodeFile(path, opts) ?: run {
+        Log.i(TAG_ART, "skip: decode returned null ($path)")
+        return@runCatching null
+    }
+
+    // Final fit-into-box step. Downscale (never up) to ART_TARGET_PX
+    // on the long edge, preserving aspect ratio so non-square art
+    // (rare in practice but possible) doesn't get squashed.
+    val longEdge = maxOf(raw.width, raw.height)
+    val scaled = if (longEdge > ART_TARGET_PX) {
+        val ratio = ART_TARGET_PX.toFloat() / longEdge
+        val w = (raw.width * ratio).toInt().coerceAtLeast(1)
+        val h = (raw.height * ratio).toInt().coerceAtLeast(1)
+        Bitmap.createScaledBitmap(raw, w, h, true).also {
+            if (it !== raw) raw.recycle()
+        }
+    } else {
+        raw
+    }
+
+    val out = java.io.ByteArrayOutputStream(64 * 1024)
+    scaled.compress(Bitmap.CompressFormat.JPEG, ART_JPEG_QUALITY, out)
+    scaled.recycle()
+    val bytes = out.toByteArray()
+    Log.i(TAG_ART, "embed: ${bytes.size}B (src=${file.length()}B path=$path)")
+    bytes
+}.onFailure {
+    Log.e(TAG_ART, "readArtworkBytes failed for $uriString", it)
 }.getOrNull()
 
-private const val MAX_ARTWORK_BYTES = 512L * 1024L
+private const val TAG_ART = "RadioShedArt"
+private const val ART_TARGET_PX = 512
+private const val ART_JPEG_QUALITY = 85
+
+/**
+ * Translate a `file://<filesDir>/artwork/<sha256>` URI into the
+ * `content://<authority>/artwork/<sha256>` URI that the FileProvider
+ * declared in the manifest will hand out. Returns null when the
+ * passed URI doesn't fall under our artwork directory (Subsonic
+ * https://, an outside file:// path, etc.) so callers can fall back
+ * to passing the original URI through unchanged.
+ *
+ * The MediaSession framework auto-grants temporary read permission
+ * on content:// URIs travelling through MediaMetadata to whichever
+ * controller pulled them, so AA, BT-AVRCP, and the system lock
+ * screen can fetch without us calling [Context.grantUriPermission]
+ * per-controller.
+ */
+private fun artworkContentUri(appContext: Context, fileUri: String): android.net.Uri? {
+    if (!fileUri.startsWith("file://")) return null
+    val path = android.net.Uri.parse(fileUri).path ?: return null
+    val artworkDir = java.io.File(appContext.filesDir, "artwork").absolutePath
+    val file = java.io.File(path)
+    if (!file.absolutePath.startsWith(artworkDir)) return null
+    if (!file.exists()) return null
+    val contentUri = runCatching {
+        androidx.core.content.FileProvider.getUriForFile(
+            appContext,
+            "${appContext.packageName}.fileprovider",
+            file,
+        )
+    }.onFailure {
+        Log.e(TAG_ART, "FileProvider.getUriForFile failed for $path", it)
+    }.getOrNull() ?: return null
+
+    // Belt-and-suspenders URI grant. The MediaSession framework is
+    // documented to auto-grant URI permissions on metadata to the
+    // controller's package, but in practice the auto-grant misses
+    // some Auto / AVRCP / lock-screen process boundaries — leaving
+    // the consumer with a `content://` URI it gets SecurityException
+    // on. Granting up-front to the well-known media-consumer
+    // packages bypasses that.
+    //
+    // Each grant is independent: Android lets you grant a URI to a
+    // package that doesn't exist on the device (no-op), so we don't
+    // need to feature-check whether the user has Auto installed.
+    for (pkg in MEDIA_CONSUMER_PACKAGES) {
+        runCatching {
+            appContext.grantUriPermission(
+                pkg,
+                contentUri,
+                android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION,
+            )
+        }
+    }
+    return contentUri
+}
+
+private val MEDIA_CONSUMER_PACKAGES = listOf(
+    "com.google.android.projection.gearhead",   // Android Auto
+    "com.google.android.bluetooth",             // Bluetooth AVRCP cover-art
+    "com.android.bluetooth",                    // Bluetooth (alt package name)
+    "com.android.systemui",                     // System lock screen / notifications
+    "com.google.android.gms",                   // Google Play Services bridge
+)
 
 private fun MediaItem.toPlayable(fallbackDurationMs: Long = 0L): Playable {
     val md = mediaMetadata
