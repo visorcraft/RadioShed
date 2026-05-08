@@ -277,7 +277,10 @@ fun LyricsScreen(
                     },
                     trailingIcon = if (findQuery.isNotEmpty()) {
                         {
-                            androidx.compose.material3.IconButton(onClick = { findQuery = "" }) {
+                            com.visorcraft.radioshed.ui.util.TooltipIconButton(
+                                tooltip = "Clear",
+                                onClick = { findQuery = "" },
+                            ) {
                                 androidx.compose.material3.Icon(
                                     Icons.Filled.Close, contentDescription = "Clear",
                                 )

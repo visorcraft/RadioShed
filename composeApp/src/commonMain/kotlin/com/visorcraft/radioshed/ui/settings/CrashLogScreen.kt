@@ -23,6 +23,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import com.visorcraft.radioshed.ui.util.TooltipIconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -76,7 +77,8 @@ fun CrashLogScreen(
                 navigationIcon = { TextButton(onClick = onBack) { Text("Back") } },
                 actions = {
                     val copyAll = com.visorcraft.radioshed.ui.util.rememberCopyToClipboard()
-                    IconButton(
+                    TooltipIconButton(
+                        tooltip = "Copy all",
                         enabled = entries.isNotEmpty(),
                         onClick = {
                             copyAll(entries.joinToString("\n\n---\n\n") { it.toShareText() })
@@ -84,7 +86,8 @@ fun CrashLogScreen(
                     ) {
                         Icon(Icons.Filled.ContentCopy, contentDescription = "Copy all")
                     }
-                    IconButton(
+                    TooltipIconButton(
+                        tooltip = "Share",
                         enabled = entries.isNotEmpty(),
                         onClick = {
                             scope.launch {
@@ -176,10 +179,10 @@ private fun CrashLogRow(
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                     )
                 }
-                IconButton(onClick = onCopy) {
+                TooltipIconButton(tooltip = "Copy entry", onClick = onCopy) {
                     Icon(Icons.Filled.ContentCopy, contentDescription = "Copy entry")
                 }
-                IconButton(onClick = onShare) {
+                TooltipIconButton(tooltip = "Share entry", onClick = onShare) {
                     Icon(Icons.Filled.Share, contentDescription = "Share entry")
                 }
             }

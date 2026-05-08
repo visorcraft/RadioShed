@@ -31,6 +31,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import com.visorcraft.radioshed.ui.util.TooltipIconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -131,7 +132,10 @@ fun HistoryScreen(
                 navigationIcon = { TextButton(onClick = onBack) { Text("Back") } },
                 actions = {
                     LayoutBox {
-                        IconButton(onClick = { menuOpen = true }) {
+                        TooltipIconButton(
+                            tooltip = "More",
+                            onClick = { menuOpen = true },
+                        ) {
                             Icon(Icons.Filled.MoreVert, contentDescription = "More")
                         }
                         DropdownMenu(
@@ -314,7 +318,10 @@ fun HistoryScreen(
                     },
                     trailingIcon = if (searchQuery.isNotEmpty()) {
                         {
-                            IconButton(onClick = { searchQuery = "" }) {
+                            TooltipIconButton(
+                                tooltip = "Clear search",
+                                onClick = { searchQuery = "" },
+                            ) {
                                 Icon(
                                     imageVector = androidx.compose.material.icons.Icons.Filled.Clear,
                                     contentDescription = "Clear search",

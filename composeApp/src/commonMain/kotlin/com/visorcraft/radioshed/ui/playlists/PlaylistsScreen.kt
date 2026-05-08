@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.IconButton
+import com.visorcraft.radioshed.ui.util.TooltipIconButton
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.automirrored.filled.Sort
@@ -228,7 +229,10 @@ fun PlaylistsScreen(
                 navigationIcon = { TextButton(onClick = onBack) { Text("Back") } },
                 actions = {
                     Box {
-                        IconButton(onClick = { sortMenuOpen = true }) {
+                        TooltipIconButton(
+                            tooltip = "Sort playlists",
+                            onClick = { sortMenuOpen = true },
+                        ) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.Sort,
                                 contentDescription = "Sort playlists",
@@ -320,7 +324,10 @@ fun PlaylistsScreen(
                         },
                         trailingIcon = if (listFilter.isNotEmpty()) {
                             {
-                                IconButton(onClick = { listFilter = "" }) {
+                                TooltipIconButton(
+                                    tooltip = "Clear",
+                                    onClick = { listFilter = "" },
+                                ) {
                                     Icon(Icons.Filled.Close, contentDescription = "Clear")
                                 }
                             }

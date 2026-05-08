@@ -29,6 +29,7 @@ import androidx.compose.foundation.lazy.items as lazyItems
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -63,6 +64,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
+import com.visorcraft.radioshed.ui.util.TooltipIconButton
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -147,6 +149,12 @@ fun StationsHomeScreen(
     // dozen custom stations don't have to scroll past the defaults.
     var stationFilter by remember { mutableStateOf("") }
     var hideBuiltIns by remember { mutableStateOf(settings.getStationsHideBuiltIns()) }
+    // Sort preference — "Custom" preserves drag-reorder order;
+    // alphabetical / most-played / least-played / recently-played
+    // are the alternates exposed via the sort dropdown next to the
+    // tile-size selector. Held in compose state so the grid
+    // reorders instantly on selection without a screen leave.
+    var currentSort by remember { mutableStateOf(settings.getStationsSort()) }
     val stations by stationRepo.observeAll().collectAsState(initial = emptyList())
     val currentStation by stationPlayback.currentStation.collectAsState()
     val playerState by audioEngine.state.collectAsState()
@@ -262,6 +270,7 @@ fun StationsHomeScreen(
     }
 
     var tileSizeMenuOpen by remember { mutableStateOf(false) }
+    var sortMenuOpen by remember { mutableStateOf(false) }
     Scaffold(
         topBar = {
             // Slim top bar — back affordance + tile-size selector. The
@@ -273,8 +282,54 @@ fun StationsHomeScreen(
                 title = {},
                 navigationIcon = { TextButton(onClick = onBack) { Text("Back") } },
                 actions = {
+                    // Sort dropdown — five options. Tooltip explains
+                    // the affordance on desktop where the icon alone
+                    // is ambiguous; the touch builds skip the
+                    // tooltip via TooltipIconButton's isDesktopHost
+                    // guard so the long-press doesn't collide with
+                    // anything.
                     Box {
-                        IconButton(onClick = { tileSizeMenuOpen = true }) {
+                        TooltipIconButton(
+                            tooltip = "Sort stations",
+                            onClick = { sortMenuOpen = true },
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.Sort,
+                                contentDescription = "Sort stations",
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = sortMenuOpen,
+                            onDismissRequest = { sortMenuOpen = false },
+                        ) {
+                            STATION_SORT_OPTIONS.forEach { (value, label) ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(label, modifier = Modifier.weight(1f))
+                                            if (currentSort == value) {
+                                                Icon(
+                                                    Icons.Filled.Check,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(16.dp),
+                                                )
+                                            }
+                                        }
+                                    },
+                                    onClick = {
+                                        currentSort = value
+                                        settings.setStationsSort(value)
+                                        sortMenuOpen = false
+                                    },
+                                )
+                            }
+                        }
+                    }
+                    Box {
+                        TooltipIconButton(
+                            tooltip = "Tile size",
+                            onClick = { tileSizeMenuOpen = true },
+                        ) {
                             Icon(
                                 imageVector = Icons.Filled.GridView,
                                 contentDescription = "Tile size",
@@ -480,7 +535,10 @@ fun StationsHomeScreen(
                             },
                             trailingIcon = if (stationFilter.isNotEmpty()) {
                                 {
-                                    IconButton(onClick = { stationFilter = "" }) {
+                                    TooltipIconButton(
+                                        tooltip = "Clear filter",
+                                        onClick = { stationFilter = "" },
+                                    ) {
                                         Icon(
                                             imageVector = Icons.Filled.Close,
                                             contentDescription = "Clear filter",
@@ -581,6 +639,29 @@ fun StationsHomeScreen(
                         else src.filter {
                             it.name.contains(q, ignoreCase = true) ||
                                 (it.customSubtitle?.contains(q, ignoreCase = true) == true)
+                        }
+                    }
+                    // Sort last so the user's filter / hide toggles
+                    // run against the original ordering (filter
+                    // result counts in the header are stable
+                    // regardless of sort) and only the on-screen
+                    // arrangement reacts to the sort preference.
+                    // "Custom" is the legacy pin / drag-reorder
+                    // ordering that the StationRepository.observeAll
+                    // flow already returns — pass through unchanged
+                    // so power users who hand-curated the order
+                    // don't see their layout reshuffle just because
+                    // the sort menu shipped.
+                    .let { src ->
+                        when (currentSort) {
+                            "NameAsc" -> src.sortedBy { it.name.lowercase() }
+                            "NameDesc" -> src.sortedByDescending { it.name.lowercase() }
+                            "MostPlayed" -> src.sortedByDescending { it.stats.playCount }
+                            "LeastPlayed" -> src.sortedBy { it.stats.playCount }
+                            "RecentlyPlayed" -> src.sortedByDescending {
+                                it.stats.lastPlayedAt ?: Long.MIN_VALUE
+                            }
+                            else -> src
                         }
                     }
                 // Inline empty hint when an active filter (Hide
@@ -1802,6 +1883,22 @@ private val TILE_SIZE_STOPS: List<Pair<String, Int>> = listOf(
     "Medium" to 240,
     "Large" to 280,
     "Extra-large" to 360,
+)
+
+/**
+ * Stations Home sort options. The first value (`Custom`) preserves
+ * the user's pin / drag-reorder ordering returned by
+ * `StationRepository.observeAll()`; the others reshuffle the
+ * displayed grid in-place. String-encoded so adding a new option
+ * later doesn't require a `SettingsStore` schema bump.
+ */
+private val STATION_SORT_OPTIONS: List<Pair<String, String>> = listOf(
+    "Custom" to "Custom (drag order)",
+    "NameAsc" to "Name A → Z",
+    "NameDesc" to "Name Z → A",
+    "MostPlayed" to "Most played",
+    "LeastPlayed" to "Least played",
+    "RecentlyPlayed" to "Recently played",
 )
 
 private fun stationColor(station: Station): Color {

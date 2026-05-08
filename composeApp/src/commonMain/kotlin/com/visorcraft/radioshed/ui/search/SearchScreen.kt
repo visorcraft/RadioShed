@@ -206,7 +206,10 @@ fun SearchScreen(
                     // heard X?" and the user wants to pull the
                     // title straight from chat.
                     if (query.isNotEmpty()) {
-                        androidx.compose.material3.IconButton(onClick = { query = "" }) {
+                        com.visorcraft.radioshed.ui.util.TooltipIconButton(
+                            tooltip = "Clear search",
+                            onClick = { query = "" },
+                        ) {
                             androidx.compose.material3.Icon(
                                 imageVector = Icons.Filled.Clear,
                                 contentDescription = "Clear search",
@@ -215,16 +218,22 @@ fun SearchScreen(
                     } else {
                         Row {
                             val pasteFromClipboard = com.visorcraft.radioshed.ui.util.rememberPasteFromClipboard()
-                            androidx.compose.material3.IconButton(onClick = {
-                                pasteFromClipboard()?.let { query = it.trim() }
-                            }) {
+                            com.visorcraft.radioshed.ui.util.TooltipIconButton(
+                                tooltip = "Paste from clipboard",
+                                onClick = {
+                                    pasteFromClipboard()?.let { query = it.trim() }
+                                },
+                            ) {
                                 androidx.compose.material3.Icon(
                                     imageVector = Icons.Filled.ContentPaste,
                                     contentDescription = "Paste from clipboard",
                                 )
                             }
                             if (com.visorcraft.radioshed.ui.util.supportsVoiceInput()) {
-                                androidx.compose.material3.IconButton(onClick = { voicePicker() }) {
+                                com.visorcraft.radioshed.ui.util.TooltipIconButton(
+                                    tooltip = "Voice search",
+                                    onClick = { voicePicker() },
+                                ) {
                                     androidx.compose.material3.Icon(
                                         imageVector = Icons.Filled.Mic,
                                         contentDescription = "Voice search",
@@ -512,7 +521,8 @@ private fun RecentSearchesBlock(
                         onClick = { onPick(q) },
                         label = { Text(q) },
                     )
-                    androidx.compose.material3.IconButton(
+                    com.visorcraft.radioshed.ui.util.TooltipIconButton(
+                        tooltip = "Remove from history",
                         onClick = { onRemoveOne(q) },
                         modifier = Modifier.size(28.dp),
                     ) {

@@ -65,6 +65,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.visorcraft.radioshed.audio.AudioEngine
 import com.visorcraft.radioshed.audio.toPlayable
+import com.visorcraft.radioshed.ui.util.TooltipIconButton
 import com.visorcraft.radioshed.ui.util.NowPlayingIndicator
 import com.visorcraft.radioshed.data.LibraryRepository
 import com.visorcraft.radioshed.data.SettingsStore
@@ -255,15 +256,18 @@ fun LibraryBrowserScreen(
                         // ("surprise me, no station setup needed") but at
                         // album granularity, which is how plenty of users
                         // think about their music.
-                        IconButton(onClick = {
-                            val pick = albums.random()
-                            scope.launch {
-                                val tracks = libraryRepo.tracksForAlbum(pick.id)
-                                if (tracks.isNotEmpty()) {
-                                    stationPlayback.playTracks(tracks, startIndex = 0)
+                        TooltipIconButton(
+                            tooltip = "Random album",
+                            onClick = {
+                                val pick = albums.random()
+                                scope.launch {
+                                    val tracks = libraryRepo.tracksForAlbum(pick.id)
+                                    if (tracks.isNotEmpty()) {
+                                        stationPlayback.playTracks(tracks, startIndex = 0)
+                                    }
                                 }
-                            }
-                        }) {
+                            },
+                        ) {
                             Icon(
                                 imageVector = Icons.Filled.Casino,
                                 contentDescription = "Random album",
@@ -277,7 +281,10 @@ fun LibraryBrowserScreen(
                         // having to add a label that competes with
                         // the title row.
                         Box {
-                            IconButton(onClick = { sortMenuOpen = true }) {
+                            TooltipIconButton(
+                                tooltip = "Sort",
+                                onClick = { sortMenuOpen = true },
+                            ) {
                                 Text(
                                     text = "↕",
                                     style = MaterialTheme.typography.titleMedium,
@@ -301,7 +308,10 @@ fun LibraryBrowserScreen(
                     }
                     if (selectedTab == LibraryTab.Albums && albums.isNotEmpty()) {
                         Box {
-                            IconButton(onClick = { sortMenuOpen = true }) {
+                            TooltipIconButton(
+                                tooltip = "Sort",
+                                onClick = { sortMenuOpen = true },
+                            ) {
                                 Text(
                                     text = "↕",
                                     style = MaterialTheme.typography.titleMedium,
@@ -325,7 +335,10 @@ fun LibraryBrowserScreen(
                     }
                     if (selectedTab == LibraryTab.Genres && genres.isNotEmpty()) {
                         Box {
-                            IconButton(onClick = { sortMenuOpen = true }) {
+                            TooltipIconButton(
+                                tooltip = "Sort",
+                                onClick = { sortMenuOpen = true },
+                            ) {
                                 Text(
                                     text = "↕",
                                     style = MaterialTheme.typography.titleMedium,
@@ -375,7 +388,10 @@ fun LibraryBrowserScreen(
                                 },
                             ),
                         ) {
-                            IconButton(onClick = {}) {
+                            TooltipIconButton(
+                                tooltip = "Shuffle all (long-press for one random)",
+                                onClick = {},
+                            ) {
                                 Icon(
                                     imageVector = Icons.Filled.Shuffle,
                                     contentDescription = "Shuffle all (long-press for one random)",
@@ -383,7 +399,10 @@ fun LibraryBrowserScreen(
                             }
                         }
                         Box {
-                            IconButton(onClick = { sortMenuOpen = true }) {
+                            TooltipIconButton(
+                                tooltip = "Sort",
+                                onClick = { sortMenuOpen = true },
+                            ) {
                                 Text(
                                     text = "↕",
                                     style = MaterialTheme.typography.titleMedium,
@@ -405,7 +424,10 @@ fun LibraryBrowserScreen(
                             }
                         }
                     }
-                    IconButton(onClick = onManage) {
+                    TooltipIconButton(
+                        tooltip = "Manage folders",
+                        onClick = onManage,
+                    ) {
                         Icon(
                             imageVector = Icons.Filled.Settings,
                             contentDescription = "Manage folders",
@@ -505,9 +527,10 @@ fun LibraryBrowserScreen(
                         },
                         trailingIcon = if (songsFilter.isNotEmpty()) {
                             {
-                                androidx.compose.material3.IconButton(onClick = {
-                                    songsFilter = ""
-                                }) {
+                                TooltipIconButton(
+                                    tooltip = "Clear filter",
+                                    onClick = { songsFilter = "" },
+                                ) {
                                     Icon(
                                         imageVector = androidx.compose.material.icons.Icons.Filled.Clear,
                                         contentDescription = "Clear filter",

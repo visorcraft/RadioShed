@@ -54,6 +54,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import com.visorcraft.radioshed.ui.util.TooltipIconButton
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -316,7 +317,10 @@ fun FolderBrowserScreen(
                     },
                     navigationIcon = {
                         if (selectionMode) {
-                            IconButton(onClick = { selectedPaths = emptySet() }) {
+                            TooltipIconButton(
+                                tooltip = "Exit selection",
+                                onClick = { selectedPaths = emptySet() },
+                            ) {
                                 Icon(Icons.Filled.Close, contentDescription = "Exit selection")
                             }
                         } else {
@@ -329,12 +333,15 @@ fun FolderBrowserScreen(
                             // most-asked batch action ("queue this
                             // album"). Files outside the current
                             // directory are unaffected.
-                            IconButton(onClick = {
-                                val visibleAudio = entries
-                                    .filter { it.isAudio }
-                                    .map { it.path }
-                                selectedPaths = selectedPaths + visibleAudio
-                            }) {
+                            TooltipIconButton(
+                                tooltip = "Select all audio in this folder",
+                                onClick = {
+                                    val visibleAudio = entries
+                                        .filter { it.isAudio }
+                                        .map { it.path }
+                                    selectedPaths = selectedPaths + visibleAudio
+                                },
+                            ) {
                                 Icon(
                                     Icons.Filled.SelectAll,
                                     contentDescription = "Select all audio in this folder",
@@ -342,22 +349,31 @@ fun FolderBrowserScreen(
                             }
                         } else {
                             if (!searchOpen) {
-                                IconButton(onClick = { searchOpen = true }) {
+                                TooltipIconButton(
+                                    tooltip = "Filter folder",
+                                    onClick = { searchOpen = true },
+                                ) {
                                     Icon(
                                         Icons.Filled.Search,
                                         contentDescription = "Filter folder",
                                     )
                                 }
                             } else {
-                                IconButton(onClick = {
-                                    searchOpen = false
-                                    searchQuery = ""
-                                }) {
+                                TooltipIconButton(
+                                    tooltip = "Close filter",
+                                    onClick = {
+                                        searchOpen = false
+                                        searchQuery = ""
+                                    },
+                                ) {
                                     Icon(Icons.Filled.Close, contentDescription = "Close filter")
                                 }
                             }
                             Box {
-                                IconButton(onClick = { sortMenuOpen = true }) {
+                                TooltipIconButton(
+                                    tooltip = "Sort",
+                                    onClick = { sortMenuOpen = true },
+                                ) {
                                     Icon(
                                         Icons.Filled.SortByAlpha,
                                         contentDescription = "Sort",
@@ -379,7 +395,8 @@ fun FolderBrowserScreen(
                                 }
                             }
                             val canGoUp = fileBrowser.parentOf(currentPath) != null
-                            IconButton(
+                            TooltipIconButton(
+                                tooltip = "Up one folder",
                                 onClick = {
                                     fileBrowser.parentOf(currentPath)?.let { currentPath = it }
                                 },

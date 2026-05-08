@@ -39,6 +39,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import com.visorcraft.radioshed.ui.util.TooltipIconButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -137,7 +138,10 @@ fun AlbumDetailScreen(
                 navigationIcon = { TextButton(onClick = onBack) { Text("Back") } },
                 actions = {
                     Box {
-                        IconButton(onClick = { sortMenuOpen = true }) {
+                        TooltipIconButton(
+                            tooltip = "Sort tracks",
+                            onClick = { sortMenuOpen = true },
+                        ) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.Sort,
                                 contentDescription = "Sort tracks",
@@ -170,7 +174,10 @@ fun AlbumDetailScreen(
                         }
                     }
                     Box {
-                        IconButton(onClick = { overflowOpen = true }) {
+                        TooltipIconButton(
+                            tooltip = "More",
+                            onClick = { overflowOpen = true },
+                        ) {
                             Icon(Icons.Filled.MoreVert, contentDescription = "More")
                         }
                         DropdownMenu(

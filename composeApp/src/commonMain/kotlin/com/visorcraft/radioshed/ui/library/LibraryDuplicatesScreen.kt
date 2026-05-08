@@ -19,6 +19,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import com.visorcraft.radioshed.ui.util.TooltipIconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -156,7 +157,7 @@ fun LibraryDuplicatesScreen(
             TopAppBar(
                 title = { Text("Duplicate tracks") },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    TooltipIconButton(tooltip = "Back", onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },

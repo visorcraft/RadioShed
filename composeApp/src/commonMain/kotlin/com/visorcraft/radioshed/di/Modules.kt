@@ -6,6 +6,7 @@ import com.visorcraft.radioshed.data.AudioSettingsRepository
 import com.visorcraft.radioshed.data.BackupRepository
 import com.visorcraft.radioshed.data.CastTargetRepository
 import com.visorcraft.radioshed.data.DatabaseDriverFactory
+import com.visorcraft.radioshed.data.DatabaseMaintenanceRepository
 import com.visorcraft.radioshed.data.DjCacheRepository
 import com.visorcraft.radioshed.data.FolderRepository
 import com.visorcraft.radioshed.data.LibraryRepository
@@ -50,6 +51,7 @@ val sharedModule: Module = module {
     single { ArtworkCacheRepository(get()) }
     single { LyricsCacheRepository(get()) }
     single { DjCacheRepository(get()) }
+    single { DatabaseMaintenanceRepository(get()) }
 
     single { AudioSettingsRepository(get()) }
     single { CastTargetRepository(get()) }

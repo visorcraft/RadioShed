@@ -20,6 +20,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import com.visorcraft.radioshed.ui.util.TooltipIconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -176,9 +177,12 @@ fun SubsonicBrowseScreen(
                     )
                 },
                 navigationIcon = {
-                    IconButton(onClick = {
-                        if (stack.size > 1) stack = stack.dropLast(1) else onBack()
-                    }) {
+                    TooltipIconButton(
+                        tooltip = "Back",
+                        onClick = {
+                            if (stack.size > 1) stack = stack.dropLast(1) else onBack()
+                        },
+                    ) {
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back",

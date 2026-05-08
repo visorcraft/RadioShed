@@ -166,6 +166,19 @@ class SettingsStore(private val settings: Settings) {
     }
 
     /**
+     * Stations Home sort preference. String-encoded enum name so
+     * adding a new sort doesn't require a schema migration. Default
+     * "Custom" preserves the user's pin / drag-reorder order, which
+     * is the legacy behavior before the sort menu shipped.
+     */
+    fun getStationsSort(): String =
+        settings.getStringOrNull(KEY_STATIONS_SORT) ?: "Custom"
+
+    fun setStationsSort(value: String) {
+        settings.putString(KEY_STATIONS_SORT, value)
+    }
+
+    /**
      * Hides the seeded preset stations from the Stations Home grid.
      * Off by default — built-ins are part of v1's first-run UX. Power
      * users with a dozen custom stations may toggle this on so the
@@ -410,7 +423,9 @@ class SettingsStore(private val settings: Settings) {
             KEY_THEME_COLOR_SOURCE, KEY_THEME_SEED, KEY_ACCENT_SEED,
             KEY_USER_VOLUME,
             KEY_REDUCE_MOTION, KEY_FONT_SCALE, KEY_STATIONS_TILE_SIZE,
-            KEY_STATIONS_HIDE_BUILTINS, KEY_CONNECTIVITY_POLICY,
+            KEY_STATIONS_HIDE_BUILTINS, KEY_STATIONS_SORT,
+            KEY_CONNECTIVITY_POLICY,
+            KEY_NETPOLICY_OVERRIDE_COVERART, KEY_NETPOLICY_OVERRIDE_LYRICS,
             KEY_LIB_TAB, KEY_LIB_SONG_SORT, KEY_LIB_ARTIST_SORT,
             KEY_LIB_ALBUM_SORT, KEY_LIB_GENRE_SORT, KEY_FILE_BROWSER_SORT,
             KEY_FILE_BROWSER_PINS,
@@ -468,6 +483,42 @@ class SettingsStore(private val settings: Settings) {
 
     fun setConnectivityPolicy(policy: ConnectivityPolicy) {
         settings.putString(KEY_CONNECTIVITY_POLICY, policy.name)
+    }
+
+    /**
+     * Per-service override for the global connectivity policy.
+     * Returns `Inherit` when no override is stored — that's the
+     * default for every service so existing user installs don't see
+     * any behavior change until they explicitly tap into the
+     * per-service rows.
+     */
+    fun getServicePolicyOverride(
+        service: com.visorcraft.radioshed.source.NetworkService,
+    ): com.visorcraft.radioshed.source.ServicePolicyOverride {
+        val raw = settings.getStringOrNull(keyForServiceOverride(service))
+            ?: return com.visorcraft.radioshed.source.ServicePolicyOverride.Inherit
+        return com.visorcraft.radioshed.source.ServicePolicyOverride.fromStorage(raw)
+    }
+
+    fun setServicePolicyOverride(
+        service: com.visorcraft.radioshed.source.NetworkService,
+        override: com.visorcraft.radioshed.source.ServicePolicyOverride,
+    ) {
+        // Inherit is the absence of an override; remove the row
+        // entirely so a backup of a default-config install doesn't
+        // carry redundant entries.
+        if (override == com.visorcraft.radioshed.source.ServicePolicyOverride.Inherit) {
+            settings.remove(keyForServiceOverride(service))
+        } else {
+            settings.putString(keyForServiceOverride(service), override.name)
+        }
+    }
+
+    private fun keyForServiceOverride(
+        service: com.visorcraft.radioshed.source.NetworkService,
+    ): String = when (service) {
+        com.visorcraft.radioshed.source.NetworkService.CoverArt -> KEY_NETPOLICY_OVERRIDE_COVERART
+        com.visorcraft.radioshed.source.NetworkService.Lyrics -> KEY_NETPOLICY_OVERRIDE_LYRICS
     }
 
     // ---- Onboarding state ----
@@ -796,6 +847,16 @@ class SettingsStore(private val settings: Settings) {
             // backups silently dropped pinned bookmarks.
             KEY_FILE_BROWSER_PINS,
             KEY_THEME_COLOR_SOURCE,
+            // Per-service connectivity-policy overrides. Default
+            // ("Inherit") is stored as the absence of a row, so a
+            // fresh install dumps nothing here and only users who
+            // tapped a per-service override carry the entry.
+            KEY_NETPOLICY_OVERRIDE_COVERART, KEY_NETPOLICY_OVERRIDE_LYRICS,
+            // Stations Home view preferences — sort order plus the
+            // existing tile-size + hide-built-ins toggles. `Custom`
+            // is the default; non-default rows persist so a restored
+            // device matches what the user picked.
+            KEY_STATIONS_SORT,
             // Subsonic server URL + username — non-credential
             // connection setup. Round-tripping these saves the user
             // re-typing the server URL and username on a new device;
@@ -946,6 +1007,8 @@ class SettingsStore(private val settings: Settings) {
         KEY_NOW_PLAYING_LAYOUT,
         KEY_FILE_BROWSER_PINS,
         KEY_THEME_COLOR_SOURCE,
+        KEY_NETPOLICY_OVERRIDE_COVERART, KEY_NETPOLICY_OVERRIDE_LYRICS,
+        KEY_STATIONS_SORT,
         KEY_SUBSONIC_URL, KEY_SUBSONIC_USERNAME -> SettingType.STR
         KEY_MATERIAL_YOU, KEY_REDUCE_MOTION, KEY_DRIVE_MODE,
         KEY_REPLAY_GAIN, KEY_AUTO_RESUME_STATION, KEY_AUTO_BACKUP,
@@ -984,6 +1047,7 @@ class SettingsStore(private val settings: Settings) {
         const val KEY_REDUCE_MOTION = "ui.reduceMotion"
         const val KEY_FONT_SCALE = "ui.fontScale"
         const val KEY_STATIONS_TILE_SIZE = "ui.stations.tileSizeDp"
+        const val KEY_STATIONS_SORT = "ui.stations.sort"
         const val KEY_STATIONS_HIDE_BUILTINS = "ui.stations.hideBuiltIns"
         const val KEY_ALBUM_TRACK_SORT = "ui.album.trackSort"
         const val KEY_ARTIST_TRACK_SORT = "ui.artist.trackSort"
@@ -1004,6 +1068,8 @@ class SettingsStore(private val settings: Settings) {
         const val KEY_SEARCH_SCOPE = "ui.search.scope"
         const val KEY_NOW_PLAYING_LAYOUT = "ui.now_playing.layout"
         const val KEY_CONNECTIVITY_POLICY = "online.connectivityPolicy"
+        const val KEY_NETPOLICY_OVERRIDE_COVERART = "online.netpolicy.override.coverart"
+        const val KEY_NETPOLICY_OVERRIDE_LYRICS = "online.netpolicy.override.lyrics"
         const val KEY_ONBOARDING_DONE = "onboarding.complete"
         const val KEY_LAST_STATION_ID = "playback.lastStationId"
         const val KEY_FILE_MODE_BROWSER = "library.fileModeBrowser"

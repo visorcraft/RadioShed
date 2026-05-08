@@ -36,6 +36,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import com.visorcraft.radioshed.ui.util.TooltipIconButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -111,7 +112,10 @@ fun PlaylistDetailScreen(
                 navigationIcon = { TextButton(onClick = onBack) { Text("Back") } },
                 actions = {
                     Box {
-                        IconButton(onClick = { menuOpen = true }) {
+                        TooltipIconButton(
+                            tooltip = "More",
+                            onClick = { menuOpen = true },
+                        ) {
                             Icon(Icons.Filled.MoreVert, contentDescription = "More")
                         }
                         DropdownMenu(
@@ -518,7 +522,7 @@ private fun PlaylistTrackRow(
                 )
                 NowPlayingIndicator(isCurrent)
             }
-            IconButton(onClick = onRemove) {
+            TooltipIconButton(tooltip = "Remove from playlist", onClick = onRemove) {
                 Icon(
                     Icons.Filled.Close,
                     contentDescription = "Remove from playlist",

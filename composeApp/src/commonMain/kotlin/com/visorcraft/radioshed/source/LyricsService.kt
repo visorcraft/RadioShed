@@ -120,9 +120,9 @@ class LyricsService(
         // don't cover.
         val autoFetchAllowed = forceRefresh || settings.getAutoFetchLyrics()
         val networkAllowed = autoFetchAllowed && if (forceRefresh) {
-            networkGate.allowUserInitiatedFetch()
+            networkGate.allowUserInitiatedFetch(NetworkService.Lyrics)
         } else {
-            networkGate.allowAutomaticFetch()
+            networkGate.allowAutomaticFetch(NetworkService.Lyrics)
         }
         if (!networkAllowed) {
             // Don't poison the cache with a miss — the user might be

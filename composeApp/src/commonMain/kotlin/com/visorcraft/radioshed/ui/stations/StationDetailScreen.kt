@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import com.visorcraft.radioshed.ui.util.TooltipIconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -117,12 +118,15 @@ fun StationDetailScreen(
                 title = { Text(station?.name ?: "Station") },
                 navigationIcon = { TextButton(onClick = onBack) { Text("Back") } },
                 actions = {
-                    IconButton(onClick = {
-                        scope.launch {
-                            stationPlayback.playStation(stationId)
-                            onPlay()
-                        }
-                    }) {
+                    TooltipIconButton(
+                        tooltip = "Play station",
+                        onClick = {
+                            scope.launch {
+                                stationPlayback.playStation(stationId)
+                                onPlay()
+                            }
+                        },
+                    ) {
                         Icon(Icons.Filled.PlayArrow, contentDescription = "Play")
                     }
                 },

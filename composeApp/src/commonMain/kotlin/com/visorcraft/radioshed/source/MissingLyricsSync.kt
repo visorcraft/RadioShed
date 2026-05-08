@@ -58,8 +58,9 @@ class MissingLyricsSync(
         // Honour connectivity policy. The user explicitly tapped
         // "Start sweep", so this counts as user-initiated — Manual
         // policy permits it; Never and WiFi-only-on-metered still
-        // block. Same gate as the artwork sweep.
-        if (!networkGate.allowUserInitiatedFetch()) {
+        // block. Same gate as the artwork sweep, with a per-service
+        // Lyrics override consulted before the global policy.
+        if (!networkGate.allowUserInitiatedFetch(NetworkService.Lyrics)) {
             emit(Progress.PolicyBlocked)
             return@flow
         }

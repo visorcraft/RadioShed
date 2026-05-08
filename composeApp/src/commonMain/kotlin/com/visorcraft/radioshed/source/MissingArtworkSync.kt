@@ -55,7 +55,11 @@ class MissingArtworkSync(
         // sweep. The user explicitly tapped "Sync missing artwork",
         // so this counts as user-initiated — Manual policy permits
         // it; Never and WiFi-only-on-metered still block.
-        if (!networkGate.allowUserInitiatedFetch()) {
+        // Service-aware: a per-service override on CoverArt
+        // (e.g. "Wi-Fi only") takes precedence over the global
+        // policy so users can keep lyrics open while restricting
+        // image bandwidth, or vice versa.
+        if (!networkGate.allowUserInitiatedFetch(NetworkService.CoverArt)) {
             emit(Progress.PolicyBlocked)
             return@flow
         }

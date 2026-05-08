@@ -37,6 +37,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import com.visorcraft.radioshed.ui.util.TooltipIconButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -127,7 +128,10 @@ fun LikedSongsScreen(
                 navigationIcon = { TextButton(onClick = onBack) { Text("Back") } },
                 actions = {
                     Box {
-                        IconButton(onClick = { sortMenuOpen = true }) {
+                        TooltipIconButton(
+                            tooltip = "Sort",
+                            onClick = { sortMenuOpen = true },
+                        ) {
                             Icon(
                                 imageVector = androidx.compose.material.icons.Icons.AutoMirrored.Filled.Sort,
                                 contentDescription = "Sort",
@@ -160,7 +164,10 @@ fun LikedSongsScreen(
                         }
                     }
                     Box {
-                        IconButton(onClick = { menuOpen = true }) {
+                        TooltipIconButton(
+                            tooltip = "More",
+                            onClick = { menuOpen = true },
+                        ) {
                             Icon(Icons.Filled.MoreVert, contentDescription = "More")
                         }
                         DropdownMenu(
@@ -321,7 +328,8 @@ fun LikedSongsScreen(
                             },
                             trailingIcon = if (searchQuery.isNotEmpty()) {
                                 {
-                                    androidx.compose.material3.IconButton(
+                                    TooltipIconButton(
+                                        tooltip = "Clear",
                                         onClick = { searchQuery = "" },
                                     ) {
                                         Icon(
@@ -559,7 +567,7 @@ private fun LikedSongRow(
                 )
                 NowPlayingIndicator(isCurrent)
             }
-            IconButton(onClick = onUnlike) {
+            TooltipIconButton(tooltip = "Unlike", onClick = onUnlike) {
                 Icon(
                     Icons.Filled.Favorite,
                     contentDescription = "Unlike",

@@ -1204,7 +1204,7 @@ Goal: app feels like a music app, not a tech demo. Looks great on every form fac
 **Phase 6 part 1 (done):** responsive Stations Home grid + full-screen Now Playing with scrubber / transport / star rating / long-press dislike menu.
 
 - [x] Stations Home: responsive grid (1 col compact, adaptive ≥240dp tiles for medium+) *(Phase 6 part 1 — sort/group/list-toggle deferred)*
-- [~] Stations Home: list/grid view toggle, sort menus, tile size XS–L preference — **tile-size selector ships** (Small / Medium / Large / Extra-large mapped to 200 / 240 / 280 / 360 dp Adaptive minSize, persisted via `SettingsStore.getStationsTileSizeDp`, exposed as a top-bar dropdown). Compact widths still force single-column. The list/grid toggle and the sort menus are still deferred — a future surface where users want them, but the tile grid + drag-reorder + long-press sort already cover most reorganizing use cases.
+- [~] Stations Home: list/grid view toggle, sort menus, tile size XS–L preference — **tile-size selector + sort menu ship**. Tile size: Small / Medium / Large / Extra-large (200 / 240 / 280 / 360 dp Adaptive minSize, persisted via `SettingsStore.getStationsTileSizeDp`, top-bar dropdown). Sort: Custom (drag-order) / Name A→Z / Name Z→A / Most played / Least played / Recently played, persisted via `SettingsStore.getStationsSort` and applied last in the filter pipeline so the user's hide-built-ins / text-filter operations stay stable. Compact widths still force single-column. The list/grid toggle is still deferred — the tile-size selector covers most density needs and the list view would require duplicating the StationCard composable for a wider single-column layout.
 - [~] Long-press tile → quick actions — `StationActionSheet` (in `StationsHomeScreen.kt`) ships Open station / Edit / Duplicate / Pin to top / Move up / Move down / Reset stats / Delete. **"Add to Drive Mode quick-list" and "Add to Widget" are still deferred** — they pair with the Drive Mode overlay (Phase 8) and the widget-config UI (Phase 13).
 - [x] Now Playing screen: full-screen art, scrubber, controls — Coil-driven `AsyncImage` artwork, full transport, blurred backdrop (`BlurredBackdrop`), tap-to-expand fullscreen lightbox.
 - [x] Now Playing: layout variants for compact (stacked) and medium+ (two-pane) *(Phase 6 part 1 — three-pane queue/lyrics deferred to large-tablet pass)*
@@ -1304,7 +1304,7 @@ Goal: power users with connectivity get richer art, lyrics, scrobbling, recs.
 - [ ] AcoustID + Chromaprint fingerprinting *(deferred)*
 - [ ] Open-Meteo client (weather variable for DJ templates) *(deferred — paired with AI DJ)*
 - [ ] Wikipedia/Wikidata client (artist bio) *(deferred)*
-- [~] Per-service toggle UI in Settings → Online & Sync — Settings → Online now exposes the four-way `ConnectivityPolicy` picker (Always / Wi-Fi only / Ask each time / Never) with a one-line subtitle that explains what's currently gated. Per-service toggles (Cover Art Archive vs LRClib individually) are still deferred but the global gate is no longer hidden.
+- [x] Per-service toggle UI in Settings → Online & Sync — Settings → Online exposes the four-way global `ConnectivityPolicy` picker (Always / Wi-Fi only / Ask each time / Never), plus per-service Inherit / Always / Wi-Fi only / Never overrides for Cover Art Archive and LRClib lyrics. `NetworkPolicyGate.allowAutomaticFetch(service)` / `allowUserInitiatedFetch(service)` consult `SettingsStore.getServicePolicyOverride(service)` and only fall back to the global policy on `Inherit`. Override values round-trip through backup; `Inherit` is stored as the absence of a row to keep default-config bundles small.
 
 ### Phase 11 — Cast & multi-room output (~1–2 weeks)
 
@@ -1365,7 +1365,7 @@ Goal: every "Advanced" setting from §7.5 is implemented and works.
 - [ ] DB browser UI (read-only) *(deferred)*
 - [ ] Raw SQL console (developer panel) *(deferred)*
 - [~] Log export — Settings → Crash Logs (`CrashLogScreen`) lists per-process exit reasons with expandable stack traces and a Share button per entry. A general "export full log" action across non-crash logs is not yet built.
-- [~] Force re-scan, clear caches, DB vacuum — "Rescan all folders" (#156), "Clear lyrics cache" (#257), and force-rescan-on-folder-change (#217) all ship. DB vacuum and a unified "clear all caches" sweep are still deferred.
+- [x] Force re-scan, clear caches, DB vacuum — "Rescan all folders" (#156), "Clear lyrics cache" (#257), force-rescan-on-folder-change (#217), unified "Clear all online caches" with confirmation gate, and "Compact database" (VACUUM via `DatabaseMaintenanceRepository`) all ship in App Settings.
 - [ ] DJ template scripting hooks (sandboxed) *(deferred — pairs with AI DJ)*
 - [ ] Custom voice model upload *(deferred — pairs with AI DJ)*
 - [ ] Path-glob exclude tester ("show me what this rule would skip") *(deferred)*
@@ -3794,8 +3794,6 @@ Known gaps still deferred:
 - Scanner + tag + lyrics deduplication into a shared JVM source set
   (currently Android and Desktop carry parallel impls of the same
   jaudiotagger code).
-- Tooltip mechanical sweep across the remaining ~62 IconButton call
-  sites.
 
 #### Phase 19 polish (continued, batch 18 — Android Auto polish + multi-pass code review)
 
@@ -3954,6 +3952,50 @@ Multi-pass code-review fix sweep (15 high-confidence runtime bugs):
   committed a slightly-different color to settings before the
   user touched anything. Skip the first emission via a
   per-composition flag; subsequent changes still propagate.
+
+Tooltip + DB-vacuum sweep (Phase 14 power-tools tail):
+
+- [x] **Tooltip sweep across remaining IconButton sites.** Every
+  IconButton in commonMain UI now uses `TooltipIconButton` from
+  `ui/util/TooltipIconButton.kt`, which renders a Material
+  PlainTooltip on hover for desktop and falls through to a plain
+  `IconButton` on touch builds (Material's touch-tooltip fires on
+  long-press, which collides with the `combinedClickable`
+  long-press affordances elsewhere in the app). 18 screens
+  converted: Album / Artist / Genre / Library / Folder / Liked /
+  Playlist / Search / History / Backup / Crash / Db browser /
+  Subsonic / Stations / StationDetail / LikedSongs /
+  PlaylistDetail / LibraryDuplicates. Tooltip text mirrors the
+  Icon's `contentDescription` so labels stay consistent with
+  TalkBack / Narrator output.
+- [x] **Stations Home sort menu** (Phase 5 follow-up). Six options
+  (`Custom` preserves drag-reorder order, plus Name asc/desc, Most/
+  Least played, Recently played). Persisted via `KEY_STATIONS_SORT`
+  and applied last in the filter pipeline so hide-built-ins +
+  text-filter visible-counts in the header stay stable across sort
+  changes. Surfaced as a top-bar Sort icon next to the tile-size
+  picker, with a tooltip on desktop.
+- [x] **Per-service connectivity overrides** (Phase 10 follow-up).
+  New `NetworkService` enum (`CoverArt`, `Lyrics`) plus
+  `ServicePolicyOverride` (`Inherit` / `Always` / `WiFiOnly` /
+  `Never`) wired through `NetworkPolicyGate.allowAutomaticFetch(service)`
+  and `allowUserInitiatedFetch(service)`. `MissingArtworkSync`,
+  `MissingLyricsSync`, and `LyricsService` now consult their
+  service-specific gate; legacy no-arg overloads kept for
+  Wikipedia / ListenBrainz / Subsonic call sites that share the
+  global gate. Settings → Online surfaces a sub-row per service.
+  Override values participate in backup round-trip
+  (`KEY_NETPOLICY_OVERRIDE_COVERART`, `KEY_NETPOLICY_OVERRIDE_LYRICS`
+  in dump + expectedTypeForKey + resetAllUserSettings).
+- [x] **DB vacuum** via new `DatabaseMaintenanceRepository`
+  (commonMain) that calls `SqlDriver.execute("VACUUM")` —
+  SQLDelight's generated repos can't host VACUUM because they
+  route through implicit `transaction { }` blocks and SQLite
+  refuses VACUUM inside a transaction. App Settings → Compact
+  database row (next to "Clear all online caches") wires through
+  with a status line. Cheap (1-2 s on a 5k-track library), fully
+  transactional under SQLite's rollback journal so a power cut
+  mid-VACUUM falls back to the pre-VACUUM file.
 
 Skipped items (low confidence / theoretical / accepted tradeoffs):
 - `removePrefixToken("\t")` whitespace-edge — unrealistic from

@@ -31,6 +31,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import com.visorcraft.radioshed.ui.util.TooltipIconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -93,7 +94,10 @@ fun BackupRestoreScreen(
                 navigationIcon = { TextButton(onClick = onBack) { Text("Back") } },
                 actions = {
                     Box {
-                        IconButton(onClick = { menuOpen = true }) {
+                        TooltipIconButton(
+                            tooltip = "More",
+                            onClick = { menuOpen = true },
+                        ) {
                             Icon(
                                 imageVector = androidx.compose.material.icons.Icons.Filled.MoreVert,
                                 contentDescription = "More",
@@ -612,13 +616,13 @@ private fun BackupRow(
                     color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
                 )
             }
-            IconButton(onClick = onShare, enabled = enabled) {
+            TooltipIconButton(tooltip = "Share", onClick = onShare, enabled = enabled) {
                 Icon(Icons.Filled.Share, contentDescription = "Share")
             }
-            IconButton(onClick = onRestore, enabled = enabled) {
+            TooltipIconButton(tooltip = "Restore", onClick = onRestore, enabled = enabled) {
                 Icon(Icons.Filled.Restore, contentDescription = "Restore")
             }
-            IconButton(onClick = onDelete, enabled = enabled) {
+            TooltipIconButton(tooltip = "Delete", onClick = onDelete, enabled = enabled) {
                 Icon(
                     Icons.Filled.Delete,
                     contentDescription = "Delete",

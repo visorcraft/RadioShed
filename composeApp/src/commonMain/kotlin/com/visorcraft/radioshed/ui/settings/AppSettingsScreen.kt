@@ -433,10 +433,11 @@ fun AppSettingsScreen(
             Spacer(Modifier.height(24.dp))
 
             // ---- Online & Sync ----
-            // Single global gate for online lookups (Cover Art Archive,
-            // LRClib). Per-service toggles are still deferred per
-            // SPEC §7.5 — the four-way enum here covers the broad
-            // user intents in the meantime.
+            // Global gate for online lookups (Cover Art Archive,
+            // LRClib). Per-service overrides for the two highest-
+            // bandwidth services live just below; everything else
+            // keeps inheriting the global policy unless the user
+            // toggles a row explicitly.
             SectionHeader("Online")
             ConnectivityPolicyRow(
                 current = connectivityPolicy,
@@ -444,6 +445,25 @@ fun AppSettingsScreen(
                     connectivityPolicy = p
                     settings.setConnectivityPolicy(p)
                 },
+            )
+            Spacer(Modifier.height(8.dp))
+            ServicePolicyOverrideRow(
+                title = "Cover Art Archive",
+                subtitle = "Album cover backfill from coverartarchive.org. " +
+                    "Override to keep covers off cellular without affecting " +
+                    "lyrics fetches.",
+                service = com.visorcraft.radioshed.source.NetworkService.CoverArt,
+                settings = settings,
+            )
+            Spacer(Modifier.height(8.dp))
+            ServicePolicyOverrideRow(
+                title = "Lyrics (LRClib)",
+                subtitle = "Time-synced + plain lyrics from lrclib.net. " +
+                    "Override independently of artwork — handy for keeping " +
+                    "lyrics open while artwork stays restricted, or vice " +
+                    "versa.",
+                service = com.visorcraft.radioshed.source.NetworkService.Lyrics,
+                settings = settings,
             )
 
             Spacer(Modifier.height(24.dp))
@@ -649,6 +669,29 @@ fun AppSettingsScreen(
                     },
                 )
             }
+            Spacer(Modifier.height(8.dp))
+            // Reclaim the disk space SQLite is hanging onto after a
+            // big "Clear all caches" pass. SQLite never automatically
+            // shrinks the DB file — freed pages get marked for reuse
+            // but the file stays large on disk. VACUUM rebuilds the
+            // file in place and is the canonical way to actually
+            // recover the bytes. Cheap and safe (full transactional
+            // semantics; a power cut mid-VACUUM falls back to the
+            // pre-VACUUM file via SQLite's rollback journal).
+            val dbMaintenance: com.visorcraft.radioshed.data.DatabaseMaintenanceRepository =
+                koinInject()
+            var vacuumStatus by remember { mutableStateOf<String?>(null) }
+            VacuumDbRow(
+                status = vacuumStatus,
+                onClick = {
+                    scope.launch {
+                        vacuumStatus = "Compacting database…"
+                        runCatching { dbMaintenance.vacuum() }
+                            .onSuccess { vacuumStatus = "Database compacted." }
+                            .onFailure { vacuumStatus = "Compaction failed: ${it.message}" }
+                    }
+                },
+            )
 
             Spacer(Modifier.height(24.dp))
 
@@ -1060,6 +1103,35 @@ private fun ClearAllCachesRow(status: String?, onClick: () -> Unit) {
                 )
             }
             TextButton(onClick = onClick) { Text("Clear all") }
+        }
+    }
+}
+
+@Composable
+private fun VacuumDbRow(status: String?, onClick: () -> Unit) {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    "Compact database",
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium,
+                )
+                Text(
+                    text = status ?: "Reclaims disk space SQLite is holding " +
+                        "after large deletes. Safe; takes a second or two.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                )
+            }
+            TextButton(onClick = onClick) { Text("Compact") }
         }
     }
 }
@@ -1902,6 +1974,71 @@ private fun ConnectivityPolicyRow(
                     androidx.compose.material3.FilterChip(
                         selected = active,
                         onClick = { if (!active) onPick(policy) },
+                        label = { Text(label) },
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Per-service override row. The user picks Inherit (default —
+ * follow the global Connectivity policy) or one of the three
+ * explicit overrides. Showing this as a sub-row beneath the main
+ * Connectivity card keeps the global vs. override hierarchy
+ * visually obvious.
+ */
+@Composable
+private fun ServicePolicyOverrideRow(
+    title: String,
+    subtitle: String,
+    service: com.visorcraft.radioshed.source.NetworkService,
+    settings: SettingsStore,
+) {
+    var current by remember(service) {
+        mutableStateOf(settings.getServicePolicyOverride(service))
+    }
+    val options = listOf(
+        com.visorcraft.radioshed.source.ServicePolicyOverride.Inherit to "Inherit",
+        com.visorcraft.radioshed.source.ServicePolicyOverride.Always to "Always",
+        com.visorcraft.radioshed.source.ServicePolicyOverride.WiFiOnly to "Wi-Fi only",
+        com.visorcraft.radioshed.source.ServicePolicyOverride.Never to "Never",
+    )
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+            Text(
+                title,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+            )
+            Spacer(Modifier.height(8.dp))
+            androidx.compose.foundation.layout.FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                options.forEach { (override, label) ->
+                    val active = override == current
+                    androidx.compose.material3.FilterChip(
+                        selected = active,
+                        onClick = {
+                            if (!active) {
+                                current = override
+                                settings.setServicePolicyOverride(service, override)
+                            }
+                        },
                         label = { Text(label) },
                     )
                 }
