@@ -48,14 +48,29 @@ class DesktopBackupStorage : BackupStorage {
             runCatching {
                 val safe = sanitizeFilename(name)
                 val target = File(backupDir, safe)
-                // Tmp + atomic-ish rename so a process crash mid-write
+                // Tmp + atomic rename so a process crash mid-write
                 // can't leave a half-written file the restore reader
                 // would try to parse.
+                //
+                // Files.move(REPLACE_EXISTING) instead of File.renameTo:
+                // on Windows, renameTo silently fails when `target`
+                // already exists (it maps to MoveFile, which doesn't
+                // overwrite). Files.move uses MoveFileEx with
+                // MOVEFILE_REPLACE_EXISTING and overwrites atomically,
+                // so a re-write of the same backup name actually
+                // replaces the prior file instead of dropping the new
+                // bytes on the floor.
                 val tmp = File(backupDir, "$safe.tmp")
                 tmp.writeBytes(bytes)
-                if (!tmp.renameTo(target)) {
+                try {
+                    java.nio.file.Files.move(
+                        tmp.toPath(),
+                        target.toPath(),
+                        java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                    )
+                } catch (e: java.io.IOException) {
                     tmp.delete()
-                    return@runCatching null
+                    throw e
                 }
                 BackupFile(
                     uri = target.toURI().toString(),

@@ -99,8 +99,19 @@ fun ColorPicker(
         }
     }
 
+    // Skip the first fire — that emission would otherwise propagate
+    // a slightly-drifted version of `initial` (round-tripped through
+    // HSV math) back to the parent and trigger a settings write
+    // before the user has touched anything. After the first
+    // composition, fire on every subsequent change so the parent's
+    // live theme preview keeps up with wheel / slider / hex edits.
+    var hasInitialized by remember(initial) { mutableStateOf(false) }
     LaunchedEffect(current) {
-        onColorChange(current)
+        if (hasInitialized) {
+            onColorChange(current)
+        } else {
+            hasInitialized = true
+        }
     }
 
     Column(modifier = modifier) {

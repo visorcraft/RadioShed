@@ -2,8 +2,6 @@ package com.visorcraft.radioshed.source
 
 import com.visorcraft.radioshed.data.IODispatcher
 import kotlinx.coroutines.withContext
-import java.awt.FileDialog
-import java.awt.Frame
 import java.io.File
 
 /**
@@ -14,20 +12,15 @@ import java.io.File
  */
 class DesktopHistoryExporter : HistoryExporter {
 
-    override suspend fun exportCsv(rows: List<HistoryCsvRow>): Boolean =
+    override suspend fun exportCsv(rows: List<HistoryCsvRow>): Boolean = runCatching {
+        val stamp = System.currentTimeMillis()
+        val (dir, name) = showSaveDialog("Export history", "radioshed-history-$stamp.csv")
+        if (dir == null || name == null) return@runCatching false
         withContext(IODispatcher) {
-            runCatching {
-                val stamp = System.currentTimeMillis()
-                val dialog = FileDialog(null as Frame?, "Export history", FileDialog.SAVE)
-                dialog.file = "radioshed-history-$stamp.csv"
-                dialog.isVisible = true
-                val name = dialog.file ?: return@runCatching false
-                val dir = dialog.directory ?: return@runCatching false
-                val target = File(dir, name)
-                target.writeText(buildCsv(rows))
-                true
-            }.getOrDefault(false)
+            File(dir, name).writeText(buildCsv(rows))
         }
+        true
+    }.getOrDefault(false)
 
     private fun buildCsv(rows: List<HistoryCsvRow>): String = buildString {
         append("played_at,title,artist,album,station,listened_ms,completed\n")

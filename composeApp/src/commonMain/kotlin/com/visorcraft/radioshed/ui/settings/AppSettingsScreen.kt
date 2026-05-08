@@ -2433,7 +2433,6 @@ private fun SubsonicConfigRow(
     var dialogOpen by remember { mutableStateOf(false) }
     val client: com.visorcraft.radioshed.source.SubsonicClient = koinInject()
     val scope = rememberCoroutineScope()
-    var status by remember { mutableStateOf<String?>(null) }
     val configured = url.isNotBlank() && username.isNotBlank() && password.isNotBlank()
 
     Column {
@@ -2468,8 +2467,20 @@ private fun SubsonicConfigRow(
         var draftUser by remember { mutableStateOf(username) }
         var draftPass by remember { mutableStateOf(password) }
         var testing by remember { mutableStateOf(false) }
+        // Status and the in-flight ping Job both live inside the
+        // dialog's `if` block so each open is a fresh session: stale
+        // "Couldn't connect" messages don't bleed into the next open,
+        // and a Cancel/dismiss aborts the ping coroutine before it
+        // can race past the dismiss and silently persist credentials.
+        var status by remember { mutableStateOf<String?>(null) }
+        var pingJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+        val dismissDialog = {
+            pingJob?.cancel()
+            pingJob = null
+            dialogOpen = false
+        }
         AlertDialog(
-            onDismissRequest = { dialogOpen = false },
+            onDismissRequest = dismissDialog,
             confirmButton = {
                 TextButton(
                     enabled = !testing,
@@ -2491,7 +2502,7 @@ private fun SubsonicConfigRow(
                             else -> {
                                 testing = true
                                 status = "Testing connection…"
-                                scope.launch {
+                                pingJob = scope.launch {
                                     val server = com.visorcraft.radioshed.source.SubsonicServer(
                                         baseUrl = u,
                                         username = user,
@@ -2513,6 +2524,7 @@ private fun SubsonicConfigRow(
                                         dialogOpen = false
                                     }
                                     testing = false
+                                    pingJob = null
                                 }
                             }
                         }
@@ -2520,7 +2532,7 @@ private fun SubsonicConfigRow(
                 ) { Text(if (testing) "Testing…" else "Test & save") }
             },
             dismissButton = {
-                TextButton(onClick = { dialogOpen = false }) { Text("Cancel") }
+                TextButton(onClick = dismissDialog) { Text("Cancel") }
             },
             title = { Text("Subsonic server") },
             text = {

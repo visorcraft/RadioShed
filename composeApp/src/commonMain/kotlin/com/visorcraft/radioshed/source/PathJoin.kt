@@ -21,6 +21,17 @@ internal fun joinPath(parent: String, child: String): String {
     if (parent.isEmpty()) return child
     if (child.isEmpty()) return parent
     val separator = if (parent.contains('\\') && !parent.contains('/')) "\\" else "/"
+    // UNC root guard. `parent == "\\"` is the network-share root the
+    // file browser reaches when the user navigates above
+    // `\\server\share` to the synthetic "network" pane. Plain
+    // trimEnd would strip both backslashes, leaving a single
+    // backslash followed by the child — `\server` — which Windows
+    // resolves as a local device path rather than a UNC host.
+    // Preserve the leading double-backslash explicitly.
+    if (parent == "\\\\" || parent == "//") {
+        val trimmedChild = child.trimStart('/', '\\')
+        return "$parent$trimmedChild"
+    }
     val trimmedParent = parent.trimEnd('/', '\\')
     val trimmedChild = child.trimStart('/', '\\')
     return "$trimmedParent$separator$trimmedChild"

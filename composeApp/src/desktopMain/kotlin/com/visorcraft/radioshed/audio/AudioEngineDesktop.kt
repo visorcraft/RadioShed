@@ -210,4 +210,23 @@ class AudioEngineDesktop : AudioEngine {
         val clamped = speed.coerceIn(0.25f, 4f)
         player?.controls()?.setRate(clamped)
     }
+
+    /**
+     * Release native libvlc handles. Call from the application's
+     * `onCloseRequest` so libvlc can flush write buffers and close
+     * the audio device cleanly. Without this, exitApplication() is
+     * called while libvlc still owns the OS audio device, leaving
+     * it locked for several seconds after RadioShed exits — an
+     * audible regression for the next app to open the same device.
+     *
+     * Idempotent: subsequent calls are no-ops because both handles
+     * are nulled. Safe to invoke even when libvlc never loaded
+     * (factory + player are still null).
+     */
+    fun close() {
+        runCatching { player?.release() }
+        runCatching { factory?.release() }
+        player = null
+        factory = null
+    }
 }

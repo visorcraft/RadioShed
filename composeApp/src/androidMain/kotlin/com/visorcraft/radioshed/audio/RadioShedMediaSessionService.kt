@@ -34,6 +34,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.koin.core.context.GlobalContext
 
 /**
@@ -321,6 +322,28 @@ class RadioShedMediaSessionService : MediaLibraryService() {
         // refresh tasks from touching a released session.
         @Volatile
         private var attachedSession: MediaLibrarySession? = null
+
+        // Cache of search results between [onSearch] (the count-only
+        // notification) and the immediately-following
+        // [onGetSearchResult] (the actual items pull). Without this
+        // cache the two callbacks issue independent searchAll queries
+        // against potentially different DB snapshots — a library scan
+        // running between the two calls would skew the count vs items.
+        //
+        // Bounded LinkedHashMap so a controller that fires onSearch
+        // without ever calling onGetSearchResult (some Bluetooth
+        // browsers do this opportunistically) can't pile up a
+        // memory leak: oldest entry evicts when we exceed the cap.
+        // Synchronized because the two callbacks run on different
+        // dispatcher continuations.
+        private val pendingSearchResults: MutableMap<String, List<MediaItem>> =
+            java.util.Collections.synchronizedMap(
+                object : LinkedHashMap<String, List<MediaItem>>(8, 0.75f, true) {
+                    override fun removeEldestEntry(
+                        eldest: MutableMap.MutableEntry<String, List<MediaItem>>,
+                    ): Boolean = size > MAX_PENDING_SEARCH_RESULTS
+                },
+            )
 
         fun attach(session: MediaLibrarySession?) {
             attachedSession = session
@@ -728,17 +751,30 @@ class RadioShedMediaSessionService : MediaLibraryService() {
                     // — re-tapping unlikes, matching the in-app heart
                     // button's behaviour. No skip; the user explicitly
                     // wants to keep listening.
+                    //
+                    // Optimistic toggle: flip the cached state and the
+                    // visual glyph synchronously, then persist async.
+                    // Reading isLiked() from the DB on every tap meant
+                    // a rapid double-tap would read the same stale
+                    // value twice and write the same `nextLiked` for
+                    // both — net result no toggle, contrary to user
+                    // intent. Sourcing the next state from the cache
+                    // makes consecutive taps alternate even when the
+                    // DB writes are still in flight.
+                    val nextLiked = !currentTrackLiked
+                    currentTrackLiked = nextLiked
+                    attachedSession?.setCustomLayout(buildCustomLayout())
                     scope.launch {
                         runCatching {
                             val ratingRepo = GlobalContext.get().get<RatingRepository>()
-                            val nextLiked = !ratingRepo.isLiked(trackId)
                             if (nextLiked) ratingRepo.like(trackId)
                             else ratingRepo.unlike(trackId)
-                            // Eagerly mirror the new state into the
-                            // cache so the next layout build paints
-                            // the right glyph without waiting for the
-                            // async re-read in refreshCustomLayout.
-                            currentTrackLiked = nextLiked
+                        }.onFailure {
+                            // DB write failed — roll the cache back so
+                            // the visual state matches the persisted
+                            // truth on the next refresh.
+                            Log.e(TAG, "ACTION_TOGGLE_LIKE: DB write failed", it)
+                            currentTrackLiked = !nextLiked
                             attachedSession?.setCustomLayout(buildCustomLayout())
                         }
                     }
@@ -907,15 +943,26 @@ class RadioShedMediaSessionService : MediaLibraryService() {
                         val libraryRepo = GlobalContext.get().get<
                             com.visorcraft.radioshed.data.LibraryRepository
                         >()
-                        val albums = libraryRepo.observeAlbums().first()
-                            .sortedBy { it.title.lowercase() }
-                            .take(AA_BROWSE_TRACK_LIMIT.toInt())
-                        val items = albums.map { album ->
-                            playableItem(
-                                mediaId = MEDIA_ID_ALBUM_PREFIX + album.id,
-                                title = album.title.ifBlank { "Unknown album" },
-                                subtitle = null,
-                            )
+                        // Sort + cap on the IO dispatcher rather than
+                        // the session callback's Main thread — for a
+                        // 2k-album library, the lowercase()/compare
+                        // sort is O(n log n) on a thread that also
+                        // services UI input. Move it off-Main to
+                        // pre-empt an ANR on the Galaxy Fold class
+                        // of devices.
+                        val items = withContext(
+                            com.visorcraft.radioshed.data.IODispatcher,
+                        ) {
+                            libraryRepo.observeAlbums().first()
+                                .sortedBy { it.title.lowercase() }
+                                .take(AA_BROWSE_TRACK_LIMIT.toInt())
+                                .map { album ->
+                                    playableItem(
+                                        mediaId = MEDIA_ID_ALBUM_PREFIX + album.id,
+                                        title = album.title.ifBlank { "Unknown album" },
+                                        subtitle = null,
+                                    )
+                                }
                         }
                         future.set(LibraryResult.ofItemList(
                             ImmutableList.copyOf(items),
@@ -938,15 +985,19 @@ class RadioShedMediaSessionService : MediaLibraryService() {
                         val libraryRepo = GlobalContext.get().get<
                             com.visorcraft.radioshed.data.LibraryRepository
                         >()
-                        val artists = libraryRepo.observeArtists().first()
-                            .sortedBy { it.name.lowercase() }
-                            .take(AA_BROWSE_TRACK_LIMIT.toInt())
-                        val items = artists.map { artist ->
-                            playableItem(
-                                mediaId = MEDIA_ID_ARTIST_PREFIX + artist.id,
-                                title = artist.name.ifBlank { "Unknown artist" },
-                                subtitle = null,
-                            )
+                        val items = withContext(
+                            com.visorcraft.radioshed.data.IODispatcher,
+                        ) {
+                            libraryRepo.observeArtists().first()
+                                .sortedBy { it.name.lowercase() }
+                                .take(AA_BROWSE_TRACK_LIMIT.toInt())
+                                .map { artist ->
+                                    playableItem(
+                                        mediaId = MEDIA_ID_ARTIST_PREFIX + artist.id,
+                                        title = artist.name.ifBlank { "Unknown artist" },
+                                        subtitle = null,
+                                    )
+                                }
                         }
                         future.set(LibraryResult.ofItemList(
                             ImmutableList.copyOf(items),
@@ -1058,10 +1109,15 @@ class RadioShedMediaSessionService : MediaLibraryService() {
                         com.visorcraft.radioshed.data.SearchRepository
                     >()
                     val results = searchRepo.searchAll(query, limitPerCategory = 20L)
-                    val total = results.tracks.size +
-                        results.albums.size +
-                        results.artists.size
-                    session.notifySearchResultChanged(browser, query, total, params)
+                    val items = buildSearchMediaItems(results)
+                    // Cache so the immediately-following onGetSearchResult
+                    // call drains the same snapshot. Without this, the
+                    // count we advertise here and the items returned
+                    // there come from two independent DB reads — a
+                    // library scan running between the two would skew
+                    // the result and break Auto's pagination invariant.
+                    pendingSearchResults[query] = items
+                    session.notifySearchResultChanged(browser, query, items.size, params)
                     future.set(LibraryResult.ofVoid(params))
                 }.onFailure {
                     Log.e(TAG, "onSearch: failed", it)
@@ -1084,6 +1140,16 @@ class RadioShedMediaSessionService : MediaLibraryService() {
                 "onGetSearchResult: query='$query' caller=${browser.packageName} " +
                     "page=$page pageSize=$pageSize",
             )
+            // Drain the cached items from the matching onSearch call.
+            // Falling back to a fresh searchAll only happens when the
+            // controller calls onGetSearchResult without a preceding
+            // onSearch — atypical but the spec doesn't forbid it.
+            val cached = pendingSearchResults.remove(query)
+            if (cached != null) {
+                return Futures.immediateFuture(
+                    LibraryResult.ofItemList(ImmutableList.copyOf(cached), params),
+                )
+            }
             val future = SettableFuture.create<LibraryResult<ImmutableList<MediaItem>>>()
             scope.launch {
                 runCatching {
@@ -1091,32 +1157,7 @@ class RadioShedMediaSessionService : MediaLibraryService() {
                         com.visorcraft.radioshed.data.SearchRepository
                     >()
                     val results = searchRepo.searchAll(query, limitPerCategory = 20L)
-                    val items = mutableListOf<MediaItem>()
-                    // Tracks first — the most-common voice-search target
-                    // ("play <song>") and AA's autoplay path picks the
-                    // first item by default, so a track top-hit means
-                    // immediate playback.
-                    for (track in results.tracks) {
-                        items += playableItem(
-                            mediaId = MEDIA_ID_TRACK_PREFIX + track.id,
-                            title = track.title.ifBlank { track.fileName },
-                            subtitle = null,
-                        )
-                    }
-                    for (album in results.albums) {
-                        items += playableItem(
-                            mediaId = MEDIA_ID_ALBUM_PREFIX + album.id,
-                            title = "Album: ${album.title}",
-                            subtitle = null,
-                        )
-                    }
-                    for (artist in results.artists) {
-                        items += playableItem(
-                            mediaId = MEDIA_ID_ARTIST_PREFIX + artist.id,
-                            title = "Artist: ${artist.name}",
-                            subtitle = null,
-                        )
-                    }
+                    val items = buildSearchMediaItems(results)
                     future.set(LibraryResult.ofItemList(
                         ImmutableList.copyOf(items),
                         params,
@@ -1127,6 +1168,39 @@ class RadioShedMediaSessionService : MediaLibraryService() {
                 }
             }
             return future
+        }
+
+        /**
+         * Build the ordered MediaItem list shown in Auto's search results.
+         * Tracks first (most common voice-search target — "play X"
+         * autoplays the first hit), then albums, then artists.
+         */
+        private fun buildSearchMediaItems(
+            results: com.visorcraft.radioshed.data.SearchResults,
+        ): List<MediaItem> {
+            val items = mutableListOf<MediaItem>()
+            for (track in results.tracks) {
+                items += playableItem(
+                    mediaId = MEDIA_ID_TRACK_PREFIX + track.id,
+                    title = track.title.ifBlank { track.fileName },
+                    subtitle = null,
+                )
+            }
+            for (album in results.albums) {
+                items += playableItem(
+                    mediaId = MEDIA_ID_ALBUM_PREFIX + album.id,
+                    title = "Album: ${album.title}",
+                    subtitle = null,
+                )
+            }
+            for (artist in results.artists) {
+                items += playableItem(
+                    mediaId = MEDIA_ID_ARTIST_PREFIX + artist.id,
+                    title = "Artist: ${artist.name}",
+                    subtitle = null,
+                )
+            }
+            return items
         }
 
         /**
@@ -1528,6 +1602,13 @@ class RadioShedMediaSessionService : MediaLibraryService() {
         /** Recently-played list size after dedup. */
         const val AA_RECENTLY_PLAYED_LIMIT = 30
         const val MEDIA_ID_STATION_PREFIX = "station_"
+
+        // Cap on the [pendingSearchResults] cache. 16 distinct
+        // queries is generous — typical voice or AA-search flows
+        // touch one query at a time, and the user-typed in-app
+        // search debounces so a single typing burst hits one or
+        // two cache entries, not dozens.
+        const val MAX_PENDING_SEARCH_RESULTS = 16
 
         // Custom action ids used by the Android Auto layout. Values are
         // arbitrary but must round-trip exactly through SessionCommand.

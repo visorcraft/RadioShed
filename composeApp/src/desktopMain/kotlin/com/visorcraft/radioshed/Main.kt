@@ -7,8 +7,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
+import com.visorcraft.radioshed.audio.AudioEngine
+import com.visorcraft.radioshed.audio.AudioEngineDesktop
 import com.visorcraft.radioshed.di.initKoin
 import com.visorcraft.radioshed.source.appAppDataDir
+import org.koin.core.context.GlobalContext
 import java.awt.Color as AwtColor
 import java.awt.Font
 import java.awt.RenderingHints
@@ -42,7 +45,18 @@ fun main() {
     application {
         val state = rememberWindowState(width = 1280.dp, height = 800.dp)
         Window(
-            onCloseRequest = ::exitApplication,
+            onCloseRequest = {
+                // Release libvlc handles before the JVM exits so the
+                // audio device unlocks immediately. exitApplication()
+                // alone terminates the process while libvlc still
+                // owns the device, leaving it in a held state for
+                // several seconds for the next app that opens it.
+                runCatching {
+                    val engine = GlobalContext.get().get<AudioEngine>()
+                    if (engine is AudioEngineDesktop) engine.close()
+                }
+                exitApplication()
+            },
             state = state,
             title = "RadioShed",
             icon = icon,

@@ -437,6 +437,25 @@ private fun artworkContentUri(appContext: Context, fileUri: String): android.net
     // on. Granting up-front to the well-known media-consumer
     // packages bypasses that.
     //
+    // Revoke the previous track's grants before issuing new ones.
+    // grantUriPermission entries persist in UriGrantsManagerService's
+    // in-memory list (and the on-disk grant table) until explicit
+    // revoke or process death, with no expiry. Without revocation,
+    // a long shuffle/queue session would accumulate one grant per
+    // package per track switch and eventually trip the framework's
+    // grant-table size guard.
+    val previous = lastGrantedArtworkUri.getAndSet(contentUri)
+    if (previous != null && previous != contentUri) {
+        for (pkg in MEDIA_CONSUMER_PACKAGES) {
+            runCatching {
+                appContext.revokeUriPermission(
+                    pkg,
+                    previous,
+                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                )
+            }
+        }
+    }
     // Each grant is independent: Android lets you grant a URI to a
     // package that doesn't exist on the device (no-op), so we don't
     // need to feature-check whether the user has Auto installed.
@@ -451,6 +470,12 @@ private fun artworkContentUri(appContext: Context, fileUri: String): android.net
     }
     return contentUri
 }
+
+// Tracks the most recently granted artwork URI so it can be revoked
+// before the next grant. AtomicReference because toMediaItem may run
+// on the binder thread (controller IPC) while a parallel track
+// transition runs on the player thread.
+private val lastGrantedArtworkUri = java.util.concurrent.atomic.AtomicReference<android.net.Uri?>()
 
 private val MEDIA_CONSUMER_PACKAGES = listOf(
     "com.google.android.projection.gearhead",   // Android Auto

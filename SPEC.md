@@ -3797,6 +3797,180 @@ Known gaps still deferred:
 - Tooltip mechanical sweep across the remaining ~62 IconButton call
   sites.
 
+#### Phase 19 polish (continued, batch 18 — Android Auto polish + multi-pass code review)
+
+Build `2026-05-06a` → `2026-05-08a`. Two threads packaged together: the
+Android Auto integration kept surfacing rough edges across multiple
+in-car sessions and got iterated to a usable state, then a multi-agent
+code review on the recent diff turned up 22 candidate bugs of which 15
+landed as fixes.
+
+Android Auto polish (sourced from real in-car testing on the user's
+Galaxy Fold 7 + head unit):
+
+- [x] **AA cover art now renders.** Long-running issue: AA's process
+  can't read `file://` URIs from our private filesDir, so embedded
+  bytes alone weren't reaching every host. Fixed by translating
+  artwork URIs through a `RadioShedFileProvider` subclass that
+  reports `image/jpeg` for `/artwork/` paths (the persisted files
+  are SHA-256-hashed with no extension, so the default
+  `getType()` returned `application/octet-stream` which AA's image
+  loader silently rejects). FileProvider authority entry added in
+  `file_provider_paths.xml`. Bytes channel kept as fallback via a
+  decode + downscale path (BitmapFactory two-pass: probe dims,
+  then sampled decode at 512 px long edge → JPEG @ 85% quality
+  → typical 30-80 KB output regardless of source).
+- [x] **AA voice search now routes.** `"Hey Google, play X on
+  RadioShed"` previously surfaced "can't play music on Radio Shed
+  because it's not a supported platform" because Assistant needs
+  TWO discovery hooks present, not one:
+  1. `MediaLibraryService` browse-root extras must include
+     `SEARCH_SUPPORTED = true` (now declared in
+     `onGetLibraryRoot`'s `LibraryParams`).
+  2. The `MainActivity` must declare an
+     `<intent-filter>` for
+     `android.media.action.MEDIA_PLAY_FROM_SEARCH` — Assistant's
+     legacy Voice Actions discovery hook from before
+     `MediaSessionService` existed.
+  Both added; `MainActivity.handleSearchIntent` now resolves the
+  spoken query (with structured `MediaStore.EXTRA_*` extras
+  preferred over the noisy free-text transcript) and dispatches
+  via `StationPlayback`.
+- [x] **Voice-search dispatch in onSetMediaItems.** Same focus-driven
+  routing as the activity-level handler, fired when the spoken
+  command lands on an already-running session via Media3's
+  `MediaItem.requestMetadata.searchQuery` channel. Filler-token
+  prefix strip (`play`, `a song by`, `music by`, etc.) keeps
+  free-text fallbacks from matching unrelated titles.
+- [x] **Star-rating button gives visible feedback on the head
+  unit.** Filled vs outline icon swap based on whether
+  `currentTrackRating > 0`, plus a head-unit Toast announcing
+  "Rated N/5" / "Rating cleared" — the AA NowPlaying button row
+  hides displayName labels, so a binary visual change + audible
+  toast was the only way to confirm taps. Layout reordered to
+  Heart → Dislike → Star so when the head unit caps secondary
+  buttons at 2, the high-utility binary actions survive.
+- [x] **Free-text track search now matches title + artist + album.**
+  `SearchRepository.searchTracks` previously called
+  `searchTracksByTitleLike` only, so typing "Roddy Ricch" missed
+  every track whose title didn't literally contain "Roddy Ricch".
+  Free-text path fans out to three indexed LIKE queries
+  (title / primary-artist name / album title) and dedupes via a
+  `LinkedHashSet<Long>` keyed by track id, with the merge order
+  preserved as best-match priority.
+
+Multi-pass code-review fix sweep (15 high-confidence runtime bugs):
+
+- [x] **`MainActivity.searchScope` cancellation.** The dispatch
+  scope was a `SupervisorJob() + Dispatchers.Default` created at
+  construction time and never cancelled — a fast-rotation right
+  after voice-fire would leave the coroutine running against a
+  destroyed activity. Added `onDestroy → searchScope.cancel()`.
+- [x] **AA artwork URI grant lifecycle.** Each track switch issued
+  `grantUriPermission` for five media-consumer packages with no
+  expiry, accumulating in `UriGrantsManagerService`'s
+  permission table forever. A long shuffle session would
+  eventually trip the framework's grant-table guard. Track
+  the most recently granted URI in an `AtomicReference`,
+  `revokeUriPermission` it before each new grant.
+- [x] **AWT `FileDialog` on the EDT.** The three desktop exporters
+  (Backup-share, Playlist, History) wrapped the dialog in
+  `withContext(IODispatcher)`, but `FileDialog.isVisible = true`
+  must be issued from the AWT Event Dispatch Thread or it
+  deadlocks on Windows (the dialog needs the EDT to pump native
+  paint events while the EDT is parked waiting for the IO
+  suspend). Helper `showSaveDialog` hops to `Dispatchers.Main`
+  (Compose Desktop's Main is the EDT) for the dialog block, then
+  back to `IODispatcher` for the file write.
+- [x] **`AudioEngineDesktop.close()` released on app exit.**
+  `Main.kt`'s `onCloseRequest = ::exitApplication` terminated
+  the JVM while libvlc still owned the OS audio device, leaving
+  it locked for several seconds for the next app to open. Added
+  `close()` that releases `MediaPlayer` + `MediaPlayerFactory`
+  before `exitApplication`.
+- [x] **`DesktopBackupStorage.write` Files.move(REPLACE_EXISTING).**
+  `File.renameTo` silently fails on Windows when the target
+  exists (it maps to `MoveFile`, not `MoveFileEx`), so a
+  re-write of the same backup name dropped the new bytes on the
+  floor. Switched to `Files.move(..., REPLACE_EXISTING)` which
+  uses `MoveFileEx` with `MOVEFILE_REPLACE_EXISTING`.
+- [x] **`joinPath` UNC root preservation.** `joinPath("\\\\", "server")`
+  was trimming both backslashes and producing `\\server`
+  (single-prefix), which Windows resolves as a local device path
+  rather than a UNC host. Added a UNC-root guard before
+  `trimEnd`. Regression coverage in new `PathJoinTest` (POSIX +
+  Windows drive + UNC root + UNC navigation).
+- [x] **`onSearch` ↔ `onGetSearchResult` race.** The two callbacks
+  ran independent `searchAll(query)` queries — a library scan
+  between the two would skew the count vs items pair returned to
+  Auto. Now share a bounded `LinkedHashMap<String, List<MediaItem>>`
+  (cap 16, oldest evicted) so the second callback drains the
+  same DB snapshot the first counted.
+- [x] **`currentTrackLiked` rapid-tap race.** Reading
+  `ratingRepo.isLiked(trackId)` then writing
+  `nextLiked = !result` left a window where a second tap arrived
+  before the first DB write completed and computed the same
+  `nextLiked`, no-op-ing the toggle. Switched to optimistic:
+  flip the cache + glyph synchronously, persist async, roll the
+  cache back on DB failure.
+- [x] **`onGetChildren` Albums/Artists off Main.** The sort + map
+  for the AA browse list ran on the session callback's Main
+  thread. Wrapped in `withContext(IODispatcher)` so an O(n log n)
+  string-comparison sort on a large library doesn't compete with
+  UI input dispatch.
+- [x] **`SubsonicConfigRow` Cancel-aware ping.** The "Test & save"
+  ping was launched on the row's `rememberCoroutineScope`, not
+  the dialog's. If the user dismissed mid-ping and ping
+  succeeded after dismiss, credentials persisted contrary to the
+  user's Cancel intent. `pingJob` now tracked and cancelled on
+  dismiss.
+- [x] **`SubsonicConfigRow.status` reset per dialog.** State was
+  declared at row scope, so a stale "Couldn't connect" message
+  from a previous dialog open displayed immediately when the
+  user re-opened. Moved into the dialog's `if` block.
+- [x] **Subsonic cover-art URL memoization.**
+  `client.coverArtUrl()` regenerates a fresh random salt on
+  every call (token auth), and `SubsonicBrowseScreen` was
+  calling it inline inside `LazyColumn.items { }` — every
+  recompose produced a different URL, defeating Coil's cache and
+  re-fetching every cover that left and re-entered the viewport.
+  URLs now precomputed via `remember(albums, server)` /
+  `remember(songs, server)` per-id maps.
+- [x] **`SubsonicBrowseScreen.server` keyed on credentials.** The
+  `server` tuple was `remember { … }` — captured exactly once
+  per composable identity. If the screen ever shifts into a
+  long-lived pane (the three-pane layout already supports it for
+  NowPlaying), credentials would become permanently stale after
+  a Settings edit. Now `remember(urlPref, userPref, passPref)`.
+- [x] **`NetworkPolicyGate` consultation.** The KDoc claimed the
+  Subsonic browse screen was "connection-policy gated" but the
+  code never consulted the gate. Now calls
+  `networkPolicy.allowUserInitiatedFetch()` before each level's
+  fetch and surfaces a "policy blocks this fetch" error.
+- [x] **`ColorPicker` skip-initial-fire.** `LaunchedEffect(current)`
+  fired immediately on first composition with `current` already
+  round-tripped through HSV math (potentially differing from
+  `initial` by float-precision drift), so opening the picker
+  committed a slightly-different color to settings before the
+  user touched anything. Skip the first emission via a
+  per-composition flag; subsequent changes still propagate.
+
+Skipped items (low confidence / theoretical / accepted tradeoffs):
+- `removePrefixToken("\t")` whitespace-edge — unrealistic from
+  Assistant transcription.
+- Voice-search empty-queue silent fail when StationPlayback
+  throws — accepted tradeoff documented at the call site;
+  logcat covers the diagnosis path.
+- `DesktopTagWriter.canWrite` race against network shares —
+  reviewer self-downgraded to "not high enough confidence".
+- `BackupFile.createdAt` from mtime instead of ctime — minor
+  presentation issue, not data loss; manually-imported phone
+  backups appear with the copy timestamp.
+- `parentPath("\\\\server")` bare-host UNC — not currently
+  reachable by any caller; KDoc has a known gap.
+- LRClib `HttpURLConnection` error-stream draining — perf only,
+  no correctness impact.
+
 ---
 
 ## Appendix A — Compose Multiplatform vs native UI: when to fall back

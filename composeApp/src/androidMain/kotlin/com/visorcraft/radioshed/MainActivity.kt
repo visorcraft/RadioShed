@@ -24,6 +24,7 @@ import com.visorcraft.radioshed.stations.StationPlayback
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import org.koin.android.ext.android.inject
 
@@ -69,6 +70,17 @@ class MainActivity : ComponentActivity() {
         // AudioEngine is now ready.
         handleViewIntent(intent)
         handleSearchIntent(intent)
+    }
+
+    override fun onDestroy() {
+        // Cancel any in-flight voice-search dispatch so the DB query
+        // and the eventual playTracks call can't outlive the activity.
+        // Without this, a fast-rotation right after the user fires
+        // "Hey Google, play X" can leave a coroutine hanging against
+        // a destroyed activity scope, and a re-fired voice command
+        // would queue a second concurrent dispatch on top.
+        searchScope.cancel()
+        super.onDestroy()
     }
 
     /**

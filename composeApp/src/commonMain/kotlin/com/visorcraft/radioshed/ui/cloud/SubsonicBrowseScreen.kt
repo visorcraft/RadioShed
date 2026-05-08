@@ -42,6 +42,7 @@ import coil3.compose.AsyncImage
 import com.visorcraft.radioshed.audio.AudioEngine
 import com.visorcraft.radioshed.audio.Playable
 import com.visorcraft.radioshed.data.SettingsStore
+import com.visorcraft.radioshed.source.NetworkPolicyGate
 import com.visorcraft.radioshed.source.SubsonicAlbum
 import com.visorcraft.radioshed.source.SubsonicArtist
 import com.visorcraft.radioshed.source.SubsonicClient
@@ -82,12 +83,21 @@ fun SubsonicBrowseScreen(
     settings: SettingsStore = koinInject(),
     client: SubsonicClient = koinInject(),
     audioEngine: AudioEngine = koinInject(),
+    networkPolicy: NetworkPolicyGate = koinInject(),
 ) {
-    val server = remember {
+    // Re-derive the server tuple if the user updates credentials in
+    // Settings during a multi-pane session — the navigation model
+    // tears the screen down between visits today, but the server
+    // captured on first composition would otherwise become permanently
+    // stale if this screen ever lives in a long-lived pane.
+    val urlPref = settings.getSubsonicUrl()
+    val userPref = settings.getSubsonicUsername()
+    val passPref = settings.getSubsonicPassword()
+    val server = remember(urlPref, userPref, passPref) {
         SubsonicServer(
-            baseUrl = settings.getSubsonicUrl(),
-            username = settings.getSubsonicUsername(),
-            password = settings.getSubsonicPassword(),
+            baseUrl = urlPref,
+            username = userPref,
+            password = passPref,
         )
     }
 
@@ -101,7 +111,34 @@ fun SubsonicBrowseScreen(
     var error by remember { mutableStateOf<String?>(null) }
     var query by remember { mutableStateOf("") }
 
+    // Cover-art URLs memoized per [albums] / [songs] list so the
+    // per-call random salt in [SubsonicClient.coverArtUrl] doesn't
+    // make every recomposition produce a fresh URL — Coil keys its
+    // cache by URL string, so without memoization a scroll would
+    // re-fetch every cover that left and re-entered the viewport.
+    val albumCoverUrls = remember(albums, server) {
+        albums.associate { album ->
+            album.id to album.coverArtId?.let { client.coverArtUrl(server, it, size = 256) }
+        }
+    }
+    val songCoverUrls = remember(songs, server) {
+        songs.associate { song ->
+            song.id to song.coverArtId?.let { client.coverArtUrl(server, it, size = 128) }
+        }
+    }
+
     LaunchedEffect(current) {
+        // Honour the user's connectivity preference. Subsonic browse
+        // is a metadata fetch (not an "automatic" background sync —
+        // the user explicitly opened this screen) so the
+        // user-initiated gate is the right one. Manual mode still
+        // allows the request because the user just initiated it.
+        if (!networkPolicy.allowUserInitiatedFetch()) {
+            error = "Network policy blocks this fetch — change your " +
+                "Connectivity preference in Settings to use this screen."
+            loading = false
+            return@LaunchedEffect
+        }
         loading = true
         error = null
         when (val lvl = current) {
@@ -226,9 +263,7 @@ fun SubsonicBrowseScreen(
                             items(visible, key = { it.id }) { album ->
                                 AlbumRow(
                                     album = album,
-                                    coverUrl = album.coverArtId?.let {
-                                        client.coverArtUrl(server, it, size = 256)
-                                    },
+                                    coverUrl = albumCoverUrls[album.id],
                                     onClick = {
                                         query = ""
                                         stack = stack + Level.Songs(
@@ -257,9 +292,7 @@ fun SubsonicBrowseScreen(
                                                 artist = song.artist,
                                                 album = song.album,
                                                 durationMs = song.durationSec * 1000L,
-                                                artworkUri = song.coverArtId?.let {
-                                                    client.coverArtUrl(server, it, size = 512)
-                                                },
+                                                artworkUri = songCoverUrls[song.id],
                                             ),
                                         )
                                     },

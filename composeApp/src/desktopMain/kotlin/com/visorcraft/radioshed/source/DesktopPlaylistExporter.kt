@@ -2,8 +2,6 @@ package com.visorcraft.radioshed.source
 
 import com.visorcraft.radioshed.data.IODispatcher
 import kotlinx.coroutines.withContext
-import java.awt.FileDialog
-import java.awt.Frame
 import java.io.File
 
 /**
@@ -24,22 +22,18 @@ class DesktopPlaylistExporter : PlaylistExporter {
     override suspend fun exportM3u(
         playlistName: String,
         entries: List<M3uEntry>,
-    ): Boolean = withContext(IODispatcher) {
-        runCatching {
-            val safeName = playlistName
-                .replace(Regex("""[\\/:*?"<>|]"""), "_")
-                .ifBlank { "playlist" }
-                .take(80)
-            val dialog = FileDialog(null as Frame?, "Export playlist", FileDialog.SAVE)
-            dialog.file = "$safeName.m3u"
-            dialog.isVisible = true
-            val name = dialog.file ?: return@runCatching false
-            val dir = dialog.directory ?: return@runCatching false
-            val target = File(dir, name)
-            target.writeText(buildM3uText(entries))
-            true
-        }.getOrDefault(false)
-    }
+    ): Boolean = runCatching {
+        val safeName = playlistName
+            .replace(Regex("""[\\/:*?"<>|]"""), "_")
+            .ifBlank { "playlist" }
+            .take(80)
+        val (dir, name) = showSaveDialog("Export playlist", "$safeName.m3u")
+        if (dir == null || name == null) return@runCatching false
+        withContext(IODispatcher) {
+            File(dir, name).writeText(buildM3uText(entries))
+        }
+        true
+    }.getOrDefault(false)
 
     private fun buildM3uText(entries: List<M3uEntry>): String = buildString {
         append("#EXTM3U\n")
