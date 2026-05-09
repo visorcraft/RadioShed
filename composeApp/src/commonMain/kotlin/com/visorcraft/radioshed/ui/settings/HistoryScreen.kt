@@ -354,13 +354,20 @@ fun HistoryScreen(
                             modifier = Modifier.combinedClickable(
                                 onClick = { timeWindow = opt },
                                 onLongClick = lp@{
+                                    // `All` is filtered out here because trimming
+                                    // *everything* is destructive enough to live
+                                    // exclusively in the menu's Clear-all-history
+                                    // option (with its own confirm) — we don't want
+                                    // a long-press on the All chip to trigger a
+                                    // wipe. With All ruled out, the `when` below
+                                    // covers Today/Week/Month exhaustively, no
+                                    // `else` arm needed.
                                     if (opt == HistoryTimeWindow.All) return@lp
                                     val nowMs = nowMillis()
                                     val cutoff = when (opt) {
                                         HistoryTimeWindow.Today -> nowMs - 24L * 60L * 60L * 1000L
                                         HistoryTimeWindow.Week -> nowMs - 7L * 24L * 60L * 60L * 1000L
                                         HistoryTimeWindow.Month -> nowMs - 30L * 24L * 60L * 60L * 1000L
-                                        else -> return@lp
                                     }
                                     trimConfirm = cutoff to opt.trimLabel
                                 },

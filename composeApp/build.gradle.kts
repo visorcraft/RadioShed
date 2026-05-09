@@ -63,7 +63,14 @@ kotlin {
             // renders U+23F8 with extra descenders that get clipped at
             // typical button heights, while Roboto on Pixels renders it
             // fine. Vector icons render identically everywhere.
-            implementation(compose.materialIconsExtended)
+            //
+            // Pinned via `libs.compose.materialIconsExtended` (1.7.3 in
+            // gradle/libs.versions.toml). The `compose.*` accessor for
+            // this artifact is deprecated upstream because the artifact
+            // itself is frozen at 1.7.3 and no longer receives updates
+            // from Compose Multiplatform; the explicit-coordinate route
+            // gets us the working build without the deprecation noise.
+            implementation(libs.compose.materialIconsExtended)
             implementation(libs.compose.ui)
             implementation(libs.compose.components.resources)
             implementation(libs.compose.uiToolingPreview)
@@ -130,7 +137,14 @@ kotlin {
                 // Compose desktop runtime — provides Window, application,
                 // Swing-based MenuBar, file dialogs, etc.
                 implementation(compose.desktop.currentOs)
-                implementation(compose.uiTooling)
+                // ui-tooling: Compose dev-mode introspection (the
+                // composable inspector helpers used by `@Preview` etc.).
+                // Reach for it via the version-catalog entry rather than
+                // the `compose.uiTooling` accessor — the accessor is
+                // deprecated in Compose Multiplatform 1.10 in favour of
+                // the explicit `org.jetbrains.compose.ui:ui-tooling`
+                // coordinate.
+                implementation(libs.compose.uiTooling)
 
                 // SQLDelight JDBC driver for the desktop DB. Stores at
                 // jdbc:sqlite:%APPDATA%/RadioShed/radioshed.db (per the
