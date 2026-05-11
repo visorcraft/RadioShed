@@ -5,11 +5,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project shape
 
 RadioShed is a private Kotlin Multiplatform / Compose Multiplatform music app
-targeting Android 13+ and iOS 16+. There is **one Gradle module** —
-`:composeApp` — with `commonMain`, `androidMain`, and `iosMain` source sets.
-There is no separate `shared/`, `androidApp/`, or `iosApp/` module despite
-what `README.md` describes for "target" layout; that document precedes the
-current single-module reality.
+targeting **Android 13+**, **Windows 11+** (Compose Desktop / JVM), and
+**iOS 16+** (the iOS branch is stubbed pending Mac access). There is **one
+Gradle module** — `:composeApp` — with `commonMain`, `androidMain`,
+`desktopMain`, and `iosMain` source sets. There is no separate `shared/`,
+`androidApp/`, or `iosApp/` module despite what `README.md` describes for
+"target" layout; that document precedes the current single-module reality.
+
+The desktop target is the JVM target named `desktop` (per `kotlin {
+jvm("desktop") }` in `composeApp/build.gradle.kts`); the source set
+follows that convention as `desktopMain`. Builds and runs on Linux too —
+useful when you need to iterate on Compose UI without spinning up an
+Android emulator.
 
 `SPEC.md` is the canonical product roadmap. The phased plan in §20 uses
 checkboxes (`- [ ]` / `- [~]` / `- [x]`); when flipping a box, also write a
@@ -41,9 +48,24 @@ device id is in `memory/user_device.md`.
 # Force SQLDelight regen after editing .sq / .sqm files
 ./gradlew :composeApp:generateCommonMainRadioShedDatabaseInterface --rerun-tasks
 
+# Desktop dev loop — compile + launch the Compose Desktop window.
+# First run pulls deps + a JBR JDK; subsequent runs are seconds.
+./gradlew :composeApp:run
+
+# Package a desktop installer for the host OS (.deb on Linux,
+# .msi on Windows, .dmg on macOS — TargetFormat list is in
+# composeApp/build.gradle.kts under `compose.desktop.nativeDistributions`).
+./gradlew :composeApp:packageDistributionForCurrentOS
+
 # iOS framework (macOS only)
 ./gradlew :composeApp:assembleXCFramework
 ```
+
+The desktop runtime needs **libvlc** (VLC 3.x) installed on the host —
+VLCJ discovers it via `NativeDiscovery().discover()` at startup. On
+Linux that's `apt install vlc`; on Windows it's the standard VLC
+installer; on macOS it's the VLC.app bundle. Without libvlc, `:run`
+launches but `AudioEngine` errors out the moment a track tries to play.
 
 JDK 17 is required (`compileOptions = VERSION_11` is the *bytecode* target,
 but the Gradle/AGP toolchain itself needs 17).
@@ -65,13 +87,17 @@ but the Gradle/AGP toolchain itself needs 17).
   is honoured.
 - `audio/` — `AudioEngine` (expect/actual), `EqualizerController`,
   `SleepTimer`. Android impl is Media3 ExoPlayer + MediaSession; iOS is
-  AVAudioEngine.
+  AVAudioEngine; desktop is VLCJ over libvlc 3.x (the installed system
+  libvlc, discovered at startup). VLCJ media-event callbacks fire on
+  VLCJ's own threads; `AudioEngineDesktop` marshals StateFlow updates
+  back onto the Compose UI thread via `kotlinx-coroutines-swing`.
 - `stations/` — `StationPlayback` (the playback orchestrator),
   `PlaybackQueue` (priority queue + history), `SourceRuleEvaluator`,
   `StationPresets` / `PresetSeeder`. Queue mutations are serialized
   through `kotlinx.coroutines.sync.Mutex.withLock`.
 - `scanner/` — library scan pipeline. `FileEnumerator` and `TagReader` are
-  expect/actual (Android uses `jaudiotagger`, iOS is currently stubbed).
+  expect/actual (Android and desktop both use `jaudiotagger`, iOS is
+  currently stubbed).
 - `ui/<feature>/` — Compose screens named `<Feature>Screen.kt`. State is
   hoisted: screens take callbacks + state, `App.kt` wires them together.
   Reusable bits live under the feature folder or `ui/util/`.

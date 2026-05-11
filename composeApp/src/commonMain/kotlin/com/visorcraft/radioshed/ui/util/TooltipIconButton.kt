@@ -4,6 +4,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Text
+import androidx.compose.material3.TooltipAnchorPosition
 import androidx.compose.material3.TooltipBox
 import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.rememberTooltipState
@@ -39,7 +40,11 @@ fun TooltipIconButton(
     }
     val state = rememberTooltipState()
     TooltipBox(
-        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(),
+        // Compose Multiplatform 1.10 deprecated the no-arg overload that
+        // implicitly anchored above the trigger. The new overload takes
+        // a `TooltipAnchorPosition`; `Above` preserves the previous
+        // visual behaviour (tooltip floats above the icon button).
+        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
         tooltip = { PlainTooltip { Text(tooltip) } },
         state = state,
     ) {
@@ -70,7 +75,11 @@ fun Tooltipped(
     }
     val state = rememberTooltipState()
     TooltipBox(
-        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(),
+        // Compose Multiplatform 1.10 deprecated the no-arg overload that
+        // implicitly anchored above the trigger. The new overload takes
+        // a `TooltipAnchorPosition`; `Above` preserves the previous
+        // visual behaviour (tooltip floats above the icon button).
+        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
         tooltip = { PlainTooltip { Text(tooltip) } },
         state = state,
     ) { content() }
