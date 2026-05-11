@@ -63,7 +63,17 @@ val sharedModule: Module = module {
 
     // Connectivity policy gate — read by every online fetcher to honour
     // the user's Always / Wi-Fi only / Never / Manual preference.
-    single { NetworkPolicyGate(get(), get()) }
+    single {
+        // Disambiguate the two constructors — Koin's `get()` can't
+        // pick between (PolicySettingsSource, ConnectivityChecker)
+        // and (SettingsStore, ConnectivityChecker) without a type
+        // hint. Pass the concrete SettingsStore so production
+        // routes through the convenience adapter.
+        NetworkPolicyGate(
+            get<com.visorcraft.radioshed.data.SettingsStore>(),
+            get<com.visorcraft.radioshed.source.ConnectivityChecker>(),
+        )
+    }
 
     // Cover Art Archive sweep. CoverArtFetcher is platform-specific
     // (Android uses HttpURLConnection; iOS is a Null stub for now).

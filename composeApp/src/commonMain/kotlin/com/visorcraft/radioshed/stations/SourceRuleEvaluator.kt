@@ -62,9 +62,9 @@ class SourceRuleEvaluator(
                     .sortedBy { it.fileCtime }
                     .take(limit.toInt())
             SmartQueryKind.LeastPlayed,
-            SmartQueryKind.LongestUnheard,
-            SmartQueryKind.AdaptiveMix ->
+            SmartQueryKind.LongestUnheard ->
                 ratingRepo.leastPlayedTracks(limit)
+            SmartQueryKind.AdaptiveMix -> evaluateAdaptiveMix(limit)
             SmartQueryKind.MostPlayed ->
                 ratingRepo.mostPlayedTracks(limit)
             SmartQueryKind.HighestRated, SmartQueryKind.RecentlyRated ->
@@ -92,6 +92,55 @@ class SourceRuleEvaluator(
 
     /** Hook so tests can pin a deterministic clock; production = nowMillis(). */
     private fun nowMs(): Long = com.visorcraft.radioshed.data.nowMillis()
+
+    /**
+     * AdaptiveMix scoring. Pulls a 3× over-fetched candidate pool
+     * (so we have meaningful headroom to score-and-trim) and ranks
+     * each track by:
+     *   - **Play penalty.** High lifetime plays push the track
+     *     down; never-played tracks get the full unpenalised weight.
+     *   - **Recency boost.** A track not played in the last 30 days
+     *     gets a boost; one played today gets nothing. NULL
+     *     last_played_at counts as max boost (never played).
+     *   - **Rating boost.** Higher star ratings boost the score.
+     *     Unrated tracks get a small baseline so they aren't
+     *     systematically excluded — discovery still works for an
+     *     un-rated library.
+     *   - **Jitter.** ±5 % random noise breaks ties so consecutive
+     *     plays of the same station don't produce identical
+     *     orderings. Without jitter the same top-N would replay
+     *     every queue refresh.
+     *
+     * Falls back to plain leastPlayedTracks if the candidate pool
+     * is empty (which only happens on a freshly-imported library
+     * with zero rows in `track`).
+     */
+    private suspend fun evaluateAdaptiveMix(limit: Long): List<Track> {
+        val poolSize = (limit * ADAPTIVE_MIX_POOL_MULT).coerceAtMost(absoluteCeiling)
+        val pool = ratingRepo.leastPlayedTracks(poolSize)
+        if (pool.isEmpty()) return emptyList()
+
+        val ids = pool.map { it.id }
+        val plays = ratingRepo.playCountsForTracks(ids)
+        val ratings = ratingRepo.ratingsForTracks(ids)
+
+        val now = nowMs()
+        val candidates = pool.map { track ->
+            val playStats = plays[track.id]
+            AdaptiveMixCandidate(
+                track = track,
+                playCount = playStats?.count ?: 0L,
+                lastPlayedAtMs = playStats?.lastPlayedAt,
+                rating = ratings[track.id] ?: 0.0,
+            )
+        }
+        return scoreAdaptiveMix(
+            candidates = candidates,
+            nowMs = now,
+            jitterSeed = now,
+            limit = limit.toInt(),
+        )
+    }
 
     private suspend fun evaluateArtists(rule: SourceRule.ArtistSelector): List<Track> =
         rule.artistIds.flatMap { libraryRepo.tracksForArtist(it) }
@@ -146,6 +195,10 @@ class SourceRuleEvaluator(
     private companion object {
         /** "Loved but neglected" cutoff for ForgottenGems, in days. */
         const val FORGOTTEN_GEMS_THRESHOLD_DAYS = 90L
+
+        /** AdaptiveMix candidate-pool multiplier: pull 3× the
+         *  requested limit so the scorer has headroom to trim. */
+        const val ADAPTIVE_MIX_POOL_MULT = 3L
     }
 
     private suspend fun evaluateTopN(rule: SourceRule.TopN): List<Track> {

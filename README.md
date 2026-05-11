@@ -1,11 +1,11 @@
 # RadioShed
 
-Cross-platform music application — **Android 13+**, **Windows 11+**, and
-**iOS 16+** (deferred — needs Mac access) — built in a single repository
-using **Kotlin Multiplatform** + **Compose Multiplatform**. Replaces
-SiriusXM / Spotify / YouTube Music with a station-centric experience
-over the user's own local music library, with optional online
-enrichment.
+Cross-platform music application — **Android 13+**, **Windows 11+**,
+**Linux** (should-work-but-untested), and **iOS 16+** (deferred —
+needs Mac access) — built in a single repository using **Kotlin
+Multiplatform** + **Compose Multiplatform**. Replaces SiriusXM /
+Spotify / YouTube Music with a station-centric experience over the
+user's own local music library, with optional online enrichment.
 
 > **License: proprietary.** Source code, compiled binaries, and
 > documentation in this repository are not for redistribution, resale,
@@ -23,7 +23,12 @@ enrichment.
 There is **one Gradle module** — `:composeApp` — with three platform
 source sets. iOS source lives in-tree but is currently stubbed
 (needs Mac access for build + test); Android and Windows desktop
-both build and run on the dev machine.
+both build and run on the dev machine. The `desktopMain` source
+set was built to be cross-platform JVM (Compose Desktop +
+VLCJ + JDBC SQLite) — Linux is a should-work-but-untested target;
+the build script already configures `TargetFormat.Deb` so
+`packageDistributionForCurrentOS` from a Linux box would produce
+a .deb without code changes.
 
 ```
 RadioShed/
@@ -60,12 +65,12 @@ RadioShed/
 | HTTP                    | JDK `HttpURLConnection` + `kotlinx.serialization`           |
 | DI                      | Koin (`platformModule` expect val + `sharedModule`)         |
 | Audio (Android)         | Media3 / ExoPlayer + `MediaLibraryService`                  |
-| Audio (Windows)         | VLCJ 4.x (libvlc bindings)                                  |
+| Audio (Desktop)         | VLCJ 4.x (libvlc bindings — Windows + Linux + macOS)        |
 | Audio (iOS, deferred)   | AVAudioEngine                                               |
 | Tag I/O                 | jaudiotagger (Android + Desktop; iOS deferred)              |
 | In-car (Android)        | Android Auto via `MediaLibraryService` browse + voice search |
 | In-car (iOS, deferred)  | CarPlay (audio-template app)                                |
-| Min SDK                 | Android 13 (API 33) / Windows 11 / iOS 16                   |
+| Min SDK                 | Android 13 (API 33) / Windows 11 / Linux (any modern DE) / iOS 16 |
 | Target SDK              | Android 14 (API 35)                                         |
 | Build system            | Gradle (Kotlin DSL), JDK 17                                 |
 
@@ -121,9 +126,14 @@ deferred to a Mac-equipped session.
 # Single test class
 ./gradlew :composeApp:testDebugUnitTest --tests "com.visorcraft.radioshed.data.SearchDslTest"
 
-# Build the Windows desktop distributable
+# Build the desktop distributable for the current OS
 ./gradlew :composeApp:createDistributable
-# Output: composeApp/build/compose/binaries/main/app/RadioShed/RadioShed.exe
+# Windows output: composeApp/build/compose/binaries/main/app/RadioShed/RadioShed.exe
+# Linux output:   composeApp/build/compose/binaries/main/app/RadioShed/bin/RadioShed
+# macOS output:   composeApp/build/compose/binaries/main/app/RadioShed.app/
+
+# Build a platform-native installer (.msi / .deb / .dmg) from this host
+./gradlew :composeApp:packageDistributionForCurrentOS
 
 # Run the desktop app from Gradle (live reload during development)
 ./gradlew :composeApp:run
@@ -164,10 +174,12 @@ error indicates a stale build cache, run `--rerun-tasks`).
 - **`Unsupported class file major version`** — confirm `JAVA_HOME`
   points at JDK 17. AGP requires JDK 17 (the bytecode target is
   VERSION_11; the toolchain itself is 17).
-- **`libvlc not found` on desktop** — install the standard VLC
-  media player from videolan.org. `NativeDiscovery` walks the
-  usual install paths; the app falls back to a clear error rather
-  than crashing if libvlc isn't present.
+- **`libvlc not found` on desktop** — install VLC. On Windows
+  grab the installer from videolan.org; on Linux use the
+  distro's package (`apt install vlc` / `dnf install vlc` —
+  Fedora needs RPMFusion first). `NativeDiscovery` walks the
+  usual install paths and the app falls back to a clear error
+  rather than crashing if libvlc isn't present.
 - **`java/sql/DriverManager` `NoClassDefFoundError` on the
   packaged desktop EXE** — bundled JRE is missing `java.sql`.
   Should be fixed by `modules("java.sql", "java.naming")` in

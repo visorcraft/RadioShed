@@ -147,6 +147,12 @@ ON CONFLICT(track_id) DO UPDATE SET
 selectPlayCount:
 SELECT * FROM play_count WHERE track_id = ?;
 
+-- Batch fetch (track_id → count, last_played_at) for the AdaptiveMix
+-- scoring path. Mirrors the shape of selectRatingsForTracks; rows
+-- without a play_count entry simply don't appear in the result.
+selectPlayCountsForTracks:
+SELECT track_id, count, last_played_at FROM play_count WHERE track_id IN ?;
+
 selectMostPlayedTracks:
 SELECT track.* FROM track
 JOIN play_count pc ON pc.track_id = track.id

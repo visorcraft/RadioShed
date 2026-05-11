@@ -9,6 +9,17 @@ interface ConnectivityChecker {
 }
 
 /**
+ * Narrow surface the gate needs from the settings store. Production
+ * implementation is [SettingsStore] (see the implicit conversion
+ * below); tests use a tiny fake so they don't have to spin up the
+ * multiplatform-settings backend.
+ */
+interface PolicySettingsSource {
+    fun getConnectivityPolicy(): ConnectivityPolicy
+    fun getServicePolicyOverride(service: NetworkService): ServicePolicyOverride
+}
+
+/**
  * Online-fetch gate consulted by every network-touching path
  * (artwork, lyrics, MusicBrainz, ListenBrainz, Subsonic). The
  * global [ConnectivityPolicy] setting (Always / Wi-Fi only /
@@ -17,9 +28,16 @@ interface ConnectivityChecker {
  * outside Wi-Fi" without flipping the whole gate.
  */
 class NetworkPolicyGate(
-    private val settings: SettingsStore,
+    private val settings: PolicySettingsSource,
     private val checker: ConnectivityChecker,
 ) {
+    /**
+     * Convenience constructor — production code passes the concrete
+     * [SettingsStore]; the [PolicySettingsSource] adapter wraps it
+     * with the two methods the gate needs.
+     */
+    constructor(settingsStore: SettingsStore, checker: ConnectivityChecker) :
+        this(adaptSettings(settingsStore), checker)
     fun allowAutomaticFetch(): Boolean = allow(
         policy = settings.getConnectivityPolicy(),
         userInitiated = false,
@@ -103,3 +121,18 @@ enum class ServicePolicyOverride {
             entries.firstOrNull { it.name == value } ?: Inherit
     }
 }
+
+/**
+ * Adapter that lets a real [SettingsStore] play the
+ * [PolicySettingsSource] role without making SettingsStore
+ * implement the interface (it lives in `data/`, while the
+ * interface lives next to its only consumer, NetworkPolicyGate).
+ */
+private fun adaptSettings(store: SettingsStore): PolicySettingsSource =
+    object : PolicySettingsSource {
+        override fun getConnectivityPolicy(): ConnectivityPolicy =
+            store.getConnectivityPolicy()
+        override fun getServicePolicyOverride(
+            service: NetworkService,
+        ): ServicePolicyOverride = store.getServicePolicyOverride(service)
+    }

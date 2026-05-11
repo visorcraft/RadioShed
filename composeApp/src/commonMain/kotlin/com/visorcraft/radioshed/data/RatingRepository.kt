@@ -3,6 +3,7 @@ package com.visorcraft.radioshed.data
 import app.cash.sqldelight.coroutines.asFlow
 import app.cash.sqldelight.coroutines.mapToOne
 import com.visorcraft.radioshed.db.RadioShedDatabase
+import com.visorcraft.radioshed.domain.PlayCountStats
 import com.visorcraft.radioshed.domain.Rating
 import com.visorcraft.radioshed.domain.Track
 import kotlinx.coroutines.flow.Flow
@@ -156,6 +157,20 @@ class RatingRepository(private val db: RadioShedDatabase) {
 
     suspend fun leastPlayedTracks(limit: Long = 100): List<Track> = withContext(IODispatcher) {
         db.ratingsQueries.selectLeastPlayedTracks(limit).executeAsList().map { it.toDomain() }
+    }
+
+    /**
+     * Batch fetch `(track_id → (count, last_played_at))` for a
+     * candidate set. Tracks without a `play_count` row are absent
+     * from the map (caller treats absence as zero / never).
+     * Used by the AdaptiveMix smart-query scorer.
+     */
+    suspend fun playCountsForTracks(
+        trackIds: Collection<Long>,
+    ): Map<Long, PlayCountStats> = withContext(IODispatcher) {
+        if (trackIds.isEmpty()) return@withContext emptyMap()
+        db.ratingsQueries.selectPlayCountsForTracks(trackIds).executeAsList()
+            .associate { it.track_id to PlayCountStats(it.count, it.last_played_at) }
     }
 
     suspend fun neverPlayedTracks(limit: Long = 100): List<Track> = withContext(IODispatcher) {

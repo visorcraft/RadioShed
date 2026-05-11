@@ -1091,7 +1091,7 @@ Goal: a single-screen app from this repo builds and runs on Android emulator and
 - [x] Create `iosApp/` Xcode project (SwiftUI shell hosting CMP `UIViewController`)
 - [ ] Configure shared framework export: SPM (preferred) or CocoaPods (fallback) *(wizard chose direct framework; bump to SPM later)*
 - [x] Wire up Koin DI scaffolding in `commonMain` *(Modules.kt + per-platform PlatformModule; RadioShedApp.kt on Android, doInitKoin from iOSApp.swift)*
-- [~] Implement responsive `WindowSizeClass`-aware shared layout scaffolding — `BoxWithConstraints` drives the breakpoint logic across Stations Home (compact vs medium+ tile grid), Now Playing (single-pane vs two-pane, plus the `<360dp` overflow-as-bottom-sheet fallback), Onboarding's TwoPaneStep, and the Library Browser top bar. A formal `WindowSizeClass` accessor is still preferable for future XLarge-screen work but isn't blocking v1.
+- [x] Implement responsive `WindowSizeClass`-aware shared layout scaffolding — `BoxWithConstraints` drives the breakpoint logic across Stations Home, Now Playing (single-pane / two-pane / triple-pane plus the `<360dp` overflow-as-bottom-sheet fallback), Onboarding's TwoPaneStep, and the Library Browser top bar. Formal accessor lives at `ui/util/WindowSizeClass.kt`: `RsWindowSizeClass` enum (Compact / Medium / Expanded matching Material 3's breakpoints) plus `rsWindowSizeClassOf(width)` resolver. Compose Multiplatform's commonMain has no `Activity`/`Window`, so the helper takes a measured `Dp` rather than reading from a `Local*`.
 - [x] Implement one shared Compose screen rendering on both platforms *(branded RadioShed shell — `App.kt` → `RadioShedTheme` → `LandingScreen`)*
 - [x] CI: Android `assembleDebug` succeeds on Linux runner
 - [ ] CI: iOS framework builds + `xcodebuild` builds `iosApp` on macOS runner *(verifying after destination fix)*
@@ -1179,7 +1179,7 @@ Goal: user can create stations; engine plays tracks per source + playback rules.
 - [x] `PlaybackRule` engine: shuffle, sequential, weighted random, smart shuffle
 - [x] No-repeat memory (artist/album spacing requires per-track artist pre-load — Phase 5 part 2)
 - [x] Weighting policies: `Uniform`, `FavorRecent` *(others fall back to Uniform in v1; need richer per-track stats — Phase 5 part 2)*
-- [ ] Adaptive Mix smart query (learns from listening history) *(falls back to LeastPlayed for v1)*
+- [x] Adaptive Mix smart query (learns from listening history) — `SourceRuleEvaluator.evaluateAdaptiveMix` over-fetches a 3× candidate pool from `leastPlayedTracks`, then scores each track on (a) play penalty (high lifetime plays push the score down), (b) recency boost (saturates at 30 days since last play; never-played = max boost), (c) rating boost (unrated tracks get a 0.2 baseline so discovery still works on un-rated libraries), and (d) ±5 % jitter so consecutive queue refreshes don't replay the same Top-N order. Backed by a new `selectPlayCountsForTracks` batch query and `RatingRepository.playCountsForTracks` returning a `Map<Long, PlayCountStats>`.
 - [ ] Auto-rotate refresh job for SmartQueries (e.g. Latest Hits re-eval daily) *(deferred)*
 - [x] Built-in presets registry — `PresetSeeder` seeds Latest Hits / All Music / Discover / Top Rated / Recently Added / Forgotten Gems / Liked Songs at first-scan completion. **Genre auto-stations** ship as a one-tap "Generate genre stations" card in Settings → Library: picks top-N genre tags by track count (≥20 tracks), creates `Genre: X` stations seeded with `TagFilter("GENRE", [name])` + Smart Shuffle, idempotent. **Decade auto-stations** ship as a sibling "Generate decade stations" card: buckets albums by `Album.year` into Pre-50s / 50s / 60s / … / 2020s, creates a `Decade: X` station seeded with `AlbumSelector` over the in-decade album IDs (≥3 albums per bucket), idempotent. Backed by a new `selectAlbumIdsByYearRange` SQL query and `LibraryRepository.albumIdsByYearRange(min, max)`.
 - [x] Station editor UI: identity, source builder, playback rules — `ui/stations/StationEditorScreen.kt` covers identity, color, every `SourceRule` selector + set-operator combiner, and every `PlaybackRule` knob.
@@ -3968,6 +3968,30 @@ Tooltip + DB-vacuum sweep (Phase 14 power-tools tail):
   PlaylistDetail / LibraryDuplicates. Tooltip text mirrors the
   Icon's `contentDescription` so labels stay consistent with
   TalkBack / Narrator output.
+- [x] **AdaptiveMix smart-query scorer** (Phase 5). Replaces the
+  `SmartQueryKind.AdaptiveMix → leastPlayedTracks` alias with a
+  weighted scoring pass over a 3× candidate pool. Score combines
+  play-count penalty (40%), recency-since-last-play boost (30%),
+  star-rating boost (30%, with 0.2 floor for unrated tracks so
+  un-rated libraries still produce variety), plus ±5 % jitter to
+  prevent identical orderings across consecutive queue refreshes.
+  New `play_count` batch query (`selectPlayCountsForTracks`) +
+  `RatingRepository.playCountsForTracks` to feed the scorer
+  without an N-row roundtrip. Scoring math factored out as a pure
+  `scoreAdaptiveMix(candidates, nowMs, jitterSeed, limit)` in
+  `stations/AdaptiveMixScorer.kt` so the algorithm is unit-
+  testable without spinning up a DB; `commonTest/.../AdaptiveMixScorerTest`
+  pins seven cases (empty pool, zero limit, fresh-vs-overplayed,
+  rating-tiebreak, unrated-baseline, 30-day recency saturation,
+  determinism for fixed seed).
+- [x] **`RsWindowSizeClass` accessor** (Phase 6 cross-cutting).
+  `ui/util/WindowSizeClass.kt` exposes a Compact / Medium /
+  Expanded enum with breakpoints matching Material 3's official
+  `WindowWidthSizeClass` (600 dp / 840 dp). Resolver takes a
+  measured `Dp` because Compose Multiplatform's commonMain has
+  no `Activity`/`Window` — the official accessor needs both.
+  Drop-in for the existing `BoxWithConstraints { val isCompact = …  }`
+  pattern as future screens land.
 - [x] **Stations Home sort menu** (Phase 5 follow-up). Six options
   (`Custom` preserves drag-reorder order, plus Name asc/desc, Most/
   Least played, Recently played). Persisted via `KEY_STATIONS_SORT`
@@ -3975,6 +3999,31 @@ Tooltip + DB-vacuum sweep (Phase 14 power-tools tail):
   text-filter visible-counts in the header stay stable across sort
   changes. Surfaced as a top-bar Sort icon next to the tile-size
   picker, with a tooltip on desktop.
+- [x] **SettingsStore backup round-trip tests** (`commonTest/.../SettingsStoreBackupTest.kt`).
+  Eight cases lock the dump → restore contract that has shipped
+  bug-fixes for missing keys twice in the last few batches
+  (KEY_SUBSONIC_URL, KEY_SUBSONIC_USERNAME). Coverage:
+  ConnectivityPolicy round-trip, per-service overrides, the
+  `Inherit` doesn't-pollute-bundle invariant, theme mode, tile
+  size, sort, Subsonic URL+username (with password explicitly
+  excluded), `resetAllUserSettings` empties the dump, and
+  type-mismatched bundle entries are silently ignored.
+  In-memory `Settings` impl is inlined in the test (the project
+  doesn't pull `multiplatform-settings`'s MapSettings artifact
+  and the surface we exercise is small).
+- [x] **NetworkPolicyGate test coverage**. Extracted a small
+  `PolicySettingsSource` interface so the gate can be exercised
+  without spinning up the multiplatform-settings backend.
+  Production code routes through a private adapter on
+  `SettingsStore`; the secondary constructor preserves the
+  call-site shape. 13 cases lock the contract: global
+  `Always` / `WiFiOnly` / `Never` / `Manual` semantics, the
+  user-vs-automatic distinction under Manual (regression-prone),
+  and the per-service override matrix (Inherit follows global,
+  Always bypasses Never, Never blocks even when global allows,
+  one service's override doesn't leak to siblings,
+  `fromStorage` falls back to Inherit on unknown values for
+  forward-compat).
 - [x] **Per-service connectivity overrides** (Phase 10 follow-up).
   New `NetworkService` enum (`CoverArt`, `Lyrics`) plus
   `ServicePolicyOverride` (`Inherit` / `Always` / `WiFiOnly` /

@@ -401,6 +401,8 @@ Settings → Display.
 - **Now Playing layout** — Auto / Compact / Expanded / Three-pane
   (CarPlay-style)
 - **Stations Home tile size** — S / M / L / XL
+- **Stations Home sort** — Custom (drag order) / Name A→Z /
+  Name Z→A / Most played / Least played / Recently played
 
 ---
 
@@ -419,8 +421,16 @@ useful for diagnosing scanner/playback weirdness without `adb pull`.
 - **Internet** is optional — only used for lyrics fetch (LRClib),
   artwork fetch (Cover Art Archive), and Voice Search. Each can be
   disabled in Settings → Connectivity.
-- **Connectivity policy**: Always / Wi-Fi only / Never. Applies to
-  every network call.
+- **Connectivity policy**: Always / Wi-Fi only / Ask each time /
+  Never — applies to every network call by default.
+- **Per-service overrides**: Cover Art Archive and Lyrics (LRClib)
+  each have an independent Inherit / Always / Wi-Fi only / Never
+  picker so you can, say, allow album-cover fetches on cellular
+  but never fetch lyrics off Wi-Fi (or vice versa).
+- **Compact database**: Settings → Online → "Compact database"
+  reclaims disk space SQLite is holding after a "Clear all caches"
+  pass. Safe (full transactional rollback) and runs in 1-2 seconds
+  on a typical library.
 - **Permissions**: only `MANAGE_EXTERNAL_STORAGE` (Android) for
   reading music files.
 - **Source code**: proprietary. See the `LICENSE` file.
