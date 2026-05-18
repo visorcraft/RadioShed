@@ -36,7 +36,12 @@ class SleepTimer(
     private val settings: SettingsStore,
 ) {
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    // crashGuard so a clock-skew / engine-call exception in the timer
+    // coroutine doesn't surface as the OS-default crash dialog.
+    private val scope = CoroutineScope(
+        SupervisorJob() + Dispatchers.Default +
+            com.visorcraft.radioshed.util.crashGuard("SleepTimer"),
+    )
 
     private val _state = MutableStateFlow<State>(State.Idle)
     val state: StateFlow<State> = _state.asStateFlow()

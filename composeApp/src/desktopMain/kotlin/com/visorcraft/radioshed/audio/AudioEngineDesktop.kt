@@ -33,7 +33,14 @@ import kotlin.math.roundToInt
  */
 class AudioEngineDesktop : AudioEngine {
 
-    private val scope = CoroutineScope(SupervisorJob() + IODispatcher)
+    // crashGuard so a VLCJ event-bridge exception (libvlc error,
+    // media-event callback firing during shutdown, etc.) doesn't
+    // bubble to the JVM uncaught-exception handler and pop the
+    // Win32 "RadioShed has stopped working" message box.
+    private val scope = CoroutineScope(
+        SupervisorJob() + IODispatcher +
+            com.visorcraft.radioshed.util.crashGuard("AudioEngineDesktop"),
+    )
 
     private val _state = MutableStateFlow<PlayerState>(PlayerState.Idle)
     override val state: StateFlow<PlayerState> = _state.asStateFlow()

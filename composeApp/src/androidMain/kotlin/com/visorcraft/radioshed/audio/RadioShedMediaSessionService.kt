@@ -82,9 +82,15 @@ class RadioShedMediaSessionService : MediaLibraryService() {
     /**
      * Service-scoped supervisor. Used by the library callback to bridge
      * between Media3's `ListenableFuture`-based API and our coroutine-based
-     * repos. Cancelled in [onDestroy].
+     * repos. Cancelled in [onDestroy]. crashGuard prevents an AA voice-
+     * search failure or callback exception from killing the service
+     * via Android's uncaught-exception handler — without it, the
+     * head unit loses media-session connectivity entirely.
      */
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private val scope = CoroutineScope(
+        SupervisorJob() + Dispatchers.Main +
+            com.visorcraft.radioshed.util.crashGuard("MediaSessionService"),
+    )
 
     /**
      * The library/session callback. Held as a field (rather than

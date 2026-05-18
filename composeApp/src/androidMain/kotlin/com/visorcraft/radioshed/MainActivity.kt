@@ -37,8 +37,13 @@ class MainActivity : ComponentActivity() {
 
     // Search-intent dispatch runs DB queries; do them off the main
     // thread. Tied to a SupervisorJob so a single search failure
-    // doesn't tear down sibling work.
-    private val searchScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    // doesn't tear down sibling work. crashGuard logs+swallows so a
+    // search query that throws (corrupt FTS index, repo bug) doesn't
+    // surface as the system "RadioShed keeps stopping" dialog.
+    private val searchScope = CoroutineScope(
+        SupervisorJob() + Dispatchers.Default +
+            com.visorcraft.radioshed.util.crashGuard("MainActivity.search"),
+    )
 
     /**
      * On Android 13+ (API 33), the foreground media notification posted by

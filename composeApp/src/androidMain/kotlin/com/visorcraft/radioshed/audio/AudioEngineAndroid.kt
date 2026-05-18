@@ -20,6 +20,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import com.visorcraft.radioshed.util.crashGuard
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -36,7 +37,11 @@ import kotlinx.coroutines.launch
  */
 class AudioEngineAndroid(private val appContext: Context) : AudioEngine {
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    // crashGuard prevents a Media3 callback exception (bad media file,
+    // controller disconnect during teardown, etc.) from propagating to
+    // Android's system uncaught-exception handler and showing the
+    // "RadioShed keeps stopping" OS dialog.
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main + crashGuard("AudioEngineAndroid"))
 
     private val controllerDeferred = CompletableDeferred<MediaController>()
     private var controller: MediaController? = null
