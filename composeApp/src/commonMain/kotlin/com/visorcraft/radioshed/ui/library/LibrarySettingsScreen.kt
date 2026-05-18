@@ -747,7 +747,18 @@ private fun MoveFolderDialog(
                         runCatching {
                             folderRepo.moveFolderUri(folder.id, newUri.trim())
                         }.onSuccess { moved -> onMoved(moved) }
-                            .onFailure { onError(it.message ?: it::class.simpleName ?: "unknown") }
+                            .onFailure {
+                                // Reset the in-progress flag BEFORE calling
+                                // onError. Today onError dismisses the
+                                // dialog so the leftover state isn't
+                                // visible, but if a future refactor keeps
+                                // the dialog open on error (e.g., to show
+                                // the message inline), the buttons would
+                                // otherwise stay disabled with "Moving…"
+                                // on the confirm and no way to retry.
+                                moving = false
+                                onError(it.message ?: it::class.simpleName ?: "unknown")
+                            }
                     }
                 },
             ) { Text(if (moving) "Moving…" else "Move") }

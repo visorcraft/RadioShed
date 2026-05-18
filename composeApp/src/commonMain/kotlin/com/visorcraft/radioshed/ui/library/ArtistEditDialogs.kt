@@ -259,6 +259,7 @@ fun MergeArtistDialog(
     var query by remember { mutableStateOf("") }
     var picked by remember { mutableStateOf<Artist?>(null) }
     var merging by remember { mutableStateOf(false) }
+    var mergeError by remember { mutableStateOf<String?>(null) }
     var sourceTrackCount by remember { mutableStateOf<Int?>(null) }
 
     LaunchedEffect(source.id) {
@@ -356,35 +357,65 @@ fun MergeArtistDialog(
             onDismissRequest = { if (!merging) picked = null },
             title = { Text("Merge artists?") },
             text = {
-                Text(
-                    "\"${source.name}\" will be merged into " +
-                        "\"${picked!!.name}\". " +
-                        (sourceTrackCount?.let {
-                            "$it track${if (it == 1) "" else "s"} will be relinked. "
-                        } ?: "") +
-                        "\"${source.name}\" will be removed from your library. " +
-                        "This can't be undone, but future scans of tracks tagged " +
-                        "with \"${source.name}\" will resolve to " +
-                        "\"${picked!!.name}\" automatically.",
-                )
+                Column {
+                    Text(
+                        "\"${source.name}\" will be merged into " +
+                            "\"${picked!!.name}\". " +
+                            (sourceTrackCount?.let {
+                                "$it track${if (it == 1) "" else "s"} will be relinked. "
+                            } ?: "") +
+                            "\"${source.name}\" will be removed from your library. " +
+                            "This can't be undone, but future scans of tracks tagged " +
+                            "with \"${source.name}\" will resolve to " +
+                            "\"${picked!!.name}\" automatically.",
+                    )
+                    mergeError?.let {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            it,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
             },
             confirmButton = {
                 Button(
                     enabled = !merging,
                     onClick = {
                         merging = true
+                        mergeError = null
                         scope.launch {
-                            libraryRepo.mergeArtists(
-                                sourceArtistId = source.id,
-                                targetArtistId = picked!!.id,
-                            )
-                            onMerged()
+                            // mergeArtists runs an atomic 6-step
+                            // transaction with FK-touching writes; a
+                            // concurrent delete of the target (race
+                            // against another surface that just removed
+                            // it) would surface as a FK violation that
+                            // throws out of the transaction. Wrap in
+                            // runCatching so the dialog doesn't freeze
+                            // with `merging = true` permanently — the
+                            // user sees the error inline and can pick a
+                            // different target.
+                            runCatching {
+                                libraryRepo.mergeArtists(
+                                    sourceArtistId = source.id,
+                                    targetArtistId = picked!!.id,
+                                )
+                            }.onSuccess { onMerged() }
+                                .onFailure {
+                                    merging = false
+                                    mergeError = "Merge failed: " +
+                                        (it.message ?: it::class.simpleName ?: "unknown")
+                                }
                         }
                     },
                 ) { Text(if (merging) "Merging…" else "Merge") }
             },
             dismissButton = {
-                TextButton(enabled = !merging, onClick = { picked = null }) { Text("Back") }
+                TextButton(enabled = !merging, onClick = {
+                    picked = null
+                    mergeError = null
+                }) { Text("Back") }
             },
         )
     }

@@ -15,8 +15,10 @@ import androidx.compose.ui.input.pointer.pointerInput
  * Chains cleanly after [combinedClickable] / [clickable] — the
  * primary-button click logic those modifiers install doesn't
  * compete for the secondary-button event, and we explicitly
- * consume the pointer change so any sibling primary handler
- * downstream doesn't double-fire on the same press.
+ * consume both the press AND the paired release so any sibling
+ * Compose ContextMenuArea or future shell-context-menu handler
+ * (which fire on Release rather than Press) doesn't double-trigger
+ * on the same physical right-click.
  *
  * Re-keys on [action] so the lambda captured by [pointerInput]
  * always points at the freshest closure — without this, an outer
@@ -25,10 +27,26 @@ import androidx.compose.ui.input.pointer.pointerInput
  */
 fun Modifier.onRightClick(action: () -> Unit): Modifier = pointerInput(action) {
     awaitEachGesture {
-        val event = awaitPointerEvent()
-        if (event.type == PointerEventType.Press && event.buttons.isSecondaryPressed) {
-            event.changes.forEach { it.consume() }
+        val press = awaitPointerEvent()
+        if (press.type == PointerEventType.Press && press.buttons.isSecondaryPressed) {
+            press.changes.forEach { it.consume() }
             action()
+            // Consume the matching Release too. Compose Desktop's own
+            // ContextMenuArea (and some Skiko platform shims) install
+            // handlers that fire on Release rather than Press; without
+            // this second consume() they'd see the unhandled release
+            // and pop a duplicate context menu over the one our
+            // [action] just opened.
+            while (true) {
+                val next = awaitPointerEvent()
+                if (next.type == PointerEventType.Release) {
+                    next.changes.forEach { it.consume() }
+                    break
+                }
+                // Other event types (Move, Enter, Exit) in between
+                // press and release are ignored; the gesture isn't
+                // complete until release.
+            }
         }
     }
 }

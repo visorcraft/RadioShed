@@ -495,18 +495,26 @@ UPDATE track SET replay_gain_track = ?, replay_gain_album = ?, replay_gain_track
 -- Library Settings: when a NAS host changes IP or a folder is
 -- relocated, every track row whose path starts with the old prefix
 -- gets the new prefix substituted. Preserves track ids (and
--- therefore ratings, play counts, station-pin membership). The
--- caller is responsible for picking a prefix that's specific enough
--- not to match unrelated paths (typically the folder.uri itself).
+-- therefore ratings, play counts, station-pin membership).
 --
--- `:oldPrefixLike` is a separate parameter (rather than computed
--- inline as `:oldPrefix || '%'`) so SQLDelight's parameter-type
--- inference treats every named binding as a String in exactly one
--- context. Mixing a single name across `length(:p)` and `path LIKE
--- :p` was tripping the generator into typing it as Long.
+-- Implementation: splice the new prefix in front of everything AFTER
+-- the old-prefix characters via `substr(path, :oldPrefixLengthPlus1)`.
+-- An earlier version used `replace(path, oldPrefix, newPrefix)`,
+-- which is wrong: SQLite's `replace` swaps EVERY non-overlapping
+-- occurrence of the search string, so a path like
+-- `\\server\music\music archive\foo.flac` (where the old prefix
+-- `\\server\music` appears both at the head AND inside a subdir
+-- name) would be doubly-rewritten and silently corrupt. The
+-- substr-based form only touches the head.
+--
+-- :oldPrefixLengthPlus1 is precomputed Kotlin-side (`oldPrefix.length
+-- + 1`) so SQLDelight's parameter-type inference doesn't conflate
+-- the same name across `length(:p)` (Long context) and `LIKE :p`
+-- (String context). Three distinct named params, three distinct
+-- types, no ambiguity.
 remapTrackPathPrefix:
 UPDATE track
-SET path = replace(path, :oldPrefix, :newPrefix),
+SET path = :newPrefix || substr(path, CAST(:oldPrefixLengthPlus1 AS INTEGER)),
     updated_at = :updatedAt
 WHERE path LIKE :oldPrefixLike;
 

@@ -127,9 +127,16 @@ class FolderRepository(private val db: RadioShedDatabase) {
                 val oldPrefixLike = "$oldUri%"
                 val moved = db.libraryQueries
                     .countTracksWithPathPrefix(oldPrefixLike).executeAsOne()
+                // substr() is 1-indexed in SQLite, and we want everything
+                // AFTER the old prefix's last character — so the start
+                // offset is oldUri.length + 1. Passed as a stringified
+                // numeric because SQLDelight's type inference defaults
+                // unconstrained parameters to String regardless of the
+                // numeric SQL context; the CAST(... AS INTEGER) inside
+                // the SQL does the conversion before substr() sees it.
                 db.libraryQueries.remapTrackPathPrefix(
-                    oldPrefix = oldUri,
                     newPrefix = newUri,
+                    oldPrefixLengthPlus1 = (oldUri.length + 1).toString(),
                     updatedAt = now,
                     oldPrefixLike = oldPrefixLike,
                 )
