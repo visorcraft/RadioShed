@@ -50,6 +50,14 @@ UPDATE folder SET display_name = ?, updated_at = ? WHERE id = ?;
 setAccentColor:
 UPDATE folder SET accent_color = ?, updated_at = ? WHERE id = ?;
 
+-- Repoint a folder at a new URI prefix. Used by the "Move folder"
+-- action when the user's network share / drive letter / mount point
+-- changes underneath them — paired with the track-table remap in
+-- Library.sq so existing rows keep their ids, ratings, play counts,
+-- and station-pin membership while pointing at the new location.
+updateUri:
+UPDATE folder SET uri = ?, updated_at = ? WHERE id = ?;
+
 deleteById:
 DELETE FROM folder WHERE id = ?;
 

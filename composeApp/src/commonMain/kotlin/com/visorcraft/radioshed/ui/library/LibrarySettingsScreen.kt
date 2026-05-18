@@ -37,6 +37,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -94,6 +95,7 @@ fun LibrarySettingsScreen(
 
     var addDialogOpen by remember { mutableStateOf(false) }
     var editingFolder by remember { mutableStateOf<Folder?>(null) }
+    var movingFolder by remember { mutableStateOf<Folder?>(null) }
     var scanStatus by remember { mutableStateOf<String?>(null) }
     var scanError by remember { mutableStateOf<String?>(null) }
     var scanJob by remember { mutableStateOf<Job?>(null) }
@@ -210,6 +212,7 @@ fun LibrarySettingsScreen(
                                 }
                             },
                             onEdit = { editingFolder = folder },
+                            onMove = { movingFolder = folder },
                             onToggleRecursive = {
                                 scope.launch {
                                     runCatching { folderRepo.setRecursive(folder.id, !folder.recursive) }
@@ -330,6 +333,24 @@ fun LibrarySettingsScreen(
             },
         )
     }
+
+    movingFolder?.let { folder ->
+        MoveFolderDialog(
+            folder = folder,
+            folderRepo = folderRepo,
+            scope = scope,
+            onDismiss = { movingFolder = null },
+            onMoved = { moved ->
+                scanStatus = "Moved $moved track${if (moved == 1L) "" else "s"} " +
+                    "to new path. Rescan to catch any renamed or added files."
+                movingFolder = null
+            },
+            onError = { msg ->
+                scanError = "Move failed: $msg"
+                movingFolder = null
+            },
+        )
+    }
 }
 
 @Composable
@@ -367,6 +388,7 @@ private fun FolderCard(
     scanEnabled: Boolean,
     onScan: () -> Unit,
     onEdit: () -> Unit,
+    onMove: () -> Unit,
     onToggleRecursive: () -> Unit,
     onDelete: () -> Unit,
     onPickColor: (Int?) -> Unit,
@@ -435,6 +457,12 @@ private fun FolderCard(
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     TextButton(onClick = onEdit, enabled = scanEnabled) { Text("Rename") }
+                    // Move: bulk-rewrite the folder's URI and every track
+                    // path under it. Preserves ids / ratings / play counts
+                    // when the storage host changes (NAS IP swap, drive
+                    // letter remap, etc.). Confirmation dialog gates the
+                    // destructive update.
+                    TextButton(onClick = onMove, enabled = scanEnabled) { Text("Move") }
                     TextButton(onClick = onScan, enabled = scanEnabled) { Text("Scan") }
                     TextButton(onClick = onDelete, enabled = scanEnabled) { Text("Delete") }
                 }
@@ -664,6 +692,133 @@ private fun VolumeChip(
                 TextButton(onClick = { onPick("") }) { Text("(root)") }
             }
         }
+    }
+}
+
+/**
+ * Move-folder dialog. Edits the folder's URI in place and bulk-
+ * rewrites every track row whose path starts with the old URI to
+ * use the new URI prefix. Ratings, play counts, station-pin
+ * membership, history are preserved — only the path string
+ * changes. Useful when:
+ *   - A NAS host changes IP (e.g., 192.168.68.150 → 192.168.68.129)
+ *   - The share name changes (e.g., `\\nas\music` → `\\nas\media\music`)
+ *   - A local drive letter is reassigned
+ *
+ * Counts the affected tracks up-front and surfaces the number in
+ * the confirmation so the user knows the blast radius before
+ * committing. The actual transition runs in a single transaction
+ * via FolderRepository.moveFolderUri, so a process kill mid-move
+ * leaves the DB in either fully-old or fully-new state, never
+ * half-and-half.
+ */
+@Composable
+private fun MoveFolderDialog(
+    folder: Folder,
+    folderRepo: FolderRepository,
+    scope: kotlinx.coroutines.CoroutineScope,
+    onDismiss: () -> Unit,
+    onMoved: (Long) -> Unit,
+    onError: (String) -> Unit,
+) {
+    var newUri by remember { mutableStateOf(folder.uri) }
+    var browserOpen by remember { mutableStateOf(false) }
+    var trackCount by remember { mutableStateOf<Long?>(null) }
+    var moving by remember { mutableStateOf(false) }
+
+    LaunchedEffect(folder.id) {
+        // Probe so the dialog can say "this will move N tracks" before
+        // the user picks a destination. Doesn't change with the
+        // typed new-URI value (the count is of the SOURCE folder).
+        trackCount = folderRepo.countTracksWithPathPrefix(folder.uri)
+    }
+
+    val canApply = newUri.isNotBlank() && newUri != folder.uri && !moving
+
+    AlertDialog(
+        onDismissRequest = { if (!moving) onDismiss() },
+        title = { Text("Move folder") },
+        confirmButton = {
+            Button(
+                enabled = canApply,
+                onClick = {
+                    moving = true
+                    scope.launch {
+                        runCatching {
+                            folderRepo.moveFolderUri(folder.id, newUri.trim())
+                        }.onSuccess { moved -> onMoved(moved) }
+                            .onFailure { onError(it.message ?: it::class.simpleName ?: "unknown") }
+                    }
+                },
+            ) { Text(if (moving) "Moving…" else "Move") }
+        },
+        dismissButton = {
+            TextButton(enabled = !moving, onClick = onDismiss) { Text("Cancel") }
+        },
+        text = {
+            Column {
+                Text(
+                    "Repoint \"${folder.displayName}\" to a new location. " +
+                        "Every track under the old path is rewritten to use " +
+                        "the new path; ratings, play counts, station pins, " +
+                        "and listening history are preserved. After moving, " +
+                        "run Scan to pick up files whose subpath also changed.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
+                )
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    "Current path",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                )
+                Text(
+                    folder.uri,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = FontFamily.Monospace,
+                )
+                trackCount?.let {
+                    Text(
+                        "$it track${if (it == 1L) "" else "s"} will be relocated",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+                Spacer(Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = newUri,
+                    onValueChange = { newUri = it },
+                    label = { Text("New path") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        imeAction = androidx.compose.ui.text.input.ImeAction.Done,
+                    ),
+                )
+                Spacer(Modifier.height(6.dp))
+                Button(
+                    onClick = { browserOpen = true },
+                    enabled = !moving,
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Browse for folder…") }
+            }
+        },
+    )
+
+    if (browserOpen) {
+        // Start the browser one level up from the current URI so the
+        // user can easily land on a sibling folder if the share name
+        // (rather than the parent volume) is what changed.
+        val startPath = com.visorcraft.radioshed.source.parentPath(folder.uri)
+            .ifBlank { com.visorcraft.radioshed.source.defaultMusicFolderPath() }
+        FolderBrowserDialog(
+            initialPath = startPath,
+            onSelect = { picked ->
+                newUri = picked
+                browserOpen = false
+            },
+            onDismiss = { browserOpen = false },
+        )
     }
 }
 

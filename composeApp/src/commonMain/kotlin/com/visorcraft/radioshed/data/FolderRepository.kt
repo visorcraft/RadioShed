@@ -86,6 +86,58 @@ class FolderRepository(private val db: RadioShedDatabase) {
         db.foldersQueries.deleteById(id)
     }
 
+    /**
+     * Count of tracks whose path begins with [prefix]. Used by the
+     * Move-folder confirmation UI to surface "N tracks will be
+     * relocated" before the destructive prefix swap fires.
+     */
+    suspend fun countTracksWithPathPrefix(prefix: String): Long =
+        withContext(IODispatcher) {
+            db.libraryQueries.countTracksWithPathPrefix("$prefix%").executeAsOne()
+        }
+
+    /**
+     * Atomic "Move folder" operation. Updates folder.uri AND
+     * rewrites every track.path that starts with the folder's old
+     * URI prefix to use [newUri] instead, all inside one transaction
+     * so a process crash mid-operation leaves the DB consistent
+     * (no half-moved state where the folder points at the new path
+     * but the tracks still point at the old, or vice versa).
+     *
+     * Preserves track ids — and therefore ratings, play counts,
+     * station-pin membership, listening history, lyrics cache —
+     * for every track whose relative location under the folder
+     * survived the move. Tracks whose names/subpaths also changed
+     * still won't resolve after the remap; a subsequent rescan
+     * marks them unavailable and indexes their new locations as
+     * fresh rows linked to the same artist/album entries.
+     *
+     * No-op if [newUri] equals the folder's current URI. Throws on
+     * UNIQUE-constraint collision with another folder's URI.
+     */
+    suspend fun moveFolderUri(folderId: Long, newUri: String): Long =
+        withContext(IODispatcher) {
+            db.transactionWithResult {
+                val now = nowMillis()
+                val current = db.foldersQueries.selectById(folderId)
+                    .executeAsOneOrNull()
+                    ?: return@transactionWithResult 0L
+                val oldUri = current.uri
+                if (oldUri == newUri) return@transactionWithResult 0L
+                val oldPrefixLike = "$oldUri%"
+                val moved = db.libraryQueries
+                    .countTracksWithPathPrefix(oldPrefixLike).executeAsOne()
+                db.libraryQueries.remapTrackPathPrefix(
+                    oldPrefix = oldUri,
+                    newPrefix = newUri,
+                    updatedAt = now,
+                    oldPrefixLike = oldPrefixLike,
+                )
+                db.foldersQueries.updateUri(newUri, now, folderId)
+                moved
+            }
+        }
+
     suspend fun count(): Long = withContext(IODispatcher) {
         db.foldersQueries.count().executeAsOne()
     }

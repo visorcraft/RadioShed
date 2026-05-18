@@ -287,7 +287,14 @@ compose.desktop {
             // user sees in About.
             packageVersion = if (appVersionMajor >= 1) appVersionName
                              else "1.$appVersionMinor.$appVersionPatch"
-            description = "Local-first cross-platform music app."
+            // Description is baked into the Windows PE FileDescription
+            // resource on the generated RadioShed.exe, which is what
+            // Task Manager's "Name" column and the taskbar hover
+            // tooltip read. We want both to say "RadioShed", not a
+            // marketing tagline, so the user can find / identify the
+            // process at a glance. Longer descriptive blurbs live in
+            // README.md / app-store listings, not here.
+            description = "RadioShed"
             copyright = "© Visorcraft. Proprietary."
             vendor = "Visorcraft"
             // jlink-bundled JRE modules. The default runtime image is

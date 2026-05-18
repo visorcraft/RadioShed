@@ -491,6 +491,30 @@ AND path NOT IN :keptPaths;
 updateTrackReplayGain:
 UPDATE track SET replay_gain_track = ?, replay_gain_album = ?, replay_gain_track_peak = ?, updated_at = ? WHERE id = ?;
 
+-- Bulk path-prefix remap. Used by the "Move folder" action in
+-- Library Settings: when a NAS host changes IP or a folder is
+-- relocated, every track row whose path starts with the old prefix
+-- gets the new prefix substituted. Preserves track ids (and
+-- therefore ratings, play counts, station-pin membership). The
+-- caller is responsible for picking a prefix that's specific enough
+-- not to match unrelated paths (typically the folder.uri itself).
+--
+-- `:oldPrefixLike` is a separate parameter (rather than computed
+-- inline as `:oldPrefix || '%'`) so SQLDelight's parameter-type
+-- inference treats every named binding as a String in exactly one
+-- context. Mixing a single name across `length(:p)` and `path LIKE
+-- :p` was tripping the generator into typing it as Long.
+remapTrackPathPrefix:
+UPDATE track
+SET path = replace(path, :oldPrefix, :newPrefix),
+    updated_at = :updatedAt
+WHERE path LIKE :oldPrefixLike;
+
+-- Companion read-only count so the UI can show "this will move N
+-- tracks" before the user commits the destructive prefix swap.
+countTracksWithPathPrefix:
+SELECT COUNT(*) FROM track WHERE path LIKE :prefixLike;
+
 deleteTrackById:
 DELETE FROM track WHERE id = ?;
 
