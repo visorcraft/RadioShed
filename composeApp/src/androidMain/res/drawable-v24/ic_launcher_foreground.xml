@@ -1,30 +1,112 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Adaptive-icon foreground: the red-shed-with-speaker mark.
+
+    Designed directly in the 108x108 Android adaptive-icon viewport
+    rather than scaled from icon/radioshed.svg, so the safe-zone
+    margins (Android recommends keeping crit. content within the
+    inner 72x72 = coords 18..90) line up exactly. Decorative
+    flourishes (the radio-wave arcs, the outer pixels of the roof)
+    intentionally extend past that safe zone so circular-mask and
+    teardrop-mask launchers reveal more of the antenna context.
+
+    Colors mirror icon/radioshed.svg (D32F2F shed body, 8B1B1B
+    roof, 1F4E8C wave arcs); palette change here means changing
+    the SVG too so legacy PNG mipmaps stay in sync — rerun
+    icon/build_icons.ps1 after edits.
+
+    Z-order matters: roof draws first so the eave band sits on
+    top; speaker draws last so it composites over the shed body.
+-->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <path android:pathData="M31,63.928c0,0 6.4,-11 12.1,-13.1c7.2,-2.6 26,-1.4 26,-1.4l38.1,38.1L107,108.928l-32,-1L31,63.928z">
-        <aapt:attr name="android:fillColor">
-            <gradient
-                android:endX="85.84757"
-                android:endY="92.4963"
-                android:startX="42.9492"
-                android:startY="49.59793"
-                android:type="linear">
-                <item
-                    android:color="#44000000"
-                    android:offset="0.0" />
-                <item
-                    android:color="#00000000"
-                    android:offset="1.0" />
-            </gradient>
-        </aapt:attr>
-    </path>
+
+    <!-- Antenna pole -->
     <path
-        android:fillColor="#FFFFFF"
-        android:fillType="nonZero"
-        android:pathData="M65.3,45.828l3.8,-6.6c0.2,-0.4 0.1,-0.9 -0.3,-1.1c-0.4,-0.2 -0.9,-0.1 -1.1,0.3l-3.9,6.7c-6.3,-2.8 -13.4,-2.8 -19.7,0l-3.9,-6.7c-0.2,-0.4 -0.7,-0.5 -1.1,-0.3C38.8,38.328 38.7,38.828 38.9,39.228l3.8,6.6C36.2,49.428 31.7,56.028 31,63.928h46C76.3,56.028 71.8,49.428 65.3,45.828zM43.4,57.328c-0.8,0 -1.5,-0.5 -1.8,-1.2c-0.3,-0.7 -0.1,-1.5 0.4,-2.1c0.5,-0.5 1.4,-0.7 2.1,-0.4c0.7,0.3 1.2,1 1.2,1.8C45.3,56.528 44.5,57.328 43.4,57.328L43.4,57.328zM64.6,57.328c-0.8,0 -1.5,-0.5 -1.8,-1.2s-0.1,-1.5 0.4,-2.1c0.5,-0.5 1.4,-0.7 2.1,-0.4c0.7,0.3 1.2,1 1.2,1.8C66.5,56.528 65.6,57.328 64.6,57.328L64.6,57.328z"
-        android:strokeWidth="1"
-        android:strokeColor="#00000000" />
+        android:fillColor="#FF2A2A2A"
+        android:pathData="M52.5,24 L55.5,24 L55.5,34 L52.5,34 Z"/>
+
+    <!-- Antenna ball -->
+    <path
+        android:fillColor="#FF2A2A2A"
+        android:pathData="M50.5,22 A3.5,3.5 0 1 0 57.5,22 A3.5,3.5 0 1 0 50.5,22 Z"/>
+
+    <!-- Radio waves, right side (two arcs) -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FF1F4E8C"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:pathData="M61,26 A7,7 0 0 1 61,36"/>
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FF1F4E8C"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:fillAlpha="1"
+        android:strokeAlpha="0.85"
+        android:pathData="M66,22 A11,11 0 0 1 66,40"/>
+
+    <!-- Radio waves, left side (two arcs) -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FF1F4E8C"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:pathData="M47,26 A7,7 0 0 0 47,36"/>
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FF1F4E8C"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeAlpha="0.85"
+        android:pathData="M42,22 A11,11 0 0 0 42,40"/>
+
+    <!-- Roof triangle -->
+    <path
+        android:fillColor="#FF8B1B1B"
+        android:pathData="M12,52 L96,52 L54,32 Z"/>
+
+    <!-- Roof eave band (slightly darker, draws on top of the triangle's lower edge) -->
+    <path
+        android:fillColor="#FF6E1414"
+        android:pathData="M12,51 L96,51 L96,55 L12,55 Z"/>
+
+    <!-- Shed body -->
+    <path
+        android:fillColor="#FFD32F2F"
+        android:pathData="M18,54 L90,54 L90,92 L18,92 Z"/>
+
+    <!-- Right-wall shadow stripe (suggests depth) -->
+    <path
+        android:fillColor="#FFA82626"
+        android:pathData="M85,54 L90,54 L90,92 L85,92 Z"/>
+
+    <!-- Speaker rim (the "door") -->
+    <path
+        android:fillColor="#FF181818"
+        android:pathData="M38,74 A16,16 0 1 0 70,74 A16,16 0 1 0 38,74 Z"/>
+
+    <!-- Speaker cone (inner ring) -->
+    <path
+        android:fillColor="#FF0F0F0F"
+        android:pathData="M42,74 A12,12 0 1 0 66,74 A12,12 0 1 0 42,74 Z"/>
+
+    <!-- Inner cone (deeper shadow) -->
+    <path
+        android:fillColor="#FF1A1A1A"
+        android:pathData="M46,74 A8,8 0 1 0 62,74 A8,8 0 1 0 46,74 Z"/>
+
+    <!-- Dust cap -->
+    <path
+        android:fillColor="#FF333333"
+        android:pathData="M50.5,74 A3.5,3.5 0 1 0 57.5,74 A3.5,3.5 0 1 0 50.5,74 Z"/>
+
+    <!-- Specular highlight on dust cap -->
+    <path
+        android:fillColor="#FF5A5A5A"
+        android:pathData="M52,72.5 A1.2,1 0 1 0 54.4,72.5 A1.2,1 0 1 0 52,72.5 Z"/>
 </vector>

@@ -27,7 +27,6 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -950,25 +949,108 @@ private fun TagFilterConfig(
         modifier = Modifier.fillMaxWidth(),
     )
     Spacer(Modifier.height(8.dp))
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Switch(
-            checked = matchAll,
-            onCheckedChange = onMatchAll,
-            enabled = enabled,
+    // Two-button segmented selector replaces the previous single
+    // Switch. The Switch was the trap behind the user-reported
+    // "BLACKPINK, Jennie" station that returned zero tracks: with
+    // a single labelled switch, the active mode is the one NOT in
+    // the label, which inverts the obvious mental model. Filled vs
+    // outlined chips here keep both labels visible and the active
+    // state obviously primary-coloured.
+    MatchModeSelector(
+        matchAll = matchAll,
+        onPick = onMatchAll,
+        enabled = enabled,
+    )
+    Spacer(Modifier.height(6.dp))
+    Text(
+        if (matchAll) "Track must have every listed value for this tag."
+        else "Track needs at least one of the listed values.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+    )
+    // Surface a soft warning when the user picks ALL with multiple
+    // values on an artist key. A track is linked to at most one
+    // ALBUM_ARTIST and one primary ARTIST, so the intersection
+    // of >1 distinct values is empty by construction — the same
+    // trap the original station fell into. Quiet hint, not a block;
+    // the user might genuinely want this with a single value.
+    val isArtistKey = key.equals("ALBUM_ARTIST", ignoreCase = true) ||
+        key.equals("ARTIST", ignoreCase = true)
+    val multipleNonBlankValues = valuesText.split(',')
+        .map { it.trim() }
+        .count { it.isNotEmpty() } >= 2
+    if (matchAll && isArtistKey && multipleNonBlankValues) {
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "Heads up: a track has only one ${key.lowercase()} at a time, " +
+                "so \"All\" with multiple values almost always matches zero tracks. " +
+                "Switch to \"Any\" unless you're sure.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.error,
         )
-        Spacer(Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                if (matchAll) "Match ALL listed values" else "Match ANY listed value",
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            Text(
-                if (matchAll) "Track must have every listed value for this tag"
-                else "Track needs at least one of the listed values",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-            )
-        }
+    }
+}
+
+/**
+ * Match-mode segmented selector. Two equal-weight Surface buttons
+ * — "Any" on the left, "All" on the right. The active option fills
+ * with primary tint so the user can see which mode is committed at
+ * a glance, no parsing of a separate label required.
+ */
+@Composable
+private fun MatchModeSelector(
+    matchAll: Boolean,
+    onPick: (Boolean) -> Unit,
+    enabled: Boolean,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        MatchModeOption(
+            label = "Match ANY",
+            selected = !matchAll,
+            enabled = enabled,
+            onClick = { onPick(false) },
+            modifier = Modifier.weight(1f),
+        )
+        MatchModeOption(
+            label = "Match ALL",
+            selected = matchAll,
+            enabled = enabled,
+            onClick = { onPick(true) },
+            modifier = Modifier.weight(1f),
+        )
+    }
+}
+
+@Composable
+private fun MatchModeOption(
+    label: String,
+    selected: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier.clickable(enabled = enabled, onClick = onClick),
+        color = if (selected) MaterialTheme.colorScheme.primaryContainer
+                else MaterialTheme.colorScheme.surfaceVariant.copy(
+                    alpha = if (enabled) 0.4f else 0.2f,
+                ),
+        shape = RoundedCornerShape(10.dp),
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+            color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer
+                    else MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 12.dp),
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+        )
     }
 }
 

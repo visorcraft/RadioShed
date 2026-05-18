@@ -12,6 +12,29 @@ CREATE TABLE artist (
 -- Note: `sort_name TEXT NOT NULL UNIQUE` already creates an implicit index;
 -- no separate artist_sort_idx is required.
 
+-- Alternate display names that all resolve to the same canonical
+-- artist. Two use-cases:
+--   1. Stage name collisions ("Slim Shady" / "Eminem") — the user
+--      adds the second name as an alias and any future tagged
+--      track that lists either name links to the same artist row.
+--   2. Merge target back-reference: when the user merges artist A
+--      into artist B, A's name becomes an alias on B so future
+--      scans of files tagged with A's name resolve to B instead
+--      of recreating A.
+--
+-- alias_sort_name is UNIQUE globally (across the whole table) so
+-- two artists can't both claim "eminem" — the most-recent merge
+-- wins because the prior alias gets deleted on conflict.
+CREATE TABLE artist_alias (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    artist_id INTEGER NOT NULL REFERENCES artist(id) ON DELETE CASCADE,
+    alias_name TEXT NOT NULL,
+    alias_sort_name TEXT NOT NULL UNIQUE,
+    created_at INTEGER NOT NULL
+);
+
+CREATE INDEX artist_alias_artist_id_idx ON artist_alias(artist_id);
+
 CREATE TABLE album (
     id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
     title TEXT NOT NULL,
@@ -141,6 +164,72 @@ UPDATE artist SET bio = ?, updated_at = ? WHERE id = ?;
 
 deleteArtistById:
 DELETE FROM artist WHERE id = ?;
+
+-- Rename an artist. Used by the Edit Artist dialog. sort_name is
+-- re-normalized on the Kotlin side so this single statement updates
+-- both columns atomically.
+updateArtistName:
+UPDATE artist SET name = ?, sort_name = ?, updated_at = ? WHERE id = ?;
+
+-- ==== Artist aliases ====
+
+-- Insert a new alias on an artist. INSERT OR IGNORE so a duplicate
+-- (alias_sort_name UNIQUE collision) doesn't crash the scanner —
+-- the caller can probe selectArtistIdByAliasSortName after to find
+-- out who already owns it.
+insertArtistAlias:
+INSERT OR IGNORE INTO artist_alias (artist_id, alias_name, alias_sort_name, created_at)
+VALUES (?, ?, ?, ?);
+
+-- Aliased-lookup used by Scanner.upsertArtist: when an incoming
+-- track's tag normalizes to a sort_name that matches an alias,
+-- return the canonical artist id so the track links to the right
+-- row instead of creating a new one.
+selectArtistIdByAliasSortName:
+SELECT artist_id FROM artist_alias WHERE alias_sort_name = ?;
+
+-- All aliases for an artist (Edit Artist dialog).
+selectAliasesForArtist:
+SELECT * FROM artist_alias WHERE artist_id = ? ORDER BY alias_name;
+
+deleteArtistAlias:
+DELETE FROM artist_alias WHERE id = ?;
+
+-- ==== Artist merge primitives ====
+--
+-- Used together inside a single transaction by
+-- LibraryRepository.mergeArtists. The order matters:
+--   1. Move track_artist links from source to target (INSERT OR
+--      IGNORE handles the case where the target already has a
+--      link with the same role on a shared track).
+--   2. Delete the source's track_artist rows (the moved ones are
+--      now duplicated on target, originals must go before the
+--      source artist row is removed).
+--   3. Re-assign every album whose artist_id was the source to
+--      the target.
+--   4. Move the source's existing aliases to the target.
+--   5. Record the source's name + sort_name as a new alias on the
+--      target so future scans of tagged files using the source's
+--      old name resolve to the target instead of recreating the
+--      source.
+--   6. Delete the source artist row (cascade-cleans any straggling
+--      track_artist links that didn't survive step 2).
+
+reassignTrackArtistLinks:
+INSERT OR IGNORE INTO track_artist (track_id, artist_id, role, position)
+SELECT track_id, :targetArtistId, role, position
+FROM track_artist WHERE artist_id = :sourceArtistId;
+
+deleteTrackArtistLinksForArtist:
+DELETE FROM track_artist WHERE artist_id = ?;
+
+reassignAlbumsForArtist:
+UPDATE album SET artist_id = :targetArtistId, updated_at = :updatedAt
+WHERE artist_id = :sourceArtistId;
+
+reassignAliasesForArtist:
+UPDATE artist_alias SET artist_id = :targetArtistId
+WHERE artist_id = :sourceArtistId;
 
 -- ==== Album queries ====
 

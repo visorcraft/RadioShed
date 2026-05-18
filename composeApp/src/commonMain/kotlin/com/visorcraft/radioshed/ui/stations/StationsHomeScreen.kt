@@ -65,6 +65,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import com.visorcraft.radioshed.ui.util.TooltipIconButton
+import com.visorcraft.radioshed.ui.util.onRightClick
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -1543,10 +1544,17 @@ private fun StationListRow(
     onLongPress: () -> Unit,
 ) {
     Card(
-        modifier = Modifier.fillMaxWidth().combinedClickable(
-            onClick = onPlay,
-            onLongClick = onLongPress,
-        ),
+        // Same combinedClickable + onRightClick pair as the grid
+        // tile — desktop right-click reaches the same action sheet
+        // that long-press opens on touch. See StationGridTile for
+        // the rationale.
+        modifier = Modifier
+            .fillMaxWidth()
+            .combinedClickable(
+                onClick = onPlay,
+                onLongClick = onLongPress,
+            )
+            .onRightClick(onLongPress),
         colors = CardDefaults.cardColors(
             containerColor = if (isCurrent) MaterialTheme.colorScheme.primaryContainer
                              else MaterialTheme.colorScheme.surface,
@@ -1662,10 +1670,23 @@ private fun StationGridTile(
 ) {
     val accent = stationColor(station)
     Card(
-        modifier = Modifier.fillMaxWidth().combinedClickable(
-            onClick = onPlay,
-            onLongClick = onEdit,
-        ),
+        // combinedClickable: primary-tap (touch / left-click) plays,
+        // long-press opens the action sheet — the Android-canonical
+        // discovery path. onRightClick adds a desktop-canonical
+        // discovery path: secondary-button click opens the same
+        // action sheet so Windows / Linux users can reach Edit /
+        // Delete / Duplicate without a long-press gesture they
+        // physically can't perform with a mouse. The two callbacks
+        // intentionally point at the same lambda — there's no
+        // separate "right-click menu" surface; this just gives
+        // mouse users a non-touch path to the existing sheet.
+        modifier = Modifier
+            .fillMaxWidth()
+            .combinedClickable(
+                onClick = onPlay,
+                onLongClick = onEdit,
+            )
+            .onRightClick(onEdit),
         colors = CardDefaults.cardColors(
             containerColor = if (isCurrent) MaterialTheme.colorScheme.primaryContainer
                              else MaterialTheme.colorScheme.surface,

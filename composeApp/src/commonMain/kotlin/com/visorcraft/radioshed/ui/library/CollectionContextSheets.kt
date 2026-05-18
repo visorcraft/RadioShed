@@ -17,6 +17,8 @@ import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Album
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.MergeType
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
@@ -190,6 +192,8 @@ fun ArtistContextSheet(
     onDismiss: () -> Unit,
     onGoToArtist: () -> Unit,
     onCreateStation: () -> Unit = {},
+    onEditArtist: () -> Unit = {},
+    onMergeArtist: () -> Unit = {},
     libraryRepo: LibraryRepository = koinInject(),
     stationPlayback: StationPlayback = koinInject(),
 ) {
@@ -261,6 +265,23 @@ fun ArtistContextSheet(
                     icon = Icons.AutoMirrored.Filled.OpenInNew,
                     label = "Go to artist",
                     onClick = onGoToArtist,
+                )
+                // Edit artist: rename + manage alias list. Alternate-
+                // name aliases let "Slim Shady" and "Eminem" resolve
+                // to the same artist on the next scan.
+                CollectionActionRow(
+                    icon = Icons.Filled.Edit,
+                    label = "Edit artist",
+                    onClick = onEditArtist,
+                )
+                // Merge into another artist: pick a target, relink
+                // every track / album / alias, drop the source row.
+                // Useful for collapsing "Jennie" + "Jennie (제니)" or
+                // mismatched-case duplicates from old scans.
+                CollectionActionRow(
+                    icon = Icons.Filled.MergeType,
+                    label = "Merge into another artist…",
+                    onClick = onMergeArtist,
                 )
                 Spacer(Modifier.height(8.dp))
             }

@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -67,6 +68,7 @@ import com.visorcraft.radioshed.audio.AudioEngine
 import com.visorcraft.radioshed.audio.toPlayable
 import com.visorcraft.radioshed.ui.util.TooltipIconButton
 import com.visorcraft.radioshed.ui.util.NowPlayingIndicator
+import com.visorcraft.radioshed.ui.util.onRightClick
 import com.visorcraft.radioshed.data.LibraryRepository
 import com.visorcraft.radioshed.data.SettingsStore
 import com.visorcraft.radioshed.domain.Album
@@ -739,6 +741,13 @@ fun LibraryBrowserScreen(
             },
         )
     }
+    // Dialog state for the new Edit / Merge actions on the artist
+    // context sheet. We surface them from the same artist row the
+    // user long-pressed / right-clicked, so they're scoped to that
+    // artist and disappear when the underlying context sheet is
+    // dismissed.
+    var editingArtist by remember { mutableStateOf<com.visorcraft.radioshed.domain.Artist?>(null) }
+    var mergingArtist by remember { mutableStateOf<com.visorcraft.radioshed.domain.Artist?>(null) }
     contextArtist?.let { artist ->
         ArtistContextSheet(
             artist = artist,
@@ -746,6 +755,14 @@ fun LibraryBrowserScreen(
             onGoToArtist = {
                 contextArtist = null
                 onArtistTap(artist.id)
+            },
+            onEditArtist = {
+                editingArtist = artist
+                contextArtist = null
+            },
+            onMergeArtist = {
+                mergingArtist = artist
+                contextArtist = null
             },
             onCreateStation = {
                 contextArtist = null
@@ -761,6 +778,19 @@ fun LibraryBrowserScreen(
                     onEditStation(newId)
                 }
             },
+        )
+    }
+    editingArtist?.let { artist ->
+        EditArtistDialog(
+            artist = artist,
+            onDismiss = { editingArtist = null },
+        )
+    }
+    mergingArtist?.let { artist ->
+        MergeArtistDialog(
+            source = artist,
+            onDismiss = { mergingArtist = null },
+            onMerged = { mergingArtist = null },
         )
     }
 }
@@ -843,6 +873,15 @@ private fun SongList(
                 )
             }
         }
+        // Desktop scrollbar overlay for the Songs tab — same pattern
+        // as the grid variant in GridWithBackToTopFab. No-op on
+        // Android via the PlatformScrollbar android actual.
+        com.visorcraft.radioshed.ui.util.ListScrollbar(
+            state = listState,
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .fillMaxHeight(),
+        )
         if (showFab) {
             androidx.compose.material3.SmallFloatingActionButton(
                 onClick = {
@@ -1095,6 +1134,17 @@ private fun GridWithBackToTopFab(
     }
     Box(modifier = Modifier.fillMaxSize()) {
         content()
+        // Desktop scrollbar — overlays the right edge of the grid
+        // so Windows / Linux users get a draggable handle for fast
+        // navigation through long Artists/Albums/Genres tabs. No-op
+        // on Android (the PlatformScrollbar android actual is
+        // empty); touch users still get the system fling indicator.
+        com.visorcraft.radioshed.ui.util.GridScrollbar(
+            state = state,
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .fillMaxHeight(),
+        )
         if (showFab) {
             androidx.compose.material3.SmallFloatingActionButton(
                 onClick = { scope.launch { state.animateScrollToItem(0) } },
@@ -1154,10 +1204,15 @@ private fun ArtistTile(
     val hue = (artist.sortName.hashCode().rem(360) + 360).rem(360).toFloat()
     val tint = androidx.compose.ui.graphics.Color.hsv(hue, 0.55f, 0.85f)
     Column(
-        modifier = Modifier.combinedClickable(
-            onClick = onTap,
-            onLongClick = onLongPress,
-        ),
+        // Right-click reaches the same context sheet as long-press
+        // so Windows / Linux mouse users have a non-touch path to
+        // Edit / Merge / Create-station-from-artist.
+        modifier = Modifier
+            .combinedClickable(
+                onClick = onTap,
+                onLongClick = onLongPress,
+            )
+            .onRightClick(onLongPress),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Box(

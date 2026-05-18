@@ -5,6 +5,7 @@ import app.cash.sqldelight.coroutines.mapToList
 import com.visorcraft.radioshed.db.RadioShedDatabase
 import com.visorcraft.radioshed.domain.Album
 import com.visorcraft.radioshed.domain.Artist
+import com.visorcraft.radioshed.domain.ArtistAlias
 import com.visorcraft.radioshed.domain.Personnel
 import com.visorcraft.radioshed.domain.Tag
 import com.visorcraft.radioshed.domain.Track
@@ -28,10 +29,22 @@ class LibraryRepository(private val db: RadioShedDatabase) {
     suspend fun upsertArtist(name: String, sortName: String, musicbrainzId: String? = null): Long =
         withContext(IODispatcher) {
             db.transactionWithResult {
+                // 1. Alias-table check FIRST. If a previous merge or a
+                //    user-defined alias maps this incoming sort_name
+                //    onto an existing canonical artist, return that id
+                //    so the new track links to the right row instead
+                //    of recreating a recently-merged artist. Most
+                //    scans will see no alias hit and fall through.
+                db.libraryQueries.selectArtistIdByAliasSortName(sortName)
+                    .executeAsOneOrNull()
+                    ?.let { return@transactionWithResult it }
+
                 val now = nowMillis()
-                // INSERT OR IGNORE handles concurrent inserts colliding on
-                // sort_name UNIQUE; the follow-up SELECT returns the id either
-                // way (the row that existed already, or the row we just wrote).
+                // 2. Race-safe insert: INSERT OR IGNORE handles
+                //    concurrent inserts colliding on sort_name UNIQUE;
+                //    the follow-up SELECT returns the id either way
+                //    (the row that existed already, or the row we just
+                //    wrote).
                 db.libraryQueries.insertArtistOrIgnore(
                     name = name,
                     sort_name = sortName,
@@ -42,6 +55,135 @@ class LibraryRepository(private val db: RadioShedDatabase) {
                     updated_at = now,
                 )
                 db.libraryQueries.selectArtistIdBySortName(sortName).executeAsOne()
+            }
+        }
+
+    /**
+     * Rename an artist. Also renormalizes the sort_name (lower-case +
+     * trim) so a rename from "Eminem" to "EMINEM" doesn't fork the
+     * lookup key. Callers don't need to call upsertArtist after —
+     * this is a direct UPDATE.
+     *
+     * Returns true on success, false on UNIQUE collision (the user
+     * picked a name whose sort_name matches a different existing
+     * artist; merge them instead).
+     */
+    suspend fun renameArtist(artistId: Long, newName: String): Boolean = withContext(IODispatcher) {
+        val sortName = newName.trim().lowercase()
+        if (sortName.isEmpty()) return@withContext false
+        runCatching {
+            db.libraryQueries.updateArtistName(
+                name = newName.trim(),
+                sort_name = sortName,
+                updated_at = nowMillis(),
+                id = artistId,
+            )
+        }.isSuccess
+    }
+
+    // ---- Artist aliases ----
+
+    suspend fun aliasesForArtist(artistId: Long): List<ArtistAlias> = withContext(IODispatcher) {
+        db.libraryQueries.selectAliasesForArtist(artistId).executeAsList().map {
+            ArtistAlias(
+                id = it.id,
+                artistId = it.artist_id,
+                aliasName = it.alias_name,
+                aliasSortName = it.alias_sort_name,
+                createdAt = it.created_at,
+            )
+        }
+    }
+
+    /**
+     * Add [aliasName] as an alternate name for the given artist.
+     * Returns true on success, false when the alias_sort_name is
+     * already taken globally (UNIQUE constraint) — the UI should
+     * surface "this name is already used by another artist; merge
+     * those two first" in that case.
+     */
+    suspend fun addArtistAlias(artistId: Long, aliasName: String): Boolean =
+        withContext(IODispatcher) {
+            val sortName = aliasName.trim().lowercase()
+            if (sortName.isEmpty()) return@withContext false
+            db.libraryQueries.insertArtistAlias(
+                artist_id = artistId,
+                alias_name = aliasName.trim(),
+                alias_sort_name = sortName,
+                created_at = nowMillis(),
+            )
+            // INSERT OR IGNORE — verify the row landed by re-reading.
+            db.libraryQueries.selectArtistIdByAliasSortName(sortName)
+                .executeAsOneOrNull() == artistId
+        }
+
+    suspend fun deleteArtistAlias(aliasId: Long) = withContext(IODispatcher) {
+        db.libraryQueries.deleteArtistAlias(aliasId)
+    }
+
+    /**
+     * Merge [sourceArtistId] into [targetArtistId]. All tracks /
+     * albums linked to the source become linked to the target; the
+     * source's aliases (and its own name) become aliases on the
+     * target so future scans of tagged files using the source's old
+     * name resolve to the target; the source row is deleted.
+     *
+     * All six steps run in a single transaction so a partial-merge
+     * cannot leak (e.g., albums reassigned but tracks not, leaving
+     * orphans). The merge is idempotent in the trivial case
+     * (source==target → no-op).
+     *
+     * Caller is responsible for confirmation UX — this method does
+     * not prompt. The destructive-confirmation pattern lives in
+     * MergeArtistDialog on the UI side.
+     */
+    suspend fun mergeArtists(sourceArtistId: Long, targetArtistId: Long) =
+        withContext(IODispatcher) {
+            if (sourceArtistId == targetArtistId) return@withContext
+            db.transaction {
+                val now = nowMillis()
+                // 1. Move track_artist links (INSERT OR IGNORE drops
+                //    duplicates where target already has same role on
+                //    a shared track — happens when a track was already
+                //    tagged with both names).
+                db.libraryQueries.reassignTrackArtistLinks(
+                    targetArtistId = targetArtistId,
+                    sourceArtistId = sourceArtistId,
+                )
+                // 2. Delete source's original links so the source
+                //    artist row can be dropped without dangling FKs.
+                db.libraryQueries.deleteTrackArtistLinksForArtist(sourceArtistId)
+                // 3. Re-assign albums whose artist_id was the source.
+                db.libraryQueries.reassignAlbumsForArtist(
+                    targetArtistId = targetArtistId,
+                    updatedAt = now,
+                    sourceArtistId = sourceArtistId,
+                )
+                // 4. Re-assign existing aliases from source to target.
+                db.libraryQueries.reassignAliasesForArtist(
+                    targetArtistId = targetArtistId,
+                    sourceArtistId = sourceArtistId,
+                )
+                // 5. Record the source's name as a new alias on the
+                //    target. Read the source row first (still alive at
+                //    this point) so we capture its name + sort_name.
+                //    INSERT OR IGNORE handles the corner case where
+                //    target already had the source's sort_name as an
+                //    alias from a prior merge.
+                val source = db.libraryQueries.selectArtistById(sourceArtistId)
+                    .executeAsOneOrNull()
+                if (source != null) {
+                    db.libraryQueries.insertArtistAlias(
+                        artist_id = targetArtistId,
+                        alias_name = source.name,
+                        alias_sort_name = source.sort_name,
+                        created_at = now,
+                    )
+                }
+                // 6. Delete the source artist row. Any straggling
+                //    track_artist rows that didn't make it through
+                //    step 1's INSERT OR IGNORE get cascade-deleted.
+                db.libraryQueries.deleteArtistById(sourceArtistId)
             }
         }
 

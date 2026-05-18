@@ -12,11 +12,8 @@ import com.visorcraft.radioshed.audio.AudioEngineDesktop
 import com.visorcraft.radioshed.di.initKoin
 import com.visorcraft.radioshed.source.appAppDataDir
 import org.koin.core.context.GlobalContext
-import java.awt.Color as AwtColor
-import java.awt.Font
-import java.awt.RenderingHints
-import java.awt.image.BufferedImage
 import java.nio.file.Files
+import javax.imageio.ImageIO
 
 /**
  * Desktop entry point. Mirrors what `MainActivity` does on Android:
@@ -67,47 +64,25 @@ fun main() {
 }
 
 /**
- * Programmatically render the title-bar / taskbar icon. Drawing it in
- * code (instead of shipping a `.png` resource) keeps the repo binary-
- * free and lets the brand colour flow from `Color.kt` if we ever bind
- * the two together. 256×256 is enough for every desktop OS — Windows,
- * macOS, and most Linux DEs auto-downscale.
+ * Load the title-bar / taskbar icon from the bundled resource at
+ * `composeApp/src/desktopMain/resources/icon/radioshed.png`
+ * (256×256). The PNG is rasterized from `icon/radioshed.svg` via
+ * `icon/build_icons.ps1` — re-run that script after editing the
+ * master SVG.
  *
- * The mark is a flat blue rounded square with a lowercase `rs` set
- * in the JVM's default sans-serif. It's a placeholder — when a
- * proper logo lands, replace this with `BitmapPainter` over a real
- * resource.
+ * 256×256 is enough for every desktop OS — Windows, macOS, and
+ * most Linux DEs auto-downscale for taskbar / dock display and
+ * up-scale gracefully on HiDPI. The packaged-installer icons
+ * (`.ico` on Windows, `.png` on Linux, `.icns` on macOS) are
+ * wired separately via `compose.desktop.nativeDistributions`
+ * in `composeApp/build.gradle.kts`.
  */
 private fun renderAppIcon(): BitmapPainter {
-    val size = 256
-    val img = BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB)
-    val g = img.createGraphics()
-    try {
-        g.setRenderingHint(
-            RenderingHints.KEY_ANTIALIASING,
-            RenderingHints.VALUE_ANTIALIAS_ON,
-        )
-        g.setRenderingHint(
-            RenderingHints.KEY_TEXT_ANTIALIASING,
-            RenderingHints.VALUE_TEXT_ANTIALIAS_ON,
-        )
-        // Brand blue background. RGB matches `LightPrimary` in
-        // ui/theme/Color.kt so the icon's tile reads as the same
-        // colour as the in-app primary surface.
-        g.color = AwtColor(0x00, 0x61, 0xA4)
-        g.fillRoundRect(0, 0, size, size, 64, 64)
-        // White wordmark.
-        g.color = AwtColor.WHITE
-        g.font = Font(Font.SANS_SERIF, Font.BOLD, 140)
-        val fm = g.fontMetrics
-        val text = "rs"
-        val tx = (size - fm.stringWidth(text)) / 2
-        // Vertical centring: half the leading-adjusted height + ascent.
-        val ty = (size - fm.height) / 2 + fm.ascent
-        g.drawString(text, tx, ty)
-    } finally {
-        g.dispose()
-    }
+    val stream = Thread.currentThread().contextClassLoader
+        .getResourceAsStream("icon/radioshed.png")
+        ?: error("icon/radioshed.png not on the classpath — run icon/build_icons.ps1")
+    val img = stream.use { ImageIO.read(it) }
+        ?: error("icon/radioshed.png failed to decode")
     return BitmapPainter(img.toComposeImageBitmap())
 }
 

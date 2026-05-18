@@ -1,5 +1,6 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.util.Properties
 
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
@@ -9,6 +10,28 @@ plugins {
     alias(libs.plugins.kotlinSerialization)
     alias(libs.plugins.sqldelight)
 }
+
+// Load version.properties from the repo root. Single source of truth
+// for the app version — drives AGP versionCode/versionName, Compose
+// Desktop installer packageVersion, AND the generated BuildInfo
+// Kotlin object below. Missing keys throw at configure-time so a
+// half-edited properties file can't silently ship a stale version.
+val versionProps: Properties = Properties().apply {
+    val propsFile = rootProject.file("version.properties")
+    require(propsFile.exists()) {
+        "version.properties not found at ${propsFile.absolutePath}"
+    }
+    propsFile.inputStream().use { load(it) }
+}
+fun requiredVersionProp(key: String): String =
+    versionProps.getProperty(key)
+        ?: error("$key missing from version.properties")
+val appVersionMajor = requiredVersionProp("versionMajor").toInt()
+val appVersionMinor = requiredVersionProp("versionMinor").toInt()
+val appVersionPatch = requiredVersionProp("versionPatch").toInt()
+val appVersionName = "$appVersionMajor.$appVersionMinor.$appVersionPatch"
+val appVersionCode = requiredVersionProp("versionCode").toInt()
+val appBuildDate = requiredVersionProp("buildDate")
 
 kotlin {
     // Silence the "expect/actual classes in Beta" warning — this is an intentional
@@ -53,6 +76,17 @@ kotlin {
     }
 
     sourceSets {
+        // Generated BuildInfo lives in a separate srcDir wired into
+        // commonMain so the constants come from version.properties at
+        // configure-time, not from a hand-edited .kt file (which
+        // historically drifted from AGP versionName because the two
+        // needed manual sync). The generator task -> source-dir
+        // dependency wiring lives at the bottom of this file.
+        commonMain {
+            kotlin.srcDir(
+                layout.buildDirectory.dir("generated/buildinfo/kotlin"),
+            )
+        }
         commonMain.dependencies {
             implementation(libs.compose.runtime)
             implementation(libs.compose.foundation)
@@ -190,8 +224,11 @@ android {
         applicationId = "com.visorcraft.radioshed"
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
-        versionCode = 1
-        versionName = "1.0"
+        // Both pulled from version.properties at the top of this
+        // file so AndroidManifest, the desktop installer metadata,
+        // and the in-app BuildInfo object never drift apart.
+        versionCode = appVersionCode
+        versionName = appVersionName
     }
     packaging {
         resources {
@@ -242,11 +279,14 @@ compose.desktop {
             targetFormats(TargetFormat.Msi, TargetFormat.Dmg, TargetFormat.Deb)
             packageName = "RadioShed"
             // Compose Desktop's per-OS validators reject MAJOR=0
-            // (DMG specifically requires MAJOR > 0). The user-facing
-            // BuildInfo.VERSION_NAME is still "0.1.0"; this is just
-            // the installer/distribution version which the OS bumps
-            // around per-update.
-            packageVersion = "1.0.0"
+            // (DMG specifically requires MAJOR > 0), so when
+            // versionMajor=0 we bump the installer's MAJOR to 1 to
+            // keep packaging buildable during pre-release. Once
+            // versionMajor>=1 (it's 1.0.0 now), pass it through
+            // unchanged so the OS install metadata matches what the
+            // user sees in About.
+            packageVersion = if (appVersionMajor >= 1) appVersionName
+                             else "1.$appVersionMinor.$appVersionPatch"
             description = "Local-first cross-platform music app."
             copyright = "© Visorcraft. Proprietary."
             vendor = "Visorcraft"
@@ -258,6 +298,110 @@ compose.desktop {
             // "java/sql/DriverManager NoClassDefFoundError". java.naming
             // is a transitive requirement of java.sql.
             modules("java.sql", "java.naming")
+
+            // Installer icons. Each packager needs its native format:
+            // - Windows .msi: multi-resolution .ico (16/24/32/48/64/
+            //   128/256 embedded in one file) so Explorer chrome
+            //   reaches into the right slot per surface.
+            // - macOS .dmg:  .icns (not yet generated — DMG packaging
+            //   only runs on macOS hosts which we don't have today;
+            //   wire this when a Mac CI lane lands).
+            // - Linux .deb:  the largest PNG we ship (512×512); dpkg
+            //   installs it under hicolor/<size>/apps and the DE
+            //   downscales for the taskbar / window list.
+            //
+            // All three files are produced by `icon/build_icons.ps1`
+            // (or the equivalent bash variant on Linux). Re-run that
+            // script after editing icon/radioshed.svg to refresh.
+            windows {
+                iconFile.set(
+                    project.file(
+                        "src/desktopMain/resources/icon/radioshed.ico",
+                    ),
+                )
+            }
+            linux {
+                iconFile.set(
+                    project.file(
+                        "src/desktopMain/resources/icon/radioshed-512.png",
+                    ),
+                )
+            }
+            // macOS .icns generation requires the `iconutil` CLI which
+            // ships only on macOS, so it isn't part of build_icons.ps1.
+            // Keep the platform-block here so a future macOS lane can
+            // fill in .icns without re-shaping the nativeDistributions
+            // section.
+            // macOS { iconFile.set(project.file("src/desktopMain/resources/icon/radioshed.icns")) }
         }
     }
 }
+
+// ---- Generated BuildInfo.kt ----
+//
+// Emits com.visorcraft.radioshed.BuildInfo into a generated source
+// directory that's wired into commonMain (see sourceSets block
+// above). Inputs are the parsed version.properties values; output
+// is a tiny Kotlin file with `const val` properties.
+//
+// Inputs declared via @Input properties so Gradle caches the task
+// and only re-runs when the version values change — editing
+// version.properties is the only thing that should invalidate it.
+// Run automatically as a dependency of every commonMain compile
+// task; also exposed for manual invocation via
+// `./gradlew :composeApp:generateBuildInfo`.
+abstract class GenerateBuildInfoTask : DefaultTask() {
+    @get:Input abstract val versionName: Property<String>
+    @get:Input abstract val versionCode: Property<Int>
+    @get:Input abstract val buildDate: Property<String>
+    @get:OutputDirectory abstract val outputDir: DirectoryProperty
+
+    @TaskAction
+    fun generate() {
+        val pkgDir = outputDir.get().asFile
+            .resolve("com/visorcraft/radioshed")
+        pkgDir.mkdirs()
+        val file = pkgDir.resolve("BuildInfo.kt")
+        file.writeText(
+            """
+            // GENERATED by :composeApp:generateBuildInfo — do NOT edit.
+            // Edit version.properties at the repo root and re-run the
+            // build (or just `./gradlew :composeApp:generateBuildInfo`).
+            package com.visorcraft.radioshed
+
+            /**
+             * Build / version constants. All three fields come from
+             * version.properties via the generateBuildInfo Gradle task,
+             * so AndroidManifest, Compose Desktop installer metadata,
+             * and the in-app About screen never drift apart.
+             */
+            object BuildInfo {
+                const val VERSION_NAME: String = "${versionName.get()}"
+                const val VERSION_CODE: Int = ${versionCode.get()}
+                const val BUILD_DATE: String = "${buildDate.get()}"
+            }
+            """.trimIndent() + "\n",
+        )
+    }
+}
+
+val generateBuildInfo = tasks.register<GenerateBuildInfoTask>("generateBuildInfo") {
+    group = "build"
+    description = "Generate BuildInfo.kt from version.properties."
+    versionName.set(appVersionName)
+    versionCode.set(appVersionCode)
+    buildDate.set(appBuildDate)
+    outputDir.set(layout.buildDirectory.dir("generated/buildinfo/kotlin"))
+}
+
+// Wire the generator as an upstream dependency of every Kotlin
+// compile task. matching{} catches commonMain + every target's
+// compile task (compileKotlinDesktop, compileDebugKotlinAndroid,
+// etc.) without having to enumerate them.
+tasks.matching { it.name.startsWith("compile") && it.name.contains("Kotlin") }
+    .configureEach { dependsOn(generateBuildInfo) }
+// Same for the SQLDelight schema generator's downstream tasks and
+// the KSP-style metadata tasks Compose Multiplatform creates —
+// they all expect commonMain sources to be present when they run.
+tasks.matching { it.name == "kspCommonMainKotlinMetadata" }
+    .configureEach { dependsOn(generateBuildInfo) }
