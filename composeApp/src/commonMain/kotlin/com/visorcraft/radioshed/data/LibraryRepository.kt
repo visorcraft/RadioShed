@@ -560,6 +560,36 @@ class LibraryRepository(private val db: RadioShedDatabase) {
         db.libraryQueries.selectTracksByTag(key, value).executeAsList().map { it.toDomain() }
     }
 
+    /**
+     * Case-insensitive variant of [tracksByTag]. Used by station rules
+     * (SourceRule.TagFilter), where user-typed values like "blackpink"
+     * should match stored "BLACKPINK" — exact-case matching here is
+     * almost never what the user wants and produced empty / surprising
+     * stations before this. The original case-sensitive query stays
+     * for callers that rely on exact match (genre canonicalization,
+     * the auto-station generator, etc.).
+     */
+    suspend fun tracksByTagCaseInsensitive(key: String, value: String): List<Track> =
+        withContext(IODispatcher) {
+            db.libraryQueries.selectTracksByTagCi(key, value).executeAsList().map { it.toDomain() }
+        }
+
+    /**
+     * Tracks linked to an artist whose normalized name matches [name].
+     * "Normalized" = [Scanner.normalizeForSort] (lowercase + trim).
+     * Returns tracks under ANY role (primary or album_artist) so a
+     * user filtering a station by ALBUM_ARTIST = "Blackpink" sees
+     * both single-artist albums (album_artist == track_artist, link
+     * stored as 'primary' only — see Scanner) and explicit
+     * album-artist links on compilation tracks.
+     */
+    suspend fun tracksByArtistName(name: String): List<Track> = withContext(IODispatcher) {
+        val sortName = name.trim().lowercase()
+        if (sortName.isEmpty()) emptyList()
+        else db.libraryQueries.selectTracksByArtistSortName(sortName)
+            .executeAsList().map { it.toDomain() }
+    }
+
     suspend fun distinctTagValues(key: String): List<String> = withContext(IODispatcher) {
         db.libraryQueries.distinctTagValues(key).executeAsList()
     }

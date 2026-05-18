@@ -12,6 +12,7 @@ import com.visorcraft.radioshed.domain.PlayOrder
 import com.visorcraft.radioshed.domain.PlaybackRule
 import com.visorcraft.radioshed.domain.Station
 import com.visorcraft.radioshed.domain.Track
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -50,7 +51,47 @@ class StationPlayback(
     private val listenBrainz: com.visorcraft.radioshed.source.ListenBrainzClient,
     private val networkPolicy: com.visorcraft.radioshed.source.NetworkPolicyGate,
 ) {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    /**
+     * Last error caught by the scope exception handler — exposed so the
+     * UI can surface a friendly "Couldn't load station" message instead
+     * of the silent failure that an uncaught coroutine exception would
+     * otherwise become. Null = no recent failure. Cleared on a
+     * successful playStation / playTracks.
+     */
+    private val _playbackError = MutableStateFlow<String?>(null)
+    val playbackError: StateFlow<String?> = _playbackError.asStateFlow()
+    fun clearPlaybackError() { _playbackError.value = null }
+
+    /**
+     * Catch-all for unhandled exceptions in any coroutine launched on
+     * [scope]. Without this, an unhandled exception in evaluate /
+     * advanceToNext / one of the auto-launch lambdas propagates to the
+     * JVM's default UncaughtExceptionHandler — which on Android shows
+     * the "Keeps stopping" dialog and kills the process. Instead we
+     * funnel into a StateFlow that the UI surfaces as a snackbar /
+     * error chip, and write a single println so the failure isn't
+     * silent in logcat.
+     *
+     * SupervisorJob alone doesn't help here — it stops a child
+     * failure from cancelling siblings, but the failure itself still
+     * needs a handler installed on the parent context to avoid
+     * uncaught propagation.
+     */
+    private val crashGuard = CoroutineExceptionHandler { _, throwable ->
+        // CancellationException is the normal control-flow signal when
+        // [stationLoadJob.cancel] interrupts a rapid station re-tap, or
+        // when [scope] tears down at shutdown. Surfacing it as a user-
+        // visible "Playback error" would flash a red banner during
+        // perfectly healthy station switching — re-throw so the
+        // standard cancellation path stays silent.
+        if (throwable is kotlinx.coroutines.CancellationException) throw throwable
+        val message = throwable.message ?: throwable::class.simpleName ?: "unknown"
+        println("StationPlayback: unhandled exception — $message")
+        throwable.printStackTrace()
+        _playbackError.value = "Playback error: $message"
+    }
+
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default + crashGuard)
 
     /**
      * Serializes all queue-mutating operations so the auto-advance
@@ -174,7 +215,9 @@ class StationPlayback(
      */
     private suspend fun rebuildQueueForCurrentStation() {
         val station = _currentStation.value ?: return
-        val ruleCandidates = sourceEvaluator.evaluate(station.source)
+        val ruleCandidates = runCatching {
+            sourceEvaluator.evaluate(station.source)
+        }.getOrDefault(emptyList())
         val pinnedTracks = stationRepo.pinnedTracks(station.id)
         val candidates = if (pinnedTracks.isEmpty()) ruleCandidates
         else {
@@ -396,7 +439,19 @@ class StationPlayback(
         // Pinned tracks are unioned in regardless of whether the source
         // rule would otherwise surface them — that's the whole point of
         // pinning ("always include in this station's pool").
-        val ruleCandidates = sourceEvaluator.evaluate(station.source)
+        //
+        // Wrap evaluate in runCatching so a single bad row (corrupted
+        // source JSON, DB query failure, etc.) yields an empty
+        // candidate list and a surfaced error rather than crashing the
+        // app. The user sees "Couldn't load tracks" via [_playbackError]
+        // and the station is still selectable — they can fix the rule
+        // in the editor without restarting.
+        val ruleCandidates = runCatching {
+            sourceEvaluator.evaluate(station.source)
+        }.onFailure {
+            _playbackError.value = "Couldn't evaluate \"${station.name}\": " +
+                (it.message ?: it::class.simpleName ?: "unknown rule error")
+        }.getOrDefault(emptyList())
         val pinned = stationRepo.pinnedTracks(stationId)
         val candidates = if (pinned.isEmpty()) {
             ruleCandidates
@@ -449,6 +504,16 @@ class StationPlayback(
             queue = newQueue
             _candidateCount.value = newQueue.candidateCount
             _priorityCountFlow.value = 0
+            // Surface a hint when a station resolves to zero tracks
+            // instead of silently no-op'ing. Common causes: rule
+            // matches nothing in the user's current library, all
+            // candidates have been disliked, source folders have been
+            // deleted. Clear the slot on a successful match so a
+            // previous failure doesn't linger across station switches.
+            _playbackError.value = if (newQueue.candidateCount == 0) {
+                "\"${station.name}\" matched 0 tracks. " +
+                    "Edit the station's rule or scan more music."
+            } else null
             // Station mode: clear finite-queue progress flow — the
             // station's pool is conceptually unbounded, so "Track N
             // of M" doesn't make sense.

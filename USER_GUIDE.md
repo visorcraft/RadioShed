@@ -187,6 +187,62 @@ Tile size is configurable (S / M / L / XL).
 - **Surprise** is a one-tap shuffle across all stations; long-press for
   "Shuffle 25" — a 25-track playable queue.
 
+### Station Editor
+
+Stations Home → "+" (new) or long-press a custom station → Edit.
+The editor has four sections: Identity, Color, Source, Playback.
+
+The **Source** section is where a station gets its rule for picking
+tracks. One of four types per station:
+
+- **Folders** — pick one or more music folders. Each selected folder
+  shows as a chip with its display name and full path. Tap
+  "Add folder…" to open the folder browser and pick another. If the
+  folder you pick isn't in your Library yet, it gets queued as a
+  pending chip ("Will be added to your Library and scanned on save")
+  — when you tap Save, RadioShed inserts the folder into your
+  Library, runs a scan with inline progress
+  (`"Scanning Music (2/3): 247 tracks"`), then closes the editor.
+  Already-scanned folders skip the scan.
+- **Smart Query** — pick a kind (Newest, Most Played, Highest Rated,
+  Liked Songs, Adaptive Mix, Forgotten Gems, …) and a track limit.
+  Best for "Top 100 tracks I've never played" style stations.
+- **Tag Filter** — pick a tag key from the dropdown
+  (`GENRE`, `ALBUM_ARTIST`, `ARTIST`, `MOOD`, `LANGUAGE`, `LABEL`,
+  `GROUPING`, `COMPOSER`, `YEAR`, `COMMENT`) or select "Custom…" to
+  type any tag your files use. Type values comma-separated.
+  Toggle between **Match ANY listed value** (track needs one of
+  them) and **Match ALL listed values** (track needs every one).
+  Matching is case-insensitive, so `blackpink` matches files
+  tagged `BLACKPINK` or `BlackPink`. `ALBUM_ARTIST` and `ARTIST`
+  are special-cased to match against your library's artist
+  records (not just the raw tag), which is what most people
+  actually want — a track from a single-artist album doesn't
+  need an explicit `ALBUM_ARTIST` tag to show up.
+- **Path Pattern** — glob include / exclude patterns matched
+  against each track's path. `*` matches any chars within a
+  name; `**` matches any directory depth. Useful when files
+  are organized but not at folder boundaries (e.g. all `*.flac`
+  anywhere under a `Live/` subdirectory).
+
+The **Playback** section controls how the station picks the next
+track within whatever the Source rule resolved:
+
+- **Play order** — Sequential, Shuffle, Smart shuffle (with
+  no-repeat memory), Weighted random.
+- **Weighting** — Uniform, Favor recent, Favor under-played,
+  Favor higher-rated.
+- **No-repeat memory** — don't replay the last N tracks (0–50).
+- **Album spacing** — skip same-album picks for N tracks
+  (small libraries: keep this low or playback starves).
+- **Artist spacing** — skip same-artist picks for N tracks.
+
+If a station ends up matching zero tracks (rule is too narrow,
+typo in a tag value, sub-folder you pointed at is empty), a
+banner appears above the MiniPlayer:
+`"<station>" matched 0 tracks. Edit the station's rule or scan more
+music.` Tap the banner to dismiss.
+
 ### Station Detail
 
 Per-station screen with header card, source-rule summary, candidate

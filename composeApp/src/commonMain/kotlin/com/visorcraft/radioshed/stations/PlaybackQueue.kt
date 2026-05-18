@@ -143,8 +143,23 @@ class PlaybackQueue(
         return when (rule.order) {
             PlayOrder.Sequential -> nextSequential(candidates, allowWrap)
             PlayOrder.Shuffle, PlayOrder.SmartShuffle, PlayOrder.WeightedRandom ->
-                nextSmartShuffle(candidates)
+                nextSmartShuffleSafe(candidates)
         }
+    }
+
+    /**
+     * Empty-pool guard around [nextSmartShuffle]. Belt-and-suspenders
+     * since `next()` already returns null when candidates is empty,
+     * but ANY future call path that reaches the shuffle picker with
+     * an empty pool would otherwise crash on `random.nextInt(0)`
+     * (IllegalArgumentException: "bound must be positive"). Treating
+     * empty as "no more tracks" matches the Sequential path's null
+     * return — the caller (StationPlayback.advanceToNext) stops the
+     * engine cleanly instead of taking the app down.
+     */
+    private fun nextSmartShuffleSafe(pool: List<Track>): Track? {
+        if (pool.isEmpty()) return null
+        return nextSmartShuffle(pool)
     }
 
     /** Inject [track] to play before the next rule-driven pick. LIFO. */

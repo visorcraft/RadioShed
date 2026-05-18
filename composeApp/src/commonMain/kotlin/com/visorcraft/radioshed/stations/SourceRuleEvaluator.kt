@@ -156,12 +156,43 @@ class SourceRuleEvaluator(
     }
 
     private suspend fun evaluateTagFilter(rule: SourceRule.TagFilter): List<Track> {
-        val perValue = rule.values.map { value -> libraryRepo.tracksByTag(rule.key, value) }
+        // Defensive: trim + drop empties so a trailing comma in the
+        // user's "blackpink, jennie, " input doesn't fan out into an
+        // empty SQL match that empties an otherwise-good Match ALL set.
+        val cleanValues = rule.values.map { it.trim() }.filter { it.isNotEmpty() }
+        if (cleanValues.isEmpty()) return emptyList()
+
+        // ARTIST and ALBUM_ARTIST aren't in track_tag — Scanner.kt
+        // normalizes them into the artist table (with sort_name =
+        // lowercased+trimmed name) and links via track_artist. A
+        // literal track_tag match against "ALBUM_ARTIST" returns the
+        // multi-value duplicates if any (AndroidTagReader writes them
+        // back as customTags too, case-preserved), but misses the
+        // canonical artist linkage. Routing through tracksByArtistName
+        // resolves both single-artist albums and compilations
+        // consistently AND is case-insensitive by construction.
+        //
+        // Caveat on matchAll + artist key: a track is linked to at
+        // most one album-artist (Scanner sets one 'primary' link and
+        // optionally one 'album_artist' link). matchAll=true with
+        // multi-value artist filter therefore intersects to the
+        // empty set in practice ("track must be linked to BOTH
+        // BLACKPINK AND Jennie"). This is the rule's natural
+        // semantics; we don't special-case it because the UI lets
+        // the user toggle Match-ANY explicitly and the empty-pool
+        // banner ("station matched 0 tracks") points them at the
+        // fix. Documented so future readers don't try to "fix" the
+        // emptiness without understanding the link model.
+        val isArtistKey = rule.key.equals("ALBUM_ARTIST", ignoreCase = true) ||
+            rule.key.equals("ARTIST", ignoreCase = true)
+        val perValue = cleanValues.map { value ->
+            if (isArtistKey) libraryRepo.tracksByArtistName(value)
+            else libraryRepo.tracksByTagCaseInsensitive(rule.key, value)
+        }
         return if (rule.matchAll) {
             // Tracks present in every value's result set
-            if (perValue.isEmpty()) emptyList()
-            else perValue.reduce { acc, list ->
-                val ids = list.map { it.id }.toSet()
+            perValue.reduce { acc, list ->
+                val ids = list.mapTo(HashSet()) { it.id }
                 acc.filter { it.id in ids }
             }
         } else {

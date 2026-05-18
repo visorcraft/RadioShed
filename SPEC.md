@@ -4062,6 +4062,122 @@ Skipped items (low confidence / theoretical / accepted tradeoffs):
 - LRClib `HttpURLConnection` error-stream draining — perf only,
   no correctness impact.
 
+#### Phase 19 polish (station-editor UX + crash safety)
+
+User-reported: a TagFilter station with `key="ALBUM_ARTIST"` and
+comma-separated lower-case values crashed the whole RadioShed
+process on open. Folders source rule didn't expose sub-folders
+without a separate trip to Library Settings. Tag-key field was a
+free-text input with no discoverability for the supported keys.
+Build `2026-05-10a` → `2026-05-18a`.
+
+- [x] **Tag Key dropdown + Custom… escape hatch.**
+  `StationEditorScreen.TagFilterConfig` replaces the free-text
+  `OutlinedTextField` with a 10-option dropdown (`GENRE`,
+  `ALBUM_ARTIST`, `ARTIST`, `MOOD`, `LANGUAGE`, `LABEL`,
+  `GROUPING`, `COMPOSER`, `YEAR`, `COMMENT`) plus a "Custom…"
+  entry that reveals an inline text field for arbitrary keys.
+  Editing a station whose existing key isn't a preset auto-
+  selects Custom so user-typed keys survive round-trip without
+  truncation.
+- [x] **`ALBUM_ARTIST` / `ARTIST` route to the artist table.**
+  Scanner normalizes both into `artist` (not `track_tag`), so a
+  literal `track_tag` match against either key returned the
+  multi-value duplicate rows (case-preserved) but missed the
+  canonical artist linkage entirely — a user typing `blackpink`
+  for a file tagged `BLACKPINK` got zero results, then a hard
+  crash on shuffle.
+  `SourceRuleEvaluator.evaluateTagFilter` now special-cases both
+  keys and routes through the new `LibraryRepository.tracksByArtistName`,
+  backed by a new `selectTracksByArtistSortName` SQL query that
+  joins `track ⨝ track_artist ⨝ artist` on `artist.sort_name`
+  (which is already lowercase+trimmed at scan time per
+  `Scanner.normalizeForSort`). Case-insensitive by construction.
+- [x] **Case-insensitive matching for all other tag keys.** New
+  `selectTracksByTagCi` SQL query (`LOWER(value) = LOWER(?)`) plus
+  `LibraryRepository.tracksByTagCaseInsensitive`. Station rules
+  route through this; the exact-match `selectTracksByTag` stays
+  for the genre-canonicalization backfill and the auto-station
+  generator that already canonicalize values before querying.
+- [x] **Trim + de-empty TagFilter input values.** A trailing
+  comma in `blackpink, jennie, ` no longer fans out into a third
+  empty-value query that empties an otherwise-good Match-ALL
+  set. Empty values are dropped at the top of
+  `evaluateTagFilter` so subsequent reduce / flatten paths
+  never see them.
+- [x] **`PlaybackQueue.nextSmartShuffleSafe` empty-pool guard.**
+  Belt-and-suspenders wrapper around `nextSmartShuffle` that
+  returns null for empty pools instead of letting
+  `pickWeighted` fall through to `random.nextInt(0)` and crash.
+  Top-level `next()` already short-circuits on empty
+  candidates; the guard protects against any future call path
+  (refactor, ad-hoc playback) that reaches the shuffle picker
+  with an exhausted avoid-filtered pool.
+- [x] **Folders source rule — chip-list + Add folder.**
+  `StationEditorScreen.FoldersConfig` rebuilt: each selected
+  folder shows as a chip with display name, path, and a Remove
+  button. The primary action is "Add folder…" which opens the
+  existing `FolderBrowserDialog` (same one Library Settings
+  uses). Picking a path already in the library just selects it;
+  picking a new path queues a "pending" chip with a "Will be
+  added to your Library and scanned on save" affordance. The
+  full-checklist UX (which only surfaced top-level registered
+  folders, missing every sub-folder) is gone — users browse
+  freely from the editor.
+- [x] **Auto-insert + scan new folders on save.** Save flow
+  inserts each pending path via `FolderRepository.insert`,
+  collects the new ids into the `FolderSelector`, persists the
+  station, then sequentially runs `Scanner.scanFolder(id)` for
+  each new folder with inline progress
+  (`"Scanning Music (2/3): 247 tracks"`) before closing the
+  editor. Existing folders skip the scan. Per-folder errors
+  surface inline; a single bad folder doesn't abort the close.
+- [x] **`CoroutineExceptionHandler` on `StationPlayback` scope.**
+  Any unhandled exception in the playback pipeline (corrupt
+  SourceRule JSON, SQL fault, NPE in a downstream coroutine)
+  now lands in a new `_playbackError` StateFlow instead of
+  propagating to the JVM's default UncaughtExceptionHandler
+  (which on Android shows "Keeps stopping" and kills the
+  process). `runCatching` also wraps `evaluate()` at both
+  `playStationInternal` and `rebuildQueueForCurrentStation`
+  call sites so a bad rule degrades to an empty pool +
+  surfaced message rather than terminating playback. The
+  editor's `LaunchedEffect(stationId)` load uses the same
+  pattern for `stationRepo.getById` so a corrupted row
+  doesn't crash the screen on Edit.
+- [x] **Top-level playback-error banner.** `App.kt` collects
+  `stationPlayback.playbackError` and renders a 5-second
+  errorContainer banner above the MiniPlayer when the flow is
+  non-null. Tap to dismiss. Also surfaces a friendly
+  `"\"<station>\" matched 0 tracks. Edit the station's rule
+  or scan more music."` when a station evaluates to an empty
+  candidate pool, replacing the previous silent no-op.
+- [x] **Exhaustive crash-safety regression tests.** Two new
+  test classes lock the no-crash guarantee at the unit-test
+  level:
+  - `commonTest/.../stations/PlaybackQueueCrashSafetyTest.kt`
+    drives ≈ 2,600 `next()` calls across every `PlayOrder` ×
+    `Weighting` × edge-case input combination (empty pool,
+    fully-disliked pool, inflated avoid windows, single-track
+    pool, priority-buffer drain on empty rule pool, 1,000-pick
+    stress) and asserts none ever throw.
+  - `commonTest/.../stations/StationRoundTripCrashTest.kt` runs
+    end-to-end against a real `JdbcSqliteDriver` in-memory
+    `RadioShedDatabase`: ≈ 480 round-trips of (save station via
+    `StationRepository.insert` → reload via `getById` →
+    evaluate source rule against real SQL → build queue →
+    drain) covering every `SourceRule` subtype (including all
+    `SmartQueryKind` and `SortBy` variants) crossed with every
+    `PlayOrder` × `Weighting`. Plus a regression-smoking-gun
+    test that seeds two tracks with `album_artist = "BLACKPINK"`
+    (uppercase), saves a `TagFilter("ALBUM_ARTIST",
+    ["blackpink", "BlackPink", "BLACKPINK"])` station, and
+    asserts the reload + evaluate path returns exactly 2 tracks
+    (deduped via the new case-insensitive routing).
+    Test-only `app.cash.sqldelight:sqlite-driver` dep added to
+    `commonTest` to reach the in-memory driver from JVM unit
+    tests.
+
 ---
 
 ## Appendix A — Compose Multiplatform vs native UI: when to fall back

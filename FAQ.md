@@ -122,6 +122,55 @@ that's why there's no in-app delete action.
 
 ---
 
+### "A Tag Filter station with `ALBUM_ARTIST` returns nothing (or used to crash)"
+
+Before build `2026-05-18a` this could hard-crash the app — fixed in
+that build.
+
+If you typed values that didn't match exactly (e.g. `blackpink` when
+the files are tagged `BLACKPINK`), the station resolved to zero
+tracks and Smart-shuffle stations crashed trying to pick from an
+empty pool. Both halves are fixed:
+
+- Tag matching is now case-insensitive across the board, so
+  `blackpink` matches `BLACKPINK` and `BlackPink`.
+- `ALBUM_ARTIST` and `ARTIST` route to your library's artist records
+  rather than the raw tag table — useful because single-artist
+  albums usually don't carry an explicit `ALBUM_ARTIST` tag, but you
+  still want them to show up.
+- An empty pool no longer crashes. If the rule legitimately matches
+  zero tracks you'll see a banner above the MiniPlayer:
+  `"<station>" matched 0 tracks. Edit the station's rule or scan
+  more music.`
+
+If you're on an older build and want the fix, update to
+`2026-05-18a` or later.
+
+---
+
+### "Folders station only shows my top-level music folder, not the sub-folders I want"
+
+Before build `2026-05-18a` the Folders source rule only listed
+already-registered Library folders — to use a sub-folder for a
+station, you first had to add it as a Library folder via Library
+Settings → gear → Add Folder. That's not obvious.
+
+Now the Station Editor's Folders source lets you browse for any
+folder directly. If you pick a path that isn't in your Library yet,
+it shows up as a chip labelled `"Will be added to your Library and
+scanned on save"`. When you tap Save, RadioShed inserts that folder
+into your Library, runs a scan with inline progress, then closes
+the editor. Folders already in your Library skip the scan.
+
+If you want a station that spans a parent folder AND some of its
+sub-folders, you can — pick each one separately. Tracks scanned by
+multiple folder roots end up associated with whichever folder root
+scanned them last; no duplicates, but the per-folder track count
+on Library Settings can drift from reality until you next rescan
+the parent.
+
+---
+
 ### "The Stations Home is empty after the first launch"
 
 If you skipped the tour from Welcome on a clean install of an older

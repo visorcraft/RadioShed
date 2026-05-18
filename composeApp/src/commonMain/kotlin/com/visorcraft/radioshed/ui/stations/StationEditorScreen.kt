@@ -19,7 +19,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -55,7 +54,10 @@ import com.visorcraft.radioshed.domain.SmartQueryKind
 import com.visorcraft.radioshed.domain.SourceRule
 import com.visorcraft.radioshed.domain.Station
 import com.visorcraft.radioshed.domain.Weighting
+import com.visorcraft.radioshed.scanner.ScanProgress
+import com.visorcraft.radioshed.scanner.Scanner
 import com.visorcraft.radioshed.source.ArtworkPersister
+import com.visorcraft.radioshed.ui.library.FolderBrowserDialog
 import com.visorcraft.radioshed.ui.util.rememberImagePicker
 import com.visorcraft.radioshed.ui.util.supportsImagePicker
 import kotlinx.coroutines.launch
@@ -93,6 +95,7 @@ fun StationEditorScreen(
     folderRepo: FolderRepository = koinInject(),
     stationRepo: StationRepository = koinInject(),
     artworkPersister: ArtworkPersister = koinInject(),
+    scanner: Scanner = koinInject(),
 ) {
     val scope = rememberCoroutineScope()
     val folders by folderRepo.observeAll().collectAsState(initial = emptyList())
@@ -115,6 +118,13 @@ fun StationEditorScreen(
 
     // Folders
     val selectedFolderIds = remember { mutableStateListOf<Long>() }
+    // Folder paths the user picked via the in-line browser that don't
+    // exist in the library yet. Inserted into FolderRepository on save
+    // (before the station write), then scanned and added to the
+    // station's FolderSelector. Held separately from selectedFolderIds
+    // so the editor can render them differently ("will be added") and
+    // the save path knows which folders need a kick-off scan.
+    val pendingNewFolderPaths = remember { mutableStateListOf<String>() }
     // Smart Query
     var smartKind by remember { mutableStateOf(SmartQueryKind.NewestN) }
     var smartLimitText by remember { mutableStateOf("100") }
@@ -128,6 +138,10 @@ fun StationEditorScreen(
 
     var saveError by remember { mutableStateOf<String?>(null) }
     var saving by remember { mutableStateOf(false) }
+    // Inline scan status published while the post-save kick-off scans
+    // run. Mirrors OnboardingScreen / LibrarySettingsScreen progress
+    // strings; null = no scan in flight (or all scans finished).
+    var scanProgressLine by remember { mutableStateOf<String?>(null) }
     // True when the existing station's source rule isn't representable
     // in the editor (compound rules, unsupported selectors). We freeze
     // the source section in that case to avoid clobbering it.
@@ -135,10 +149,17 @@ fun StationEditorScreen(
 
     LaunchedEffect(stationId) {
         if (stationId == null) return@LaunchedEffect
-        val station = stationRepo.getById(stationId) ?: run {
-            saveError = "Station $stationId not found"
-            return@LaunchedEffect
-        }
+        // Wrap in runCatching so a corrupted source-JSON row (which
+        // would otherwise throw out of decodeSource inside getById)
+        // surfaces as a friendly inline error instead of crashing the
+        // editor when the user taps Edit on a broken station.
+        val station = runCatching { stationRepo.getById(stationId) }
+            .onFailure { saveError = "Couldn't load station: ${it.message ?: it::class.simpleName}" }
+            .getOrNull()
+            ?: run {
+                if (saveError == null) saveError = "Station $stationId not found"
+                return@LaunchedEffect
+            }
         existing = station
         name = station.name
         subtitle = station.customSubtitle.orEmpty()
@@ -183,7 +204,8 @@ fun StationEditorScreen(
     val sourceEditable = !isBuiltIn && !sourceLockedAsCompound
     val canSave = name.isNotBlank() && !saving && when {
         !sourceEditable -> true   // cosmetic edit; source preserved as-is
-        sourceType == SourceType.Folders -> selectedFolderIds.isNotEmpty()
+        sourceType == SourceType.Folders ->
+            selectedFolderIds.isNotEmpty() || pendingNewFolderPaths.isNotEmpty()
         sourceType == SourceType.SmartQuery -> smartLimitText.toIntOrNull()?.let { it > 0 } == true
         sourceType == SourceType.TagFilter -> tagKey.isNotBlank() && tagValuesText.isNotBlank()
         sourceType == SourceType.PathPattern -> pathIncludesText.isNotBlank()
@@ -194,7 +216,15 @@ fun StationEditorScreen(
         topBar = {
             androidx.compose.material3.TopAppBar(
                 title = { Text(if (isEditing) "Edit station" else "New station") },
-                navigationIcon = { TextButton(onClick = onClose) { Text("Cancel") } },
+                navigationIcon = {
+                    // Disabled during a save-in-flight so a mid-scan
+                    // cancel can't tear down [scope], strand a freshly-
+                    // inserted folder in the DB without tracks, and
+                    // leave the station referencing it. Once the
+                    // scan-loop drains and [saving] flips false, the
+                    // button re-enables and the editor closes normally.
+                    TextButton(onClick = onClose, enabled = !saving) { Text("Cancel") }
+                },
                 colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface,
                 ),
@@ -285,6 +315,7 @@ fun StationEditorScreen(
                     SourceType.Folders -> FoldersConfig(
                         folders = folders,
                         selectedFolderIds = selectedFolderIds,
+                        pendingNewFolderPaths = pendingNewFolderPaths,
                         enabled = sourceEditable,
                     )
                     SourceType.SmartQuery -> SmartQueryConfig(
@@ -409,6 +440,34 @@ fun StationEditorScreen(
                         saveError = null
                         scope.launch {
                             runCatching {
+                                // Step 1: Insert any newly-picked folders
+                                // BEFORE the station write so the station's
+                                // FolderSelector can reference real ids.
+                                // The collected id list is the union of
+                                // already-existing ids + freshly-inserted
+                                // ids. Existing pendingNewFolderPaths
+                                // entries that turn out to already be in
+                                // the library (race with another panel) get
+                                // de-duped via folderRepo.getByUri.
+                                val newlyInsertedIds = mutableListOf<Long>()
+                                if (sourceType == SourceType.Folders) {
+                                    for (path in pendingNewFolderPaths.toList()) {
+                                        val existingRow = folderRepo.getByUri(path)
+                                        val id = existingRow?.id ?: folderRepo.insert(
+                                            displayName = path.substringAfterLast('/')
+                                                .ifBlank {
+                                                    path.substringAfterLast('\\').ifBlank { path }
+                                                },
+                                            uri = path,
+                                            recursive = true,
+                                        )
+                                        newlyInsertedIds += id
+                                    }
+                                }
+                                val finalFolderIds = (selectedFolderIds.toList() + newlyInsertedIds)
+                                    .distinct()
+
+                                // Step 2: Write the station.
                                 saveStation(
                                     repo = stationRepo,
                                     existing = existing,
@@ -418,7 +477,7 @@ fun StationEditorScreen(
                                     artworkUri = artworkUri,
                                     sourceLocked = !sourceEditable,
                                     sourceType = sourceType,
-                                    selectedFolderIds = selectedFolderIds.toList(),
+                                    selectedFolderIds = finalFolderIds,
                                     smartKind = smartKind,
                                     smartLimit = smartLimitText.toIntOrNull() ?: 100,
                                     tagKey = tagKey.trim(),
@@ -432,13 +491,80 @@ fun StationEditorScreen(
                                     artistSpacing = artistSpacing,
                                     albumSpacing = albumSpacing,
                                 )
+
+                                // Step 3: Kick off scans for the newly-
+                                // inserted folders. Run sequentially —
+                                // the scanner serializes through shared
+                                // DB transactions, concurrent scans would
+                                // contend. Progress updates publish to
+                                // the inline status line; nothing throws
+                                // out of this block (per-scan errors are
+                                // swallowed into the status line so a
+                                // single bad folder doesn't abort the
+                                // close). The pending list is cleared
+                                // AFTER scans drain so a mid-scan
+                                // cancellation leaves the chips visible
+                                // — the user can retry without re-
+                                // picking everything from the browser.
+                                if (newlyInsertedIds.isNotEmpty()) {
+                                    val totalNew = newlyInsertedIds.size
+                                    newlyInsertedIds.forEachIndexed { idx, id ->
+                                        val folder = folderRepo.getById(id)
+                                        val label = folder?.displayName ?: "folder"
+                                        scanProgressLine = "Scanning $label " +
+                                            "(${idx + 1}/$totalNew)…"
+                                        runCatching {
+                                            scanner.scanFolder(id).collect { ev ->
+                                                if (ev is ScanProgress.Progress) {
+                                                    scanProgressLine = "Scanning $label " +
+                                                        "(${idx + 1}/$totalNew): " +
+                                                        "${ev.tracksProcessed} tracks"
+                                                } else if (ev is ScanProgress.Failed) {
+                                                    scanProgressLine = "Scan failed for " +
+                                                        "$label: ${ev.message}"
+                                                }
+                                            }
+                                        }.onFailure {
+                                            scanProgressLine = "Scan crashed for $label: " +
+                                                (it.message ?: it::class.simpleName ?: "unknown")
+                                        }
+                                    }
+                                    scanProgressLine = "Scanned $totalNew new folder" +
+                                        if (totalNew == 1) "" else "s"
+                                }
+                                // Drained without cancellation — safe to
+                                // drop the pending-chips state now.
+                                pendingNewFolderPaths.clear()
                             }.onSuccess { onClose() }
                                 .onFailure { saveError = "Save failed: ${it.message}" }
                             saving = false
                         }
                     },
                     enabled = canSave,
-                ) { Text(if (isEditing) "Save" else "Create") }
+                ) {
+                    Text(
+                        when {
+                            saving && scanProgressLine != null -> "Scanning…"
+                            saving -> "Saving…"
+                            isEditing -> "Save"
+                            else -> "Create"
+                        },
+                    )
+                }
+            }
+            // Inline scan-progress strip. Mirrors the
+            // OnboardingScreen / LibrarySettingsScreen pattern — single
+            // line, monospace, primary tint so the user sees that the
+            // editor is still working on a kick-off scan before the
+            // window closes.
+            scanProgressLine?.let { line ->
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    line,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontFamily = FontFamily.Monospace,
+                )
             }
             Spacer(Modifier.height(16.dp))
 
@@ -584,25 +710,143 @@ private fun SourceTypeTabs(
 private fun FoldersConfig(
     folders: List<com.visorcraft.radioshed.domain.Folder>,
     selectedFolderIds: androidx.compose.runtime.snapshots.SnapshotStateList<Long>,
+    pendingNewFolderPaths: androidx.compose.runtime.snapshots.SnapshotStateList<String>,
     enabled: Boolean,
 ) {
-    if (folders.isEmpty()) {
-        EmptyHint("No folders registered yet. Add one in Library Settings first.")
-        return
-    }
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        folders.forEach { folder ->
-            FolderRow(
-                folderName = folder.displayName,
-                folderPath = folder.uri,
-                checked = folder.id in selectedFolderIds,
-                enabled = enabled,
-                onToggle = {
-                    if (!enabled) return@FolderRow
-                    if (folder.id in selectedFolderIds) selectedFolderIds.remove(folder.id)
-                    else selectedFolderIds += folder.id
-                },
+    var browserOpen by remember { mutableStateOf(false) }
+    val foldersByUri = remember(folders) { folders.associateBy { it.uri } }
+    val foldersById = remember(folders) { folders.associateBy { it.id } }
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (selectedFolderIds.isEmpty() && pendingNewFolderPaths.isEmpty()) {
+            EmptyHint(
+                "No folders selected. Tap \"Add folder\" to browse for one. " +
+                    "Folders you pick that aren't in your Library yet will be " +
+                    "added and scanned automatically when you save.",
             )
+        } else {
+            // Existing-library folder chips. Filter through foldersById so
+            // a stale id (e.g. folder deleted in Library Settings while
+            // the editor was open) doesn't render an empty chip.
+            selectedFolderIds.forEach { id ->
+                val folder = foldersById[id] ?: return@forEach
+                SelectedFolderChip(
+                    folderName = folder.displayName,
+                    folderPath = folder.uri,
+                    pending = false,
+                    enabled = enabled,
+                    onRemove = { if (enabled) selectedFolderIds.remove(id) },
+                )
+            }
+            // Newly-picked folder paths that aren't in the library yet.
+            // Rendered with a distinct "will be added" affordance so
+            // the user knows the save is about to do extra work.
+            pendingNewFolderPaths.forEach { path ->
+                SelectedFolderChip(
+                    folderName = path.substringAfterLast('/').ifBlank { path }
+                        .substringAfterLast('\\').ifBlank { path },
+                    folderPath = path,
+                    pending = true,
+                    enabled = enabled,
+                    onRemove = { if (enabled) pendingNewFolderPaths.remove(path) },
+                )
+            }
+        }
+
+        OutlinedButton(
+            onClick = { if (enabled) browserOpen = true },
+            enabled = enabled,
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text("Add folder…") }
+    }
+
+    if (browserOpen) {
+        // Default landing path: the parent of the first already-selected
+        // folder if any, else any registered library folder, else the
+        // platform default. Lets the user keep browsing in the same
+        // tree they last selected from without having to walk back up
+        // from the platform root every time.
+        val startPath = remember(folders, selectedFolderIds) {
+            val firstSelected = selectedFolderIds.firstNotNullOfOrNull { foldersById[it]?.uri }
+            val anyFolder = folders.firstOrNull()?.uri
+            (firstSelected ?: anyFolder)?.let {
+                com.visorcraft.radioshed.source.parentPath(it).ifBlank { it }
+            } ?: com.visorcraft.radioshed.source.defaultMusicFolderPath()
+        }
+        FolderBrowserDialog(
+            initialPath = startPath,
+            onSelect = { picked ->
+                browserOpen = false
+                if (picked.isBlank()) return@FolderBrowserDialog
+                val existing = foldersByUri[picked]
+                when {
+                    // Already an existing library folder → just select.
+                    existing != null -> {
+                        if (existing.id !in selectedFolderIds) {
+                            selectedFolderIds += existing.id
+                        }
+                    }
+                    // Already queued as pending → no-op (avoid dupes).
+                    picked in pendingNewFolderPaths -> Unit
+                    else -> pendingNewFolderPaths += picked
+                }
+            },
+            onDismiss = { browserOpen = false },
+        )
+    }
+}
+
+@Composable
+private fun SelectedFolderChip(
+    folderName: String,
+    folderPath: String,
+    pending: Boolean,
+    enabled: Boolean,
+    onRemove: () -> Unit,
+) {
+    // Surface tint differs between pending and existing folders so the
+    // user can tell at a glance which selections will trigger a scan
+    // on save. Pending uses the primary container; existing uses the
+    // neutral surface variant.
+    val container = if (pending) MaterialTheme.colorScheme.primaryContainer
+                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+    val onContainer = if (pending) MaterialTheme.colorScheme.onPrimaryContainer
+                      else MaterialTheme.colorScheme.onSurface
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = container,
+        shape = RoundedCornerShape(8.dp),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    folderName,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = onContainer,
+                )
+                Text(
+                    folderPath,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = onContainer.copy(alpha = 0.7f),
+                    fontFamily = FontFamily.Monospace,
+                )
+                if (pending) {
+                    Text(
+                        "Will be added to your Library and scanned on save",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = onContainer.copy(alpha = 0.85f),
+                    )
+                }
+            }
+            Spacer(Modifier.width(8.dp))
+            TextButton(
+                onClick = onRemove,
+                enabled = enabled,
+            ) { Text("Remove", color = onContainer) }
         }
     }
 }
@@ -644,20 +888,58 @@ private fun TagFilterConfig(
     onMatchAll: (Boolean) -> Unit,
     enabled: Boolean,
 ) {
+    // Stable preset list. ALBUM_ARTIST / ARTIST are first-class even
+    // though they're stored in the artist table (not track_tag) —
+    // SourceRuleEvaluator special-cases them so the user-facing rule
+    // works the way users expect ("filter to tracks by these artists").
+    val presets = remember { COMMON_TAG_KEYS }
+    val isPreset = remember(key) { key in presets }
+    // "Custom" mode is sticky: once the user enters a non-preset key
+    // (either by selecting Custom from the dropdown OR by loading a
+    // station whose existing key isn't a preset) we keep the text
+    // field visible until they pick a preset again.
+    var customMode by remember(key) { mutableStateOf(!isPreset && key.isNotBlank()) }
+    val effectiveSelection = when {
+        customMode -> CUSTOM_SENTINEL
+        isPreset -> key
+        else -> presets.first()
+    }
+
     Text(
-        "Common keys: GENRE, ALBUM_ARTIST, MOOD, LANGUAGE, LABEL, GROUPING. Type any tag your files use.",
+        "Filters tracks by a metadata tag. ARTIST / ALBUM_ARTIST match by " +
+            "name; other keys match the value as stored in your files.",
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
     )
     Spacer(Modifier.height(6.dp))
-    OutlinedTextField(
-        value = key,
-        onValueChange = onKey,
-        label = { Text("Tag key") },
-        singleLine = true,
+    TagKeyDropdown(
+        selected = effectiveSelection,
+        options = presets,
         enabled = enabled,
-        modifier = Modifier.fillMaxWidth(),
+        onPick = { picked ->
+            if (picked == CUSTOM_SENTINEL) {
+                customMode = true
+                // Don't blow away an existing custom key when the user
+                // re-opens the dropdown and picks Custom again.
+                if (key in presets) onKey("")
+            } else {
+                customMode = false
+                onKey(picked)
+            }
+        },
     )
+    if (customMode) {
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(
+            value = key,
+            onValueChange = onKey,
+            label = { Text("Custom tag key") },
+            placeholder = { Text("e.g. STYLE, REMIXER, CATALOGNUMBER") },
+            singleLine = true,
+            enabled = enabled,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
     Spacer(Modifier.height(8.dp))
     OutlinedTextField(
         value = valuesText,
@@ -685,6 +967,49 @@ private fun TagFilterConfig(
                 else "Track needs at least one of the listed values",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+            )
+        }
+    }
+}
+
+@Composable
+private fun TagKeyDropdown(
+    selected: String,
+    options: List<String>,
+    enabled: Boolean,
+    onPick: (String) -> Unit,
+) {
+    var open by remember { mutableStateOf(false) }
+    Column {
+        Text(
+            "Tag key",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
+        )
+        Spacer(Modifier.height(4.dp))
+        OutlinedButton(
+            onClick = { if (enabled) open = true },
+            enabled = enabled,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(if (selected == CUSTOM_SENTINEL) "Custom…" else selected)
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            options.forEach { option ->
+                DropdownMenuItem(
+                    text = { Text(option) },
+                    onClick = {
+                        onPick(option)
+                        open = false
+                    },
+                )
+            }
+            DropdownMenuItem(
+                text = { Text("Custom…") },
+                onClick = {
+                    onPick(CUSTOM_SENTINEL)
+                    open = false
+                },
             )
         }
     }
@@ -875,38 +1200,6 @@ private fun ColorSwatchRow(selected: Int, onPick: (Int) -> Unit) {
 }
 
 @Composable
-private fun FolderRow(
-    folderName: String,
-    folderPath: String,
-    checked: Boolean,
-    enabled: Boolean,
-    onToggle: () -> Unit,
-) {
-    Surface(
-        modifier = Modifier.fillMaxWidth().clickable(enabled = enabled, onClick = onToggle),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (enabled) 0.3f else 0.15f),
-        shape = RoundedCornerShape(8.dp),
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Checkbox(checked = checked, onCheckedChange = { onToggle() }, enabled = enabled)
-            Spacer(Modifier.width(8.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(folderName, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-                Text(
-                    folderPath,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                    fontFamily = FontFamily.Monospace,
-                )
-            }
-        }
-    }
-}
-
-@Composable
 private fun <T> EnumPicker(
     label: String,
     values: List<T>,
@@ -976,6 +1269,40 @@ private fun SmartQueryKind.uiLabel(): String = when (this) {
 
 private fun String.toCsvList(): List<String> =
     split(',').map { it.trim() }.filter { it.isNotBlank() }
+
+/**
+ * Tag keys offered as one-tap options in the Tag Filter editor.
+ * Order = roughly "most useful first" for the typical user, not
+ * alphabetical. Selecting "Custom…" instead exposes a free-text
+ * field for any tag the user's files happen to carry (e.g. STYLE,
+ * CATALOGNUMBER, SCRIPT, ORIGINAL_RELEASE_DATE).
+ *
+ * ARTIST and ALBUM_ARTIST are presented as tag keys even though
+ * they aren't stored in track_tag — SourceRuleEvaluator special-
+ * cases both and routes them through the artist table so the
+ * user-facing semantics ("filter by these artists") work.
+ */
+private val COMMON_TAG_KEYS = listOf(
+    "GENRE",
+    "ALBUM_ARTIST",
+    "ARTIST",
+    "MOOD",
+    "LANGUAGE",
+    "LABEL",
+    "GROUPING",
+    "COMPOSER",
+    "YEAR",
+    "COMMENT",
+)
+
+/**
+ * Sentinel that means "the user picked Custom from the tag-key
+ * dropdown". Not a real tag key — used only inside the editor UI
+ * to flip Custom mode on and reveal the free-text field. The
+ * actual saved key comes from the OutlinedTextField in custom
+ * mode (never this sentinel).
+ */
+private const val CUSTOM_SENTINEL = "__custom__"
 
 private const val BRAND_AMBER = 0xFFFF7F1A.toInt()
 private val SWATCHES = listOf(

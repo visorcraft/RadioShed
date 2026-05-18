@@ -489,6 +489,50 @@ SELECT track.* FROM track
 JOIN track_tag tt ON tt.track_id = track.id
 WHERE tt.key = ? AND tt.value = ? AND track.is_available = 1;
 
+-- Case-insensitive variant for user-driven station rules where the
+-- user's typed values almost never match the original tag casing
+-- (e.g., user types "blackpink" and the file's ALBUM_ARTIST tag
+-- stores "BLACKPINK"). The exact-match form above stays in place
+-- for callers that need it (genre auto-station consolidation
+-- already canonicalizes GENRE to title case on scan).
+--
+-- Performance note: `LOWER(tt.value)` is NOT sargable against the
+-- `(key, value)` index defined on track_tag — SQLite will use the
+-- index for the `tt.key = ?` predicate, then scan all rows with
+-- that key applying `LOWER()` per row. Acceptable today because:
+-- (a) GENRE is already canonical-cased at scan so users hit the
+-- index-friendly exact-match path for the most populous key; (b)
+-- ALBUM_ARTIST / ARTIST route to the artist table via
+-- `selectTracksByArtistSortName` (artist.sort_name is pre-
+-- lowercased, indexed, and sargable); (c) the keys that actually
+-- hit this query (MOOD, LABEL, COMPOSER, etc.) typically have
+-- modest cardinality. A proper fix would be an expression index
+-- like `CREATE INDEX track_tag_kv_ci_idx ON track_tag(key,
+-- LOWER(value))`; SQLite 3.9+ supports it (we ship 3.45 on
+-- Android via requery, well past the cutoff). Tracked for a
+-- future Phase 18 SPEC item rather than added inline because
+-- migrations are paused pending the verifier-friendly schema
+-- restate (see CLAUDE.md).
+selectTracksByTagCi:
+SELECT track.* FROM track
+JOIN track_tag tt ON tt.track_id = track.id
+WHERE tt.key = ? AND LOWER(tt.value) = LOWER(?) AND track.is_available = 1;
+
+-- Case-insensitive tracks-by-artist-name. Joins through track_artist
+-- with any role, since the user typing "Blackpink" as an ALBUM_ARTIST
+-- value expects to see every track tagged with that artist regardless
+-- of whether their library splits primary-vs-album-artist links.
+-- artist.sort_name is already lowercase-normalized at scan time
+-- (Scanner.normalizeForSort), so we lowercase the input and compare
+-- against sort_name. DISTINCT collapses the (rare) case where a
+-- track has both "primary" and "album_artist" links to the same
+-- artist row.
+selectTracksByArtistSortName:
+SELECT DISTINCT track.* FROM track
+JOIN track_artist ta ON ta.track_id = track.id
+JOIN artist a ON a.id = ta.artist_id
+WHERE a.sort_name = ? AND track.is_available = 1;
+
 distinctTagValues:
 SELECT DISTINCT value FROM track_tag WHERE key = ? ORDER BY value;
 

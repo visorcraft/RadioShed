@@ -1,10 +1,14 @@
 package com.visorcraft.radioshed
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -12,6 +16,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.tooling.preview.Preview
 import com.visorcraft.radioshed.data.LibraryRepository
 import com.visorcraft.radioshed.data.SettingsStore
@@ -519,6 +524,42 @@ fun App(
                     -> Unit
                     // StationDetail handled above explicitly; no else
                     // branch needed because the sealed list is exhaustive.
+                }
+            }
+            // Transient playback-error banner. Surfaces the latest
+            // failure from StationPlayback (rule eval crash, zero
+            // matches, etc.) so the user gets a clear hint instead of
+            // a silent no-op. Auto-dismisses after a short window so a
+            // stale message doesn't linger on Home. Tap-to-dismiss
+            // also clears it via clearPlaybackError.
+            val playbackError by stationPlayback.playbackError.collectAsState()
+            playbackError?.let { msg ->
+                androidx.compose.runtime.LaunchedEffect(msg) {
+                    kotlinx.coroutines.delay(5_000)
+                    stationPlayback.clearPlaybackError()
+                }
+                androidx.compose.material3.Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        // Role.Button + a content description tells
+                        // TalkBack / Narrator that this is interactive
+                        // (tap-to-dismiss) and reads the error text
+                        // itself rather than a generic "Surface". A
+                        // plain clickable Surface gets announced as a
+                        // non-interactive container, which hides the
+                        // dismiss affordance from non-visual users.
+                        .clickable(
+                            onClickLabel = "Dismiss error",
+                            role = androidx.compose.ui.semantics.Role.Button,
+                        ) { stationPlayback.clearPlaybackError() },
+                    color = androidx.compose.material3.MaterialTheme.colorScheme.errorContainer,
+                ) {
+                    androidx.compose.material3.Text(
+                        text = msg,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                        color = androidx.compose.material3.MaterialTheme.colorScheme.onErrorContainer,
+                    )
                 }
             }
             MiniPlayer(onExpand = { navTo(AppScreen.NowPlaying) })
