@@ -1,95 +1,80 @@
 # RadioShed
 
-Cross-platform music application — **Android 13+**, **Windows 11+**,
-**Linux** (should-work-but-untested), and **iOS 16+** (deferred —
-needs Mac access) — built in a single repository using **Kotlin
-Multiplatform** + **Compose Multiplatform**. Replaces SiriusXM /
-Spotify / YouTube Music with a station-centric experience over the
-user's own local music library, with optional online enrichment.
+RadioShed is a private, station-centric music app for a local music library.
+It targets **Android 13+**, **Windows 11+**, **Linux**, and eventually
+**iOS 16+**. It is built with Kotlin Multiplatform and Compose Multiplatform.
 
-> **License: proprietary.** Source code, compiled binaries, and
-> documentation in this repository are not for redistribution, resale,
-> public sharing, or mirroring. See `LICENSE` for full terms.
->
-> **Specification:** see [`SPEC.md`](./SPEC.md) for the full product
-> spec, feature catalog, and phased build plan with checkbox tasks.
->
-> **User-facing docs:** [`USER_GUIDE.md`](./USER_GUIDE.md) for
-> end-user feature walkthroughs, [`FAQ.md`](./FAQ.md) for common
-> confusion points.
+RadioShed is meant to replace shuffle-heavy streaming apps with something
+closer to personal radio: scan your music, build stations, tune playback rules,
+save playlists, fetch optional metadata, and keep your library under your own
+control.
 
-## Repository layout
+> **License: proprietary.** Source code, compiled binaries, and documentation
+> in this repository are not for redistribution, resale, public sharing, or
+> mirroring. See `LICENSE` for full terms.
 
-There is **one Gradle module** — `:composeApp` — with three platform
-source sets. iOS source lives in-tree but is currently stubbed
-(needs Mac access for build + test); Android and Windows desktop
-both build and run on the dev machine. The `desktopMain` source
-set was built to be cross-platform JVM (Compose Desktop +
-VLCJ + JDBC SQLite) — Linux is a should-work-but-untested target;
-the build script already configures `TargetFormat.Deb` so
-`packageDistributionForCurrentOS` from a Linux box would produce
-a .deb without code changes.
+## Status
 
-```
+| Platform | Status |
+| --- | --- |
+| Android 13+ | Primary mobile target. Debug/release APK builds are supported. |
+| Linux x86_64 | Desktop run, app-image directory, single-file `.AppImage`, and `.deb` are verified. |
+| Windows 11 | Compose Desktop target is supported; MSI packaging should be validated on a Windows host. |
+| macOS | Compose Desktop `.dmg` target is configured, but icon packaging needs a Mac lane. |
+| iOS 16+ | Source set exists, but real iOS implementation is deferred until Mac access. |
+
+For the product roadmap, feature list, and phased implementation plan, read
+[`SPEC.md`](./SPEC.md). For user workflows, read [`USER_GUIDE.md`](./USER_GUIDE.md)
+and [`FAQ.md`](./FAQ.md).
+
+## Repository Layout
+
+There is one Gradle module: `:composeApp`.
+
+```text
 RadioShed/
 ├── README.md
-├── SPEC.md                       # Product spec + phased build plan (canonical)
-├── USER_GUIDE.md                 # End-user feature walkthroughs
-├── FAQ.md                        # Common questions / confusion points
-├── CLAUDE.md                     # AI/agent project conventions
-├── AGENTS.md                     # Coding-style conventions for AI tools
-├── CONTRIBUTING.md               # Branch / commit / PR conventions
-├── LICENSE                       # Proprietary
+├── SPEC.md
+├── USER_GUIDE.md
+├── FAQ.md
+├── AGENTS.md                     # Authoritative AI-agent/project guide
+├── CLAUDE.md                     # Stub redirecting Claude agents to AGENTS.md
+├── CONTRIBUTING.md
+├── LICENSE
 ├── settings.gradle.kts
 ├── build.gradle.kts
 ├── gradle.properties
 ├── gradle/
-│   └── libs.versions.toml        # Dependency versions
+│   └── libs.versions.toml
 └── composeApp/
     ├── build.gradle.kts
     └── src/
-        ├── commonMain/           # Pure-Kotlin domain, data, UI, audio orchestration
-        ├── androidMain/          # Android 13+ — Media3, jaudiotagger, AA, widgets
-        ├── desktopMain/          # Windows 11 — VLCJ audio, Compose Desktop, AWT dialogs
-        ├── iosMain/              # iOS 16+ stub — AVAudioEngine actuals (deferred)
-        └── commonTest/           # JVM-runnable Kotlin tests (executed via Android variant)
+        ├── commonMain/           # Shared domain, data, UI, source, station logic
+        ├── androidMain/          # Android app, Media3, Android Auto, widgets
+        ├── desktopMain/          # Windows/Linux desktop, VLCJ, AWT dialogs
+        ├── iosMain/              # iOS stubs pending Mac access
+        └── commonTest/           # Shared JVM-runnable tests
 ```
 
-## Tech stack
+## Prerequisites
 
-| Layer                   | Choice                                                      |
-| ----------------------- | ----------------------------------------------------------- |
-| Shared business logic   | Kotlin Multiplatform (KMP)                                  |
-| Shared UI               | Compose Multiplatform 1.10.x                                |
-| Database                | SQLDelight 2.1 (Android: requery sqlite-android; Desktop: JdbcSqliteDriver) |
-| HTTP                    | JDK `HttpURLConnection` + `kotlinx.serialization`           |
-| DI                      | Koin (`platformModule` expect val + `sharedModule`)         |
-| Audio (Android)         | Media3 / ExoPlayer + `MediaLibraryService`                  |
-| Audio (Desktop)         | VLCJ 4.x (libvlc bindings — Windows + Linux + macOS)        |
-| Audio (iOS, deferred)   | AVAudioEngine                                               |
-| Tag I/O                 | jaudiotagger (Android + Desktop; iOS deferred)              |
-| In-car (Android)        | Android Auto via `MediaLibraryService` browse + voice search |
-| In-car (iOS, deferred)  | CarPlay (audio-template app)                                |
-| Min SDK                 | Android 13 (API 33) / Windows 11 / Linux (any modern DE) / iOS 16 |
-| Target SDK              | Android 14 (API 35)                                         |
-| Build system            | Gradle (Kotlin DSL), JDK 17                                 |
+### All Development Hosts
 
-## Toolchain on the dev machine (Windows 11)
+- JDK 17. Gradle/AGP requires JDK 17 even though some bytecode targets are
+  lower.
+- Network access for the first Gradle sync and dependency download.
+- Git and a normal shell environment.
 
-The Android side, the Windows desktop side, and all shared Kotlin
-code build fully on Windows. iOS builds require macOS.
+### Android
 
-| Component             | Version / Location                                                       |
-| --------------------- | ------------------------------------------------------------------------ |
-| OS                    | Windows 11                                                               |
-| JDK                   | Microsoft OpenJDK 17 — `C:\Program Files\Microsoft\jdk-17.0.18.8-hotspot` |
-| Android SDK           | `C:\android-sdk`                                                         |
-| `adb`                 | `C:\android-sdk\platform-tools\adb.exe` (NOT on PATH)                    |
-| VLC (for desktop run) | Standard install from videolan.org — libvlc auto-discovered              |
+- Android SDK with API 35 compile/target packages.
+- Android 13+ device or emulator.
+- `adb`; on the Windows dev machine it lives at
+  `C:\android-sdk\platform-tools\adb.exe`.
 
-Persistent user-level environment variables:
+Recommended Windows environment:
 
-```
+```text
 ANDROID_HOME      = C:\android-sdk
 ANDROID_SDK_ROOT  = C:\android-sdk
 JAVA_HOME         = C:\Program Files\Microsoft\jdk-17.0.18.8-hotspot
@@ -98,248 +83,302 @@ PATH              += %ANDROID_HOME%\platform-tools
                      %ANDROID_HOME%\emulator
 ```
 
-Variables set via `setx` / the user registry take effect only in **new**
-shells. If a current shell does not see them, open a fresh terminal.
+Open a fresh terminal after changing persistent environment variables.
 
-### iOS builds (require macOS)
+### Desktop Playback
 
-iOS code can be authored from Windows, but compilation, simulator
-runs, and App Store submission all require macOS. The iOS source
-set under `composeApp/src/iosMain/` is currently stubbed — most
-platform peers return `Null*` impls. Real iOS implementation is
-deferred to a Mac-equipped session.
+Desktop playback uses VLCJ and system `libvlc` 3.x.
 
-## Common build commands
+- Windows: install VLC from VideoLAN.
+- Linux: install the distro VLC package, for example `vlc` on Debian/Ubuntu,
+  Fedora/RPMFusion, Arch, or CachyOS.
+- macOS: install VLC.app.
+
+Without `libvlc`, the desktop app can launch but playback fails when audio is
+opened.
+
+### Linux Packaging
+
+Linux x86_64 packaging can produce three useful outputs:
+
+- app-image directory from Compose/JPackage,
+- true single-file `.AppImage`,
+- `.deb` installer.
+
+Additional tools:
+
+- `.deb` packaging needs `dpkg-deb` on PATH.
+- The single-file `.AppImage` task uses AppImageKit `appimagetool`.
+  If `APPIMAGETOOL=/path/to/appimagetool` is set or `appimagetool` is on PATH,
+  Gradle uses that. Otherwise Gradle downloads the x86_64 AppImageKit tool to
+  `composeApp/build/compose/tools/`.
+- Running AppImages on some Linux installs may require FUSE. If FUSE is not
+  available, run with `--appimage-extract-and-run`.
+
+## Build From Source
+
+Run commands from the repository root.
+
+### Android
 
 ```bash
-# Build the Android debug APK
+# Build debug APK
 ./gradlew :composeApp:assembleDebug
-# Output: composeApp/build/outputs/apk/debug/composeApp-debug.apk
 
-# Install latest debug build on the connected device
-"C:\android-sdk\platform-tools\adb.exe" install -r \
-    composeApp/build/outputs/apk/debug/composeApp-debug.apk
+# Build release APK
+./gradlew :composeApp:assembleRelease
 
-# Run JVM-side unit tests (commonTest sources execute via the Android variant)
+# Run shared/unit tests through the Android JVM test variant
 ./gradlew :composeApp:testDebugUnitTest
 
-# Single test class
+# Run one test class
 ./gradlew :composeApp:testDebugUnitTest --tests "com.visorcraft.radioshed.data.SearchDslTest"
+```
 
-# Build the desktop distributable for the current OS
-./gradlew :composeApp:createDistributable
-# Windows output: composeApp/build/compose/binaries/main/app/RadioShed/RadioShed.exe
-# Linux output:   composeApp/build/compose/binaries/main/app/RadioShed/bin/RadioShed
-# macOS output:   composeApp/build/compose/binaries/main/app/RadioShed.app/
+Debug APK output:
 
-# Build a platform-native installer (.msi / .deb / .dmg) from this host
-./gradlew :composeApp:packageDistributionForCurrentOS
+```text
+composeApp/build/outputs/apk/debug/composeApp-debug.apk
+```
 
-# Run the desktop app from Gradle (live reload during development)
+### Desktop Development Run
+
+```bash
 ./gradlew :composeApp:run
+```
 
-# Force SQLDelight regen after editing .sq / .sqm files
+This compiles the desktop target and launches the Compose Desktop window.
+It is the fastest loop for UI and shared logic work.
+
+### Desktop App-Image Directory
+
+```bash
+./gradlew :composeApp:createDistributable
+```
+
+Outputs:
+
+- Windows: `composeApp/build/compose/binaries/main/app/RadioShed/RadioShed.exe`
+- Linux: `composeApp/build/compose/binaries/main/app/RadioShed/bin/RadioShed`
+- macOS: `composeApp/build/compose/binaries/main/app/RadioShed.app/`
+
+This is a runnable directory tree, not a single-file Linux AppImage.
+
+### Linux Single-File AppImage
+
+```bash
+./gradlew :composeApp:packageSingleFileAppImage
+```
+
+Output:
+
+```text
+composeApp/build/compose/binaries/main/appimage/RadioShed-<version>-x86_64.AppImage
+```
+
+Example:
+
+```bash
+chmod +x composeApp/build/compose/binaries/main/appimage/RadioShed-1.0.0-x86_64.AppImage
+composeApp/build/compose/binaries/main/appimage/RadioShed-1.0.0-x86_64.AppImage
+```
+
+### Current-OS Packages
+
+```bash
+./gradlew :composeApp:packageDistributionForCurrentOS
+```
+
+On Linux x86_64, this builds:
+
+- app-image directory,
+- single-file `.AppImage`,
+- `.deb`.
+
+Linux outputs:
+
+```text
+composeApp/build/compose/binaries/main/app/RadioShed/
+composeApp/build/compose/binaries/main/appimage/RadioShed-<version>-x86_64.AppImage
+composeApp/build/compose/binaries/main/deb/radioshed_<version>_amd64.deb
+```
+
+On Windows, this builds the configured Windows package. On macOS, this builds
+the configured macOS package when run from a Mac with the required icon tooling.
+
+### SQLDelight Regeneration
+
+After editing `.sq` or `.sqm` files:
+
+```bash
 ./gradlew :composeApp:generateCommonMainRadioShedDatabaseInterface --rerun-tasks
+```
 
-# iOS framework (macOS only)
+### iOS Framework
+
+Requires macOS:
+
+```bash
 ./gradlew :composeApp:assembleXCFramework
 ```
 
-## Quick smoke-test path
+## Installation And Running
 
-After cloning + initial Gradle sync:
+### Android Debug Install
 
 ```bash
-# Android
-./gradlew :composeApp:testDebugUnitTest :composeApp:assembleDebug
 "C:\android-sdk\platform-tools\adb.exe" install -r \
     composeApp/build/outputs/apk/debug/composeApp-debug.apk
-
-# Desktop
-./gradlew :composeApp:createDistributable
-start "" "composeApp\build\compose\binaries\main\app\RadioShed\RadioShed.exe"
 ```
 
-If both succeed the toolchain is healthy. If `RadioShed.exe`
-launches with a `java/sql/DriverManager` error, the bundled JRE is
-missing the `java.sql` module — see `composeApp/build.gradle.kts`
-`nativeDistributions { modules(...) }` (already configured; the
-error indicates a stale build cache, run `--rerun-tasks`).
+On Linux/macOS with `adb` on PATH:
+
+```bash
+adb install -r composeApp/build/outputs/apk/debug/composeApp-debug.apk
+```
+
+### Linux AppImage
+
+The AppImage is the easiest Linux artifact to test or share privately.
+
+```bash
+chmod +x composeApp/build/compose/binaries/main/appimage/RadioShed-1.0.0-x86_64.AppImage
+composeApp/build/compose/binaries/main/appimage/RadioShed-1.0.0-x86_64.AppImage
+```
+
+If FUSE is not available:
+
+```bash
+composeApp/build/compose/binaries/main/appimage/RadioShed-1.0.0-x86_64.AppImage \
+    --appimage-extract-and-run
+```
+
+### Linux Deb
+
+On Debian-based systems:
+
+```bash
+sudo apt install ./composeApp/build/compose/binaries/main/deb/radioshed_1.0.0_amd64.deb
+```
+
+Or:
+
+```bash
+sudo dpkg -i composeApp/build/compose/binaries/main/deb/radioshed_1.0.0_amd64.deb
+sudo apt -f install
+```
+
+The `.deb` installs the application under `/opt/radioshed/` and registers a
+desktop launcher.
+
+### Desktop Directory Build
+
+Use this when you want the unpacked application rather than an installer:
+
+```bash
+composeApp/build/compose/binaries/main/app/RadioShed/bin/RadioShed
+```
+
+On Windows, run:
+
+```bat
+composeApp\build\compose\binaries\main\app\RadioShed\RadioShed.exe
+```
+
+## First-Run Setup
+
+1. Install VLC/libvlc before desktop playback testing.
+2. Launch RadioShed.
+3. Add one or more music folders from the onboarding/library settings flow.
+4. Run a scan and wait for metadata import to finish.
+5. Review detected artists, albums, folders, and genres.
+6. Create or edit stations to match how you listen.
+7. Set network policy before enabling online enrichment if you want to limit
+   background lookups.
+8. Create a backup once your folders, settings, stations, and playlists look
+   correct.
+
+Keep music paths stable after scanning. If you move a library, update folders
+inside RadioShed and rescan so playlists, station rules, artwork, and history
+continue to resolve cleanly.
+
+## Best-Practice Usage
+
+- Prefer a stable top-level music folder per device or synced library. Avoid
+  scanning temporary download directories.
+- Keep filenames and tags reasonably clean before large imports. RadioShed can
+  help organize metadata, but clean source tags reduce duplicate artists and
+  albums.
+- Use stations for repeat listening patterns and playlists for hand-picked
+  track lists.
+- Set online policy to **Wi-Fi only** or **Never** before travel or metered
+  connections.
+- Back up after major setup work: first scan, station edits, playlist imports,
+  and settings changes.
+- On desktop, leave VLC installed and updated. RadioShed uses system libvlc
+  rather than bundling audio decoders.
+- If playback behavior seems wrong after a large library change, rescan folders
+  before editing station rules.
+- For portable Linux testing, prefer the single-file `.AppImage`; for a
+  machine you control long-term, prefer `.deb` on Debian-based systems.
+
+## Development Best Practices
+
+- Read [`AGENTS.md`](./AGENTS.md) before making code changes. It is the
+  authoritative engineering and agent guide.
+- Keep `CLAUDE.md` as a redirect stub only.
+- Run focused tests for touched logic, then at least
+  `./gradlew :composeApp:compileKotlinDesktop` for shared UI/desktop work.
+- After SQL changes, run the SQLDelight regeneration task with `--rerun-tasks`.
+- On Linux packaging changes, run:
+
+```bash
+./gradlew :composeApp:packageSingleFileAppImage --rerun-tasks
+./gradlew :composeApp:packageDistributionForCurrentOS --rerun-tasks
+```
 
 ## Troubleshooting
 
-- **`SDK location not found`** — ensure `ANDROID_HOME` is set in the
-  current shell, or that the project's `local.properties` pins
-  `sdk.dir`.
-- **`Unsupported class file major version`** — confirm `JAVA_HOME`
-  points at JDK 17. AGP requires JDK 17 (the bytecode target is
-  VERSION_11; the toolchain itself is 17).
-- **`libvlc not found` on desktop** — install VLC. On Windows
-  grab the installer from videolan.org; on Linux use the
-  distro's package (`apt install vlc` / `dnf install vlc` —
-  Fedora needs RPMFusion first). `NativeDiscovery` walks the
-  usual install paths and the app falls back to a clear error
-  rather than crashing if libvlc isn't present.
-- **`java/sql/DriverManager` `NoClassDefFoundError` on the
-  packaged desktop EXE** — bundled JRE is missing `java.sql`.
-  Should be fixed by `modules("java.sql", "java.naming")` in
-  `nativeDistributions` already; rebuild with `--rerun-tasks` if
-  it surfaces.
-- **AA "doesn't seem to be working"** — `adb logcat -s
-  RadioShedMS:V` will show the session-callback handshake. Most
-  past issues were `setCustomLayout` thrown exceptions or
-  missing `DEFAULT_SESSION_AND_LIBRARY_COMMANDS` (now both
-  guarded against).
-- **AA cover art shows blank** — `adb logcat -s RadioShedArt:V`
-  shows whether the FileProvider URI was generated and the bytes
-  embed succeeded per track switch.
+- **`SDK location not found`**: set `ANDROID_HOME` / `ANDROID_SDK_ROOT`, or add
+  a local `local.properties` with `sdk.dir`.
+- **`java` not found**: install JDK 17 and set `JAVA_HOME`.
+- **`Unsupported class file major version`**: confirm Gradle is running on
+  JDK 17, not an older JRE.
+- **`libvlc not found` on desktop**: install VLC/libvlc 3.x for the host OS.
+- **Playback opens but no audio starts**: confirm the file path still exists,
+  VLC can play the same file, and the folder was rescanned after moves.
+- **`packageDeb` fails with `Invalid or unsupported type: [deb]`**: install
+  the package that provides `dpkg-deb`.
+- **Single-file `.AppImage` packaging fails before appimagetool runs**: set
+  `APPIMAGETOOL`, put `appimagetool` on PATH, or allow Gradle to download it.
+- **`TargetFormat.AppImage` confusion**: Compose/JPackage's AppImage target
+  creates a directory. The single downloadable file comes from
+  `:composeApp:packageSingleFileAppImage`.
+- **Packaged desktop app reports `java/sql/DriverManager` missing**: rebuild
+  with `--rerun-tasks`; `java.sql` and `java.naming` are configured in
+  `composeApp/build.gradle.kts`.
+- **Android Auto appears stale**: use `adb logcat -s RadioShedMS:V` and
+  `adb logcat -s RadioShedArt:V` to inspect media session and artwork output.
 
-## App icon pipeline
+## App Icon Assets
 
-The app icon (a red shed with a roof-mounted antenna and a single
-circular speaker for the door) lives as a single SVG master at
-`icon/radioshed.svg`. Every platform-specific PNG / ICO that ships
-with the app is rasterized from that source by a PowerShell driver
-at `icon/build_icons.ps1` — both files are checked in. Don't edit
-the rasterized outputs by hand; re-run the script.
+The checked-in cross-platform bitmap is:
 
-### How the icon was generated
-
-1. **Master SVG** — `icon/radioshed.svg` (512×512 viewBox). Plain
-   SVG with `<rect>`, `<polygon>`, `<circle>`, and stroked `<path>`
-   primitives. No external fonts or rasters referenced; the icon
-   is fully self-contained vector geometry. Z-order: antenna →
-   radio waves → roof → shed body → shadows → speaker, so the
-   speaker stays on top of the shed and the roof sits above the
-   wave arcs.
-2. **Rasterization** — `icon/build_icons.ps1` shells out to
-   ImageMagick 7 (`magick`). Each output PNG is rendered via a
-   two-stage approach: rasterize the SVG at 2× the target pixel
-   size from a high DPI (1024), then Lanczos-downsample to the
-   final size. This gives noticeably crisper antialiasing at the
-   16/24/48 px end of the range than a single-pass rasterize.
-3. **Round mipmap variant** — for each Android density, the
-   square mipmap is also composited onto a sky-blue circular fill
-   (`#CDE4F5`) and written as `ic_launcher_round.png`. The fill
-   matches the adaptive-icon background gradient's mid-tone so
-   circular-mask launchers and adaptive-shape launchers look
-   visually consistent. (minSdk=30 means real devices use the
-   vector adaptive icon; the round PNG is a legacy fallback.)
-4. **Windows multi-resolution ICO** — `radioshed.ico` is assembled
-   by rendering seven separate PNGs (16, 24, 32, 48, 64, 128,
-   256) and packing them into a single .ico container. Explorer
-   chrome reaches into the right embedded image per surface
-   (16 for detail-view, 24 for menu strips, 32 for desktop, 256
-   for the large-icon view), so each context gets a hand-tuned
-   rasterization rather than a blurry downscale.
-5. **Android adaptive icon** — the foreground (`composeApp/src/
-   androidMain/res/drawable-v24/ic_launcher_foreground.xml`) and
-   background (`drawable/ic_launcher_background.xml`) are
-   hand-authored Android VectorDrawables, not bitmaps. Designed
-   directly in the 108×108 adaptive-icon viewport with critical
-   content kept inside the 72×72 safe zone; decorative bits (the
-   radio-wave arcs, the outer pixels of the roof) intentionally
-   spill past so circular-mask and teardrop-mask launchers reveal
-   more context. Colours and proportions mirror the SVG so
-   legacy mipmap PNGs and the vector adaptive icon read as the
-   same mark. If you change either, change the other too and
-   re-run `build_icons.ps1`.
-
-### Regenerating
-
-```powershell
-# From the repo root, with ImageMagick 7 on PATH (or installed at
-# the default C:\Program Files\ImageMagick-7.1.2-Q16-HDRI\):
-pwsh -File icon/build_icons.ps1
+```text
+composeApp/src/commonMain/composeResources/drawable/radioshed.png
 ```
 
-For Linux / macOS contributors without PowerShell, the same
-rasterization can be done with `magick` directly:
+It is 256×256 and feeds the shared welcome screen, the desktop runtime icon,
+the Linux `.deb`, and the single-file `.AppImage`.
 
-```bash
-# Example: Android xxxhdpi (192×192)
-magick -background none -density 1024 icon/radioshed.svg \
-    -resize 384x384 -filter Lanczos -resize 192x192 \
-    composeApp/src/androidMain/res/mipmap-xxxhdpi/ic_launcher.png
+Android launcher icons live under `composeApp/src/androidMain/res/`, including
+adaptive icon XML and legacy mipmap PNGs. If icon artwork changes, keep the
+Android adaptive icon, Android mipmaps, and shared Compose PNG visually in sync.
 
-# Example: Windows .ico (multi-res)
-for s in 16 24 32 48 64 128 256; do
-    magick -background none -density 1024 icon/radioshed.svg \
-        -resize "$((s*2))x$((s*2))" -filter Lanczos -resize "${s}x${s}" \
-        "/tmp/icon-${s}.png"
-done
-magick /tmp/icon-{16,24,32,48,64,128,256}.png \
-    composeApp/src/desktopMain/resources/icon/radioshed.ico
-```
+## Documentation Map
 
-Porting the PowerShell driver to a portable shell/bash script
-once the project gets a Linux CI lane is tracked in SPEC §20.
-
-### Output locations the script writes
-
-| File                                                                           | Pixel size | Used by                                                |
-| ------------------------------------------------------------------------------ | ---------- | ------------------------------------------------------ |
-| `composeApp/src/androidMain/res/mipmap-mdpi/ic_launcher.png`                   | 48×48      | Android launchers, pre-26 fallback                     |
-| `composeApp/src/androidMain/res/mipmap-mdpi/ic_launcher_round.png`             | 48×48      | Same, round-mask launchers                             |
-| `composeApp/src/androidMain/res/mipmap-hdpi/ic_launcher.png`                   | 72×72      | Same                                                   |
-| `composeApp/src/androidMain/res/mipmap-hdpi/ic_launcher_round.png`             | 72×72      | Same                                                   |
-| `composeApp/src/androidMain/res/mipmap-xhdpi/ic_launcher.png`                  | 96×96      | Same                                                   |
-| `composeApp/src/androidMain/res/mipmap-xhdpi/ic_launcher_round.png`            | 96×96      | Same                                                   |
-| `composeApp/src/androidMain/res/mipmap-xxhdpi/ic_launcher.png`                 | 144×144    | Same; also the size Android Auto pulls from manifest   |
-| `composeApp/src/androidMain/res/mipmap-xxhdpi/ic_launcher_round.png`           | 144×144    | Same                                                   |
-| `composeApp/src/androidMain/res/mipmap-xxxhdpi/ic_launcher.png`                | 192×192    | Same                                                   |
-| `composeApp/src/androidMain/res/mipmap-xxxhdpi/ic_launcher_round.png`          | 192×192    | Same                                                   |
-| `composeApp/src/desktopMain/resources/icon/radioshed.png`                      | 256×256    | Compose Window runtime icon (title bar + taskbar)      |
-| `composeApp/src/desktopMain/resources/icon/radioshed-512.png`                  | 512×512    | Linux `.deb` installer icon (Compose nativeDistributions) |
-| `composeApp/src/desktopMain/resources/icon/radioshed.ico`                      | multi-res  | Windows `.msi` installer icon (16/24/32/48/64/128/256) |
-
-The Android adaptive-icon VectorDrawables under
-`composeApp/src/androidMain/res/drawable*/ic_launcher_{foreground,background}.xml`
-are NOT generated by the script — they're hand-authored XML kept
-in lock-step with the SVG. The adaptive-icon manifest pointer at
-`composeApp/src/androidMain/res/mipmap-anydpi-v26/ic_launcher.xml`
-(and `ic_launcher_round.xml`) is unchanged.
-
-### Platforms each output serves
-
-- **Android phone launcher / Pixel / Galaxy launcher** — adaptive
-  icon from `drawable-v24/ic_launcher_foreground.xml` +
-  `drawable/ic_launcher_background.xml`. PNG mipmaps are the
-  pre-26 fallback only.
-- **Android Auto** — the MediaLibraryService presents whatever
-  `application@android:icon` resolves to via the manifest, which
-  is the same `@mipmap/ic_launcher`. AA car-head-unit displays
-  pull from the largest available density (xxhdpi at 144 or
-  xxxhdpi at 192).
-- **Windows 11 title bar + taskbar (runtime)** — `radioshed.png`
-  via `Window(icon = ...)` in `Main.kt`.
-- **Windows 11 installer (.msi) / Start Menu shortcut /
-  Explorer chrome** — `radioshed.ico` via
-  `compose.desktop.nativeDistributions { windows { iconFile.set
-  (...) } }`.
-- **Linux Wayland title bar + taskbar (runtime)** — same
-  `radioshed.png` as Windows runtime, via the JVM window-icon
-  mechanism. GNOME / KDE strip the title bar entirely on
-  Wayland-CSD apps but still display the icon in the dock /
-  overview.
-- **Linux installer (.deb)** — `radioshed-512.png` via
-  `nativeDistributions { linux { iconFile.set(...) } }`. The
-  packager installs it under
-  `/opt/RadioShed/lib/RadioShed.png` and registers a `.desktop`
-  file pointing at it.
-- **macOS .dmg** — not yet generated. Needs `radioshed.icns`
-  which requires the `iconutil` CLI (macOS-only). The
-  `nativeDistributions { macOS { } }` block in
-  `composeApp/build.gradle.kts` is wired but commented out
-  pending a Mac CI lane.
-
-## Where to go next
-
-- Read **`SPEC.md`** — the product spec, including responsive-design
-  requirements (§1.1), platform parity matrix (§3), and the phased
-  build plan with checkbox tasks (§20). The latest batch entries
-  describe the most recently shipped work.
-- For end-user docs, see **`USER_GUIDE.md`** and **`FAQ.md`**.
-- For agent / AI-tool conventions, see **`CLAUDE.md`** (project
-  context for Claude Code) and **`AGENTS.md`** (coding-style
-  conventions).
+- [`USER_GUIDE.md`](./USER_GUIDE.md): user workflows and feature walkthroughs.
+- [`FAQ.md`](./FAQ.md): common questions and confusion points.
+- [`SPEC.md`](./SPEC.md): product specification and phased roadmap.
+- [`AGENTS.md`](./AGENTS.md): authoritative engineering/agent instructions.
+- [`CLAUDE.md`](./CLAUDE.md): redirect stub for Claude-family agents.
