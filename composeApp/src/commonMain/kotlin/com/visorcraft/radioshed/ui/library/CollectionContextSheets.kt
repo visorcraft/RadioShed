@@ -13,13 +13,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.MergeType
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.MergeType
-import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Radio
@@ -279,7 +279,7 @@ fun ArtistContextSheet(
                 // Useful for collapsing "Jennie" + "Jennie (제니)" or
                 // mismatched-case duplicates from old scans.
                 CollectionActionRow(
-                    icon = Icons.Filled.MergeType,
+                    icon = Icons.AutoMirrored.Filled.MergeType,
                     label = "Merge into another artist…",
                     onClick = onMergeArtist,
                 )

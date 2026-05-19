@@ -1,6 +1,10 @@
+import org.gradle.api.file.FileSystemOperations
+import org.gradle.process.ExecOperations
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.net.URI
 import java.util.Properties
+import javax.inject.Inject
 
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
@@ -32,6 +36,11 @@ val appVersionPatch = requiredVersionProp("versionPatch").toInt()
 val appVersionName = "$appVersionMajor.$appVersionMinor.$appVersionPatch"
 val appVersionCode = requiredVersionProp("versionCode").toInt()
 val appBuildDate = requiredVersionProp("buildDate")
+val appImageToolUrl =
+    "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage"
+val osName = System.getProperty("os.name").lowercase()
+val osArch = System.getProperty("os.arch").lowercase()
+val isLinuxX64Host = osName.contains("linux") && osArch in setOf("amd64", "x86_64")
 
 kotlin {
     // Silence the "expect/actual classes in Beta" warning — this is an intentional
@@ -276,7 +285,12 @@ compose.desktop {
     application {
         mainClass = "com.visorcraft.radioshed.MainKt"
         nativeDistributions {
-            targetFormats(TargetFormat.Msi, TargetFormat.Dmg, TargetFormat.Deb)
+            targetFormats(
+                TargetFormat.AppImage,
+                TargetFormat.Msi,
+                TargetFormat.Dmg,
+                TargetFormat.Deb,
+            )
             packageName = "RadioShed"
             // Compose Desktop's per-OS validators reject MAJOR=0
             // (DMG specifically requires MAJOR > 0), so when
@@ -313,13 +327,13 @@ compose.desktop {
             // - macOS .dmg:  .icns (not yet generated — DMG packaging
             //   only runs on macOS hosts which we don't have today;
             //   wire this when a Mac CI lane lands).
-            // - Linux .deb:  the largest PNG we ship (512×512); dpkg
-            //   installs it under hicolor/<size>/apps and the DE
-            //   downscales for the taskbar / window list.
+            // - Linux .deb:  the shared Compose PNG; dpkg installs it
+            //   under hicolor/<size>/apps and the DE downscales for
+            //   the taskbar / window list.
             //
-            // All three files are produced by `icon/build_icons.ps1`
-            // (or the equivalent bash variant on Linux). Re-run that
-            // script after editing icon/radioshed.svg to refresh.
+            // Keep the Linux package icon pointed at the common
+            // Compose resource so `:composeApp:run` and the `.deb`
+            // launcher use the same checked-in bitmap.
             windows {
                 iconFile.set(
                     project.file(
@@ -330,7 +344,7 @@ compose.desktop {
             linux {
                 iconFile.set(
                     project.file(
-                        "src/desktopMain/resources/icon/radioshed-512.png",
+                        "src/commonMain/composeResources/drawable/radioshed.png",
                     ),
                 )
             }
@@ -341,6 +355,176 @@ compose.desktop {
             // section.
             // macOS { iconFile.set(project.file("src/desktopMain/resources/icon/radioshed.icns")) }
         }
+    }
+}
+
+val appImageToolFile = layout.buildDirectory.file("compose/tools/appimagetool-x86_64.AppImage")
+
+abstract class DownloadAppImageToolTask : DefaultTask() {
+    @get:Input abstract val downloadUrl: Property<String>
+    @get:Input abstract val appImageToolEnv: Property<String>
+    @get:Input abstract val pathEnv: Property<String>
+    @get:OutputFile abstract val outputFile: RegularFileProperty
+
+    @TaskAction
+    fun download() {
+        if (findAppImageTool(appImageToolEnv.get(), pathEnv.get()) != null) return
+
+        val toolFile = outputFile.get().asFile
+        if (toolFile.canExecute()) return
+
+        toolFile.parentFile.mkdirs()
+        URI(downloadUrl.get()).toURL().openStream().use { input ->
+            toolFile.outputStream().use { output ->
+                input.copyTo(output)
+            }
+        }
+        toolFile.setExecutable(true)
+    }
+
+    private fun findAppImageTool(configuredPath: String, path: String): File? {
+        configuredPath
+            .takeIf { it.isNotBlank() }
+            ?.let { File(it) }
+            ?.takeIf { it.canExecute() }
+            ?.let { return it }
+
+        return path
+            .split(File.pathSeparator)
+            .asSequence()
+            .map { File(it, "appimagetool") }
+            .firstOrNull { it.canExecute() }
+    }
+}
+
+abstract class PackageSingleFileAppImageTask @Inject constructor(
+    private val fileSystemOperations: FileSystemOperations,
+    private val execOperations: ExecOperations,
+) : DefaultTask() {
+    @get:Input abstract val versionName: Property<String>
+    @get:Input abstract val downloadUrl: Property<String>
+    @get:Input abstract val hostOsName: Property<String>
+    @get:Input abstract val hostOsArch: Property<String>
+    @get:Input abstract val appImageToolEnv: Property<String>
+    @get:Input abstract val pathEnv: Property<String>
+    @get:Internal
+    abstract val downloadedAppImageTool: RegularFileProperty
+    @get:InputDirectory @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val sourceDir: DirectoryProperty
+    @get:Internal abstract val appDir: DirectoryProperty
+    @get:OutputFile abstract val outputFile: RegularFileProperty
+
+    @TaskAction
+    fun packageAppImage() {
+        require(isLinuxX64Host()) {
+            "packageSingleFileAppImage currently supports Linux x86_64 hosts only."
+        }
+
+        val source = sourceDir.get().asFile
+        val target = appDir.get().asFile
+        val output = outputFile.get().asFile
+        val tool = findAppImageTool(appImageToolEnv.get(), pathEnv.get())
+            ?: downloadedAppImageTool.get().asFile.takeIf { it.canExecute() }
+            ?: error(
+                "appimagetool is unavailable; set APPIMAGETOOL, put appimagetool on PATH, " +
+                    "or allow Gradle to download ${downloadUrl.get()}",
+            )
+
+        fileSystemOperations.delete {
+            delete(target)
+        }
+        fileSystemOperations.copy {
+            from(source)
+            into(target)
+        }
+
+        target.resolve("AppRun").apply {
+            writeText(
+                """
+                #!/bin/sh
+                HERE="$(dirname "$(readlink -f "${'$'}0")")"
+                exec "${'$'}HERE/bin/RadioShed" "${'$'}@"
+                """.trimIndent() + "\n",
+            )
+            setExecutable(true)
+        }
+        target.resolve("radioshed.desktop").writeText(
+            """
+            [Desktop Entry]
+            Type=Application
+            Name=RadioShed
+            Exec=RadioShed
+            Icon=radioshed
+            Categories=AudioVideo;Audio;Player;
+            Terminal=false
+            """.trimIndent() + "\n",
+        )
+        fileSystemOperations.copy {
+            from(target.resolve("lib/RadioShed.png"))
+            into(target)
+            rename { "radioshed.png" }
+        }
+
+        output.parentFile.mkdirs()
+        output.delete()
+        execOperations.exec {
+            executable = tool.absolutePath
+            args("-n", target.absolutePath, output.absolutePath)
+            environment("ARCH", "x86_64")
+            environment("VERSION", versionName.get())
+            environment("APPIMAGE_EXTRACT_AND_RUN", "1")
+        }.assertNormalExitValue()
+    }
+
+    private fun isLinuxX64Host(): Boolean =
+        hostOsName.get().contains("linux") && hostOsArch.get() in setOf("amd64", "x86_64")
+
+    private fun findAppImageTool(configuredPath: String, path: String): File? {
+        configuredPath
+            .takeIf { it.isNotBlank() }
+            ?.let { File(it) }
+            ?.takeIf { it.canExecute() }
+            ?.let { return it }
+
+        return path
+            .split(File.pathSeparator)
+            .asSequence()
+            .map { File(it, "appimagetool") }
+            .firstOrNull { it.canExecute() }
+    }
+}
+
+val downloadAppImageTool = tasks.register<DownloadAppImageToolTask>("downloadAppImageTool") {
+    group = "distribution"
+    description = "Download appimagetool for building a single-file Linux AppImage."
+    downloadUrl.set(appImageToolUrl)
+    appImageToolEnv.set(providers.environmentVariable("APPIMAGETOOL").orElse(""))
+    pathEnv.set(providers.environmentVariable("PATH").orElse(""))
+    outputFile.set(appImageToolFile)
+}
+
+val packageSingleFileAppImage = tasks.register<PackageSingleFileAppImageTask>("packageSingleFileAppImage") {
+    group = "distribution"
+    description = "Package the desktop app-image directory as a single-file Linux .AppImage."
+    dependsOn("packageAppImage", downloadAppImageTool)
+
+    versionName.set(appVersionName)
+    downloadUrl.set(appImageToolUrl)
+    hostOsName.set(osName)
+    hostOsArch.set(osArch)
+    appImageToolEnv.set(providers.environmentVariable("APPIMAGETOOL").orElse(""))
+    pathEnv.set(providers.environmentVariable("PATH").orElse(""))
+    downloadedAppImageTool.set(appImageToolFile)
+    sourceDir.set(layout.buildDirectory.dir("compose/binaries/main/app/RadioShed"))
+    appDir.set(layout.buildDirectory.dir("compose/tmp/singleFileAppImage/RadioShed.AppDir"))
+    outputFile.set(
+        layout.buildDirectory.file("compose/binaries/main/appimage/RadioShed-$appVersionName-x86_64.AppImage"),
+    )
+}
+
+if (isLinuxX64Host) {
+    tasks.matching { it.name == "packageDistributionForCurrentOS" }.configureEach {
+        dependsOn(packageSingleFileAppImage)
     }
 }
 

@@ -64,11 +64,9 @@ fun main() {
 }
 
 /**
- * Load the title-bar / taskbar icon from the bundled resource at
- * `composeApp/src/desktopMain/resources/icon/radioshed.png`
- * (256×256). The PNG is rasterized from `icon/radioshed.svg` via
- * `icon/build_icons.ps1` — re-run that script after editing the
- * master SVG.
+ * Load the title-bar / taskbar icon from the bundled Compose
+ * resource at `composeApp/src/commonMain/composeResources/drawable/radioshed.png`
+ * (256×256), which is shared with the in-app welcome screen.
  *
  * 256×256 is enough for every desktop OS — Windows, macOS, and
  * most Linux DEs auto-downscale for taskbar / dock display and
@@ -79,12 +77,15 @@ fun main() {
  */
 private fun renderAppIcon(): BitmapPainter {
     val stream = Thread.currentThread().contextClassLoader
-        .getResourceAsStream("icon/radioshed.png")
-        ?: error("icon/radioshed.png not on the classpath — run icon/build_icons.ps1")
+        .getResourceAsStream(APP_ICON_RESOURCE)
+        ?: error("$APP_ICON_RESOURCE not on the classpath")
     val img = stream.use { ImageIO.read(it) }
-        ?: error("icon/radioshed.png failed to decode")
+        ?: error("$APP_ICON_RESOURCE failed to decode")
     return BitmapPainter(img.toComposeImageBitmap())
 }
+
+private const val APP_ICON_RESOURCE =
+    "composeResources/radioshed.composeapp.generated.resources/drawable/radioshed.png"
 
 /**
  * Resolve the per-user app data directory:
