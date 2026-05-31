@@ -78,7 +78,12 @@ fastlane/test_output
 .DS_Store
 .AppleDouble
 .LSOverride
-Icon
+# macOS Finder custom-folder icon file is literally "Icon" + a carriage
+# return. Match "Icon?" (a trailing char is required) instead of a bare
+# "Icon": with core.ignorecase=true a bare "Icon" also matches our
+# composeApp/src/desktopMain/resources/icon/ directory and hides the
+# Windows installer's radioshed.ico from git.
+Icon?
 ._*
 .Spotlight-V100
 .Trashes
