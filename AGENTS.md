@@ -14,8 +14,9 @@ a stub that redirects Claude-family agents here. The product roadmap lives in
 ## Project Shape
 
 RadioShed is a private Kotlin Multiplatform / Compose Multiplatform music app
-targeting **Android 13+**, **Windows 11+** and **Linux** (Compose Desktop /
-JVM), and **iOS 16+** (the iOS branch is stubbed pending Mac access). There
+targeting **Android 11+** (minSdk 30; target/compileSdk 36), **Windows 11+**
+and **Linux** (Compose Desktop / JVM), and **iOS 16+** (the iOS branch is
+stubbed pending Mac access). There
 is **one Gradle module** — `:composeApp` — with `commonMain`, `androidMain`,
 `desktopMain`, and `iosMain` source sets. There is no separate `shared/`,
 `androidApp/`, or `iosApp` module.
@@ -34,8 +35,7 @@ Stale checkboxes are worse than missing ones.
 ## Common Commands
 
 The main Android dev host is **Windows 11**. `adb` lives at
-`C:\android-sdk\platform-tools\adb.exe` (not on PATH). The Galaxy Fold 7 test
-device id is in `memory/user_device.md`.
+`C:\android-sdk\platform-tools\adb.exe` (not on PATH).
 
 ```bash
 # Build a debug APK (output: composeApp/build/outputs/apk/debug/composeApp-debug.apk)
@@ -68,8 +68,12 @@ device id is in `memory/user_device.md`.
 # Build only the true single-file Linux .AppImage.
 ./gradlew :composeApp:packageSingleFileAppImage
 
-# iOS framework (macOS only)
-./gradlew :composeApp:assembleXCFramework
+# iOS frameworks (macOS only). The iOS targets (iosArm64,
+# iosSimulatorArm64) build a *static* framework named `ComposeApp` via
+# Kotlin/Native link tasks, e.g. linkReleaseFrameworkIosArm64. No
+# XCFramework holder is configured, so there is NO assembleXCFramework
+# task — the iOS branch is stubbed pending Mac access (see Project Shape).
+./gradlew :composeApp:linkReleaseFrameworkIosArm64
 ```
 
 The desktop runtime needs **libvlc** (VLC 3.x) installed on the host. VLCJ
@@ -201,13 +205,16 @@ entries in `SPEC.md` for it.
 
 ### SPEC ↔ Task ↔ Memory Relationship
 
-- The auto-memory at `memory/MEMORY.md` holds non-derivable facts (test
-  device, batching feedback). Do not duplicate the SPEC's content there.
+- The agent-managed auto-memory (maintained outside the repo) holds
+  non-derivable facts such as batching feedback. Do not duplicate the SPEC's
+  content there.
 - The task list (`#NNN` ids) is the unit of granular tracking. New work gets
   a new id; ids monotonically increase.
 - Each "build, install, document batch N" task closes a batch. That is when
-  `SPEC.md` gets the batch entry and `BuildInfo.BUILD_DATE` is bumped
-  manually to today's UTC date.
+  `SPEC.md` gets the batch entry and the `buildDate` field in
+  `version.properties` (repo root) is bumped to today's UTC date. It flows
+  into the generated `BuildInfo.BUILD_DATE` via the `generateBuildInfo`
+  task; the generated `BuildInfo.kt` itself is do-not-edit.
 
 ## Coding Conventions
 
