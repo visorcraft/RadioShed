@@ -110,10 +110,24 @@ In `AppSettingsScreen` (About section):
   compact card that retains the **attributions blurb** (LRClib lyrics — CC0;
   Cover Art Archive — CC0/public domain; local-tags-only, no telemetry) and adds
   an **"Open-source licenses ›"** row that invokes `onOpenLicenses`.
-- The existing proprietary-**License** link row stays; update its stale comment
-  / subtitle that currently references "the CreditsCard above lists OSS deps."
-- Wire `onOpenLicenses` in `App.kt` exactly like `onOpenDbBrowser` (new nav
-  destination + callback).
+- The proprietary-**License** row no longer links out. Because RadioShed is a
+  **private repo**, tapping "License" now shows RadioShed's own proprietary
+  `LICENSE` text **in-app** (bundled as a resource), via the same
+  list→detail Licenses screen (or a dedicated detail entry). The canonical repo
+  URL is corrected to `https://github.com/visorcraft/RadioShed/blob/master/LICENSE`
+  and may appear as a secondary "view online" affordance, but the in-app text is
+  primary. The bogus `https://github.com/anthropics/radioshed/...` URL is removed.
+  - **In-app copy scope (default, flag for confirmation):** display the
+    `LICENSE` body through `END OF AGREEMENT`, excluding the internal
+    "REMINDERS FOR THE PROJECT MAINTAINER (DELETE BEFORE PUBLIC RELEASE)"
+    footer, which is maintainer-only and not user-facing. The "DRAFT — NOT YET
+    LEGALLY REVIEWED" banner is retained (it is part of the current legal text
+    and is honest about status).
+- Wire `onOpenLicenses` in `App.kt` exactly like `onOpenDbBrowser`: add an
+  `AppScreen.Licenses` enum case, a `when(current)` branch rendering
+  `LicensesScreen(onBack = { current = AppScreen.AppSettings })`, and pass
+  `onOpenLicenses = { current = AppScreen.Licenses }` plus the new
+  `onOpenLicenses: () -> Unit = {}` parameter on `AppSettingsScreen`.
 
 ## 6. `THIRD_PARTY_LICENSES` Release File
 
