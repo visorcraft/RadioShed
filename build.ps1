@@ -1,7 +1,9 @@
 # build.ps1 — build the RadioShed Windows MSI installer.
 $ErrorActionPreference = 'Stop'
 
-$RepoRoot = 'C:\Users\Thomas\repos\RadioShed'
+# Repo root = the folder this script lives in, so it works from any checkout
+# location (C:, Z:, a cloned path on another machine, …) with no editing.
+$RepoRoot = $PSScriptRoot
 Set-Location -LiteralPath $RepoRoot
 
 # Relocate Gradle's caches onto C: -- this is what avoids the broken lock on the Z: share
