@@ -294,8 +294,12 @@ compose.desktop {
             // Side-car resources copied beside the desktop binary by
             // jpackage (into the app-image / .deb / .AppImage). The
             // generateThirdPartyLicenses task writes the aggregate
-            // THIRD_PARTY_LICENSES here so each desktop release carries
-            // the license file next to the launcher (LICENSE §5.1).
+            // THIRD_PARTY_LICENSES under `common/` here so each desktop
+            // release carries the license file next to the launcher
+            // (LICENSE §5.1). NOTE: Compose only picks up files placed in
+            // a platform subdir of this root (`common/` = all OSes,
+            // `linux/`, `linux-x64/`, …); files at the root are ignored
+            // (prepareAppResources reports NO-SOURCE).
             appResourcesRootDir.set(project.layout.projectDirectory.dir("desktopAppResources"))
             packageName = "RadioShed"
             // Compose Desktop's per-OS validators reject MAJOR=0
@@ -629,8 +633,10 @@ val thirdPartyLicensesRoot = rootProject.layout.projectDirectory.file("THIRD_PAR
 val thirdPartyLicensesBundled = layout.projectDirectory.file(
     "src/commonMain/composeResources/files/THIRD_PARTY_LICENSES.txt",
 )
+// Under `common/` so Compose's appResourcesRootDir actually picks it up
+// (root-level files are ignored — see the nativeDistributions note above).
 val thirdPartyLicensesDesktop = layout.projectDirectory.file(
-    "desktopAppResources/THIRD_PARTY_LICENSES",
+    "desktopAppResources/common/THIRD_PARTY_LICENSES",
 )
 
 val generateThirdPartyLicenses = tasks.register<JavaExec>("generateThirdPartyLicenses") {
