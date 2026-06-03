@@ -348,6 +348,15 @@ compose.desktop {
             // Compose resource so `:composeApp:run` and the `.deb`
             // launcher use the same checked-in bitmap.
             windows {
+                // jpackage adds NO shortcuts by default, so a plain MSI
+                // install left the user with no Start-menu entry — and since
+                // Windows Search only indexes Start-menu shortcuts, searching
+                // "RadioShed" found nothing and the app had to be launched from
+                // its install dir. `menu` creates the Start-menu shortcut (and
+                // makes it searchable); `shortcut` adds a desktop icon.
+                menu = true
+                menuGroup = "RadioShed"
+                shortcut = true
                 iconFile.set(
                     project.file(
                         "src/desktopMain/resources/icon/radioshed.ico",
