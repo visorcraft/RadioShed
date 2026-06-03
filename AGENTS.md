@@ -449,6 +449,12 @@ GitHub release titled `RadioShed X.Y.Z` on `visorcraft/RadioShed`, cut via the
 `gh release upload` the per-platform assets. Desktop binaries only build on/for
 their host OS, so each platform's assets are produced on that host.
 
+The Windows MSI (`compose.desktop … windows {}`) sets `menu`/`shortcut` (Start-menu
++ desktop shortcuts; MSI installs have no `uninstall.exe` — removal is via Apps &
+features / re-running the `.msi`) and a **fixed `upgradeUuid`** that ties all
+versions into one product family for in-place upgrades. That GUID is **permanent
+— never change it** (a new value orphans prior installs).
+
 Per-platform shippable artifacts (command → output):
 
 | Artifact | Command | Output |

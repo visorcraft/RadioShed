@@ -348,6 +348,13 @@ compose.desktop {
             // Compose resource so `:composeApp:run` and the `.deb`
             // launcher use the same checked-in bitmap.
             windows {
+                // Stable MSI UpgradeCode. Ties every RadioShed version to one
+                // product family so a newer .msi upgrades the previous install
+                // in place instead of stacking another entry in Apps & features.
+                // LOAD-BEARING AND PERMANENT: never change this GUID — a new
+                // value orphans all prior installs (they'd no longer be
+                // recognized/replaced on upgrade).
+                upgradeUuid = "36ab954d-c147-41a1-95ef-711ee06a975b"
                 // jpackage adds NO shortcuts by default, so a plain MSI
                 // install left the user with no Start-menu entry — and since
                 // Windows Search only indexes Start-menu shortcuts, searching
