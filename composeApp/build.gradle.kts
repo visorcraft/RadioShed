@@ -207,18 +207,21 @@ kotlin {
                 // APE — same coverage on desktop as on Android.
                 implementation(libs.jaudiotagger)
 
-                // VLCJ: Java bindings for libvlc. Plays virtually every
-                // format (MP3/FLAC/Opus/ALAC/WMA/APE/DSD) without
-                // pulling decoders into the project ourselves. Requires
-                // a libvlc install on the host — `nativediscovery`
-                // searches typical Windows / macOS / Linux paths and
-                // surfaces a clear error when it can't find one.
-                implementation(libs.vlcj)
+                // JNA: direct foreign-function binding to the system
+                // libvlc 3.x (see NativeLibVlc.kt), replacing the GPL
+                // VLCJ layer. Plays virtually every format
+                // (MP3/FLAC/Opus/ALAC/WMA/APE/DSD) without pulling
+                // decoders into the project ourselves. Requires a libvlc
+                // install on the host — NativeLibVlc discovers it across
+                // the standard Windows / macOS / Linux paths and surfaces
+                // a clear error (and the "VLC required" modal) when it
+                // can't find one. jna-platform supplies the win32
+                // registry helper used to read the Windows install dir.
+                implementation(libs.jna)
+                implementation(libs.jna.platform)
 
-                // Coroutines Swing dispatcher — used by AudioEngine to
-                // route VLCJ media-event callbacks (which fire on
-                // VLCJ's own threads) onto the Compose UI thread when
-                // updating StateFlows that drive the player UI.
+                // Coroutines Swing dispatcher — provides Dispatchers.Swing
+                // on the desktop target.
                 implementation(libs.kotlinx.coroutines.swing)
             }
         }

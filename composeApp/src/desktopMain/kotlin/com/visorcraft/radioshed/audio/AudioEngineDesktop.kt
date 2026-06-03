@@ -1,42 +1,47 @@
 package com.visorcraft.radioshed.audio
 
+import com.sun.jna.Pointer
 import com.visorcraft.radioshed.data.IODispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import uk.co.caprica.vlcj.factory.MediaPlayerFactory
-import uk.co.caprica.vlcj.factory.discovery.NativeDiscovery
-import uk.co.caprica.vlcj.player.base.MediaPlayer
-import uk.co.caprica.vlcj.player.base.MediaPlayerEventAdapter
-import java.io.File
+import kotlinx.coroutines.runBlocking
 import kotlin.math.roundToInt
 
 /**
- * VLCJ-backed AudioEngine for the desktop target. Handles the
- * formats the rest of RadioShed handles on Android (MP3 / FLAC /
- * Opus / OGG / ALAC / AAC / WMA) without us shipping decoders —
- * libvlc does the work.
+ * libvlc-backed [AudioEngine] for the desktop target, bound directly to
+ * the LGPL libvlc 3.x C API via JNA ([NativeLibVlc]) — no GPL VLCJ layer.
+ * Handles the same formats the rest of RadioShed handles on Android
+ * (MP3 / FLAC / Opus / OGG / ALAC / AAC / WMA) without us shipping
+ * decoders: the user's installed libvlc does the work.
  *
- * libvlc is discovered at first-play via [NativeDiscovery]. If it
- * can't be found, [play] surfaces a [PlayerState.Error] with a
- * message instructing the user to install VLC; the app stays
- * functional otherwise (browsing, settings, scanning) so a missing
- * libvlc isn't a blocker for setup.
+ * libvlc is discovered at first play via [NativeLibVlc.available]. If it
+ * can't be found, [play] surfaces a [PlayerState.Error] instructing the
+ * user to install VLC; the app stays functional otherwise (browsing,
+ * settings, scanning) so a missing libvlc isn't a blocker for setup. The
+ * "VLC required" modal (see `App`) also reads [NativeLibVlc.available]
+ * via `isMediaPlaybackAvailable`.
  *
- * Threading: VLCJ delivers events on its own internal threads. We
- * fan them out through StateFlows that Compose collects on the
- * UI thread; StateFlow's value-set is thread-safe so no extra
- * marshalling is needed for the simple state/position updates.
+ * Threading / state: libvlc has no Java-side event callbacks here. State
+ * and position are read by a ~250 ms polling coroutine on the engine's
+ * own [scope] (started when the player is created). Polling — rather than
+ * binding libvlc's event manager — keeps native code off Java threads and
+ * avoids the crash-prone JNA callback + event-union path. StateFlow value
+ * sets are thread-safe, so Compose collects them directly.
  */
 class AudioEngineDesktop : AudioEngine {
 
-    // crashGuard so a VLCJ event-bridge exception (libvlc error,
-    // media-event callback firing during shutdown, etc.) doesn't
-    // bubble to the JVM uncaught-exception handler and pop the
-    // Win32 "RadioShed has stopped working" message box.
+    // crashGuard so a libvlc-bridge exception (native error during
+    // polling, a call racing shutdown, etc.) doesn't bubble to the JVM
+    // uncaught-exception handler and pop the Win32 "RadioShed has stopped
+    // working" message box.
     private val scope = CoroutineScope(
         SupervisorJob() + IODispatcher +
             com.visorcraft.radioshed.util.crashGuard("AudioEngineDesktop"),
@@ -58,102 +63,123 @@ class AudioEngineDesktop : AudioEngine {
     private var queueIndex: Int = 0
 
     /** Lazily created on first play(); null if libvlc isn't installed. */
-    private var factory: MediaPlayerFactory? = null
-    private var player: MediaPlayer? = null
+    private var lib: LibVlc? = null
+    private var instance: Pointer? = null
+    private var player: Pointer? = null
     private var libvlcLoadFailed: Boolean = false
 
-    private fun ensurePlayer(): MediaPlayer? {
+    /** The poll loop; cancelled and recreated with the player. */
+    private var pollJob: Job? = null
+
+    /**
+     * Guards one-shot auto-advance on the transition into Ended. Reset in
+     * [play] so the next track can auto-advance once when it finishes.
+     */
+    private var advancedForThisTrack: Boolean = false
+
+    /** Last state we emitted, to dedupe poll-loop emissions. */
+    private var lastPolledState: Int = LibVlcState.NOTHING_SPECIAL
+
+    private fun ensurePlayer(): Pointer? {
         player?.let { return it }
         if (libvlcLoadFailed) return null
-        // NativeDiscovery probes typical install paths (Program Files,
-        // /Applications, /usr/lib, …) and returns false when nothing
-        // works. We treat that as a recoverable error rather than a
-        // crash.
-        val discovered = runCatching { NativeDiscovery().discover() }.getOrDefault(false)
-        if (!discovered) {
+        // NativeLibVlc.available probes typical install paths (Program
+        // Files, /Applications, /usr/lib, …) and the versioned Linux
+        // SONAME. We treat a miss as a recoverable error, not a crash.
+        val loaded = NativeLibVlc.lib
+        if (loaded == null) {
             libvlcLoadFailed = true
             _state.value = PlayerState.Error(
                 "libvlc not found — install VLC media player from videolan.org and relaunch.",
             )
             return null
         }
-        val f = runCatching { MediaPlayerFactory() }.getOrElse {
+        val inst = runCatching { loaded.libvlc_new(0, null) }.getOrNull()
+        if (inst == null) {
             libvlcLoadFailed = true
-            _state.value = PlayerState.Error("Failed to initialise libvlc: ${it.message}")
+            _state.value = PlayerState.Error("Failed to initialise libvlc.")
             return null
         }
-        val p = runCatching { f.mediaPlayers().newMediaPlayer() }.getOrElse {
+        val p = runCatching { loaded.libvlc_media_player_new(inst) }.getOrNull()
+        if (p == null) {
             libvlcLoadFailed = true
-            _state.value = PlayerState.Error("Failed to create media player: ${it.message}")
+            runCatching { loaded.libvlc_release(inst) }
+            _state.value = PlayerState.Error("Failed to create media player.")
             return null
         }
-        p.events().addMediaPlayerEventListener(object : MediaPlayerEventAdapter() {
-            override fun playing(mediaPlayer: MediaPlayer) {
-                _state.value = PlayerState.Playing
-            }
-            override fun paused(mediaPlayer: MediaPlayer) {
-                _state.value = PlayerState.Paused
-            }
-            override fun stopped(mediaPlayer: MediaPlayer) {
-                _state.value = PlayerState.Idle
-            }
-            override fun finished(mediaPlayer: MediaPlayer) {
-                _state.value = PlayerState.Ended
-                // Auto-advance into queue if there's a follow-up.
-                scope.launch { skipNext() }
-            }
-            override fun error(mediaPlayer: MediaPlayer) {
-                val attempted = _nowPlaying.value?.uri
-                System.err.println("AudioEngineDesktop: error event for uri=$attempted")
-                _state.value = PlayerState.Error(
-                    "VLC reported playback error for ${attempted?.substringAfterLast('\\') ?: "track"}.",
-                )
-            }
-            override fun timeChanged(mediaPlayer: MediaPlayer, newTime: Long) {
-                _position.value = Position(
-                    currentMs = newTime,
-                    durationMs = mediaPlayer.media().info()?.duration() ?: 0L,
-                )
-            }
-            override fun lengthChanged(mediaPlayer: MediaPlayer, newLength: Long) {
-                _position.value = _position.value.copy(durationMs = newLength)
-            }
-        })
-        // VLC's volume range is 0..200 (200 = software amplification).
-        // We seed at 100 so default volume is unchanged from the OS-level
-        // playback level.
-        p.audio().setVolume(100)
-        factory = f
+        // libvlc's volume range is 0..200 (200 = software amplification).
+        // Seed at 100 so default volume matches the OS-level level and we
+        // never apply gain we didn't ask for.
+        runCatching { loaded.libvlc_audio_set_volume(p, 100) }
+        lib = loaded
+        instance = inst
         player = p
+        startPolling(loaded, p)
         return p
     }
 
-    private fun resolveMrl(uri: String): String {
-        // VLC accepts file:// MRLs, bare local paths, AND raw UNC
-        // paths (`\\server\share\file.mp3`). The instinct to convert
-        // local paths into a `file://` URL via `File.toURI()` actually
-        // breaks UNC: `File("\\\\host\\share\\f").toURI().toString()`
-        // produces `file:////host/share/f` (4 slashes), which libvlc
-        // parses by stripping the `file://` prefix and then handing
-        // the remaining `//host/share/f` to its filesystem demuxer
-        // — that ends up as the single-backslash path `\host\share\f`,
-        // which Windows networking can't resolve. Just pass the raw
-        // path through; VLC opens local + UNC + remote alike from a
-        // bare string.
-        return uri
+    /**
+     * Poll `get_state` / `get_time` / `get_length` every ~250 ms while a
+     * player exists. Replaces VLCJ's event callbacks: state changes are
+     * emitted on change, position is updated each tick, and the
+     * transition into Ended auto-advances the queue exactly once.
+     */
+    private fun startPolling(loaded: LibVlc, p: Pointer) {
+        pollJob?.cancel()
+        lastPolledState = LibVlcState.NOTHING_SPECIAL
+        pollJob = scope.launch {
+            while (isActive) {
+                delay(POLL_INTERVAL_MS)
+                val nativeState = runCatching { loaded.libvlc_media_player_get_state(p) }
+                    .getOrDefault(LibVlcState.ERROR)
+                val time = runCatching { loaded.libvlc_media_player_get_time(p) }.getOrDefault(0L)
+                val length = runCatching { loaded.libvlc_media_player_get_length(p) }.getOrDefault(0L)
+                _position.value = Position(currentMs = time.coerceAtLeast(0L), durationMs = length.coerceAtLeast(0L))
+
+                if (nativeState != lastPolledState) {
+                    lastPolledState = nativeState
+                    mapState(nativeState)?.let { _state.value = it }
+                    // Auto-advance on the *transition into* Ended, once
+                    // per track — matches the old VLCJ finished() behavior.
+                    if (nativeState == LibVlcState.ENDED && !advancedForThisTrack) {
+                        advancedForThisTrack = true
+                        scope.launch { skipNext() }
+                    }
+                }
+            }
+        }
     }
 
     override fun play(playable: Playable) {
         val p = ensurePlayer() ?: return
+        val loaded = lib ?: return
+        val inst = instance ?: return
+        advancedForThisTrack = false
         _nowPlaying.value = playable
         _state.value = PlayerState.Buffering
         val mrl = resolveMrl(playable.uri)
-        // Log to stderr so the gradle :run console captures what we
-        // sent libvlc — invaluable when a track refuses to play and
-        // the user reports "VLC reported playback error" without any
-        // way to know what URI was attempted.
+        // Log to stderr so the gradle :run console captures what we sent
+        // libvlc — invaluable when a track refuses to play and the user
+        // reports a playback error without any way to know which URI was
+        // attempted.
         System.err.println("AudioEngineDesktop: play($mrl)")
-        p.media().play(mrl)
+        // Scheme-bearing MRLs (http://, file://, smb://, …) go through
+        // new_location; everything else is a local/UNC path → new_path,
+        // which preserves the raw/UNC pass-through resolveMrl() relies on.
+        val media = if (hasUriScheme(mrl)) {
+            runCatching { loaded.libvlc_media_new_location(inst, mrl) }.getOrNull()
+        } else {
+            runCatching { loaded.libvlc_media_new_path(inst, mrl) }.getOrNull()
+        }
+        if (media == null) {
+            _state.value = PlayerState.Error("Failed to open ${mrl.substringAfterLast('\\').substringAfterLast('/')}.")
+            return
+        }
+        loaded.libvlc_media_player_set_media(p, media)
+        // The player retains its own reference to the media, so release
+        // our handle immediately to avoid leaking one per track.
+        loaded.libvlc_media_release(media)
+        loaded.libvlc_media_player_play(p)
     }
 
     override fun playQueue(items: List<Playable>, startIndex: Int) {
@@ -164,21 +190,25 @@ class AudioEngineDesktop : AudioEngine {
     }
 
     override fun pause() {
-        player?.controls()?.setPause(true)
+        val p = player ?: return
+        lib?.libvlc_media_player_set_pause(p, 1)
     }
 
     override fun resume() {
-        player?.controls()?.play()
+        val p = player ?: return
+        lib?.libvlc_media_player_play(p)
     }
 
     override fun togglePlayPause() {
         val p = player ?: return
-        if (_state.value == PlayerState.Playing) p.controls().setPause(true)
-        else p.controls().play()
+        val loaded = lib ?: return
+        if (_state.value == PlayerState.Playing) loaded.libvlc_media_player_set_pause(p, 1)
+        else loaded.libvlc_media_player_play(p)
     }
 
     override fun seekTo(positionMs: Long) {
-        player?.controls()?.setTime(positionMs)
+        val p = player ?: return
+        lib?.libvlc_media_player_set_time(p, positionMs.coerceAtLeast(0L))
     }
 
     override fun skipNext() {
@@ -200,40 +230,97 @@ class AudioEngineDesktop : AudioEngine {
     }
 
     override fun stop() {
-        player?.controls()?.stop()
+        val p = player ?: return
+        runCatching { lib?.libvlc_media_player_stop(p) }
         _state.value = PlayerState.Idle
         _position.value = Position(0L, 0L)
+        lastPolledState = LibVlcState.STOPPED
     }
 
     override fun setVolume(fraction: Float) {
         val clamped = fraction.coerceIn(0f, 1f)
         _volume.value = clamped
-        // Map 0..1 → 0..100 (VLC's 1.0-equivalent reference level).
+        // Map 0..1 → 0..100 (libvlc's 1.0-equivalent reference level).
         // Above 100 is software gain we explicitly avoid.
-        player?.audio()?.setVolume((clamped * 100f).roundToInt())
+        val p = player ?: return
+        lib?.libvlc_audio_set_volume(p, (clamped * 100f).roundToInt())
     }
 
     override fun setPlaybackSpeed(speed: Float) {
         val clamped = speed.coerceIn(0.25f, 4f)
-        player?.controls()?.setRate(clamped)
+        val p = player ?: return
+        lib?.libvlc_media_player_set_rate(p, clamped)
     }
 
     /**
      * Release native libvlc handles. Call from the application's
-     * `onCloseRequest` so libvlc can flush write buffers and close
-     * the audio device cleanly. Without this, exitApplication() is
-     * called while libvlc still owns the OS audio device, leaving
-     * it locked for several seconds after RadioShed exits — an
-     * audible regression for the next app to open the same device.
+     * `onCloseRequest` so libvlc can flush write buffers and close the
+     * audio device cleanly. Without this, exitApplication() terminates
+     * the process while libvlc still owns the device, leaving it locked
+     * for several seconds for the next app that opens it.
      *
-     * Idempotent: subsequent calls are no-ops because both handles
-     * are nulled. Safe to invoke even when libvlc never loaded
-     * (factory + player are still null).
+     * Cancels *and joins* the poll loop before releasing, so no native call
+     * can race the release: cancel() alone is cooperative (the loop only
+     * observes it at the next isActive check), which leaves a window where a
+     * poll iteration that already passed isActive calls get_state/get_time on
+     * a pointer this method then frees — a native use-after-free the per-call
+     * runCatching cannot catch (it crashes the process, not the coroutine).
+     * The loop runs on Dispatchers.IO (a different thread than the
+     * onCloseRequest caller), so the race is real. Joining bounds the wait to
+     * one in-flight native libvlc call. Idempotent: subsequent calls are
+     * no-ops because the handles are nulled. Safe to invoke even when libvlc
+     * never loaded (all handles are still null).
      */
     fun close() {
-        runCatching { player?.release() }
-        runCatching { factory?.release() }
+        runBlocking { pollJob?.cancelAndJoin() }
+        pollJob = null
+        val loaded = lib
+        runCatching { player?.let { loaded?.libvlc_media_player_release(it) } }
+        runCatching { instance?.let { loaded?.libvlc_release(it) } }
         player = null
-        factory = null
+        instance = null
+        lib = null
     }
+}
+
+/**
+ * libvlc accepts file:// MRLs, bare local paths, AND raw UNC paths
+ * (`\\server\share\file.mp3`). The instinct to convert local paths into a
+ * `file://` URL via `File.toURI()` actually breaks UNC:
+ * `File("\\\\host\\share\\f").toURI().toString()` produces
+ * `file:////host/share/f` (4 slashes), which libvlc parses by stripping
+ * the `file://` prefix and then handing the remaining `//host/share/f` to
+ * its filesystem demuxer — that ends up as the single-backslash path
+ * `\host\share\f`, which Windows networking can't resolve. Just pass the
+ * raw path through; libvlc opens local + UNC + remote alike from a bare
+ * string (new_path for paths, new_location for scheme-bearing MRLs).
+ */
+internal fun resolveMrl(uri: String): String = uri
+
+/**
+ * True when [mrl] starts with a URI scheme (`http://`, `file://`, `smb://`,
+ * …) per RFC 3986's `scheme "://"` shape. Drives the new_location vs
+ * new_path choice in [AudioEngineDesktop.play]; a bare Windows drive path
+ * like `C:\Music\x.mp3` is deliberately NOT treated as a scheme (the `://`
+ * requirement excludes it), so it routes through new_path.
+ */
+internal fun hasUriScheme(mrl: String): Boolean = URI_SCHEME_REGEX.containsMatchIn(mrl)
+
+private val URI_SCHEME_REGEX = Regex("^[A-Za-z][A-Za-z0-9+.-]*://")
+
+private const val POLL_INTERVAL_MS = 250L
+
+/**
+ * Map a `libvlc_state_t` int onto a [PlayerState], or null when the state
+ * carries no UI-visible change (NothingSpecial / Opening). Buffering covers
+ * both Opening-adjacent buffering and the explicit Buffering state.
+ */
+internal fun mapState(nativeState: Int): PlayerState? = when (nativeState) {
+    LibVlcState.PLAYING -> PlayerState.Playing
+    LibVlcState.PAUSED -> PlayerState.Paused
+    LibVlcState.OPENING, LibVlcState.BUFFERING -> PlayerState.Buffering
+    LibVlcState.STOPPED -> PlayerState.Idle
+    LibVlcState.ENDED -> PlayerState.Ended
+    LibVlcState.ERROR -> PlayerState.Error("VLC reported a playback error.")
+    else -> null
 }

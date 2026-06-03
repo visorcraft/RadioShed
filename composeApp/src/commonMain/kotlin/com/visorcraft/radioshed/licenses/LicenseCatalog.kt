@@ -3,7 +3,6 @@ package com.visorcraft.radioshed.licenses
 import com.visorcraft.radioshed.licenses.License.APACHE_2_0
 import com.visorcraft.radioshed.licenses.License.BSD_2_CLAUSE
 import com.visorcraft.radioshed.licenses.License.BSD_3_CLAUSE
-import com.visorcraft.radioshed.licenses.License.GPL_3_0_OR_LATER
 import com.visorcraft.radioshed.licenses.License.LGPL_2_1_OR_LATER
 import com.visorcraft.radioshed.licenses.License.MIT
 import com.visorcraft.radioshed.licenses.License.PROPRIETARY
@@ -253,7 +252,7 @@ val THIRD_PARTY_COMPONENTS: List<ThirdPartyComponent> = listOf(
         copyright = "Copyright 2000-2020 JetBrains s.r.o. and Kotlin Programming Language contributors",
         platforms = setOf(DESKTOP),
         homepage = "https://github.com/Kotlin/kotlinx.coroutines",
-        notes = "Provides Dispatchers.Swing; marshals VLCJ media-event callbacks onto the UI thread.",
+        notes = "Provides Dispatchers.Swing on the desktop target.",
     ),
     ThirdPartyComponent(
         name = "Skiko (Kotlin Skia bindings)",
@@ -305,29 +304,6 @@ val THIRD_PARTY_COMPONENTS: List<ThirdPartyComponent> = listOf(
             "'or (at your option) any later version'.",
     ),
     ThirdPartyComponent(
-        name = "vlcj",
-        coordinate = "uk.co.caprica:vlcj",
-        version = "4.10.1",
-        license = GPL_3_0_OR_LATER,
-        copyright = "Copyright 2009-2025 Caprica Software Limited.",
-        platforms = setOf(DESKTOP),
-        homepage = "https://github.com/caprica/vlcj",
-        notes = "DESKTOP only; never linked into the Android APK. GPL-3.0-or-later (source headers: " +
-            "'version 3 of the License, or (at your option) any later version'). See the SPEC " +
-            "VLCJ/GPL legal-review note.",
-    ),
-    ThirdPartyComponent(
-        name = "vlcj-natives",
-        coordinate = "uk.co.caprica:vlcj-natives",
-        version = "4.8.3",
-        license = GPL_3_0_OR_LATER,
-        copyright = "Copyright 2009-2025 Caprica Software Limited.",
-        platforms = setOf(DESKTOP),
-        homepage = "https://github.com/caprica/vlcj-natives",
-        transitive = true,
-        notes = "Transitive via vlcj 4.10.1; JNA bindings to libvlc.",
-    ),
-    ThirdPartyComponent(
         name = "JNA (jna-jpms)",
         coordinate = "net.java.dev.jna:jna-jpms",
         version = "5.14.0",
@@ -336,9 +312,10 @@ val THIRD_PARTY_COMPONENTS: List<ThirdPartyComponent> = listOf(
             "Bläsing) and contributors",
         platforms = setOf(DESKTOP),
         homepage = "https://github.com/java-native-access/jna",
-        transitive = true,
-        notes = "Transitive via vlcj-natives. Dual-licensed 'LGPL-2.1-or-later OR Apache-2.0'; " +
-            "RadioShed relies on the Apache-2.0 option.",
+        notes = "DESKTOP only; never linked into the Android APK. Direct dependency: the " +
+            "foreign-function binding in NativeLibVlc.kt loads the system libvlc 3.x through it. " +
+            "Dual-licensed 'LGPL-2.1-or-later OR Apache-2.0'; RadioShed relies on the Apache-2.0 " +
+            "option.",
     ),
     ThirdPartyComponent(
         name = "JNA Platform (jna-platform-jpms)",
@@ -349,9 +326,10 @@ val THIRD_PARTY_COMPONENTS: List<ThirdPartyComponent> = listOf(
             "Bläsing) and contributors",
         platforms = setOf(DESKTOP),
         homepage = "https://github.com/java-native-access/jna",
-        transitive = true,
-        notes = "Transitive via vlcj-natives. Dual-licensed 'LGPL-2.1-or-later OR Apache-2.0'; " +
-            "RadioShed relies on the Apache-2.0 option.",
+        notes = "DESKTOP only. Direct dependency: supplies com.sun.jna.platform.win32 " +
+            "(Advapi32Util) used to read the Windows VLC install dir from the registry during " +
+            "libvlc discovery. Dual-licensed 'LGPL-2.1-or-later OR Apache-2.0'; RadioShed relies " +
+            "on the Apache-2.0 option.",
     ),
     ThirdPartyComponent(
         name = "libvlc",
@@ -362,8 +340,9 @@ val THIRD_PARTY_COMPONENTS: List<ThirdPartyComponent> = listOf(
         platforms = setOf(DESKTOP),
         homepage = "https://www.videolan.org/vlc/libvlc.html",
         transitive = true,
-        notes = "EXTERNAL, NOT BUNDLED. User/OS-installed native runtime discovered at startup via " +
-            "vlcj NativeDiscovery(). LGPL obligations satisfied by the user's own system install.",
+        notes = "EXTERNAL, NOT BUNDLED. User/OS-installed native runtime discovered at startup and " +
+            "bound directly via JNA (NativeLibVlc.kt). LGPL obligations satisfied by the user's " +
+            "own system install.",
     ),
 
     // ---- Android only ----

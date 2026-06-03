@@ -18,6 +18,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.tooling.preview.Preview
+import com.visorcraft.radioshed.audio.AudioEngine
+import com.visorcraft.radioshed.audio.PlayerState
+import com.visorcraft.radioshed.audio.isMediaPlaybackAvailable
 import com.visorcraft.radioshed.data.LibraryRepository
 import com.visorcraft.radioshed.data.SettingsStore
 import com.visorcraft.radioshed.data.nowMillis
@@ -48,6 +51,8 @@ import com.visorcraft.radioshed.ui.stations.StationEditorScreen
 import com.visorcraft.radioshed.ui.stations.StationsHomeScreen
 import com.visorcraft.radioshed.ui.theme.RadioShedTheme
 import com.visorcraft.radioshed.ui.theme.ThemeMode
+import com.visorcraft.radioshed.ui.util.VlcRequiredDialog
+import com.visorcraft.radioshed.ui.util.openGetVlcPage
 import org.koin.compose.koinInject
 
 @Composable
@@ -58,6 +63,7 @@ fun App(
     libraryRepo: LibraryRepository = koinInject(),
     backupService: BackupService = koinInject(),
     presetSeeder: PresetSeeder = koinInject(),
+    audioEngine: AudioEngine = koinInject(),
 ) {
     // Live-mutable theme inputs: read once from the persisted settings,
     // then hold in state so the AppSettingsScreen picker can re-theme
@@ -88,6 +94,32 @@ fun App(
             if (settings.isOnboardingComplete()) AppScreen.Home else AppScreen.Onboarding
         }
         var current by remember { mutableStateOf<AppScreen>(startScreen) }
+
+        // "VLC required" modal (desktop only — Android/iOS always report
+        // media playback available). Triggers at startup if libvlc is
+        // absent, and re-shows on a play attempt that errors while libvlc
+        // is still missing. Dismissible.
+        var showVlcDialog by remember { mutableStateOf(false) }
+        LaunchedEffect(Unit) {
+            if (!isMediaPlaybackAvailable()) showVlcDialog = true
+        }
+        // Re-check on a play-attempt failure: gating on PlayerState.Error
+        // AND a fresh availability re-check (rather than string-matching
+        // the message) means a normal file error with VLC present never
+        // triggers this, but a play attempt with libvlc still missing
+        // re-surfaces the modal even after the user dismissed it.
+        val playerState by audioEngine.state.collectAsState()
+        LaunchedEffect(playerState) {
+            if (playerState is PlayerState.Error && !isMediaPlaybackAvailable()) {
+                showVlcDialog = true
+            }
+        }
+        if (showVlcDialog) {
+            VlcRequiredDialog(
+                onDismiss = { showVlcDialog = false },
+                onGetVlc = { openGetVlcPage() },
+            )
+        }
 
         // Composition-local nav handles for deep widgets (Track context
         // sheet, MiniPlayer overflow, etc.) that don't have a clean

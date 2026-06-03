@@ -93,8 +93,6 @@ private val EXPECTED_SHIPPED_COORDINATES: Set<String> = setOf(
     "app.cash.sqldelight:sqlite-driver",
     "org.xerial:sqlite-jdbc",
     "net.jthink:jaudiotagger",
-    "uk.co.caprica:vlcj",
-    "uk.co.caprica:vlcj-natives",
     "net.java.dev.jna:jna-jpms",
     "net.java.dev.jna:jna-platform-jpms",
     // Android
@@ -121,4 +119,8 @@ private val EXCLUDED_NOT_SHIPPED: Set<String> = setOf(
     "app.cash.sqldelight:sqlite-3-38-dialect",
     "androidx.core:core-ktx",
     "androidx.appcompat:appcompat",
+    // Replaced by the direct JNA libvlc binding (feature/jna-libvlc); the
+    // GPL VLCJ layer no longer ships and must not return to the catalog.
+    "uk.co.caprica:vlcj",
+    "uk.co.caprica:vlcj-natives",
 )

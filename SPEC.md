@@ -1066,7 +1066,7 @@ Goal: repo exists, decisions documented, CI skeleton green.
 
 - [x] Create **private** GitHub repository with branch protection on `master`
 - [x] Draft proprietary `LICENSE` file: no redistribution, no resale, no public sharing, no mirroring; reserve all rights; private use of authorized binaries only (lawyer review still pending before public release)
-- [x] Fulfil LICENSE §5.1 third-party documentation: hand-curated `licenses/LicenseCatalog.kt`, in-app `ui/settings/LicensesScreen.kt` (About → Open-source licenses; proprietary entry pinned first), and `generateThirdPartyLicenses` Gradle task rendering `THIRD_PARTY_LICENSES` (repo root + bundled resource + desktop side-car). VLCJ/GPL desktop conflict documented in Appendix C, flagged for legal review (~) before any public desktop release.
+- [x] Fulfil LICENSE §5.1 third-party documentation: hand-curated `licenses/LicenseCatalog.kt`, in-app `ui/settings/LicensesScreen.kt` (About → Open-source licenses; proprietary entry pinned first), and `generateThirdPartyLicenses` Gradle task rendering `THIRD_PARTY_LICENSES` (repo root + bundled resource + desktop side-car). VLCJ/GPL desktop conflict (Appendix C) is RESOLVED: VLCJ replaced by a direct JNA (Apache-2.0) binding to LGPL libvlc (`audio/NativeLibVlc.kt`), so the desktop build is GPL-free.
 - [x] Add `.editorconfig`, `.gitignore`, `.gitattributes`
 - [x] Add `CONTRIBUTING.md` (private team contribution guide) — covers working environment, build/install loop, branching/commits, code style, testing, SPEC update conventions, and license posture.
 - [x] Create `docs/decisions/` with ADR template (`0000-template.md`)
@@ -4271,22 +4271,23 @@ implications baked into the spec:
   Hand-curated catalog in `licenses/LicenseCatalog.kt` is the single source of
   truth; `./gradlew :composeApp:generateThirdPartyLicenses` renders the release
   file (repo root + bundled resource + desktop side-car).
-- **VLCJ / GPL finding (DESKTOP — flagged for legal/product review):** the GPL
-  obligation comes specifically from **VLCJ** (`uk.co.caprica:vlcj` 4.10.1 +
-  `vlcj-natives`) — Caprica's **GPL-3.0-or-later** *Java bindings* — which we
-  compile into and ship with the desktop app. It is **not** about libvlc or VLC:
-  **libvlc** (the native playback engine) is **LGPL-2.1+** and is the
-  *user-installed*, dynamically-loaded library we do **not** redistribute, and
-  the **VLC** application is never shipped. So "we don't bundle VLC" is true but
-  irrelevant — the copyleft attaches to the bundled VLCJ binding, not to libvlc.
-  A GPLv3 library compiled into a binary distributed under the proprietary
-  LICENSE is a genuine license-compatibility conflict for the desktop target.
-  Resolution options: **replace VLCJ with a direct JNA (Apache-2.0) binding to
-  the LGPL libvlc** (designed in
-  `docs/superpowers/specs/2026-06-03-libvlc-jna-and-vlc-modal-design.md`),
-  a commercial VLCJ license from Caprica, or accepting GPL for the desktop build.
-  Until resolved, do not ship a public desktop build. Android/iOS are unaffected
-  (VLCJ is desktop-only; Android uses Media3, iOS AVAudioEngine).
+- **VLCJ / GPL finding (DESKTOP — RESOLVED):** the desktop GPL conflict came
+  specifically from **VLCJ** (`uk.co.caprica:vlcj` + `vlcj-natives`) — Caprica's
+  **GPL-3.0-or-later** *Java bindings* — which were compiled into and shipped
+  with the desktop app. It was **never** about libvlc or VLC: **libvlc** (the
+  native playback engine) is **LGPL-2.1+** and is the *user-installed*,
+  dynamically-loaded library we do **not** redistribute, and the **VLC**
+  application is never shipped — the copyleft attached to the bundled VLCJ
+  binding, not to libvlc. **Resolution (shipped):** VLCJ is replaced by a direct
+  **JNA (Apache-2.0)** binding to the LGPL libvlc 3.x
+  (`audio/NativeLibVlc.kt` + the rewritten `AudioEngineDesktop`, per
+  `docs/superpowers/specs/2026-06-03-libvlc-jna-and-vlc-modal-design.md`). No GPL
+  artifact ships: the catalog and `THIRD_PARTY_LICENSES` carry no GPL component,
+  `jna-jpms` / `jna-platform-jpms` are direct Apache-2.0 deps, and libvlc stays
+  external/LGPL. **The desktop build is now GPL-free**; there is no longer a GPL
+  blocker on public desktop binaries. (Runtime playback must still be verified on
+  a VLC-equipped machine per OS — see the spec's verification handoff.)
+  Android/iOS were always unaffected (Android uses Media3, iOS AVAudioEngine).
 
 A draft proprietary `LICENSE` is in Phase 0; recommend a lawyer review
 the final text before public launch.

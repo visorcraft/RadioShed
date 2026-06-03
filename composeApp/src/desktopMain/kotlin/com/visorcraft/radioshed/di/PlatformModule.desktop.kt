@@ -63,8 +63,8 @@ import java.util.prefs.Preferences
 /**
  * Desktop Koin module. Mirrors the iOS module's structure but binds
  * desktop-specific implementations: real DB driver, real file
- * scanning + tag reading + artwork persisting, VLCJ audio, and Null*
- * stubs for the surfaces deferred from the spike (lyrics fetchers,
+ * scanning + tag reading + artwork persisting, JNA libvlc audio, and
+ * Null* stubs for the surfaces deferred from the spike (lyrics fetchers,
  * MusicBrainz, ListenBrainz, etc.).
  *
  * Settings: backed by `java.util.prefs.Preferences` under the
@@ -104,9 +104,9 @@ actual val platformModule: Module = module {
     single { StorageVolumes() }
     single { SyncthingDetector() }
 
-    // Phase 4: audio engine — VLCJ-backed, lazily initialised on
-    // first play() call so a missing libvlc surfaces as a clear
-    // error rather than crashing app startup.
+    // Phase 4: audio engine — JNA libvlc binding, lazily initialised on
+    // first play() call so a missing libvlc surfaces as a clear error
+    // rather than crashing app startup.
     single<AudioEngine> { AudioEngineDesktop() }
     single<EqualizerController> { NullEqualizerController() }
 

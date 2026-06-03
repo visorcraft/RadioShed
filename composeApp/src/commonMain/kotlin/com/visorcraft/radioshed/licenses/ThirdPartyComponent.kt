@@ -52,12 +52,6 @@ enum class License(
         "files/licenses/LGPL-2.1.txt",
         copyleft = true,
     ),
-    GPL_3_0_OR_LATER(
-        "GPL-3.0-or-later",
-        "GNU GPL v3.0 or later",
-        "files/licenses/GPL-3.0.txt",
-        copyleft = true,
-    ),
 
     /**
      * RadioShed's own proprietary license. Not a third-party OSS license; modeled

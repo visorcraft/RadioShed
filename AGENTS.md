@@ -103,11 +103,15 @@ is **gitignored / per-machine** — do not hardcode a path. With an SDK installe
 the Linux desktop host builds the Android APK + AAB end-to-end too (Android is
 not Windows-only).
 
-The desktop runtime needs **libvlc** (VLC 3.x) installed on the host. VLCJ
-discovers it via `NativeDiscovery().discover()` at startup. On Linux that's
-`apt install vlc` or the distro equivalent; on Windows it's the standard VLC
-installer; on macOS it's the VLC.app bundle. Without libvlc, `:run` launches
-but `AudioEngine` errors out the moment a track tries to play.
+The desktop runtime needs **libvlc** (VLC 3.x) installed on the host.
+`audio/NativeLibVlc.kt` discovers it via JNA at startup across the standard
+per-OS install paths (with a `RADIOSHED_LIBVLC_PATH` env override and the
+Linux `libvlc.so.5` SONAME fallback). On Linux that's `apt install vlc` or
+the distro equivalent; on Windows it's the standard VLC installer (the install
+dir is also read from `HKLM\Software\VideoLAN\VLC\InstallDir`); on macOS it's
+the VLC.app bundle. Without libvlc, `:run` launches but `AudioEngine` errors
+out the moment a track tries to play, and `App` shows the dismissible "VLC
+required" modal (startup + on a failed play attempt).
 
 Linux packaging details:
 
@@ -145,10 +149,15 @@ bytecode targets are lower than the toolchain: **Android `JVM_11`**
   is honoured.
 - `audio/` — `AudioEngine` (expect/actual), `EqualizerController`,
   `SleepTimer`. Android impl is Media3 ExoPlayer + MediaSession; iOS is
-  AVAudioEngine; desktop is VLCJ over libvlc 3.x (the installed system
-  libvlc, discovered at startup). VLCJ media-event callbacks fire on VLCJ's
-  own threads; `AudioEngineDesktop` marshals StateFlow updates back onto the
-  Compose UI thread via `kotlinx-coroutines-swing`.
+  AVAudioEngine; desktop is a thin **Kotlin + JNA binding to libvlc 3.x**
+  (`audio/NativeLibVlc.kt` — the installed system libvlc, discovered at
+  startup), **not** VLCJ. libvlc is LGPL and JNA is Apache-2.0, so the
+  desktop build ships no GPL artifact (see Appendix C / the `### Releases`
+  note). There are no Java-side libvlc event callbacks: `AudioEngineDesktop`
+  reads state/position via a ~250 ms polling coroutine and auto-advances the
+  queue once on the transition into Ended. `isMediaPlaybackAvailable()`
+  (expect/actual) reports whether libvlc was found (desktop) or `true`
+  (Android/iOS), driving the desktop-only "VLC required" modal in `App`.
 - `stations/` — `StationPlayback` (the playback orchestrator),
   `PlaybackQueue` (priority queue + history), `SourceRuleEvaluator`,
   `StationPresets` / `PresetSeeder`. Queue mutations are serialized through
@@ -454,12 +463,15 @@ Asset naming used for v1.1.0: `RadioShed-1.1.0-debug-signed.apk` (release APK
 debug-signed to be installable), `RadioShed-1.1.0-release.aab`,
 `RadioShed-1.1.0-x86_64.AppImage`, `radioshed_1.1.0_amd64.deb`.
 
-**Desktop public-release blocker:** the desktop build links **VLCJ
-(GPL-3.0-or-later)**, a copyleft conflict with the proprietary `LICENSE` — per
-SPEC Appendix C, **do not publish public desktop binaries (`.AppImage` / `.deb`)
-until legal/product review**. Android/iOS are unaffected (VLCJ is
-desktop-only). If desktop binaries are attached to a release, the release notes
-must carry this caveat.
+**Desktop GPL status — RESOLVED (no blocker).** The desktop build no longer
+links VLCJ: audio runs through a direct **Kotlin + JNA binding to libvlc**
+(`audio/NativeLibVlc.kt`; libvlc is LGPL, JNA is Apache-2.0), so no GPL artifact
+ships and there is **no GPL conflict** with the proprietary `LICENSE` for future
+desktop builds (see SPEC Appendix C). One caveat carries forward: the JNA
+binding's runtime playback has not been verified on a VLC-equipped machine per
+OS, so smoke-test desktop playback before relying on a public desktop release.
+Note the **already-published v1.1.0** assets *did* ship VLCJ; the de-GPL applies
+to the next build/release.
 
 ### Commits
 
