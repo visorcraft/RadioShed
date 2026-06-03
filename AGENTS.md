@@ -126,6 +126,25 @@ Linux packaging details:
 - `.deb` packaging needs `dpkg-deb` on PATH; Arch/CachyOS provide it via the
   `dpkg` package.
 
+Local install on the Linux dev box (CachyOS / KDE Plasma), pinned to the
+taskbar — there is exactly **one** install and it updates in place:
+
+- The install is the **single-file AppImage copied to a stable, version-agnostic
+  path**: `~/Applications/RadioShed.AppImage` (`chmod +x`). Do **not** point the
+  launcher into `composeApp/build/…` or at a versioned filename — a build-dir /
+  per-version path goes stale on `clean` or a version bump and leaves the pin
+  launching an old build.
+- Launcher `~/.local/share/applications/radioshed.desktop` has `Exec`/`TryExec`
+  → that stable path, `Icon=radioshed` (PNGs already under
+  `~/.local/share/icons/hicolor/<size>/apps/radioshed.png`), and is pinned in the
+  KDE Task Manager (`~/.config/plasma-org.kde.plasma.desktop-appletsrc` →
+  `launchers=…,applications:radioshed.desktop,…`).
+- **To update:** rebuild the AppImage
+  (`./gradlew :composeApp:packageSingleFileAppImage`) and overwrite
+  `~/Applications/RadioShed.AppImage`; `chmod +x`. The launcher and taskbar pin
+  need no changes. (All user-level — no `sudo`. The desktop AppImage still needs
+  libvlc on the host to play; see the audio note above.)
+
 **JDK 17+** is required (17 is the documented baseline; building both the
 desktop and the Android APK + AAB is verified on JDK 21 too). There is no
 pinned Gradle Java toolchain, so Gradle runs on whatever JDK invokes it. The
