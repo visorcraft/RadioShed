@@ -4271,14 +4271,22 @@ implications baked into the spec:
   Hand-curated catalog in `licenses/LicenseCatalog.kt` is the single source of
   truth; `./gradlew :composeApp:generateThirdPartyLicenses` renders the release
   file (repo root + bundled resource + desktop side-car).
-- **VLCJ / GPL finding (DESKTOP — flagged for legal/product review):** VLCJ
-  4.10.1 (+ vlcj-natives) is **GPL-3.0-or-later** and is linked into the desktop
-  build. A GPLv3 library linked into a binary distributed under the proprietary
+- **VLCJ / GPL finding (DESKTOP — flagged for legal/product review):** the GPL
+  obligation comes specifically from **VLCJ** (`uk.co.caprica:vlcj` 4.10.1 +
+  `vlcj-natives`) — Caprica's **GPL-3.0-or-later** *Java bindings* — which we
+  compile into and ship with the desktop app. It is **not** about libvlc or VLC:
+  **libvlc** (the native playback engine) is **LGPL-2.1+** and is the
+  *user-installed*, dynamically-loaded library we do **not** redistribute, and
+  the **VLC** application is never shipped. So "we don't bundle VLC" is true but
+  irrelevant — the copyleft attaches to the bundled VLCJ binding, not to libvlc.
+  A GPLv3 library compiled into a binary distributed under the proprietary
   LICENSE is a genuine license-compatibility conflict for the desktop target.
-  This is a product/legal decision **outside the scope of the licensing-docs
-  task**, which only documents it accurately. Resolution options (backend swap,
-  dual-licensing from Caprica, etc.) are deferred — do not ship a public desktop
-  build until reviewed. Android/iOS are unaffected (VLCJ is desktop-only).
+  Resolution options: **replace VLCJ with a direct JNA (Apache-2.0) binding to
+  the LGPL libvlc** (designed in
+  `docs/superpowers/specs/2026-06-03-libvlc-jna-and-vlc-modal-design.md`),
+  a commercial VLCJ license from Caprica, or accepting GPL for the desktop build.
+  Until resolved, do not ship a public desktop build. Android/iOS are unaffected
+  (VLCJ is desktop-only; Android uses Media3, iOS AVAudioEngine).
 
 A draft proprietary `LICENSE` is in Phase 0; recommend a lawyer review
 the final text before public launch.
