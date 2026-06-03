@@ -41,8 +41,13 @@ The main Android dev host is **Windows 11**. `adb` lives at
 # Build a debug APK (output: composeApp/build/outputs/apk/debug/composeApp-debug.apk)
 ./gradlew :composeApp:assembleDebug
 
-# Build release
+# Build release APK (UNSIGNED — see "No release signing" note below).
+# Output: composeApp/build/outputs/apk/release/composeApp-release-unsigned.apk
 ./gradlew :composeApp:assembleRelease
+
+# Build the Play App Bundle (UNSIGNED .aab).
+# Output: composeApp/build/outputs/bundle/release/composeApp-release.aab
+./gradlew :composeApp:bundleRelease
 
 # Install latest debug build on the connected device
 "C:\android-sdk\platform-tools\adb.exe" install -r composeApp/build/outputs/apk/debug/composeApp-debug.apk
@@ -81,6 +86,23 @@ The main Android dev host is **Windows 11**. `adb` lives at
 ./gradlew :composeApp:linkReleaseFrameworkIosArm64
 ```
 
+**No release signing is configured.** The `android {}` block has no
+`signingConfigs` and no `buildTypes.release.signingConfig` (release only sets
+`isMinifyEnabled = false`), so `assembleRelease` / `bundleRelease` emit
+**unsigned** artifacts (the APK is literally named
+`composeApp-release-unsigned.apk`). To ship an installable APK, either
+debug-sign + `zipalign` the release APK out-of-band (what the v1.1.0 asset did)
+or add a real `signingConfig`. Keystores and `keystore.properties` / `*.jks` /
+`*.keystore` are gitignored and machine-specific — never commit them.
+
+Building **any** Android variant needs an Android SDK with **platform
+`android-36`** (compile/target SDK 36) and **build-tools `36.0.0`**, plus
+platform-tools and cmdline-tools. Point Gradle at it via `sdk.dir` in
+`local.properties` (or `ANDROID_HOME` / `ANDROID_SDK_ROOT`); `local.properties`
+is **gitignored / per-machine** — do not hardcode a path. With an SDK installed,
+the Linux desktop host builds the Android APK + AAB end-to-end too (Android is
+not Windows-only).
+
 The desktop runtime needs **libvlc** (VLC 3.x) installed on the host. VLCJ
 discovers it via `NativeDiscovery().discover()` at startup. On Linux that's
 `apt install vlc` or the distro equivalent; on Windows it's the standard VLC
@@ -100,8 +122,11 @@ Linux packaging details:
 - `.deb` packaging needs `dpkg-deb` on PATH; Arch/CachyOS provide it via the
   `dpkg` package.
 
-JDK 17 is required (`compileOptions = VERSION_11` is the bytecode target, but
-the Gradle/AGP toolchain itself needs 17).
+**JDK 17+** is required (17 is the documented baseline; building both the
+desktop and the Android APK + AAB is verified on JDK 21 too). There is no
+pinned Gradle Java toolchain, so Gradle runs on whatever JDK invokes it. The
+bytecode targets are lower than the toolchain: **Android `JVM_11`**
+(`compileOptions`), **desktop `JVM_17`**.
 
 ## Architecture
 
@@ -368,8 +393,10 @@ DO NOT:
 
 ### Build & Tooling
 
-- Toolchain: JDK 17 required (Microsoft OpenJDK 17 on the dev machine).
-  Bytecode target is `JvmTarget.JVM_11`.
+- Toolchain: **JDK 17+** (17 baseline; desktop + Android builds verified on
+  JDK 21). No pinned Gradle Java toolchain. Bytecode targets: Android
+  `JvmTarget.JVM_11`, desktop `JvmTarget.JVM_17`. AGP 8.11.2 / Gradle 8.14.3 /
+  Kotlin 2.3.20.
 - Versions live in `gradle/libs.versions.toml`. Add new dependencies
   there, never inline in `build.gradle.kts`.
 - When adding or bumping a third-party dependency, also update
@@ -395,6 +422,44 @@ DO NOT:
   on PATH.
 - `verifyMigrations` is intentionally **off** — do not flip it on
   without the schema-restating refactor tracked in SPEC Phase 18.
+
+### Releases
+
+`version.properties` (repo root) is the single source of truth for the version
+and drives AGP `versionName`/`versionCode`, desktop `packageVersion`, and the
+generated `BuildInfo`. Bump rules live in that file: patch = bug fixes, minor =
+backwards-compatible features, major = breaking changes (e.g. backup-format
+incompatibility); `versionCode` is monotonic and **never decremented** (Play
+rejects duplicate/decreasing codes); `buildDate` = today's UTC date on every
+ship.
+
+Releases are tagged **`vX.Y.Z`** (`v1.1.0` is the first tag) with a matching
+GitHub release titled `RadioShed X.Y.Z` on `visorcraft/RadioShed`, cut via the
+`gh` CLI. End-to-end flow: bump `version.properties` → commit → push →
+`git tag -a vX.Y.Z` → push the tag → `gh release create vX.Y.Z` →
+`gh release upload` the per-platform assets. Desktop binaries only build on/for
+their host OS, so each platform's assets are produced on that host.
+
+Per-platform shippable artifacts (command → output):
+
+| Artifact | Command | Output |
+| --- | --- | --- |
+| Android APK (release, **unsigned**) | `:composeApp:assembleRelease` | `composeApp/build/outputs/apk/release/composeApp-release-unsigned.apk` |
+| Android AAB (**unsigned**) | `:composeApp:bundleRelease` | `composeApp/build/outputs/bundle/release/composeApp-release.aab` |
+| Linux `.AppImage` | `:composeApp:packageSingleFileAppImage` | `composeApp/build/compose/binaries/main/appimage/RadioShed-<version>-x86_64.AppImage` |
+| Linux `.deb` | `:composeApp:packageDistributionForCurrentOS` | `composeApp/build/compose/binaries/main/deb/radioshed_<version>_amd64.deb` |
+| Windows `.msi` / macOS `.dmg` | `:composeApp:packageDistributionForCurrentOS` (on that host) | jpackage native installer for the host OS |
+
+Asset naming used for v1.1.0: `RadioShed-1.1.0-debug-signed.apk` (release APK
+debug-signed to be installable), `RadioShed-1.1.0-release.aab`,
+`RadioShed-1.1.0-x86_64.AppImage`, `radioshed_1.1.0_amd64.deb`.
+
+**Desktop public-release blocker:** the desktop build links **VLCJ
+(GPL-3.0-or-later)**, a copyleft conflict with the proprietary `LICENSE` — per
+SPEC Appendix C, **do not publish public desktop binaries (`.AppImage` / `.deb`)
+until legal/product review**. Android/iOS are unaffected (VLCJ is
+desktop-only). If desktop binaries are attached to a release, the release notes
+must carry this caveat.
 
 ### Commits
 
