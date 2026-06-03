@@ -56,6 +56,11 @@ The main Android dev host is **Windows 11**. `adb` lives at
 # Force SQLDelight regen after editing .sq / .sqm files
 ./gradlew :composeApp:generateCommonMainRadioShedDatabaseInterface --rerun-tasks
 
+# Regenerate THIRD_PARTY_LICENSES after editing the license catalog.
+# Renders the repo-root file + bundled resource + desktop side-car from
+# licenses/LicenseCatalog.kt (the single source of truth; see Build & Tooling).
+./gradlew :composeApp:generateThirdPartyLicenses
+
 # Desktop dev loop — compile + launch the Compose Desktop window.
 # First run pulls deps + a JBR JDK; subsequent runs are seconds.
 ./gradlew :composeApp:run
