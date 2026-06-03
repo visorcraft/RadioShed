@@ -1,0 +1,321 @@
+RadioShed — Proprietary License
+
+Copyright (c) 2026 VisorCraft LLC. All rights reserved.
+
+==============================================================================
+DRAFT — NOT YET LEGALLY REVIEWED.
+
+This file is a starting template authored by the project's developer and
+is **not** a substitute for advice from a licensed attorney. Before this
+license is used in any public-facing distribution, beta, App Store
+submission, Play Store submission, or any transfer of the Software to a
+third party, it must be reviewed and customized by qualified legal
+counsel for the relevant jurisdiction(s). Placeholders in [SQUARE
+BRACKETS] must be filled in.
+==============================================================================
+
+
+1. DEFINITIONS
+
+1.1 "Software" means the RadioShed application, including its source
+    code, object code, compiled binaries, installers, packaged
+    artifacts (APK, AAB, IPA, XCFramework), build scripts,
+    configuration files, design documents, specifications, screenshots,
+    icons, artwork, and any accompanying documentation contained in or
+    distributed with this repository, in whole or in part, in any form
+    or medium, whether existing now or created in the future.
+
+1.2 "Licensor" means VisorCraft LLC, the sole owner of the
+    Software and all intellectual-property rights in it, and any
+    successors or assigns.
+
+1.3 "You" or "Licensee" means the natural or legal person who has
+    obtained an authorized copy of the Software through a channel
+    expressly permitted by Licensor.
+
+1.4 "Authorized Channel" means any of the following, and only these:
+    (a) the Apple App Store;
+    (b) the Google Play Store, where Licensor has published the
+        Software under its own developer account;
+    (c) a direct-download portal operated by, or expressly authorized
+        in writing by, Licensor;
+    (d) Apple TestFlight or any other beta-distribution mechanism
+        operated by, or expressly authorized in writing by, Licensor.
+    Any other channel — including but not limited to file-sharing
+    sites, third-party app stores, alternative app marketplaces,
+    sideload aggregators, public code repositories, package mirrors,
+    archive sites, and peer-to-peer networks — is **not** an
+    Authorized Channel.
+
+1.5 "Third-Party Components" means software libraries, frameworks,
+    fonts, icons, sample audio, or other materials that are owned by
+    parties other than Licensor and that are incorporated into the
+    Software, each governed by its own license terms.
+
+
+2. GRANT OF LICENSE
+
+2.1 Subject to Your continuing compliance with every term of this
+    Agreement, Licensor grants You a personal, non-exclusive,
+    non-transferable, non-sublicensable, revocable license to install
+    and use the Software, in compiled binary form only, on devices
+    that You own or personally control, solely for Your own private,
+    non-commercial use.
+
+2.2 The license in Section 2.1 is granted only for binaries obtained
+    through an Authorized Channel.
+
+2.3 No other rights are granted, expressly, by implication, by
+    estoppel, or otherwise. All rights not expressly granted are
+    reserved by Licensor.
+
+
+3. RESTRICTIONS
+
+3.1 You shall not, and shall not permit any other person to, do any
+    of the following with respect to the Software:
+
+    (a) Copy, reproduce, or duplicate the Software, except for a
+        single backup copy kept solely on a device You own or
+        personally control;
+
+    (b) Distribute, redistribute, publish, transmit, mirror, host,
+        upload, share, lend, lease, rent, sell, resell, sublicense,
+        assign, or otherwise transfer the Software or any copy,
+        portion, or derivative of it to any other person, by any
+        medium, including but not limited to public code repositories,
+        file-sharing services, third-party app stores, alternative
+        app marketplaces, peer-to-peer networks, or physical media;
+
+    (c) Publicly display, perform, or make the Software available to
+        the public in any manner;
+
+    (d) Modify, adapt, translate, port, fork, merge with other
+        software, or create derivative works of the Software, except
+        as expressly permitted by applicable law notwithstanding this
+        prohibition;
+
+    (e) Reverse engineer, decompile, disassemble, deobfuscate, or
+        otherwise attempt to derive the source code, underlying
+        ideas, algorithms, file formats, programming interfaces, or
+        non-public aspects of the Software, except, and only to the
+        extent, that such activity is expressly permitted by
+        applicable law notwithstanding this prohibition, and only
+        after first giving Licensor written notice and a reasonable
+        opportunity to provide the information You require;
+
+    (f) Remove, alter, or obscure any copyright, trademark, license,
+        attribution, or other proprietary notice on or in the
+        Software;
+
+    (g) Use the Software, or any output produced with the Software,
+        for any commercial purpose, including but not limited to
+        offering paid playback services, monetized streaming, or
+        public broadcasting;
+
+    (h) Use the Software to develop a competing product or to assist
+        any other person in developing a competing product;
+
+    (i) Use the Software in any manner that violates applicable law
+        or that infringes the rights of any third party;
+
+    (j) Bypass, circumvent, or disable any license-key check,
+        copy-protection mechanism, or technical access control built
+        into the Software or its distribution channel; or
+
+    (k) Use any automated means to access, scrape, or mass-download
+        the Software from an Authorized Channel beyond what is
+        necessary for ordinary personal installation.
+
+3.2 The restrictions in Section 3.1 apply to the Software in whole
+    and to every part of it, including individual source files,
+    binaries, configuration files, documentation, artwork, and any
+    other constituent materials.
+
+
+4. USER DATA AND PORTABILITY
+
+4.1 Notwithstanding the proprietary status of the Software, the
+    personal data You create using the Software — including Your
+    music library metadata, station definitions, playlists, ratings,
+    play history, settings, custom artwork, and DJ templates —
+    belongs to You. The Software provides export functionality (see
+    SPEC.md §14) so that You may take Your data to any other
+    application You choose. Licensor does not assert ownership over
+    user-created data.
+
+4.2 Audio files (Your music) are not part of the Software and are
+    not subject to this Agreement. Your use of audio files is
+    governed by the licenses under which You hold those files.
+
+
+5. THIRD-PARTY COMPONENTS
+
+5.1 The Software incorporates Third-Party Components that are
+    licensed under their respective terms (which include
+    open-source licenses such as the Apache License 2.0, the MIT
+    License, the BSD licenses, the LGPL, and others). The full list
+    of Third-Party Components and the texts of their licenses are
+    available in the Software's "About → Licenses" screen and in the
+    `THIRD_PARTY_LICENSES` file accompanying each release.
+
+5.2 Nothing in this Agreement limits, modifies, or supersedes the
+    terms of any Third-Party Component license. Your use of each
+    Third-Party Component is governed by its own license, which
+    controls in the event of any conflict with this Agreement
+    solely with respect to that component.
+
+
+6. NO IMPLIED LICENSE; FEEDBACK
+
+6.1 No license, right, or interest in any trademark, trade name,
+    service mark, or logo of Licensor is granted under this
+    Agreement.
+
+6.2 If You provide Licensor with any feedback, comments,
+    suggestions, or ideas regarding the Software ("Feedback"), You
+    grant Licensor a perpetual, irrevocable, worldwide, royalty-free,
+    sublicensable license to use that Feedback for any purpose,
+    without obligation or compensation to You.
+
+
+7. UPDATES AND VERSIONS
+
+7.1 Licensor may, at its sole discretion, release updates,
+    upgrades, patches, or new versions of the Software. Any such
+    release is governed by this Agreement unless accompanied by a
+    different license, in which case the accompanying license
+    governs that release.
+
+7.2 Licensor is under no obligation to provide updates, support,
+    maintenance, or any service relating to the Software.
+
+
+8. NO WARRANTY
+
+8.1 THE SOFTWARE IS PROVIDED "AS IS" AND "AS AVAILABLE", WITHOUT
+    WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT
+    LIMITED TO THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS
+    FOR A PARTICULAR PURPOSE, TITLE, AND NON-INFRINGEMENT.
+
+8.2 LICENSOR DOES NOT WARRANT THAT THE SOFTWARE WILL BE
+    UNINTERRUPTED OR ERROR-FREE, THAT DEFECTS WILL BE CORRECTED, OR
+    THAT THE SOFTWARE IS FREE OF VIRUSES OR OTHER HARMFUL
+    COMPONENTS.
+
+8.3 NO ORAL OR WRITTEN INFORMATION OR ADVICE GIVEN BY LICENSOR OR
+    ITS REPRESENTATIVES SHALL CREATE A WARRANTY.
+
+
+9. LIMITATION OF LIABILITY
+
+9.1 TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, IN NO EVENT
+    SHALL LICENSOR BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL,
+    EXEMPLARY, OR CONSEQUENTIAL DAMAGES, OR FOR ANY LOSS OF
+    PROFITS, REVENUE, DATA, GOODWILL, OR OTHER INTANGIBLE LOSSES,
+    ARISING OUT OF OR RELATING TO THIS AGREEMENT OR YOUR USE OF OR
+    INABILITY TO USE THE SOFTWARE, REGARDLESS OF THE THEORY OF
+    LIABILITY (CONTRACT, TORT, NEGLIGENCE, STRICT LIABILITY, OR
+    OTHERWISE) AND EVEN IF LICENSOR HAS BEEN ADVISED OF THE
+    POSSIBILITY OF SUCH DAMAGES.
+
+9.2 TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, LICENSOR'S
+    TOTAL CUMULATIVE LIABILITY ARISING OUT OF OR RELATING TO THIS
+    AGREEMENT OR THE SOFTWARE SHALL NOT EXCEED THE GREATER OF (a)
+    THE AMOUNT, IF ANY, ACTUALLY PAID BY YOU TO LICENSOR FOR THE
+    SOFTWARE IN THE TWELVE (12) MONTHS PRECEDING THE EVENT GIVING
+    RISE TO THE CLAIM, OR (b) USD $5.00.
+
+9.3 Some jurisdictions do not allow the exclusion or limitation of
+    incidental or consequential damages, so the limitations in
+    Sections 9.1 and 9.2 may not apply to You in full. In such
+    jurisdictions, Licensor's liability is limited to the maximum
+    extent permitted by law.
+
+
+10. INDEMNIFICATION
+
+10.1 You agree to indemnify, defend, and hold harmless Licensor and
+     its officers, directors, employees, and agents from and
+     against any and all claims, liabilities, damages, losses, and
+     expenses (including reasonable attorneys' fees) arising out of
+     or in any way connected with Your breach of this Agreement,
+     Your misuse of the Software, or Your violation of any law or
+     of the rights of any third party.
+
+
+11. TERM AND TERMINATION
+
+11.1 This Agreement is effective from the moment You install or
+     otherwise begin using the Software and continues until
+     terminated.
+
+11.2 This Agreement terminates automatically and immediately,
+     without notice, if You breach any term of it. Licensor may
+     also terminate this Agreement at any time, with or without
+     cause, upon notice to You.
+
+11.3 Upon termination, all rights granted to You under this
+     Agreement cease, and You must immediately cease all use of the
+     Software and delete or destroy all copies of the Software in
+     Your possession or control. The provisions of Sections 3, 4,
+     5, 6, 8, 9, 10, 11.3, and 12 survive termination.
+
+
+12. GENERAL
+
+12.1 Governing Law. This Agreement is governed by and construed in
+     accordance with the laws of the State of Texas, United States of America, without regard to
+     its conflict-of-laws principles. The United Nations Convention
+     on Contracts for the International Sale of Goods does not
+     apply.
+
+12.2 Venue. Any dispute arising out of or relating to this
+     Agreement shall be brought exclusively in the courts located
+     in the State of Texas, United States of America, and the parties consent to the personal
+     jurisdiction of those courts.
+
+12.3 Severability. If any provision of this Agreement is held
+     unenforceable, that provision shall be modified to the minimum
+     extent necessary to make it enforceable, and the remaining
+     provisions shall remain in full force and effect.
+
+12.4 No Waiver. Licensor's failure to enforce any provision of this
+     Agreement shall not be deemed a waiver of that provision or of
+     any other provision.
+
+12.5 Assignment. You may not assign or transfer this Agreement, by
+     operation of law or otherwise, without Licensor's prior
+     written consent. Licensor may assign this Agreement freely.
+     Any attempted assignment in violation of this Section is void.
+
+12.6 Entire Agreement. This Agreement constitutes the entire
+     agreement between You and Licensor regarding the Software and
+     supersedes all prior or contemporaneous understandings,
+     communications, and agreements, whether oral or written,
+     regarding its subject matter.
+
+12.7 Headings. Section headings are for convenience only and do
+     not affect interpretation.
+
+12.8 Notices. Any notice under this Agreement must be in writing
+     and sent to the contact address Licensor designates from time
+     to time, or, in the case of notices to You, to the email
+     address You provided when obtaining the Software, if any.
+
+12.9 Export Compliance. You shall comply with all applicable export
+     and import laws and regulations in Your use of the Software.
+
+12.10 U.S. Government End-Users. The Software is a "commercial
+      item" as that term is defined at 48 C.F.R. 2.101, consisting
+      of "commercial computer software" and "commercial computer
+      software documentation" as such terms are used in 48 C.F.R.
+      12.212. Consistent with 48 C.F.R. 12.212 and 48 C.F.R.
+      227.7202-1 through 227.7202-4, U.S. Government end-users
+      acquire the Software with only those rights set forth in
+      this Agreement.
+
+
+==============================================================================
+END OF AGREEMENT
+==============================================================================

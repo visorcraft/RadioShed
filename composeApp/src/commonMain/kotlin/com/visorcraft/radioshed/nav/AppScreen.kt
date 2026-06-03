@@ -129,6 +129,9 @@ sealed interface AppScreen {
      */
     data object DbBrowser : AppScreen
 
+    /** Open-source + proprietary license documentation (list -> detail). */
+    data object Licenses : AppScreen
+
     /**
      * Subsonic-protocol cloud-music browser. Reachable from Settings
      * → Cloud sources → Subsonic, once the user has filled in

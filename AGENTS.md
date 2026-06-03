@@ -367,6 +367,14 @@ DO NOT:
   Bytecode target is `JvmTarget.JVM_11`.
 - Versions live in `gradle/libs.versions.toml`. Add new dependencies
   there, never inline in `build.gradle.kts`.
+- When adding or bumping a third-party dependency, also update
+  `composeApp/src/commonMain/kotlin/com/visorcraft/radioshed/licenses/LicenseCatalog.kt`
+  (and add its license text under
+  `composeApp/src/commonMain/composeResources/files/licenses/` if a new SPDX id
+  appears), then rerun `./gradlew :composeApp:generateThirdPartyLicenses`. The
+  catalog is the single source of truth for the in-app About → Licenses screen
+  and the generated `THIRD_PARTY_LICENSES` file (LICENSE §5.1). `LicenseCatalogTest`
+  fails the build if a shipped coordinate is undocumented.
 - After editing `.sq` / `.sqm` files, regenerate with
   `./gradlew :composeApp:generateCommonMainRadioShedDatabaseInterface --rerun-tasks`.
 - Linux desktop packaging:

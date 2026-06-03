@@ -362,6 +362,15 @@ fun App(
                         )
                     }
 
+                    AppScreen.Licenses -> {
+                        // No outer PlatformBackHandler — LicensesScreen
+                        // installs its own so back collapses detail -> list
+                        // before popping the screen (FolderBrowser precedent).
+                        com.visorcraft.radioshed.ui.settings.LicensesScreen(
+                            onBack = { current = AppScreen.AppSettings },
+                        )
+                    }
+
                     AppScreen.SubsonicBrowse -> {
                         PlatformBackHandler { current = AppScreen.AppSettings }
                         com.visorcraft.radioshed.ui.cloud.SubsonicBrowseScreen(
@@ -391,6 +400,7 @@ fun App(
                             onOpenCrashLog = { current = AppScreen.CrashLog },
                             onOpenSyncthingWizard = { current = AppScreen.SyncthingWizard },
                             onOpenDbBrowser = { current = AppScreen.DbBrowser },
+                            onOpenLicenses = { current = AppScreen.Licenses },
                             onOpenSubsonic = { current = AppScreen.SubsonicBrowse },
                         )
                     }

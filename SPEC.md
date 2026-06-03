@@ -1066,6 +1066,7 @@ Goal: repo exists, decisions documented, CI skeleton green.
 
 - [x] Create **private** GitHub repository with branch protection on `master`
 - [x] Draft proprietary `LICENSE` file: no redistribution, no resale, no public sharing, no mirroring; reserve all rights; private use of authorized binaries only (lawyer review still pending before public release)
+- [x] Fulfil LICENSE §5.1 third-party documentation: hand-curated `licenses/LicenseCatalog.kt`, in-app `ui/settings/LicensesScreen.kt` (About → Open-source licenses; proprietary entry pinned first), and `generateThirdPartyLicenses` Gradle task rendering `THIRD_PARTY_LICENSES` (repo root + bundled resource + desktop side-car). VLCJ/GPL desktop conflict documented in Appendix C, flagged for legal review (~) before any public desktop release.
 - [x] Add `.editorconfig`, `.gitignore`, `.gitattributes`
 - [x] Add `CONTRIBUTING.md` (private team contribution guide) — covers working environment, build/install loop, branching/commits, code style, testing, SPEC update conventions, and license posture.
 - [x] Create `docs/decisions/` with ADR template (`0000-template.md`)
@@ -4266,6 +4267,18 @@ implications baked into the spec:
 - **CI cost** — private repo means GitHub Actions free minutes are
   limited; macOS minutes cost 10× Linux minutes. Plan budget or move
   to a self-hosted Mac runner once iOS builds are frequent.
+- **About → Licenses screen + `THIRD_PARTY_LICENSES`** fulfil LICENSE §5.1.
+  Hand-curated catalog in `licenses/LicenseCatalog.kt` is the single source of
+  truth; `./gradlew :composeApp:generateThirdPartyLicenses` renders the release
+  file (repo root + bundled resource + desktop side-car).
+- **VLCJ / GPL finding (DESKTOP — flagged for legal/product review):** VLCJ
+  4.10.1 (+ vlcj-natives) is **GPL-3.0-or-later** and is linked into the desktop
+  build. A GPLv3 library linked into a binary distributed under the proprietary
+  LICENSE is a genuine license-compatibility conflict for the desktop target.
+  This is a product/legal decision **outside the scope of the licensing-docs
+  task**, which only documents it accurately. Resolution options (backend swap,
+  dual-licensing from Caprica, etc.) are deferred — do not ship a public desktop
+  build until reviewed. Android/iOS are unaffected (VLCJ is desktop-only).
 
 A draft proprietary `LICENSE` is in Phase 0; recommend a lawyer review
 the final text before public launch.

@@ -291,6 +291,12 @@ compose.desktop {
                 TargetFormat.Dmg,
                 TargetFormat.Deb,
             )
+            // Side-car resources copied beside the desktop binary by
+            // jpackage (into the app-image / .deb / .AppImage). The
+            // generateThirdPartyLicenses task writes the aggregate
+            // THIRD_PARTY_LICENSES here so each desktop release carries
+            // the license file next to the launcher (LICENSE §5.1).
+            appResourcesRootDir.set(project.layout.projectDirectory.dir("desktopAppResources"))
             packageName = "RadioShed"
             // Compose Desktop's per-OS validators reject MAJOR=0
             // (DMG specifically requires MAJOR > 0), so when
@@ -596,3 +602,92 @@ tasks.matching { it.name.startsWith("compile") && it.name.contains("Kotlin") }
 // they all expect commonMain sources to be present when they run.
 tasks.matching { it.name == "kspCommonMainKotlinMetadata" }
     .configureEach { dependsOn(generateBuildInfo) }
+
+// ---- Generated THIRD_PARTY_LICENSES ----
+//
+// Renders the aggregate THIRD_PARTY_LICENSES from the SAME
+// LicenseCatalog.kt the in-app Licenses screen reads, so the file and
+// the screen can never drift. The renderer is a desktop-target JVM
+// `main` (LicenseFileRenderer.kt) run via JavaExec; it reuses the
+// compiled commonMain catalog directly off the desktop runtime
+// classpath — no second copy of the data.
+//
+// Outputs:
+//   - repo-root THIRD_PARTY_LICENSES (release file accompanying each build),
+//   - composeResources/files/THIRD_PARTY_LICENSES.txt (ships inside every
+//     APK / jar / iOS framework via the Compose resources mechanism),
+//   - desktopAppResources/THIRD_PARTY_LICENSES (copied beside the desktop
+//     binary by jpackage via appResourcesRootDir).
+//
+// Deliberately NOT wired upstream of compile* (unlike generateBuildInfo):
+// it depends on the desktop compile, so wiring it before compile would
+// cycle. The bundled .txt is checked in; package tasks regenerate it.
+val licensesResDir = layout.projectDirectory.dir(
+    "src/commonMain/composeResources/files/licenses",
+)
+val thirdPartyLicensesRoot = rootProject.layout.projectDirectory.file("THIRD_PARTY_LICENSES")
+val thirdPartyLicensesBundled = layout.projectDirectory.file(
+    "src/commonMain/composeResources/files/THIRD_PARTY_LICENSES.txt",
+)
+val thirdPartyLicensesDesktop = layout.projectDirectory.file(
+    "desktopAppResources/THIRD_PARTY_LICENSES",
+)
+
+val generateThirdPartyLicenses = tasks.register<JavaExec>("generateThirdPartyLicenses") {
+    group = "build"
+    description = "Render THIRD_PARTY_LICENSES from LicenseCatalog.kt (single source of truth)."
+    val desktopMainCompilation = kotlin.targets.getByName("desktop")
+        .compilations.getByName("main")
+    dependsOn(desktopMainCompilation.compileTaskProvider)
+    classpath = files(
+        desktopMainCompilation.output.allOutputs,
+        configurations.getByName("desktopRuntimeClasspath"),
+    )
+    mainClass.set("com.visorcraft.radioshed.licenses.LicenseFileRendererKt")
+    // The renderer writes the same body to every output path (arg[1..]).
+    // Passing the desktop side-car as a 4th arg keeps the copy inside the
+    // JVM main, which is configuration-cache-safe (no `project`/`copy`
+    // reference at execution time).
+    args(
+        licensesResDir.asFile.absolutePath,
+        thirdPartyLicensesRoot.asFile.absolutePath,
+        thirdPartyLicensesBundled.asFile.absolutePath,
+        thirdPartyLicensesDesktop.asFile.absolutePath,
+    )
+    inputs.dir(licensesResDir)
+    inputs.file("src/commonMain/kotlin/com/visorcraft/radioshed/licenses/LicenseCatalog.kt")
+    outputs.file(thirdPartyLicensesRoot)
+    outputs.file(thirdPartyLicensesBundled)
+    outputs.file(thirdPartyLicensesDesktop)
+}
+
+// Make packaging depend on the generator so the side-car can't go stale
+// at release time.
+//
+// The real reader of appResourcesRootDir (= desktopAppResources/) is the
+// Compose plugin's `prepareAppResources` Sync task: it copies that directory
+// into the build dir, and jpackage (createDistributable / package* / their
+// release + run variants) reads the *copied* result via an @Internal
+// appResourcesDir property. So the ordering edge that actually matters is
+// generateThirdPartyLicenses -> prepareAppResources; without it Gradle is free
+// to run the Sync before the generator overwrites the side-car on disk,
+// copying a stale file into the app-image. Wiring the generator onto
+// prepareAppResources guarantees regeneration before the copy; every
+// createDistributable / package* / packageSingleFileAppImage task picks it up
+// transitively (they all dependOn prepareAppResources).
+tasks.matching { it.name == "prepareAppResources" }
+    .configureEach { dependsOn(generateThirdPartyLicenses) }
+
+// Keep the explicit package*-task edges too. They are redundant once
+// prepareAppResources is covered, but harmless, and they keep the generator
+// wired even if a future Compose version renames the Sync task.
+tasks.matching {
+    it.name in setOf(
+        "packageDistributionForCurrentOS",
+        "packageReleaseDistributionForCurrentOS",
+        "packageDeb", "packageReleaseDeb",
+        "packageAppImage", "packageReleaseAppImage",
+        "packageMsi", "packageReleaseMsi",
+        "packageDmg", "packageReleaseDmg",
+    )
+}.configureEach { dependsOn(generateThirdPartyLicenses) }
