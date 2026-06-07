@@ -1,17 +1,30 @@
-# RadioShed
+<h1 align="center">📻 RadioShed</h1>
 
-RadioShed is a private, station-centric music app for a local music library.
-It targets **Android 13+**, **Windows 11+**, **Linux**, and eventually
-**iOS 16+**. It is built with Kotlin Multiplatform and Compose Multiplatform.
+<p align="center">
+  <b>A private, station-centric music app for your own local music library.</b>
+  <br />
+  Scan your music, build stations, tune playback rules, save playlists, and fetch optional metadata — your library, under your own control.
+  <br />
+  Kotlin Multiplatform · Android · Windows · Linux · iOS (soon)
+</p>
 
-RadioShed is meant to replace shuffle-heavy streaming apps with something
-closer to personal radio: scan your music, build stations, tune playback rules,
-save playlists, fetch optional metadata, and keep your library under your own
-control.
+<p align="center">
+  <img src="https://img.shields.io/badge/platforms-Android%20%C2%B7%20Windows%20%C2%B7%20Linux%20%C2%B7%20iOS-1f6feb" alt="Platforms: Android, Windows, Linux, iOS" />
+  <img src="https://img.shields.io/badge/built%20with-Kotlin%20Multiplatform-7F52FF?logo=kotlin&logoColor=white" alt="Built with Kotlin Multiplatform" />
+  <img src="https://img.shields.io/badge/UI-Compose%20Multiplatform-4285F4?logo=jetpackcompose&logoColor=white" alt="Compose Multiplatform" />
+  <img src="https://img.shields.io/badge/license-Proprietary-red" alt="License: Proprietary" />
+  <img src="https://img.shields.io/badge/status-in%20development-orange" alt="Status: in development" />
+</p>
 
-> **License: proprietary.** Source code, compiled binaries, and documentation
-> in this repository are not for redistribution, resale, public sharing, or
-> mirroring. See `LICENSE` for full terms.
+---
+
+## What is RadioShed?
+
+RadioShed is a private, station-centric music app for a local music library. It targets **Android 13+**, **Windows 11+**, **Linux**, and eventually **iOS 16+**, built with Kotlin Multiplatform and Compose Multiplatform.
+
+RadioShed replaces shuffle-heavy streaming apps with something closer to personal radio: scan your music, build stations, tune playback rules, save playlists, fetch optional metadata, and keep your library under your own control.
+
+---
 
 ## Status
 
@@ -26,6 +39,8 @@ control.
 For the product roadmap, feature list, and phased implementation plan, read
 [`SPEC.md`](./SPEC.md). For user workflows, read [`USER_GUIDE.md`](./USER_GUIDE.md)
 and [`FAQ.md`](./FAQ.md).
+
+---
 
 ## Repository Layout
 
@@ -55,6 +70,8 @@ RadioShed/
         ├── iosMain/              # iOS stubs pending Mac access
         └── commonTest/           # Shared JVM-runnable tests
 ```
+
+---
 
 ## Prerequisites
 
@@ -114,6 +131,8 @@ Additional tools:
   `composeApp/build/compose/tools/`.
 - Running AppImages on some Linux installs may require FUSE. If FUSE is not
   available, run with `--appimage-extract-and-run`.
+
+---
 
 ## Build From Source
 
@@ -222,6 +241,8 @@ Requires macOS:
 ./gradlew :composeApp:assembleXCFramework
 ```
 
+---
+
 ## Installation And Running
 
 ### Android Debug Install
@@ -285,6 +306,8 @@ On Windows, run:
 composeApp\build\compose\binaries\main\app\RadioShed\RadioShed.exe
 ```
 
+---
+
 ## First-Run Setup
 
 1. Install VLC/libvlc before desktop playback testing.
@@ -301,6 +324,8 @@ composeApp\build\compose\binaries\main\app\RadioShed\RadioShed.exe
 Keep music paths stable after scanning. If you move a library, update folders
 inside RadioShed and rescan so playlists, station rules, artwork, and history
 continue to resolve cleanly.
+
+---
 
 ## Best-Practice Usage
 
@@ -322,6 +347,8 @@ continue to resolve cleanly.
 - For portable Linux testing, prefer the single-file `.AppImage`; for a
   machine you control long-term, prefer `.deb` on Debian-based systems.
 
+---
+
 ## Development Best Practices
 
 - Read [`AGENTS.md`](./AGENTS.md) before making code changes. It is the
@@ -336,6 +363,8 @@ continue to resolve cleanly.
 ./gradlew :composeApp:packageSingleFileAppImage --rerun-tasks
 ./gradlew :composeApp:packageDistributionForCurrentOS --rerun-tasks
 ```
+
+---
 
 ## Troubleshooting
 
@@ -360,6 +389,8 @@ continue to resolve cleanly.
 - **Android Auto appears stale**: use `adb logcat -s RadioShedMS:V` and
   `adb logcat -s RadioShedArt:V` to inspect media session and artwork output.
 
+---
+
 ## App Icon Assets
 
 The checked-in cross-platform bitmap is:
@@ -375,6 +406,8 @@ Android launcher icons live under `composeApp/src/androidMain/res/`, including
 adaptive icon XML and legacy mipmap PNGs. If icon artwork changes, keep the
 Android adaptive icon, Android mipmaps, and shared Compose PNG visually in sync.
 
+---
+
 ## Documentation Map
 
 - [`USER_GUIDE.md`](./USER_GUIDE.md): user workflows and feature walkthroughs.
@@ -382,3 +415,11 @@ Android adaptive icon, Android mipmaps, and shared Compose PNG visually in sync.
 - [`SPEC.md`](./SPEC.md): product specification and phased roadmap.
 - [`AGENTS.md`](./AGENTS.md): authoritative engineering/agent instructions.
 - [`CLAUDE.md`](./CLAUDE.md): redirect stub for Claude-family agents.
+
+---
+
+## License
+
+**Proprietary.** © 2026 VisorCraft LLC. All rights reserved. See [`LICENSE`](LICENSE) for full terms.
+
+Source code, compiled binaries, and documentation in this repository are **not** for redistribution, resale, public sharing, or mirroring.
