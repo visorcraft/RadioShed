@@ -7,6 +7,9 @@ import com.visorcraft.radioshed.domain.SmartQueryKind
 import com.visorcraft.radioshed.domain.SortBy
 import com.visorcraft.radioshed.domain.SourceRule
 import com.visorcraft.radioshed.domain.Track
+import com.visorcraft.radioshed.source.MediaSourceRegistry
+import com.visorcraft.radioshed.source.SourceFilter
+import kotlinx.coroutines.flow.toList
 
 /**
  * Resolves any [SourceRule] tree into a flat list of candidate tracks for
@@ -23,7 +26,7 @@ class SourceRuleEvaluator(
     private val libraryRepo: LibraryRepository,
     private val ratingRepo: RatingRepository,
     private val playlistRepo: PlaylistRepository,
-    private val mediaSourceRegistry: com.visorcraft.radioshed.source.MediaSourceRegistry,
+    private val mediaSourceRegistry: MediaSourceRegistry,
 ) {
 
     /** Hard cap on "everything in the library" smart-queries so we don't
@@ -94,21 +97,24 @@ class SourceRuleEvaluator(
 
     private suspend fun evaluateMediaSource(rule: SourceRule.MediaSourceSelector): List<Track> {
         val source = mediaSourceRegistry.getById(rule.mediaSourceId) ?: return emptyList()
-        return source.listTracks(SourceFilter()).map { track ->
-            // Convert DiscoveredTrack to Track.
-            // Note: For cloud sources, we use the URI as the path.
+        val now = nowMs()
+        // Cloud tracks aren't persisted to the local library yet, so
+        // synthesize Track rows from discovery metadata. The URI-hash id
+        // is a placeholder until remote tracks get stable local ids via a
+        // remote-track schema (see SubsonicClient KDoc, deferred scope).
+        return source.listTracks(SourceFilter()).toList().map { discovered ->
             Track(
-                id = track.uri.hashCode().toLong(), // This is a bit hacky for now; real implementation should use stable IDs from source
-                path = track.uri,
-                fileName = track.fileName,
-                fileSize = track.fileSize,
-                fileCtime = track.fileCtime,
-                fileMtime = track.fileMtime,
-                title = "", // We don't have title yet; it should come from TagReader or source metadata
-                durationMs = 0L, // Ideally we'd get this from the source too
-                format = track.format,
-                addedAt = System.currentTimeMillis(), // Placeholder
-                updatedAt = System.currentTimeMillis() // Placeholder
+                id = discovered.uri.hashCode().toLong(),
+                path = discovered.uri,
+                fileName = discovered.fileName,
+                fileSize = discovered.fileSize,
+                fileCtime = discovered.fileCtime,
+                fileMtime = discovered.fileMtime,
+                title = "",
+                durationMs = 0L,
+                format = discovered.format,
+                addedAt = now,
+                updatedAt = now,
             )
         }
     }

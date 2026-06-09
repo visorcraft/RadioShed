@@ -22,6 +22,7 @@ import com.visorcraft.radioshed.audio.SleepTimer
 import com.visorcraft.radioshed.scanner.Scanner
 import com.visorcraft.radioshed.source.BackupService
 import com.visorcraft.radioshed.source.LyricsService
+import com.visorcraft.radioshed.source.MediaSourceRegistry
 import com.visorcraft.radioshed.source.MissingArtworkSync
 import com.visorcraft.radioshed.source.MissingLyricsSync
 import com.visorcraft.radioshed.source.NetworkPolicyGate
@@ -101,11 +102,12 @@ val sharedModule: Module = module {
     }
 
     // Phase 5: stations engine. AudioEngine comes from platformModule.
-    single { SourceRuleEvaluator(get(), get(), get()) }
+    // MediaSourceRegistry starts empty — cloud/remote MediaSources
+    // register themselves when the user configures one.
+    single { MediaSourceRegistry() }
+    single { SourceRuleEvaluator(get(), get(), get(), get()) }
     single { StationPlayback(get(), get(), get(), get(), get(), get(), get(), get(), get()) }
     single { PresetSeeder(get(), get()) }
-    single<com.visorcraft.radioshed.source.SubsonicClient> { com.visorcraft.radioshed.source.SubsonicClientImpl(get()) }
-
 }
 
 /** Convenience entry-point used by both platforms. */

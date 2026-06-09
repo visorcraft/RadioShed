@@ -14,6 +14,7 @@ import com.visorcraft.radioshed.domain.SortBy
 import com.visorcraft.radioshed.domain.SourceRule
 import com.visorcraft.radioshed.domain.Tag
 import com.visorcraft.radioshed.domain.Weighting
+import com.visorcraft.radioshed.source.MediaSourceRegistry
 import kotlinx.coroutines.test.runTest
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
@@ -67,7 +68,7 @@ class StationRoundTripCrashTest {
         library = LibraryRepository(db)
         playlists = PlaylistRepository(db)
         ratings = RatingRepository(db)
-        evaluator = SourceRuleEvaluator(library, ratings, playlists)
+        evaluator = SourceRuleEvaluator(library, ratings, playlists, MediaSourceRegistry())
     }
 
     @AfterTest

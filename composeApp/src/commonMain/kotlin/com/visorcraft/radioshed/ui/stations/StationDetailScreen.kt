@@ -382,6 +382,7 @@ private fun describeSource(rule: SourceRule): String = when (rule) {
     is SourceRule.PathPattern -> "Path patterns"
     is SourceRule.DurationFilter -> "Duration filter"
     is SourceRule.FileFormatFilter -> "Format filter"
+    is SourceRule.MediaSourceSelector -> "Media source: ${rule.mediaSourceId}"
     is SourceRule.Union -> "Union of ${rule.children.size} rules"
     is SourceRule.Intersection -> "Intersection of ${rule.children.size} rules"
     is SourceRule.Difference -> "Difference"

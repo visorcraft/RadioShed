@@ -140,11 +140,6 @@ kotlin {
 
             // Serialization + coroutines
             implementation(libs.kotlinx.serialization.json)
-            // Ktor (Networking)
-            implementation(libs.ktor.client.core)
-            implementation(libs.ktor.client.content.negotiation)
-            implementation(libs.ktor.serialization.kotlinx.json)
-            implementation(libs.ktor.client.cio)
             implementation(libs.kotlinx.coroutines.core)
 
             // Image loading (Coil 3 KMP) — renders album art from file://
@@ -155,8 +150,6 @@ kotlin {
         commonTest.dependencies {
             implementation(libs.kotlin.test)
             implementation(libs.kotlinx.coroutines.test)
-            // Ktor Mock Engine for testing networking code in commonTest
-            implementation("io.ktor:ktor-client-mock:${libs.versions.ktor.get()}")
             // JDBC sqlite driver — gives the JVM-side unit tests a real
             // in-memory RadioShedDatabase so integration tests can
             // round-trip stations (save → reload → evaluate → enqueue)
@@ -184,12 +177,10 @@ kotlin {
             implementation(libs.androidx.media3.exoplayer)
             implementation(libs.androidx.media3.session)
             implementation(libs.androidx.media3.common)
-            implementation(libs.ktor.client.okhttp)
         }
 
         iosMain.dependencies {
             implementation(libs.sqldelight.nativeDriver)
-            implementation(libs.ktor.client.darwin)
         }
 
         val desktopMain by getting {
@@ -264,6 +255,26 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
+    }
+    testOptions {
+        // Compose resources' Android reader calls android.util.Log when
+        // commonTest runs on the JVM (testDebugUnitTest); the android.jar
+        // stub throws "not mocked" without this. No-op defaults are fine —
+        // nothing under test asserts on log output.
+        unitTests.isReturnDefaultValues = true
+        unitTests.all { test ->
+            // Compose resources ship as Android *assets*, which the JVM
+            // unit-test classpath doesn't include, and unit tests have no
+            // Android context for the asset-manager fallback — so
+            // Res.readBytes() in commonTest throws MissingResourceException
+            // (see LicenseCatalogTest). The per-variant copy task lays the
+            // assets out in classpath shape; adding its output lets the
+            // resource reader's classloader path resolve them.
+            val variant = if (test.name.contains("Release")) "Release" else "Debug"
+            val copyTask = "copy${variant}ComposeResourcesToAndroidAssets"
+            test.dependsOn(copyTask)
+            test.classpath += files(layout.buildDirectory.dir("generated/assets/$copyTask"))
+        }
     }
 }
 
