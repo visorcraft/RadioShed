@@ -9,6 +9,7 @@ import platform.MediaPlayer.*
 import platform.Foundation.*
 import platform.CoreMedia.*
 import kotlinx.cinterop.*
+import platform.UIKit.*
 
 /**
  * Implementation of [AudioEngine] for iOS using `AVAudioEngine` and `AVAudioPlayerNode`.
@@ -249,11 +250,24 @@ class AudioEngineIos : AudioEngine {
 
     private fun updateNowPlayingMetadata(playable: Playable) {
         val infoCenter = MPNowPlayingInfoCenter.defaultPlayableMedia
-        infoCenter.nowPlayingInfo = mutableMapOf<Any?, Any?>(
+        val metadata = mutableMapOf<Any?, Any?>(
             MPMediaItemPropertyTitle to playable.title,
             MPMediaItemPropertyArtist to (playable.artist ?: "Unknown Artist"),
             MPMediaItemPropertyAlbum to (playable.album ?: "")
-        ) as Map<Any?, Any?>
+        )
+
+        if (!playable.artworkUri.isNullOrBlank()) {
+            val uri = playable.artworkUri
+            if (uri.startsWith("file://")) {
+                val path = uri.removePrefix("file://")
+                val image = UIImage.imageWithContentsOfFile(path)
+                if (image != null) {
+                    metadata[MPMediaItemPropertyArtwork] = MPMediaItemArtworkImpl(image)
+                }
+            }
+        }
+
+        infoCenter.nowPlayingInfo = metadata as Map<Any?, Any?>
     }
 
     private fun setupInterruptionHandling() {
@@ -333,5 +347,10 @@ class AudioEngineIos : AudioEngine {
             val errorPtr = alloc<ObjCObjectVar<NSError?>>()
             engine.stopAndReturnError(errorPtr.ptr)
         }
+    }
+
+    private class MPMediaItemArtworkImpl(private val image: UIImage) : NSObject(), MPMediaItemArtwork {
+        override fun addRemoteContentRequest(request: MPMediaItemArtworkResourceRequest) {}
+        override fun addLocalContentRequest(request: MPMediaItemArtworkLocalContentRequest) {}
     }
 }
