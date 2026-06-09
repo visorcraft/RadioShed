@@ -96,14 +96,12 @@ The main Android dev host is **Windows 11**. `adb` lives at
 ./gradlew :composeApp:linkReleaseFrameworkIosArm64
 ```
 
-**No release signing is configured.** The `android {}` block has no
-`signingConfigs` and no `buildTypes.release.signingConfig` (release only sets
-`isMinifyEnabled = false`), so `assembleRelease` / `bundleRelease` emit
-**unsigned** artifacts (the APK is literally named
-`composeApp-release-unsigned.apk`). To ship an installable APK, either
-debug-sign + `zipalign` the release APK out-of-band (what the v1.1.0 asset did)
-or add a real `signingConfig`. Keystores and `keystore.properties` / `*.jks` /
-`*.keystore` are gitignored and machine-specific — never commit them.
+**No release signing is configured** (no `signingConfigs` in `android {}`),
+so `assembleRelease` / `bundleRelease` emit **unsigned** artifacts. To ship
+an installable APK, debug-sign + `zipalign` it out-of-band (what the v1.1.0
+asset did) or add a real `signingConfig`. Keystores and
+`keystore.properties` / `*.jks` / `*.keystore` are gitignored and
+machine-specific — never commit them.
 
 Building **any** Android variant needs an Android SDK with **platform
 `android-36`** (compile/target SDK 36) and **build-tools `36.0.0`**, plus
@@ -136,30 +134,21 @@ Linux packaging details:
 - `.deb` packaging needs `dpkg-deb` on PATH; Arch/CachyOS provide it via the
   `dpkg` package.
 
-Local install on the Linux dev box (CachyOS / KDE Plasma), pinned to the
-taskbar — there is exactly **one** install and it updates in place:
+Local install on the Linux dev box (CachyOS / KDE Plasma) — exactly **one**
+install, updated in place:
 
-- The install is the **single-file AppImage copied to a stable, version-agnostic
-  path**: `~/Applications/RadioShed.AppImage` (`chmod +x`). Do **not** point the
-  launcher into `composeApp/build/…` or at a versioned filename — a build-dir /
-  per-version path goes stale on `clean` or a version bump and leaves the pin
-  launching an old build.
-- Launcher `~/.local/share/applications/radioshed.desktop` has `Exec`/`TryExec`
-  → that stable path, `Icon=radioshed` (PNGs already under
-  `~/.local/share/icons/hicolor/<size>/apps/radioshed.png`), and is pinned in the
-  KDE Task Manager (`~/.config/plasma-org.kde.plasma.desktop-appletsrc` →
+- The single-file AppImage lives at the stable, version-agnostic path
+  `~/Applications/RadioShed.AppImage` (`chmod +x`). Never point the launcher
+  into `composeApp/build/…` or at a versioned filename — those go stale on
+  `clean` / version bumps and leave the pin launching an old build.
+- Launcher `~/.local/share/applications/radioshed.desktop`: `Exec`/`TryExec`
+  → that stable path, `Icon=radioshed` (PNGs under
+  `~/.local/share/icons/hicolor/<size>/apps/`), pinned in the KDE Task
+  Manager (`~/.config/plasma-org.kde.plasma.desktop-appletsrc` →
   `launchers=…,applications:radioshed.desktop,…`).
-- **To update:** rebuild the AppImage
-  (`./gradlew :composeApp:packageSingleFileAppImage`) and overwrite
-  `~/Applications/RadioShed.AppImage`; `chmod +x`. The launcher and taskbar pin
-  need no changes. (All user-level — no `sudo`. The desktop AppImage still needs
-  libvlc on the host to play; see the audio note above.)
-
-**JDK 17+** is required (17 is the documented baseline; building both the
-desktop and the Android APK + AAB is verified on JDK 21 too). There is no
-pinned Gradle Java toolchain, so Gradle runs on whatever JDK invokes it. The
-bytecode targets are lower than the toolchain: **Android `JVM_11`**
-(`compileOptions`), **desktop `JVM_17`**.
+- **To update:** `./gradlew :composeApp:packageSingleFileAppImage`, overwrite
+  `~/Applications/RadioShed.AppImage`, `chmod +x`. Launcher and pin need no
+  changes. All user-level — no `sudo`; playback still needs host libvlc.
 
 ## Architecture
 
@@ -173,12 +162,19 @@ bytecode targets are lower than the toolchain: **Android `JVM_11`**
   directly from a screen — go through `SettingsStore` with a `KEY_*`
   constant; this is what makes backup/restore round-trip correctly.
 - `source/` — outbound integrations (LRClib lyrics, Cover Art Archive,
-  backup JSON, file browser, exporters). Online fetchers must consult
-  `NetworkPolicyGate` so the user's Always / Wi-Fi only / Never preference
-  is honoured.
+  Subsonic, backup JSON, file browser, exporters) plus the `MediaSource`
+  plug-in abstraction (`MediaSource` / `MediaSourceRegistry` /
+  `SourceRule.MediaSourceSelector`; `MockCloudSource` is the test/demo
+  impl). Online fetchers must consult `NetworkPolicyGate` so the user's
+  Always / Wi-Fi only / Never preference is honoured. HTTP clients are
+  JDK-only (`HttpURLConnection`, one GET per call) — do **not** add
+  Ktor/OkHttp client libraries. `SubsonicClient` is bound per platform:
+  Android = the real `AndroidSubsonicClient` (token auth, never sends the
+  cleartext password), desktop/iOS = `Null` stubs.
 - `audio/` — `AudioEngine` (expect/actual), `EqualizerController`,
   `SleepTimer`. Android impl is Media3 ExoPlayer + MediaSession; iOS is
-  AVAudioEngine; desktop is a thin **Kotlin + JNA binding to libvlc 3.x**
+  a documented no-op stub (AVAudioEngine planned, pending Mac access);
+  desktop is a thin **Kotlin + JNA binding to libvlc 3.x**
   (`audio/NativeLibVlc.kt` — the installed system libvlc, discovered at
   startup), **not** VLCJ. libvlc is LGPL and JNA is Apache-2.0, so the
   desktop build ships no GPL artifact (see Appendix C / the `### Releases`
@@ -188,9 +184,10 @@ bytecode targets are lower than the toolchain: **Android `JVM_11`**
   (expect/actual) reports whether libvlc was found (desktop) or `true`
   (Android/iOS), driving the desktop-only "VLC required" modal in `App`.
 - `stations/` — `StationPlayback` (the playback orchestrator),
-  `PlaybackQueue` (priority queue + history), `SourceRuleEvaluator`,
-  `StationPresets` / `PresetSeeder`. Queue mutations are serialized through
-  `kotlinx.coroutines.sync.Mutex.withLock`.
+  `PlaybackQueue` (priority queue + history), `SourceRuleEvaluator`
+  (resolves `SourceRule` trees; `MediaSourceSelector` rules go through
+  `MediaSourceRegistry`), `StationPresets` / `PresetSeeder`. Queue
+  mutations are serialized through `kotlinx.coroutines.sync.Mutex.withLock`.
 - `scanner/` — library scan pipeline. `FileEnumerator` and `TagReader` are
   expect/actual (Android and desktop both use `jaudiotagger`, iOS is
   currently stubbed).
@@ -232,6 +229,10 @@ Schema lives in `composeApp/src/commonMain/sqldelight/com/visorcraft/radioshed/d
   baseline `.sq` files, so every FK reference fails with "No column found".
   Re-stating prior schema at the top of each `.sqm` to enable verification is
   tracked in SPEC Phase 18; do not flip the flag without that refactor.
+- Shipped `.sqm` files are immutable upgrade history — **never rewrite one
+  in place** (installs already past that version never see the edit, and
+  replaying altered statements breaks installs that haven't). Any schema
+  change is a new `<n+1>.sqm` plus the matching `.sq` baseline edit.
 - After editing `.sq` or `.sqm`, regenerate with `--rerun-tasks` because the
   task is cached aggressively.
 
@@ -251,11 +252,18 @@ Koin is split:
   `CoverArtFetcher`, `FolderRevealer`, etc.
 - `sharedModule` binds repositories, `SettingsStore`, `Scanner`,
   `LyricsService`, `BackupService`, `StationPlayback`, `SleepTimer`,
-  `MissingArtworkSync`, `PresetSeeder`. All are `single`.
+  `MissingArtworkSync`, `PresetSeeder`, `MediaSourceRegistry`,
+  `SourceRuleEvaluator`. All are `single`.
 
 When adding a constructor parameter to anything in `sharedModule`, update the
-`single { ... }` line. The DSL takes positional `get()` calls, so a wrong
-arity produces a runtime "no definition for..." rather than a compile error.
+`single { ... }` line. Too few positional `get()` calls is a compile error,
+but a `get()` whose resolved type has no binding only fails at runtime with
+Koin's "no definition found" — so also register any newly-required type.
+
+`appModules()` loads `platformModule` **then** `sharedModule`, and Koin's
+last definition silently wins. Never re-bind a platform-bound interface
+(`SubsonicClient`, `CoverArtFetcher`, `AudioEngine`, …) in `sharedModule` —
+it replaces the working platform impl on every target.
 
 ### Backup Format
 
@@ -427,7 +435,17 @@ DO NOT:
 - Use `kotlin.test` (`@Test`, `assertEquals`, `assertTrue`); for
   coroutine tests use `kotlinx-coroutines-test`.
 - Tests live in `composeApp/src/commonTest/kotlin/...` mirroring the
-  `commonMain` package path.
+  `commonMain` package path. They execute on the JVM via
+  `testDebugUnitTest` (Android variant — the default to run) and
+  `desktopTest`.
+- The `android.testOptions` block in `composeApp/build.gradle.kts` is
+  load-bearing: `isReturnDefaultValues = true` (no-op `android.util.Log`
+  stubs) plus the compose-resource assets dir on the unit-test classpath
+  are what let `Res.readBytes()` resolve under `testDebugUnitTest`
+  (`LicenseCatalogTest` fails without both).
+- DB-backed tests build a real in-memory database —
+  `JdbcSqliteDriver(IN_MEMORY)` + `RadioShedDatabase.Schema.create(driver)`
+  — instead of mocking repositories (see `StationRoundTripCrashTest`).
 
 ### Build & Tooling
 
@@ -445,19 +463,8 @@ DO NOT:
   catalog is the single source of truth for the in-app About → Licenses screen
   and the generated `THIRD_PARTY_LICENSES` file (LICENSE §5.1). `LicenseCatalogTest`
   fails the build if a shipped coordinate is undocumented.
-- After editing `.sq` / `.sqm` files, regenerate with
-  `./gradlew :composeApp:generateCommonMainRadioShedDatabaseInterface --rerun-tasks`.
-- Linux desktop packaging:
-  `./gradlew :composeApp:packageDistributionForCurrentOS` builds the
-  jpackage app-image directory, a true single-file `.AppImage`, and a
-  `.deb` on Linux x86_64. `TargetFormat.AppImage` alone is only the
-  app-image directory; the user-facing single file comes from
-  `:composeApp:packageSingleFileAppImage`.
-- `packageSingleFileAppImage` uses AppImageKit `appimagetool`. Prefer
-  `APPIMAGETOOL=/path/to/appimagetool` or an `appimagetool` on PATH;
-  otherwise the Gradle task downloads the x86_64 tool into
-  `composeApp/build/compose/tools/`. `.deb` packaging needs `dpkg-deb`
-  on PATH.
+- Linux desktop packaging: see "Linux packaging details" under Common
+  Commands.
 - `verifyMigrations` is intentionally **off** — do not flip it on
   without the schema-restating refactor tracked in SPEC Phase 18.
 
@@ -498,15 +505,13 @@ Asset naming used for v1.1.0: `RadioShed-1.1.0-debug-signed.apk` (release APK
 debug-signed to be installable), `RadioShed-1.1.0-release.aab`,
 `RadioShed-1.1.0-x86_64.AppImage`, `radioshed_1.1.0_amd64.deb`.
 
-**Desktop GPL status — RESOLVED (no blocker).** The desktop build no longer
-links VLCJ: audio runs through a direct **Kotlin + JNA binding to libvlc**
-(`audio/NativeLibVlc.kt`; libvlc is LGPL, JNA is Apache-2.0), so no GPL artifact
-ships and there is **no GPL conflict** with the proprietary `LICENSE` for future
-desktop builds (see SPEC Appendix C). One caveat carries forward: the JNA
-binding's runtime playback has not been verified on a VLC-equipped machine per
-OS, so smoke-test desktop playback before relying on a public desktop release.
-Note the **already-published v1.1.0** assets *did* ship VLCJ; the de-GPL applies
-to the next build/release.
+**Desktop GPL status — RESOLVED (no blocker).** Desktop audio is the
+Kotlin + JNA libvlc binding (libvlc LGPL, JNA Apache-2.0), not VLCJ, so no
+GPL artifact ships and there is no conflict with the proprietary `LICENSE`
+(SPEC Appendix C). Caveats: smoke-test desktop playback per OS before a
+public desktop release (JNA-binding playback not yet verified on every
+VLC-equipped OS), and the already-published v1.1.0 assets *did* ship VLCJ —
+the de-GPL applies from the next release.
 
 ### Commits
 
@@ -534,3 +539,11 @@ to the next build/release.
   document hard-won lessons and are load-bearing.
 - **Do not** widen the JitPack repository allow-list beyond
   `com.github.requery`.
+- **Do not** rewrite shipped `.sqm` migration files in place — schema
+  changes are a new `<n+1>.sqm` (see Persistence).
+- **Do not** write `iosMain` code against platform APIs (AVFoundation,
+  MediaPlayer, …) on a non-Mac host: the iOS target only compiles on
+  macOS, so such code lands unverified — and twice now has shipped
+  nonexistent APIs. iOS stays a no-op stub until Mac access.
+- **Do not** re-bind a platform-bound interface in `sharedModule`
+  (Koin last-definition-wins; see DI).
