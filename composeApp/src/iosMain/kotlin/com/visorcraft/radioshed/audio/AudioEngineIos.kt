@@ -114,7 +114,16 @@ class AudioEngineIos : AudioEngine {
         _state.value = PlayerState.Buffering
 
         try {
+            if (playable.uri.isBlank()) {
+                _state.value = PlayerState.Error("Invalid track URI: ${playable.title}")
+                return
+            }
+
             val url = NSURL.fileURLWithPath(playable.uri)
+            if (!NSFileManager.defaultManager.fileExistsAtPath(playable.uri)) {
+                _state.value = PlayerState.Error("File not found: ${playable.title}")
+                return
+            }
             val file = AVURLAsset(uRL = url, options = null)
 
             engine.attachNode(playerNode)
@@ -212,7 +221,14 @@ class AudioEngineIos : AudioEngine {
 
     override fun stop() {
         playerNode.stop()
-        engine.stopAndReturnError(null)
+        memScoped {
+            val errorPtr = alloc<ObjCObjectVar<NSError?>>()
+            engine.stopAndReturnError(errorPtr.ptr)
+            if (errorPtr.value != null) {
+                // We don't want to set the state to Error here as we are stopping, 
+                // but it might be useful for debugging if we had a logger.
+            }
+        }
         _state.value = PlayerState.Idle
         _nowPlaying.value = null
         positionJob?.cancel()
