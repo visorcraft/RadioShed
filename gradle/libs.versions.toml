@@ -34,13 +34,17 @@ multiplatformSettings = "1.3.0"
 # that SQLDelight's AndroidSqliteDriver needs.
 requerySqliteAndroid = "3.45.0"
 sqldelight = "2.1.0"
+
+ktor = "3.0.1"
+
+jna = "5.14.0"
+jna-platform = "5.14.0"
 # JNA — direct foreign-function binding to the system libvlc 3.x used by
 # the desktop AudioEngine (replaces the GPL VLCJ layer). jna-jpms carries
 # com.sun.jna.* (Library/Native/Pointer); jna-platform-jpms carries
 # com.sun.jna.platform.win32 (Advapi32Util, for reading the Windows VLC
 # install dir from the registry). Apache-2.0 (dual LGPL/Apache; we use
 # Apache). Desktop only; never linked into the Android APK.
-jna = "5.14.0"
 
 [libraries]
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
@@ -112,6 +116,13 @@ jaudiotagger = { module = "net.jthink:jaudiotagger", version.ref = "jaudiotagger
 # the Continue Listening callout. file:// URIs work out of the box; the
 # `coil-compose` artifact ships with Compose Multiplatform AsyncImage.
 coil-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil" }
+# ---- Ktor (Networking) ----
+ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
+ktor-client-content-negotiation = { module = "io.ktor:ktor-client-content-negotiation", version.ref = "ktor" }
+ktor-serialization-kotlinx-json = { module = "io.ktor:ktor-serialization-kotlinx-json", version.ref = "ktor" }
+ktor-client-okhttp = { module = "io.ktor:ktor-client-okhttp", version.ref = "ktor" }
+ktor-client-darwin = { module = "io.ktor:ktor-client-darwin", version.ref = "ktor" }
+ktor-client-cio = { module = "io.ktor:ktor-client-cio", version.ref = "ktor" }
 
 # ---- Phase 4: audio engine ----
 androidx-media3-exoplayer = { module = "androidx.media3:media3-exoplayer", version.ref = "media3" }

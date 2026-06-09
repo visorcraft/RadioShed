@@ -1,20 +1,149 @@
--- Migration v5 → v6: backfill station_pinned_track for older DBs.
---
--- The station_pinned_track table was added to Stations.sq's baseline
--- when "Pinned tracks per station" landed (#180), but no migration
--- was written at the same time. Users whose DB was created before
--- that schema change therefore never got the table — every query
--- that joins station_pinned_track (selectPinnedTracksForStation,
--- countPinnedTracksForStation, etc.) fails at runtime with "no such
--- table". The crash surfaces every time the user taps Play on a
--- station because StationPlayback.playStation calls
--- stationRepo.pinnedTracks before building the candidate pool.
---
--- IF NOT EXISTS so this is a clean no-op on fresh installs (which
--- get the table from the Stations.sq baseline) and on installs
--- that somehow already have the table from prior reinstalls.
+-- Schema as of v5
+CREATE TABLE artist (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    sort_name TEXT NOT NULL UNIQUE,
+    musicbrainz_id TEXT,
+    image_uri TEXT,
+    bio TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
 
-CREATE TABLE IF NOT EXISTS station_pinned_track (
+CREATE table artist_alias (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    artist_id INTEGER NOT NULL REFERENCES artist(id) ON DELETE CASCADE,
+    alias_name TEXT NOT NULL,
+    alias_sort_name TEXT NOT NULL UNIQUE,
+    created_at INTEGER NOT NULL
+);
+
+CREATE INDEX artist_alias_artist_id_idx ON artist_alias(artist_id);
+
+CREATE table album (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    artist_id INTEGER REFERENCES artist(id) ON DELETE SET NULL,
+    sort_title TEXT NOT NULL,
+    year INTEGER,
+    musicbrainz_id TEXT,
+    artwork_uri TEXT,
+    track_count INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    UNIQUE (sort_title, artist_id)
+);
+
+CREATE INDEX album_artist_idx ON album(artist_id);
+CREATE INDEX album_sort_idx ON album(sort_title);
+
+CREATE table track (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    path TEXT NOT NULL UNIQUE,
+    file_name TEXT NOT NULL,
+    file_size INTEGER NOT NULL,
+    file_ctime INTEGER NOT NULL,
+    file_mtime INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    album_id INTEGER REFERENCES album(id) ON DELETE SET NULL,
+    track_number INTEGER,
+    disc_number INTEGER,
+    duration_ms INTEGER NOT NULL,
+    bitrate_kbps INTEGER,
+    sample_rate_hz INTEGER,
+    channels INTEGER,
+    format TEXT NOT NULL,
+    replay_gain_track REAL,
+    replay_gain_album REAL,
+    replay_gain_track_peak REAL,
+    bpm REAL,
+    musicbrainz_id TEXT,
+    acoustid_fingerprint TEXT,
+    cue_offset_start_ms INTEGER,
+    cue_offset_end_ms INTEGER,
+    is_available INTEGER NOT NULL DEFAULT 1,
+    added_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+
+CREATE INDEX track_album_idx ON track(album_id);
+CREATE INDEX track_added_idx ON track(added_at);
+CREATE INDEX track_format_idx ON track(format);
+CREATE INDEX track_available_idx ON track(is_available);
+
+CREATE table track_folder (
+    track_id INTEGER NOT NULL REFERENCES track(id) ON DELETE CASCADE,
+    folder_id INTEGER NOT NULL REFERENCES folder(id) ON DELETE CASCADE,
+    PRIMARY KEY (track_id, folder_id)
+);
+
+CREATE INDEX track_folder_folder_idx ON track_folder(folder_id);
+
+CREATE table track_artist (
+    track_id INTEGER NOT NULL REFERENCES track(id) ON DELETE CASCADE,
+    artist_id INTEGER NOT NULL REFERENCES artist(id) ON DELETE CASCADE,
+    role TEXT NOT NULL DEFAULT 'primary',
+    position INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (track_id, artist_id, role)
+);
+
+CREATE INDEX track_artist_a_idx ON track_artist(artist_id);
+
+CREATE table track_tag (
+    track_id INTEGER NOT NULL REFERENCES track(id) ON DELETE CASCADE,
+    key TEXT NOT NULL,
+    value TEXT NOT NULL,
+    position INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (track_id, key, position)
+);
+
+CREATE INDEX track_tag_kv_idx ON track_tag(key, value);
+
+CREATE table track_personnel (
+    track_id INTEGER NOT NULL REFERENCES track(id) ON DELETE CASCADE,
+    role TEXT NOT NULL,
+    name TEXT NOT NULL,
+    position INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (track_id, role, position)
+);
+
+CREATE table folder (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    display_name TEXT NOT NULL,
+    uri TEXT NOT NULL UNIQUE,
+    recursive INTEGER NOT NULL DEFAULT 1,
+    include_globs TEXT,
+    exclude_globs TEXT,
+    last_scanned_at INTEGER,
+    track_count INTEGER NOT NULL DEFAULT 0,
+    is_available INTEGER NOT NULL DEFAULT 1,
+    accent_color INTEGER,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+
+CREATE INDEX folder_uri_idx ON folder(uri);
+
+CREATE table liked_track (
+    track_id INTEGER NOT NULL PRIMARY KEY REFERENCES track(id) ON DELETE CASCADE,
+    liked_at INTEGER NOT NULL
+);
+
+CREATE INDEX liked_track_liked_at_idx ON liked_track(liked_at);
+
+CREATE table lyrics_query_override (
+    track_id INTEGER NOT NULL PRIMARY KEY REFERENCES track(id) ON DELETE CASCADE,
+    artist TEXT NOT NULL,
+    title TEXT NOT NULL,
+    set_at INTEGER NOT NULL
+);
+
+CREATE table track_global_dislike (
+    track_id INTEGER NOT NULL PRIMARY KEY REFERENCES track(id) ON DELETE CASCADE,
+    disliked_at INTEGER NOT NULL
+);
+
+CREATE table station_pinned_track (
     station_id INTEGER NOT NULL REFERENCES station(id) ON DELETE CASCADE,
     track_id INTEGER NOT NULL REFERENCES track(id) ON DELETE CASCADE,
     pinned_at INTEGER NOT NULL,

@@ -56,6 +56,11 @@ import com.visorcraft.radioshed.source.TagReader
 import com.visorcraft.radioshed.source.TagWriter
 import com.visorcraft.radioshed.source.TrackSharer
 import com.visorcraft.radioshed.source.WikipediaBioFetcher
+import io.ktor.client.*
+import io.ktor.client.engine.cio.*
+import io.ktor.client.plugins.contentnegotiation.*
+import io.ktor.serialization.kotlinx.json.*
+import kotlinx.serialization.json.Json
 import org.koin.core.module.Module
 import org.koin.dsl.module
 import java.util.prefs.Preferences
@@ -112,4 +117,15 @@ actual val platformModule: Module = module {
 
     single<CrashLogReader> { DesktopCrashLogReader() }
     single<CrashLogSharer> { DesktopCrashLogSharer() }
+
+    single<HttpClient> {
+        HttpClient(CIO) {
+            install(ContentNegotiation) {
+                json(Json {
+                    ignoreUnknownKeys = true
+                    isLenient = true
+                })
+            }
+        }
+    }
 }

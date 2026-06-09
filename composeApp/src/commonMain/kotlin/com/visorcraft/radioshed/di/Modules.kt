@@ -104,6 +104,8 @@ val sharedModule: Module = module {
     single { SourceRuleEvaluator(get(), get(), get()) }
     single { StationPlayback(get(), get(), get(), get(), get(), get(), get(), get(), get()) }
     single { PresetSeeder(get(), get()) }
+    single<com.visorcraft.radioshed.source.SubsonicClient> { com.visorcraft.radioshed.source.SubsonicClientImpl(get()) }
+
 }
 
 /** Convenience entry-point used by both platforms. */

@@ -137,3 +137,4 @@ GoogleService-Info.plist
 crashlogs/
 # Backup zips created during testing
 *-backup-*.zip
+.qwen/

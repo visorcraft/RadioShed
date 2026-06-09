@@ -1,5 +1,15 @@
 # AGENTS.md
 
+## Agent Working Style
+
+- Be concise. No long explanations. Don't restate the plan unless it changed.
+- Never scan `node_modules`, `.venv`, `dist`, `build`, log/archive dirs, or generated files.
+- Cap output when searching or reading files. Default to limits, e.g.:
+  - `head -n 100` / `tail -n 100`
+  - `grep -n "pattern" file | head`
+  - `find . -type f | head -n 200`
+  - `python script.py --limit 50`
+
 Guidelines for AI coding agents (Claude Code, Codex, Gemini, etc.) working
 in this repository. The conventions below are derived from
 `.editorconfig`, `gradle.properties`, and dominant patterns in
@@ -499,6 +509,8 @@ Note the **already-published v1.1.0** assets *did* ship VLCJ; the de-GPL applies
 to the next build/release.
 
 ### Commits
+
+- **Attribution (IMPORTANT):** Commits are authored solely by the human committer. Never attribute code changes to any AI agent, assistant, or tool — including, but not limited to, **Cursor**, **cursoragent**, **Claude**, and **Codex**. Do **not** add `Co-Authored-By` trailers, "Generated with…" / "Assisted-by" lines, or any other AI attribution in commit messages, PR titles/descriptions, code, or comments.
 
 - Imperative present tense, ≤ 72-char subject.
 - Reference SPEC items by phase number or task id (e.g. `#142`, `Phase 4`).

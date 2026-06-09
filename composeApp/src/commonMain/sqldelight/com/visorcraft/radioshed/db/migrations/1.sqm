@@ -1,31 +1,118 @@
--- Migration v1 → v2: track ↔ folder becomes many-to-many via track_folder.
---
--- Why: in v1 each track had a single folder_id NOT NULL. When the user
--- registered overlapping folders (e.g. both /Music and /Music/Rock), the
--- last scan won — Rock tracks would silently switch to belonging to
--- whichever of the two was scanned most recently. This broke stations
--- scoped to the more-specific folder. The v2 model stores membership in
--- a junction table so a track can belong to N folders simultaneously.
-
--- 1. Junction table (matches the post-migration schema in Library.sq).
-CREATE TABLE track_folder (
-    track_id INTEGER NOT NULL REFERENCES track(id) ON DELETE CASCADE,
-    folder_id INTEGER NOT NULL REFERENCES folder(id) ON DELETE CASCADE,
-    PRIMARY KEY (track_id, folder_id)
+-- Schema as of v0
+CREATE TABLE artist (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    sort_name TEXT NOT NULL UNIQUE,
+    musicbrainz_id TEXT,
+    image_uri TEXT,
+    bio TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
 );
 
-CREATE INDEX track_folder_folder_idx ON track_folder(folder_id);
+CREATE TABLE artist_alias (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    artist_id INTEGER NOT NULL REFERENCES artist(id) ON DELETE CASCADE,
+    alias_name TEXT NOT NULL,
+    alias_sort_name TEXT NOT NULL UNIQUE,
+    created_at INTEGER NOT NULL
+);
 
--- 2. Preserve existing (track → folder) relationships. INSERT OR IGNORE
--- guards against any stray duplicates that might have crept in via an
--- inconsistent v1 state (shouldn't happen, but cheap insurance).
-INSERT OR IGNORE INTO track_folder (track_id, folder_id)
-SELECT id, folder_id FROM track;
+CREATE INDEX artist_alias_artist_id_idx ON artist_alias(artist_id);
 
--- 3. Drop the now-redundant single-folder column + its index. ALTER TABLE
--- DROP COLUMN requires SQLite ≥ 3.35; we ship a bundled SQLite (~3.45) on
--- Android via requery, and iOS 16+ system SQLite is recent enough, so
--- this works on every supported target.
-DROP INDEX IF EXISTS track_folder_idx;
+CREATE TABLE album (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    artist_id INTEGER REFERENCES artist(id) ON DELETE SET NULL,
+    sort_title TEXT NOT NULL,
+    year INTEGER,
+    musicbrainz_id TEXT,
+    artwork_uri TEXT,
+    track_count INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    UNIQUE (sort_title, artist_id)
+);
 
-ALTER TABLE track DROP COLUMN folder_id;
+CREATE INDEX album_artist_idx ON album(artist_id);
+CREATE INDEX album_sort_idx ON album(sort_title);
+
+CREATE TABLE track (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    path TEXT NOT NULL UNIQUE,
+    file_name TEXT NOT NULL,
+    file_size INTEGER NOT NULL,
+    file_ctime INTEGER NOT NULL,
+    file_mtime INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    album_id INTEGER REFERENCES album(id) ON DELETE SET NULL,
+    track_number INTEGER,
+    disc_number INTEGER,
+    duration_ms INTEGER NOT NULL,
+    bitrate_kbps INTEGER,
+    sample_rate_hz INTEGER,
+    channels INTEGER,
+    format TEXT NOT NULL,
+    replay_gain_track REAL,
+    replay_gain_album REAL,
+    replay_gain_track_peak REAL,
+    bpm REAL,
+    musicbrainz_id TEXT,
+    acoustid_fingerprint TEXT,
+    cue_offset_start_ms INTEGER,
+    cue_offset_end_ms INTEGER,
+    is_available INTEGER NOT NULL DEFAULT 1,
+    added_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    folder_id INTEGER NOT NULL
+);
+
+CREATE INDEX track_album_idx ON track(album_id);
+CREATE INDEX track_added_idx ON track(added_at);
+CREATE INDEX track_format_idx ON track(format);
+CREATE INDEX track_available_idx ON track(is_available);
+CREATE INDEX track_folder_id_idx ON track(folder_id);
+
+CREATE TABLE track_artist (
+    track_id INTEGER NOT NULL REFERENCES track(id) ON DELETE CASCADE,
+    artist_id INTEGER NOT NULL REFERENCES artist(id) ON DELETE CASCADE,
+    role TEXT NOT NULL DEFAULT 'primary',
+    position INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (track_id, artist_id, role)
+);
+
+CREATE INDEX track_artist_a_idx ON track_artist(artist_id);
+
+CREATE TABLE track_tag (
+    track_id INTEGER NOT NULL REFERENCES track(id) ON DELETE CASCADE,
+    key TEXT NOT NULL,
+    value TEXT NOT NULL,
+    position INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (track_id, key, position)
+);
+
+CREATE INDEX track_tag_kv_idx ON track_tag(key, value);
+
+CREATE TABLE track_personnel (
+    track_id INTEGER NOT NULL REFERENCES track(id) ON DELETE CASCADE,
+    role TEXT NOT NULL,
+    name TEXT NOT NULL,
+    position INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (track_id, role, position)
+);
+
+CREATE TABLE folder (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    display_name TEXT NOT NULL,
+    uri TEXT NOT NULL UNIQUE,
+    recursive INTEGER NOT NULL DEFAULT 1,
+    include_globs TEXT,
+    exclude_globs TEXT,
+    last_scanned_at INTEGER,
+    track_count INTEGER NOT NULL DEFAULT 0,
+    is_available INTEGER NOT NULL DEFAULT 1,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+
+CREATE INDEX folder_uri_idx ON folder(uri);

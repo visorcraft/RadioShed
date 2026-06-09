@@ -140,6 +140,11 @@ kotlin {
 
             // Serialization + coroutines
             implementation(libs.kotlinx.serialization.json)
+            // Ktor (Networking)
+            implementation(libs.ktor.client.core)
+            implementation(libs.ktor.client.content.negotiation)
+            implementation(libs.ktor.serialization.kotlinx.json)
+            implementation(libs.ktor.client.cio)
             implementation(libs.kotlinx.coroutines.core)
 
             // Image loading (Coil 3 KMP) — renders album art from file://
@@ -150,6 +155,8 @@ kotlin {
         commonTest.dependencies {
             implementation(libs.kotlin.test)
             implementation(libs.kotlinx.coroutines.test)
+            // Ktor Mock Engine for testing networking code in commonTest
+            implementation("io.ktor:ktor-client-mock:${libs.versions.ktor.get()}")
             // JDBC sqlite driver — gives the JVM-side unit tests a real
             // in-memory RadioShedDatabase so integration tests can
             // round-trip stations (save → reload → evaluate → enqueue)
@@ -177,10 +184,12 @@ kotlin {
             implementation(libs.androidx.media3.exoplayer)
             implementation(libs.androidx.media3.session)
             implementation(libs.androidx.media3.common)
+            implementation(libs.ktor.client.okhttp)
         }
 
         iosMain.dependencies {
             implementation(libs.sqldelight.nativeDriver)
+            implementation(libs.ktor.client.darwin)
         }
 
         val desktopMain by getting {

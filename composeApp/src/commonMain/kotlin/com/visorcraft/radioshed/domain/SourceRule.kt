@@ -52,6 +52,10 @@ sealed interface SourceRule {
     @SerialName("path_pattern")
     data class PathPattern(val include: List<String>, val exclude: List<String>) : SourceRule
 
+    @Serializable
+    @SerialName("media_source")
+    data class MediaSourceSelector(val mediaSourceId: String) : SourceRule
+
     // ---- Set operators ----
 
     @Serializable

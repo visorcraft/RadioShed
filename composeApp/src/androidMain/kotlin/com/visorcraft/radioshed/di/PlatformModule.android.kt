@@ -1,12 +1,17 @@
 package com.visorcraft.radioshed.di
 
 import android.content.Context
+import io.ktor.client.*
+import io.ktor.client.engine.okhttp.*
+import io.ktor.client.plugins.contentnegotiation.*
+import io.ktor.serialization.kotlinx.json.*
+import kotlinx.serialization.json.Json
 import com.russhwolf.settings.Settings
 import com.russhwolf.settings.SharedPreferencesSettings
-import com.visorcraft.radioshed.audio.AndroidEqualizerController
 import com.visorcraft.radioshed.audio.AudioEngine
 import com.visorcraft.radioshed.audio.AudioEngineAndroid
 import com.visorcraft.radioshed.audio.EqualizerController
+import com.visorcraft.radioshed.audio.AndroidEqualizerController
 import com.visorcraft.radioshed.crash.AndroidCrashLogReader
 import com.visorcraft.radioshed.crash.AndroidCrashLogSharer
 import com.visorcraft.radioshed.crash.CrashLogReader
@@ -107,6 +112,17 @@ actual val platformModule: Module = module {
     // talk to Syncthing's REST API or modify its config; the wizard
     // just deep-links into the app at the right moments.
     single { com.visorcraft.radioshed.source.SyncthingDetector(androidContext()) }
+
+    single<HttpClient> {
+        HttpClient(OkHttp) {
+            install(ContentNegotiation) {
+                json(Json {
+                    ignoreUnknownKeys = true
+                    isLenient = true
+                })
+            }
+        }
+    }
 }
 
 private const val PREFS_NAME = "radioshed.prefs"

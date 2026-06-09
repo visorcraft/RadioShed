@@ -23,6 +23,7 @@ class SourceRuleEvaluator(
     private val libraryRepo: LibraryRepository,
     private val ratingRepo: RatingRepository,
     private val playlistRepo: PlaylistRepository,
+    private val mediaSourceRegistry: com.visorcraft.radioshed.source.MediaSourceRegistry,
 ) {
 
     /** Hard cap on "everything in the library" smart-queries so we don't
@@ -39,6 +40,7 @@ class SourceRuleEvaluator(
         is SourceRule.DurationFilter -> emptyList() // standalone n/a; see KDoc
         is SourceRule.FileFormatFilter -> emptyList()
         is SourceRule.PathPattern -> emptyList()
+        is SourceRule.MediaSourceSelector -> evaluateMediaSource(rule)
         is SourceRule.Union -> evaluateUnion(rule)
         is SourceRule.Intersection -> evaluateIntersection(rule)
         is SourceRule.Difference -> evaluateDifference(rule)
@@ -87,6 +89,27 @@ class SourceRuleEvaluator(
             }
             SmartQueryKind.LikedSongs ->
                 ratingRepo.likedTracks().take(limit.toInt())
+        }
+    }
+
+    private suspend fun evaluateMediaSource(rule: SourceRule.MediaSourceSelector): List<Track> {
+        val source = mediaSourceRegistry.getById(rule.mediaSourceId) ?: return emptyList()
+        return source.listTracks(SourceFilter()).map { track ->
+            // Convert DiscoveredTrack to Track.
+            // Note: For cloud sources, we use the URI as the path.
+            Track(
+                id = track.uri.hashCode().toLong(), // This is a bit hacky for now; real implementation should use stable IDs from source
+                path = track.uri,
+                fileName = track.fileName,
+                fileSize = track.fileSize,
+                fileCtime = track.fileCtime,
+                fileMtime = track.fileMtime,
+                title = "", // We don't have title yet; it should come from TagReader or source metadata
+                durationMs = 0L, // Ideally we'd get this from the source too
+                format = track.format,
+                addedAt = System.currentTimeMillis(), // Placeholder
+                updatedAt = System.currentTimeMillis() // Placeholder
+            )
         }
     }
 
