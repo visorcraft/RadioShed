@@ -97,6 +97,7 @@ fun AppSettingsScreen(
     onFontScaleChange: (Float) -> Unit = {},
     onOpenEqualizer: () -> Unit = {},
     onOpenDjSettings: () -> Unit = {},
+    onOpenDriveMode: () -> Unit = {},
     onOpenPlaylists: () -> Unit = {},
     onOpenBackup: () -> Unit = {},
     onOpenStats: () -> Unit = {},
@@ -122,7 +123,6 @@ fun AppSettingsScreen(
     var replayGain by remember { mutableStateOf(settings.getReplayGainEnabled()) }
     var preampDb by remember { mutableStateOf(settings.getReplayGainPreampDb()) }
     var autoResume by remember { mutableStateOf(settings.getAutoResumeLastStation()) }
-    var driveMode by remember { mutableStateOf(settings.getDriveMode()) }
     var autoBackup by remember { mutableStateOf(settings.getAutoBackupEnabled()) }
     var autoRescan by remember { mutableStateOf(settings.getAutoRescanOnLaunch()) }
     var endFadeSec by remember { mutableStateOf(settings.getEndFadeSec()) }
@@ -141,7 +141,6 @@ fun AppSettingsScreen(
         replayGain = settings.getReplayGainEnabled()
         preampDb = settings.getReplayGainPreampDb()
         autoResume = settings.getAutoResumeLastStation()
-        driveMode = settings.getDriveMode()
         autoBackup = settings.getAutoBackupEnabled()
         autoRescan = settings.getAutoRescanOnLaunch()
         endFadeSec = settings.getEndFadeSec()
@@ -242,15 +241,11 @@ fun AppSettingsScreen(
                 },
             )
             Spacer(Modifier.height(8.dp))
-            SettingsToggleRow(
+            NavRow(
                 title = "Drive Mode",
-                subtitle = "Larger transport buttons on Now Playing — easier to hit at a glance " +
-                    "while driving. Takes effect the next time you open Now Playing.",
-                checked = driveMode,
-                onCheckedChange = { v ->
-                    driveMode = v
-                    settings.setDriveMode(v)
-                },
+                subtitle = "Larger transport buttons, automatic triggers, a station " +
+                    "quick list, and the in-car button bar.",
+                onClick = onOpenDriveMode,
             )
             Spacer(Modifier.height(8.dp))
             // Now Playing layout selector. Reads via the mirror
@@ -823,7 +818,6 @@ fun AppSettingsScreen(
                     replayGain = settings.getReplayGainEnabled()
                     preampDb = settings.getReplayGainPreampDb()
                     autoResume = settings.getAutoResumeLastStation()
-                    driveMode = settings.getDriveMode()
                     autoBackup = settings.getAutoBackupEnabled()
                     autoRescan = settings.getAutoRescanOnLaunch()
                     endFadeSec = settings.getEndFadeSec()

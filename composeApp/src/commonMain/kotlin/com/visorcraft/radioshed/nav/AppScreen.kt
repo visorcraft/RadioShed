@@ -79,6 +79,9 @@ sealed interface AppScreen {
     /** AI DJ settings — cadence, quiet hours, ducking, voice, templates. */
     data object DjSettings : AppScreen
 
+    /** Drive Mode settings — triggers, quick list, transport buttons. */
+    data object DriveModeSettings : AppScreen
+
     /** Backup & restore — list saved JSON bundles, create/restore/delete. */
     data object BackupRestore : AppScreen
 

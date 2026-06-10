@@ -436,6 +436,7 @@ fun App(
                             onFontScaleChange = { fontScale = it },
                             onOpenEqualizer = { current = AppScreen.Equalizer },
                             onOpenDjSettings = { current = AppScreen.DjSettings },
+                            onOpenDriveMode = { current = AppScreen.DriveModeSettings },
                             onOpenPlaylists = { current = AppScreen.Playlists },
                             onOpenBackup = { current = AppScreen.BackupRestore },
                             onOpenStats = { current = AppScreen.Stats },
@@ -485,6 +486,13 @@ fun App(
                     AppScreen.DjSettings -> {
                         PlatformBackHandler { current = AppScreen.AppSettings }
                         com.visorcraft.radioshed.ui.settings.DjSettingsScreen(
+                            onBack = { current = AppScreen.AppSettings },
+                        )
+                    }
+
+                    AppScreen.DriveModeSettings -> {
+                        PlatformBackHandler { current = AppScreen.AppSettings }
+                        com.visorcraft.radioshed.ui.car.DriveModeSettingsScreen(
                             onBack = { current = AppScreen.AppSettings },
                         )
                     }

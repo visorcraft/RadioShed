@@ -1,0 +1,642 @@
+package com.visorcraft.radioshed.ui.car
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.Bluetooth
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import com.visorcraft.radioshed.car.BluetoothWatcher
+import com.visorcraft.radioshed.car.BtPeer
+import com.visorcraft.radioshed.data.RadioShedJson
+import com.visorcraft.radioshed.data.SettingsStore
+import com.visorcraft.radioshed.data.StationRepository
+import com.visorcraft.radioshed.domain.DriveModeTrigger
+import com.visorcraft.radioshed.domain.Station
+import com.visorcraft.radioshed.permissions.rememberBluetoothConnectGate
+import com.visorcraft.radioshed.ui.settings.MinutesOfDaySlider
+import com.visorcraft.radioshed.ui.settings.SettingsSectionHeader
+import com.visorcraft.radioshed.ui.settings.SettingsToggleRow
+import com.visorcraft.radioshed.ui.settings.formatHhMm
+import com.visorcraft.radioshed.ui.util.rememberHapticTick
+import kotlinx.serialization.builtins.ListSerializer
+import org.koin.compose.koinInject
+
+/** Fixed canonical order for the Drive Mode button-bar action ids. Selected
+ *  ids persist in this order so the rendered bar (Task 2.4) is deterministic
+ *  regardless of the order the user toggled them. */
+private val DRIVE_BUTTON_ORDER = listOf(
+    "previous" to "Previous",
+    "play_pause" to "Play / Pause",
+    "next" to "Next",
+    "station_picker" to "Station picker",
+    "voice_search" to "Voice search",
+    "mute" to "Mute",
+)
+
+private const val QUICK_LIST_MAX = 6
+private const val MIN_BUTTONS = 4
+
+/**
+ * Drive Mode configuration: the manual toggle + auto-exit, the automatic
+ * trigger list (Bluetooth devices / schedule windows), the big-button station
+ * quick-list, and the transport button-bar selection.
+ *
+ * State is hoisted via [SettingsStore] reads held in compose state; every edit
+ * re-encodes and writes straight through so the change survives process death
+ * and is picked up by the running [com.visorcraft.radioshed.car.DriveModeController].
+ *
+ * Triggers round-trip through [RadioShedJson] + a [ListSerializer] of
+ * [DriveModeTrigger] (the same encoding the controller decodes). The quick-list
+ * is comma-joined station ids (≤6); the button bar is comma-joined action ids
+ * persisted in [DRIVE_BUTTON_ORDER].
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DriveModeSettingsScreen(
+    onBack: () -> Unit,
+    settings: SettingsStore = koinInject(),
+    bluetoothWatcher: BluetoothWatcher = koinInject(),
+    stationRepo: StationRepository = koinInject(),
+) {
+    var driveMode by remember { mutableStateOf(settings.getDriveMode()) }
+    var autoExit by remember { mutableStateOf(settings.getDriveAutoExit()) }
+
+    var triggers by remember { mutableStateOf(decodeTriggers(settings.getDriveTriggers())) }
+    val persistTriggers: (List<DriveModeTrigger>) -> Unit = { next ->
+        triggers = next
+        settings.setDriveTriggers(encodeTriggers(next))
+    }
+
+    var quickList by remember { mutableStateOf(parseIds(settings.getDriveQuickList())) }
+    val persistQuickList: (List<String>) -> Unit = { next ->
+        quickList = next
+        settings.setDriveQuickList(next)
+    }
+
+    var buttons by remember { mutableStateOf(parseIds(settings.getDriveButtons())) }
+    val persistButtons: (List<String>) -> Unit = { next ->
+        // Re-order to the canonical sequence so rendering (Task 2.4) is stable.
+        val ordered = DRIVE_BUTTON_ORDER.map { it.first }.filter { it in next }
+        buttons = ordered
+        settings.setDriveButtons(ordered)
+    }
+
+    // All stations, used by the quick-list editor for names + the "add" dialog.
+    var allStations by remember { mutableStateOf<List<Station>>(emptyList()) }
+    LaunchedEffect(Unit) { allStations = stationRepo.list() }
+
+    val btGate = rememberBluetoothConnectGate()
+
+    var btDialogOpen by remember { mutableStateOf(false) }
+    var scheduleDialogOpen by remember { mutableStateOf(false) }
+    var addStationDialogOpen by remember { mutableStateOf(false) }
+
+    val haptic = rememberHapticTick()
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Drive Mode") },
+                navigationIcon = { TextButton(onClick = onBack) { Text("Back") } },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                ),
+            )
+        },
+        containerColor = MaterialTheme.colorScheme.background,
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+        ) {
+            // ---- 1. Drive Mode ----
+            SettingsSectionHeader("Drive Mode")
+            SettingsToggleRow(
+                title = "Drive Mode",
+                subtitle = "Larger transport buttons on Now Playing — easier to hit at a glance " +
+                    "while driving. Takes effect the next time you open Now Playing.",
+                checked = driveMode,
+                onCheckedChange = { v ->
+                    haptic()
+                    driveMode = v
+                    settings.setDriveMode(v)
+                },
+            )
+            Spacer(Modifier.height(8.dp))
+            SettingsToggleRow(
+                title = "Auto-exit Drive Mode",
+                subtitle = "Leave Drive Mode automatically once no trigger condition is active " +
+                    "anymore (Bluetooth disconnects, schedule window closes).",
+                checked = autoExit,
+                onCheckedChange = { v ->
+                    autoExit = v
+                    settings.setDriveAutoExit(v)
+                },
+            )
+
+            Spacer(Modifier.height(24.dp))
+
+            // ---- 2. Triggers ----
+            SettingsSectionHeader("Automatic triggers")
+            Text(
+                "Drive Mode turns on by itself when any of these conditions match.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+            )
+            Spacer(Modifier.height(8.dp))
+            TriggersSection(
+                triggers = triggers,
+                onDelete = { index ->
+                    persistTriggers(triggers.toMutableList().apply { removeAt(index) })
+                },
+                onAddBluetooth = {
+                    if (!btGate.granted) btGate.request() else btDialogOpen = true
+                },
+                onAddSchedule = { scheduleDialogOpen = true },
+            )
+
+            Spacer(Modifier.height(24.dp))
+
+            // ---- 3. Quick list ----
+            SettingsSectionHeader("Station quick list")
+            Text(
+                "Stations shown as big buttons in the Drive Mode picker, in this order. " +
+                    "Up to $QUICK_LIST_MAX.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+            )
+            Spacer(Modifier.height(8.dp))
+            QuickListSection(
+                quickList = quickList,
+                stationsById = allStations.associateBy { it.id.toString() },
+                onMoveUp = { index ->
+                    if (index <= 0) return@QuickListSection
+                    persistQuickList(quickList.toMutableList().apply {
+                        val tmp = this[index - 1]
+                        this[index - 1] = this[index]
+                        this[index] = tmp
+                    })
+                },
+                onMoveDown = { index ->
+                    if (index >= quickList.lastIndex) return@QuickListSection
+                    persistQuickList(quickList.toMutableList().apply {
+                        val tmp = this[index + 1]
+                        this[index + 1] = this[index]
+                        this[index] = tmp
+                    })
+                },
+                onRemove = { index ->
+                    persistQuickList(quickList.toMutableList().apply { removeAt(index) })
+                },
+                onAdd = { addStationDialogOpen = true },
+            )
+
+            Spacer(Modifier.height(24.dp))
+
+            // ---- 4. Buttons ----
+            SettingsSectionHeader("Transport buttons")
+            Text(
+                "Pick which controls appear in the Drive Mode button bar. Choose $MIN_BUTTONS " +
+                    "to ${DRIVE_BUTTON_ORDER.size}.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+            )
+            Spacer(Modifier.height(8.dp))
+            ButtonsSection(
+                selected = buttons,
+                onToggle = { id, checked ->
+                    if (checked) {
+                        if (id !in buttons) persistButtons(buttons + id)
+                    } else {
+                        // Enforce a 4-button floor — block the deselect that
+                        // would drop below it (the hint line explains why).
+                        if (buttons.size > MIN_BUTTONS) persistButtons(buttons - id)
+                    }
+                },
+            )
+
+            Spacer(Modifier.height(24.dp))
+        }
+    }
+
+    if (btDialogOpen) {
+        BluetoothDeviceDialog(
+            // Filter out devices already configured as triggers.
+            candidates = bluetoothWatcher.bondedDevices().filterNot { peer ->
+                triggers.any { it is DriveModeTrigger.BtDevice && it.mac == peer.mac }
+            },
+            onPick = { peer ->
+                persistTriggers(
+                    triggers + DriveModeTrigger.BtDevice(mac = peer.mac, name = peer.name),
+                )
+                btDialogOpen = false
+            },
+            onDismiss = { btDialogOpen = false },
+        )
+    }
+
+    if (scheduleDialogOpen) {
+        ScheduleDialog(
+            onConfirm = { startMin, endMin ->
+                persistTriggers(
+                    triggers + DriveModeTrigger.Schedule(startMin = startMin, endMin = endMin),
+                )
+                scheduleDialogOpen = false
+            },
+            onDismiss = { scheduleDialogOpen = false },
+        )
+    }
+
+    if (addStationDialogOpen) {
+        AddStationDialog(
+            // Only stations not already in the quick list.
+            candidates = allStations.filterNot { it.id.toString() in quickList },
+            onPick = { station ->
+                if (quickList.size < QUICK_LIST_MAX) {
+                    persistQuickList(quickList + station.id.toString())
+                }
+                addStationDialogOpen = false
+            },
+            onDismiss = { addStationDialogOpen = false },
+        )
+    }
+}
+
+@Composable
+private fun TriggersSection(
+    triggers: List<DriveModeTrigger>,
+    onDelete: (Int) -> Unit,
+    onAddBluetooth: () -> Unit,
+    onAddSchedule: () -> Unit,
+) {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+            if (triggers.isEmpty()) {
+                Text(
+                    "No triggers yet. Drive Mode is activated manually.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                )
+            } else {
+                triggers.forEachIndexed { index, trigger ->
+                    TriggerRow(trigger = trigger, onDelete = { onDelete(index) })
+                }
+            }
+            Spacer(Modifier.height(4.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = onAddBluetooth) { Text("Add Bluetooth device") }
+                OutlinedButton(onClick = onAddSchedule) { Text("Add schedule") }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TriggerRow(trigger: DriveModeTrigger, onDelete: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        when (trigger) {
+            is DriveModeTrigger.BtDevice -> {
+                Icon(
+                    imageVector = Icons.Filled.Bluetooth,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                )
+                Spacer(Modifier.size(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        trigger.name,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        trigger.mac,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    )
+                }
+            }
+
+            is DriveModeTrigger.Schedule -> {
+                Icon(
+                    imageVector = Icons.Filled.Schedule,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                )
+                Spacer(Modifier.size(12.dp))
+                Text(
+                    "${formatHhMm(trigger.startMin)} – ${formatHhMm(trigger.endMin)}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+        IconButton(onClick = onDelete) {
+            Icon(imageVector = Icons.Filled.Delete, contentDescription = "Delete trigger")
+        }
+    }
+}
+
+@Composable
+private fun QuickListSection(
+    quickList: List<String>,
+    stationsById: Map<String, Station>,
+    onMoveUp: (Int) -> Unit,
+    onMoveDown: (Int) -> Unit,
+    onRemove: (Int) -> Unit,
+    onAdd: () -> Unit,
+) {
+    val atCapacity = quickList.size >= QUICK_LIST_MAX
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+            if (quickList.isEmpty()) {
+                Text(
+                    "No stations yet.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                )
+            } else {
+                quickList.forEachIndexed { index, id ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            // Stale id (station deleted) degrades to the raw id
+                            // rather than vanishing, so the user can still remove it.
+                            stationsById[id]?.name ?: "Unknown station ($id)",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.weight(1f),
+                        )
+                        IconButton(onClick = { onMoveUp(index) }, enabled = index > 0) {
+                            Icon(
+                                imageVector = Icons.Filled.ArrowUpward,
+                                contentDescription = "Move up",
+                            )
+                        }
+                        IconButton(
+                            onClick = { onMoveDown(index) },
+                            enabled = index < quickList.lastIndex,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.ArrowDownward,
+                                contentDescription = "Move down",
+                            )
+                        }
+                        IconButton(onClick = { onRemove(index) }) {
+                            Icon(
+                                imageVector = Icons.Filled.Delete,
+                                contentDescription = "Remove station",
+                            )
+                        }
+                    }
+                }
+            }
+            Spacer(Modifier.height(4.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedButton(onClick = onAdd, enabled = !atCapacity) { Text("Add station") }
+                if (atCapacity) {
+                    Spacer(Modifier.size(12.dp))
+                    Text(
+                        "$QUICK_LIST_MAX of $QUICK_LIST_MAX",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ButtonsSection(
+    selected: List<String>,
+    onToggle: (String, Boolean) -> Unit,
+) {
+    val atFloor = selected.size <= MIN_BUTTONS
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+            DRIVE_BUTTON_ORDER.forEach { (id, label) ->
+                val checked = id in selected
+                // Block the deselect that would drop below the floor — the
+                // checkbox stays disabled while it's the load-bearing one.
+                val deselectBlocked = checked && atFloor
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Checkbox(
+                        checked = checked,
+                        enabled = !deselectBlocked,
+                        onCheckedChange = { onToggle(id, it) },
+                    )
+                    Spacer(Modifier.size(8.dp))
+                    Text(
+                        label,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+            }
+            if (atFloor) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "At least $MIN_BUTTONS buttons are required.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun BluetoothDeviceDialog(
+    candidates: List<BtPeer>,
+    onPick: (BtPeer) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+        title = { Text("Paired devices") },
+        text = {
+            Column {
+                if (candidates.isEmpty()) {
+                    Text(
+                        "No paired devices available. Pair a device in your phone's " +
+                            "Bluetooth settings, or grant the nearby-devices permission.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                    )
+                } else {
+                    candidates.forEach { peer ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    peer.name,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                )
+                                Text(
+                                    peer.mac,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                                )
+                            }
+                            Button(onClick = { onPick(peer) }) { Text("Add") }
+                        }
+                    }
+                }
+            }
+        },
+    )
+}
+
+@Composable
+private fun ScheduleDialog(
+    onConfirm: (Int, Int) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var startMin by remember { mutableStateOf(8 * 60) }
+    var endMin by remember { mutableStateOf(17 * 60) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(onClick = { onConfirm(startMin, endMin) }) { Text("Add") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        title = { Text("Schedule window") },
+        text = {
+            Column {
+                MinutesOfDaySlider(label = "Start", minutes = startMin, onChange = { startMin = it })
+                Spacer(Modifier.height(8.dp))
+                MinutesOfDaySlider(label = "End", minutes = endMin, onChange = { endMin = it })
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "If the start is later than the end, the window wraps across midnight " +
+                        "(e.g. 23:00 → 01:00).",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                )
+            }
+        },
+    )
+}
+
+@Composable
+private fun AddStationDialog(
+    candidates: List<Station>,
+    onPick: (Station) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+        title = { Text("Add station") },
+        text = {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                if (candidates.isEmpty()) {
+                    Text(
+                        "All stations are already in the quick list.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                    )
+                } else {
+                    candidates.forEach { station ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                station.name,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Button(onClick = { onPick(station) }) { Text("Add") }
+                        }
+                    }
+                }
+            }
+        },
+    )
+}
+
+/** Decode the persisted triggers JSON; a corrupt/empty blob yields no triggers. */
+private fun decodeTriggers(json: String): List<DriveModeTrigger> {
+    if (json.isBlank()) return emptyList()
+    return runCatching {
+        RadioShedJson.decodeFromString(ListSerializer(DriveModeTrigger.serializer()), json)
+    }.getOrDefault(emptyList())
+}
+
+private fun encodeTriggers(triggers: List<DriveModeTrigger>): String =
+    RadioShedJson.encodeToString(ListSerializer(DriveModeTrigger.serializer()), triggers)
+
+/** Split a comma-joined id string into a clean list (drops blanks). */
+private fun parseIds(joined: String): List<String> =
+    joined.split(',').map { it.trim() }.filter { it.isNotEmpty() }

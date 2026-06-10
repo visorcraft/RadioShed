@@ -470,56 +470,6 @@ private fun QuietHoursSection(
 }
 
 @Composable
-private fun MinutesOfDaySlider(
-    label: String,
-    minutes: Int,
-    enabledControls: Boolean,
-    onChange: (Int) -> Unit,
-) {
-    // Lift-up-state so the readout tracks the drag but the prefs write only
-    // fires on release — mirrors the AppSettings slider idiom.
-    var dragging by remember { mutableStateOf(false) }
-    // Initial value seeds the drag buffer only; display reads [minutes] when not dragging.
-    var pending by remember { mutableStateOf(minutes) }
-    val display = if (dragging) pending else minutes
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Text(
-            label,
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Medium,
-            modifier = Modifier.weight(1f),
-            color = MaterialTheme.colorScheme.onSurface.copy(
-                alpha = if (enabledControls) 1f else 0.4f,
-            ),
-        )
-        Text(
-            formatHhMm(display),
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurface.copy(
-                alpha = if (enabledControls) 0.8f else 0.4f,
-            ),
-        )
-    }
-    Slider(
-        value = display.toFloat(),
-        enabled = enabledControls,
-        onValueChange = {
-            dragging = true
-            pending = it.toInt().coerceIn(0, 1439)
-        },
-        onValueChangeFinished = {
-            onChange(pending)
-            dragging = false
-        },
-        valueRange = 0f..1439f,
-        modifier = Modifier.fillMaxWidth(),
-    )
-}
-
-@Composable
 private fun DuckSlider(
     enabledControls: Boolean,
     fraction: Float,
@@ -821,10 +771,3 @@ private fun TextFieldValue.insertAtCursor(token: String): TextFieldValue {
     return TextFieldValue(text = newText, selection = TextRange(caret))
 }
 
-/** Formats a minute-of-day (0..1439) as a 24-hour h:mm label. */
-private fun formatHhMm(minuteOfDay: Int): String {
-    val hours = (minuteOfDay / 60).coerceIn(0, 23)
-    val minutes = (minuteOfDay % 60).coerceIn(0, 59)
-    val mm = if (minutes < 10) "0$minutes" else "$minutes"
-    return "$hours:$mm"
-}
