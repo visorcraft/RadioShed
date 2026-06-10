@@ -6,6 +6,7 @@
     <string name="notification_channel_playback">Playback</string>
     <string name="backup_share_subject">RadioShed backup</string>
     <string name="widget_now_playing_label">RadioShed — Now Playing</string>
+    <string name="widget_station_launcher_label">RadioShed — Station Launcher</string>
     <string name="widget_idle_title">Nothing playing</string>
     <string name="widget_idle_subtitle">Tap to open RadioShed</string>
 </resources>

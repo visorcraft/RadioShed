@@ -170,6 +170,28 @@
                 android:resource="@xml/widget_now_playing_info" />
         </receiver>
 
+        <!-- Station-launcher widget. Displays a grid of station tiles;
+             tapping a tile opens the app and starts that station. -->
+        <receiver
+            android:name=".widget.StationLauncherWidget"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_station_launcher_info" />
+        </receiver>
+
+        <activity
+            android:name=".widget.StationLauncherWidgetConfigActivity"
+            android:exported="true"
+            android:theme="@android:style/Theme.Material.Light.NoActionBar">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
+
         <!-- FileProvider for the Backup &amp; Restore screen's "Share"
              action. Backups live under filesDir/backups/ which other
              apps can't read directly; FileProvider hands out content://

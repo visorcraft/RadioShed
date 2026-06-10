@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:initialLayout="@layout/widget_station_launcher"
+    android:minWidth="180dp"
+    android:minHeight="120dp"
+    android:targetCellWidth="3"
+    android:targetCellHeight="2"
+    android:resizeMode="horizontal|vertical"
+    android:updatePeriodMillis="0"
+    android:widgetCategory="home_screen"
+    android:configure="com.visorcraft.radioshed.widget.StationLauncherWidgetConfigActivity"
+    android:description="@string/widget_station_launcher_label"
+    android:previewLayout="@layout/widget_station_launcher" />

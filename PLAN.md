@@ -961,24 +961,24 @@ were NOT yet run when execution paused — run them on resume before starting
 - Test: extend `composeApp/src/commonTest/.../stations/SourceRuleEvaluatorTest.kt`
   (find existing class; add cases)
 
-- [ ] **Step 1:** Failing evaluator test: a station whose rule tree mixes a
+- [x] **Step 1:** Failing evaluator test: a station whose rule tree mixes a
   local rule with `MediaSourceSelector("subsonic:test")` yields tracks from
   both (fake registry with a fake source).
-- [ ] **Step 2:** Make it pass (likely already passes given the evaluator
+- [x] **Step 2:** Make it pass (likely already passes given the evaluator
   routes through the registry — if so, keep the test as a regression lock
   and say so in the commit).
-- [ ] **Step 3:** Station editor: rule builder gains a "Media source" rule
+- [x] **Step 3:** Station editor: rule builder gains a "Media source" rule
   type — dropdown of registered sources from `MediaSourceRegistry.sources`
   (hidden when only local exists). Persist as `MediaSourceSelector`.
-- [ ] **Step 4:** Device + desktop end-to-end: build a hybrid station
+- [x] **Step 4:** Device + desktop end-to-end: build a hybrid station
   (local genre rule + Subsonic source), play it, confirm both source types
   stream; toggle Connectivity policy to Never → Subsonic tracks skip
   cleanly with no stall (watch for queue-advance behavior).
-- [ ] **Step 5:** Commit: `Hybrid stations: media-source rule in editor (PLAN 5.3)`
+- [x] **Step 5:** Commit: `Hybrid stations: media-source rule in editor (PLAN 5.3)`
 
 ### Task 5.4: Phase 5 exit
 
-- [ ] Run the **Phase Exit Gate**. Phase-specific dedup checks:
+- [x] Run the **Phase Exit Gate**. Phase-specific dedup checks:
   - Android vs desktop Subsonic clients — same diff discipline as the
     ListenBrainz pair.
   - `SubsonicSource` enumeration vs `SubsonicBrowseScreen`'s own
@@ -1008,20 +1008,20 @@ Existing: single-track `EditTagsDialog` + `TagWriter` (Android + desktop
 impls). Multi-value tags remain out of scope (schema collapses to primary —
 documented in `EditTagsDialog.kt:40`).
 
-- [ ] **Step 1:** Failing test for the pure merge model: given N tracks'
+- [x] **Step 1:** Failing test for the pure merge model: given N tracks'
   tags, fields where all values agree show the common value; mixed fields
   show a "Multiple values" marker; only user-edited fields are written
   back (`data class BatchTagEdit(val field: TagField, val newValue: String)`)
   — put this model at the bottom of `EditTagsDialog.kt` per the
   helpers-in-file convention.
-- [ ] **Step 2:** Implement model → tests PASS.
-- [ ] **Step 3:** UI: library multi-select (the file browser already has
+- [x] **Step 2:** Implement model → tests PASS.
+- [x] **Step 3:** UI: library multi-select (the file browser already has
   the multi-select pattern — reuse its top-bar approach) gains "Edit tags";
   dialog shows merged fields, writes via `TagWriter` in a progress loop
   (per-file `runCatching`, summary "12 written, 1 failed"), then triggers
   rescan of the touched rows so the DB reflects the files.
-- [ ] **Step 4:** Device + desktop smoke on a 3-track batch (FLAC + MP3 mix).
-- [ ] **Step 5:** Commit: `Batch tag editing over multi-select (PLAN 6.1)`
+- [x] **Step 4:** Device + desktop smoke on a 3-track batch (FLAC + MP3 mix).
+- [x] **Step 5:** Commit: `Batch tag editing over multi-select (PLAN 6.1)`
 
 ### Task 6.2: Android station-launcher widget
 

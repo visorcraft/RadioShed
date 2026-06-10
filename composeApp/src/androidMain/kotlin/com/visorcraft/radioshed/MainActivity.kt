@@ -21,6 +21,7 @@ import com.visorcraft.radioshed.audio.toPlayable
 import com.visorcraft.radioshed.data.LibraryRepository
 import com.visorcraft.radioshed.data.SearchRepository
 import com.visorcraft.radioshed.stations.StationPlayback
+import com.visorcraft.radioshed.widget.WidgetSupport
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -75,6 +76,7 @@ class MainActivity : ComponentActivity() {
         // AudioEngine is now ready.
         handleViewIntent(intent)
         handleSearchIntent(intent)
+        handleStationIntent(intent)
     }
 
     override fun onDestroy() {
@@ -99,6 +101,7 @@ class MainActivity : ComponentActivity() {
         setIntent(intent)
         handleViewIntent(intent)
         handleSearchIntent(intent)
+        handleStationIntent(intent)
     }
 
     /**
@@ -135,6 +138,24 @@ class MainActivity : ComponentActivity() {
                 durationMs = 0L,
             ),
         )
+    }
+
+    /**
+     * Station-launcher widget entry point. When the user taps a tile on the
+     * home-screen widget, the PendingIntent carries [WidgetSupport.EXTRA_STATION_ID].
+     * Resolve the station and start playback via [StationPlayback.playStation]
+     * so the behaviour matches tapping a station inside the app.
+     */
+    private fun handleStationIntent(intent: Intent?) {
+        val stationId = intent?.getLongExtra(WidgetSupport.EXTRA_STATION_ID, -1L)
+            ?.takeIf { it >= 0 } ?: return
+        searchScope.launch {
+            runCatching {
+                stationPlayback.playStation(stationId)
+            }.onFailure {
+                Log.e(TAG, "station launcher: failed to play station $stationId", it)
+            }
+        }
     }
 
     /**

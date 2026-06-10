@@ -6,8 +6,6 @@ import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.graphics.BitmapFactory
-import android.net.Uri
 import android.view.KeyEvent
 import android.widget.RemoteViews
 import com.visorcraft.radioshed.MainActivity
@@ -15,6 +13,8 @@ import com.visorcraft.radioshed.R
 import com.visorcraft.radioshed.audio.AudioEngine
 import com.visorcraft.radioshed.audio.PlayerState
 import com.visorcraft.radioshed.audio.RadioShedMediaSessionService
+import com.visorcraft.radioshed.widget.WidgetSupport.decodeArtworkBitmap
+import com.visorcraft.radioshed.widget.WidgetSupport.openAppIntent
 import org.koin.core.context.GlobalContext
 
 /**
@@ -50,15 +50,6 @@ class NowPlayingWidget : AppWidgetProvider() {
     }
 
     companion object {
-        /**
-         * Target dimension for widget artwork decoding. The persister
-         * stores at ~500 px; the widget cell is ~128 dp at most.
-         * Decoding to 256 px is more than enough headroom for any
-         * scaled-up cell on a 3-4x density display, and ~16x cheaper
-         * memory than the full-size source.
-         */
-        private const val ARTWORK_TARGET_PX = 256
-
         /**
          * Force a one-shot update on every existing widget instance.
          * Called from [RadioShedMediaSessionService] whenever the
@@ -113,22 +104,7 @@ class NowPlayingWidget : AppWidgetProvider() {
             // IPC, so a 1MB full-size bitmap on every state tick is
             // wasteful and on low-memory devices can OOM the widget
             // host.
-            val artworkBitmap = artworkUri?.let { uri ->
-                runCatching {
-                    val parsed = Uri.parse(uri)
-                    val path = parsed.path ?: return@runCatching null
-                    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                    BitmapFactory.decodeFile(path, bounds)
-                    val targetPx = ARTWORK_TARGET_PX
-                    var sample = 1
-                    while ((bounds.outWidth / sample) > targetPx ||
-                        (bounds.outHeight / sample) > targetPx) {
-                        sample *= 2
-                    }
-                    val decode = BitmapFactory.Options().apply { inSampleSize = sample }
-                    BitmapFactory.decodeFile(path, decode)
-                }.getOrNull()
-            }
+            val artworkBitmap = decodeArtworkBitmap(artworkUri)
             if (artworkBitmap != null) {
                 views.setImageViewBitmap(R.id.widget_artwork, artworkBitmap)
                 // Note: do NOT recycle the bitmap here. RemoteViews
@@ -153,7 +129,7 @@ class NowPlayingWidget : AppWidgetProvider() {
             // child handled below.
             views.setOnClickPendingIntent(
                 R.id.widget_root,
-                openAppIntent(context),
+                openAppIntent(context, requestCode = 0),
             )
 
             // Transport buttons → media-button broadcasts to the
@@ -189,18 +165,6 @@ class NowPlayingWidget : AppWidgetProvider() {
             isPlaying = false,
             artworkUri = null,
         )
-
-        private fun openAppIntent(context: Context): PendingIntent {
-            val intent = Intent(context, MainActivity::class.java).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-            }
-            return PendingIntent.getActivity(
-                context,
-                /* requestCode = */ 0,
-                intent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-            )
-        }
 
         private fun mediaButtonIntent(
             context: Context,

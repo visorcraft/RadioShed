@@ -1,0 +1,223 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Station-launcher home-screen widget. Static 2×3 grid of artwork+name
+  tiles. Empty slots are hidden at runtime; the visible ones centre
+  within the remaining space because each row is a weighted
+  LinearLayout.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_launcher_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="?android:attr/colorBackground"
+    android:padding="6dp">
+
+    <!-- Row 1 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="horizontal">
+
+        <LinearLayout
+            android:id="@+id/widget_slot_0"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:padding="4dp">
+
+            <ImageView
+                android:id="@+id/widget_slot_artwork_0"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:scaleType="centerCrop"
+                android:contentDescription="@null"
+                android:background="?android:attr/colorPrimary"
+                android:src="@drawable/ic_radioshed_notification" />
+
+            <TextView
+                android:id="@+id/widget_slot_name_0"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:gravity="center"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:textColor="?android:attr/textColorPrimary"
+                android:singleLine="true"
+                android:ellipsize="end" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/widget_slot_1"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:padding="4dp">
+
+            <ImageView
+                android:id="@+id/widget_slot_artwork_1"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:scaleType="centerCrop"
+                android:contentDescription="@null"
+                android:background="?android:attr/colorPrimary"
+                android:src="@drawable/ic_radioshed_notification" />
+
+            <TextView
+                android:id="@+id/widget_slot_name_1"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:gravity="center"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:textColor="?android:attr/textColorPrimary"
+                android:singleLine="true"
+                android:ellipsize="end" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/widget_slot_2"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:padding="4dp">
+
+            <ImageView
+                android:id="@+id/widget_slot_artwork_2"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:scaleType="centerCrop"
+                android:contentDescription="@null"
+                android:background="?android:attr/colorPrimary"
+                android:src="@drawable/ic_radioshed_notification" />
+
+            <TextView
+                android:id="@+id/widget_slot_name_2"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:gravity="center"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:textColor="?android:attr/textColorPrimary"
+                android:singleLine="true"
+                android:ellipsize="end" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Row 2 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="horizontal">
+
+        <LinearLayout
+            android:id="@+id/widget_slot_3"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:padding="4dp">
+
+            <ImageView
+                android:id="@+id/widget_slot_artwork_3"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:scaleType="centerCrop"
+                android:contentDescription="@null"
+                android:background="?android:attr/colorPrimary"
+                android:src="@drawable/ic_radioshed_notification" />
+
+            <TextView
+                android:id="@+id/widget_slot_name_3"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:gravity="center"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:textColor="?android:attr/textColorPrimary"
+                android:singleLine="true"
+                android:ellipsize="end" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/widget_slot_4"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:padding="4dp">
+
+            <ImageView
+                android:id="@+id/widget_slot_artwork_4"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:scaleType="centerCrop"
+                android:contentDescription="@null"
+                android:background="?android:attr/colorPrimary"
+                android:src="@drawable/ic_radioshed_notification" />
+
+            <TextView
+                android:id="@+id/widget_slot_name_4"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:gravity="center"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:textColor="?android:attr/textColorPrimary"
+                android:singleLine="true"
+                android:ellipsize="end" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/widget_slot_5"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:padding="4dp">
+
+            <ImageView
+                android:id="@+id/widget_slot_artwork_5"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:scaleType="centerCrop"
+                android:contentDescription="@null"
+                android:background="?android:attr/colorPrimary"
+                android:src="@drawable/ic_radioshed_notification" />
+
+            <TextView
+                android:id="@+id/widget_slot_name_5"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:gravity="center"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:textColor="?android:attr/textColorPrimary"
+                android:singleLine="true"
+                android:ellipsize="end" />
+        </LinearLayout>
+    </LinearLayout>
+</LinearLayout>
