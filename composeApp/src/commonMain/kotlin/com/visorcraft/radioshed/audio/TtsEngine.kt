@@ -14,6 +14,9 @@ interface TtsEngine {
     /**
      * Synthesize [text] to [outPath]. Returns true on success. Must not
      * throw on engine failure — DJ speech is decorative, never fatal.
+     *
+     * [outPath] must be an absolute path in an app-writable directory (e.g. the DJ
+     * cache dir); the caller guarantees the parent exists.
      */
     suspend fun synthesizeToFile(text: String, voice: DjVoice?, outPath: String): Boolean
 }
