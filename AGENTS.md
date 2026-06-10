@@ -171,7 +171,8 @@ install, updated in place:
   JDK-only (`HttpURLConnection`, one GET per call) — do **not** add
   Ktor/OkHttp client libraries. `SubsonicClient` is bound per platform:
   Android = the real `AndroidSubsonicClient` (token auth, never sends the
-  cleartext password), desktop/iOS = `Null` stubs.
+  cleartext password), desktop = the real `DesktopSubsonicClient`
+  (mirrors Android token-auth over `HttpURLConnection`), iOS = `Null` stub.
 - `audio/` — `AudioEngine` (expect/actual), `EqualizerController`,
   `SleepTimer`. Android impl is Media3 ExoPlayer + MediaSession; iOS is
   a documented no-op stub (AVAudioEngine planned, pending Mac access);
