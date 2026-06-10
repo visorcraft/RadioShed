@@ -1,7 +1,9 @@
 package com.visorcraft.radioshed.stations
 
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
 /**
@@ -126,5 +128,39 @@ class DjAnnouncerTest {
         assertFalse(decide(frequency = "every_n", frequencyN = 3, tracksSinceAnnounce = 1))
         assertFalse(decide(frequency = "every_n", frequencyN = 3, tracksSinceAnnounce = 2))
         assertTrue(decide(frequency = "every_n", frequencyN = 3, tracksSinceAnnounce = 3))
+    }
+
+    @Test
+    fun precacheKeyIsStableForSameInputs() {
+        // The cache-key derivation is the single source of truth shared by the
+        // live announce path and the precache path. Identical (text, voice)
+        // MUST hash to the same key (cache hit); a different text MUST NOT.
+        val a = DjAnnouncer.cacheKeyFor("Up next: Song A.", "system")
+        val b = DjAnnouncer.cacheKeyFor("Up next: Song A.", "system")
+        val c = DjAnnouncer.cacheKeyFor("Up next: Song B.", "system")
+        assertEquals(a, b)
+        assertNotEquals(a, c)
+    }
+
+    @Test
+    fun announceAndPrecacheAgreeOnVariant() {
+        // Determinism contract: the announce path and the precache path must
+        // pick the SAME variant for the same transition, since the precache
+        // synthesizes the clip the announce path will look up. The seed is
+        // stable per (startingTrack.trackId, slot) — NOT the wall clock — so a
+        // pre-rendered clip and the live render agree.
+        val variants = DEFAULT_DJ_TEMPLATES[DjSlots.UP_NEXT]!!
+        val seedA = DjAnnouncer.variantSeedFor(trackId = 42L, slot = DjSlots.UP_NEXT)
+        val seedAagain = DjAnnouncer.variantSeedFor(trackId = 42L, slot = DjSlots.UP_NEXT)
+        val seedB = DjAnnouncer.variantSeedFor(trackId = 99L, slot = DjSlots.UP_NEXT)
+        assertEquals(seedA, seedAagain)
+        // Same track + slot → identical variant for announce and precache.
+        assertEquals(
+            DjTemplate.pickVariant(variants, seed = seedA),
+            DjTemplate.pickVariant(variants, seed = seedAagain),
+        )
+        // Different tracks get different seeds → variety survives across the
+        // queue even though selection is deterministic per track.
+        assertNotEquals(seedA, seedB)
     }
 }

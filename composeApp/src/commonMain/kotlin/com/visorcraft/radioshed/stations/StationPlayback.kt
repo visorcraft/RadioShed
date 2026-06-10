@@ -1062,6 +1062,33 @@ class StationPlayback(
                         stationChanged = stationChanged,
                     ),
                 )
+                // Pre-cache one queue-step ahead so the NEXT transition's clip
+                // is already synthesized when it becomes due. The predicted
+                // transition starts on [nextTrack] (the track that will play
+                // after the current one) and teases the track after that.
+                // stationChanged is false: an intra-station advance is the
+                // common case and a mid-queue station switch isn't knowable
+                // here. Artist lookups reuse the reads above; the track after
+                // next is an approximation off the current upcoming snapshot
+                // (the queue may re-order before then, but a stale precache is
+                // a harmless cache warm, never a wrong announcement).
+                nextTrack?.let { upcomingTrack ->
+                    val afterNext = upcoming(2).getOrNull(1)
+                    val afterNextArtist = afterNext?.let {
+                        libraryRepo.artistsForTrack(it.id).firstOrNull()?.name
+                    }
+                    djAnnouncer.precacheUpcoming(
+                        listOf(
+                            TrackTransition(
+                                stationName = station?.name,
+                                endedTrack = startingTrack.toPlayable(artistName = startingArtist),
+                                startingTrack = upcomingTrack.toPlayable(artistName = nextArtist),
+                                nextTrack = afterNext?.toPlayable(artistName = afterNextArtist),
+                                stationChanged = false,
+                            ),
+                        ),
+                    )
+                }
             }
         }
     }
