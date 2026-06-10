@@ -35,7 +35,6 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -193,7 +192,7 @@ fun AppSettingsScreen(
                 .padding(horizontal = 16.dp, vertical = 8.dp),
         ) {
             // ---- Appearance ----
-            SectionHeader("Appearance")
+            SettingsSectionHeader("Appearance")
             ThemeChoiceList(
                 current = currentThemeMode,
                 onPick = { mode ->
@@ -223,7 +222,7 @@ fun AppSettingsScreen(
             Spacer(Modifier.height(16.dp))
 
             // ---- Accessibility ----
-            SectionHeader("Accessibility")
+            SettingsSectionHeader("Accessibility")
             FontScaleRow(
                 value = currentFontScale,
                 onChange = { v ->
@@ -232,7 +231,7 @@ fun AppSettingsScreen(
                 },
             )
             Spacer(Modifier.height(8.dp))
-            ToggleRow(
+            SettingsToggleRow(
                 title = "Reduce motion",
                 subtitle = "Minimize animations across the app. Useful for motion-sensitivity, also " +
                     "helps perceived performance on lower-end hardware.",
@@ -243,7 +242,7 @@ fun AppSettingsScreen(
                 },
             )
             Spacer(Modifier.height(8.dp))
-            ToggleRow(
+            SettingsToggleRow(
                 title = "Drive Mode",
                 subtitle = "Larger transport buttons on Now Playing — easier to hit at a glance " +
                     "while driving. Takes effect the next time you open Now Playing.",
@@ -266,7 +265,7 @@ fun AppSettingsScreen(
                 onPick = { v -> settings.setNowPlayingLayout(v) },
             )
             Spacer(Modifier.height(8.dp))
-            ToggleRow(
+            SettingsToggleRow(
                 title = "Haptic feedback",
                 subtitle = "Subtle vibration on long-press / mode-flip gestures. Off mutes " +
                     "every haptic across the app — useful if your phone's vibration motor " +
@@ -278,7 +277,7 @@ fun AppSettingsScreen(
                 },
             )
             Spacer(Modifier.height(8.dp))
-            ToggleRow(
+            SettingsToggleRow(
                 title = "Keep screen on while playing",
                 subtitle = "Holds the display on while a track is actually playing. " +
                     "Pause / idle releases the lock so the screen times out normally " +
@@ -293,8 +292,8 @@ fun AppSettingsScreen(
             Spacer(Modifier.height(24.dp))
 
             // ---- Audio ----
-            SectionHeader("Audio")
-            ToggleRow(
+            SettingsSectionHeader("Audio")
+            SettingsToggleRow(
                 title = "Resume last station on launch",
                 subtitle = "Start playing whatever station was last active when the " +
                     "app reopens. Off by default — silent launches are usually what " +
@@ -306,7 +305,7 @@ fun AppSettingsScreen(
                 },
             )
             Spacer(Modifier.height(8.dp))
-            ToggleRow(
+            SettingsToggleRow(
                 title = "ReplayGain",
                 subtitle = "Normalize per-track loudness using embedded ReplayGain " +
                     "tags. Loud tracks are attenuated toward a common reference; " +
@@ -361,7 +360,7 @@ fun AppSettingsScreen(
                 onClick = onOpenBackup,
             )
             Spacer(Modifier.height(8.dp))
-            ToggleRow(
+            SettingsToggleRow(
                 title = "Auto-backup weekly",
                 subtitle = "Silently writes a fresh backup once per week so you " +
                     "don't have to remember. Files live alongside manual backups " +
@@ -381,7 +380,7 @@ fun AppSettingsScreen(
                 },
             )
             Spacer(Modifier.height(8.dp))
-            ToggleRow(
+            SettingsToggleRow(
                 title = "Auto-fetch lyrics over network",
                 subtitle = "Allows the lyrics view to query LRClib when local " +
                     "sidecar / embedded lyrics aren't found. Off keeps the app " +
@@ -397,7 +396,7 @@ fun AppSettingsScreen(
             Spacer(Modifier.height(8.dp))
             SubsonicConfigRow(settings = settings, onOpenBrowse = onOpenSubsonic)
             Spacer(Modifier.height(8.dp))
-            ToggleRow(
+            SettingsToggleRow(
                 title = "Sleep timer stops playback",
                 subtitle = "When the timer expires, fully stop playback (clears " +
                     "the lock-screen tile) instead of pausing. Off keeps the " +
@@ -446,7 +445,7 @@ fun AppSettingsScreen(
             // bandwidth services live just below; everything else
             // keeps inheriting the global policy unless the user
             // toggles a row explicitly.
-            SectionHeader("Online")
+            SettingsSectionHeader("Online")
             ConnectivityPolicyRow(
                 current = connectivityPolicy,
                 onPick = { p ->
@@ -477,8 +476,8 @@ fun AppSettingsScreen(
             Spacer(Modifier.height(24.dp))
 
             // ---- Library maintenance ----
-            SectionHeader("Library")
-            ToggleRow(
+            SettingsSectionHeader("Library")
+            SettingsToggleRow(
                 title = "Rescan folders on launch",
                 subtitle = "Walks every registered folder every time RadioShed " +
                     "starts cold, picking up files added externally (USB " +
@@ -704,7 +703,7 @@ fun AppSettingsScreen(
             Spacer(Modifier.height(24.dp))
 
             // ---- About ----
-            SectionHeader("About")
+            SettingsSectionHeader("About")
             // The version row doubles as a hidden affordance: long-press
             // to open the read-only DB-stats screen. Lets a developer
             // (or a user filing a bug) inspect row counts without an
@@ -1225,17 +1224,6 @@ private fun CreditsCard(onOpenLicenses: () -> Unit) {
     }
 }
 
-@Composable
-private fun SectionHeader(text: String) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.labelLarge,
-        fontWeight = FontWeight.SemiBold,
-        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f),
-        modifier = Modifier.padding(top = 4.dp, bottom = 6.dp),
-    )
-}
-
 /**
  * Visual radio group for theme choices. Each option shows an icon + label
  * + brief description; the currently-selected one gets the primary border.
@@ -1544,43 +1532,6 @@ private fun NavRow(
                 style = MaterialTheme.typography.headlineSmall,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
             )
-        }
-    }
-}
-
-@Composable
-private fun ToggleRow(
-    title: String,
-    subtitle: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onCheckedChange(!checked) },
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-        shape = RoundedCornerShape(12.dp),
-    ) {
-        Row(
-            modifier = Modifier.padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    title,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Text(
-                    subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                )
-            }
-            Spacer(Modifier.size(12.dp))
-            Switch(checked = checked, onCheckedChange = onCheckedChange)
         }
     }
 }
@@ -2442,7 +2393,7 @@ private fun ListenBrainzRow(settings: SettingsStore) {
     var validation by remember { mutableStateOf<String?>(null) }
 
     Column {
-        ToggleRow(
+        SettingsToggleRow(
             title = "ListenBrainz scrobbling",
             subtitle = if (token.isBlank()) {
                 "Send completed plays to your ListenBrainz profile. Tap to add token."

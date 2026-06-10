@@ -3,6 +3,7 @@ package com.visorcraft.radioshed.ui.settings
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -27,7 +28,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -55,7 +55,9 @@ import com.visorcraft.radioshed.stations.DjTemplateVars
 import com.visorcraft.radioshed.stations.encodeTemplatesJson
 import com.visorcraft.radioshed.stations.parseTemplatesJson
 import com.visorcraft.radioshed.ui.util.rememberHapticTick
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.koin.compose.koinInject
 
 /**
@@ -125,8 +127,8 @@ fun DjSettingsScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 8.dp),
         ) {
-            DjSectionHeader("AI DJ")
-            DjToggleRow(
+            SettingsSectionHeader("AI DJ")
+            SettingsToggleRow(
                 title = "AI DJ",
                 subtitle = "An automated voice introduces tracks, recaps what just played, " +
                     "and reads station IDs between songs. Purely decorative — never " +
@@ -200,32 +202,39 @@ fun DjSettingsScreen(
                         // Any failure is a silent no-op; the finally always
                         // restores and clears the in-flight flag.
                         val prior = audioEngine.volume.value
-                        runCatching {
-                            val sample = DjTemplate.render(
-                                DjTemplate.pickVariant(
-                                    DEFAULT_DJ_TEMPLATES[DjSlots.STATION_ID].orEmpty(),
-                                    seed = 0L,
-                                ),
-                                SAMPLE_PREVIEW_VARS,
-                            )
-                            val dir = tts.cacheDir() ?: return@runCatching
-                            val outPath = "$dir/dj_preview.wav"
-                            val ok = tts.synthesizeToFile(sample, voice = null, outPath = outPath)
-                            if (!ok) return@runCatching
-                            audioEngine.setVolume(settings.getDjDuckFraction())
-                            clipPlayer.playFile(outPath)
+                        try {
+                            runCatching {
+                                val sample = DjTemplate.render(
+                                    DjTemplate.pickVariant(
+                                        DEFAULT_DJ_TEMPLATES[DjSlots.STATION_ID].orEmpty(),
+                                        seed = 0L,
+                                    ),
+                                    SAMPLE_PREVIEW_VARS,
+                                )
+                                val dir = tts.cacheDir() ?: return@runCatching
+                                val outPath = "$dir/dj_preview.wav"
+                                val ok = tts.synthesizeToFile(sample, voice = null, outPath = outPath)
+                                if (!ok) return@runCatching
+                                audioEngine.setVolume(settings.getDjDuckFraction())
+                                clipPlayer.playFile(outPath)
+                            }
+                        } finally {
+                            // Cancellation-proof: restore must run even if the
+                            // screen is disposed mid-clip. runCatching does NOT
+                            // catch CancellationException, so without this the
+                            // ducked volume would be stranded.
+                            withContext(NonCancellable) {
+                                audioEngine.setVolume(prior)
+                                previewing = false
+                            }
                         }
-                        // Intentionally outside runCatching: restore must run even
-                        // if duck/synthesis/playback failed (finally-equivalent).
-                        audioEngine.setVolume(prior)
-                        previewing = false
                     }
                 },
             )
 
             Spacer(Modifier.height(24.dp))
 
-            DjSectionHeader("Templates")
+            SettingsSectionHeader("Templates")
             Text(
                 "Each line is one phrasing the DJ may use for that slot. Tokens in " +
                     "curly braces are filled in live; a line whose token has no value " +
@@ -323,7 +332,7 @@ private fun FrequencySection(
                 ),
             )
             Spacer(Modifier.height(10.dp))
-            androidx.compose.foundation.layout.FlowRow(
+            FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
                 modifier = Modifier.fillMaxWidth(),
@@ -470,6 +479,7 @@ private fun MinutesOfDaySlider(
     // Lift-up-state so the readout tracks the drag but the prefs write only
     // fires on release — mirrors the AppSettings slider idiom.
     var dragging by remember { mutableStateOf(false) }
+    // Initial value seeds the drag buffer only; display reads [minutes] when not dragging.
     var pending by remember { mutableStateOf(minutes) }
     val display = if (dragging) pending else minutes
     Row(
@@ -516,6 +526,7 @@ private fun DuckSlider(
     onChange: (Float) -> Unit,
 ) {
     var dragging by remember { mutableStateOf(false) }
+    // Initial value seeds the drag buffer only; display reads [fraction] when not dragging.
     var pending by remember { mutableStateOf(fraction) }
     val display = if (dragging) pending else fraction
     Surface(
@@ -731,7 +742,7 @@ private fun VariantEditDialog(
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                 )
                 Spacer(Modifier.height(6.dp))
-                androidx.compose.foundation.layout.FlowRow(
+                FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp),
                     modifier = Modifier.fillMaxWidth(),
@@ -798,60 +809,6 @@ private fun ResetTemplatesRow(enabled: Boolean, onReset: () -> Unit) {
                 TextButton(onClick = { confirmOpen = false }) { Text("Cancel") }
             },
         )
-    }
-}
-
-@Composable
-private fun DjSectionHeader(text: String) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.labelLarge,
-        fontWeight = FontWeight.SemiBold,
-        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f),
-        modifier = Modifier.padding(top = 4.dp, bottom = 6.dp),
-    )
-}
-
-/**
- * Toggle row local to this screen. The shared AppSettings ToggleRow is
- * private to that file and always-enabled; the DJ screen needs an explicit
- * [enabled] flag so the master toggle stays live while the rest grey out.
- */
-@Composable
-private fun DjToggleRow(
-    title: String,
-    subtitle: String,
-    checked: Boolean,
-    enabled: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(enabled = enabled) { onCheckedChange(!checked) },
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-        shape = RoundedCornerShape(12.dp),
-    ) {
-        Row(
-            modifier = Modifier.padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    title,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Text(
-                    subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                )
-            }
-            Spacer(Modifier.size(12.dp))
-            Switch(checked = checked, enabled = enabled, onCheckedChange = onCheckedChange)
-        }
     }
 }
 
