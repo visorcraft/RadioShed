@@ -183,12 +183,20 @@ class DjCacheRepository(private val db: RadioShedDatabase) {
     /**
      * Evict DJ clips not used since [olderThanMs] (epoch millis): delete each
      * stale row AND the on-disk blob it points at. Returns the number of rows
-     * removed. Best-effort — a blob that's already gone (manual file-manager
-     * pass) or unreadable still drops its row, so the table never strands
-     * pointers to files that won't be recreated. Reuses the
-     * `last_used_at`-indexed `selectDjAudioOlderThan` read and the
-     * delete-by-key `deleteDjAudio` query, so no new SQL or migration is
-     * needed. Every step is wrapped so eviction can never throw into a caller.
+     * removed.
+     *
+     * The return value of [deleteFileIfExists] is intentionally discarded — a
+     * row is always dropped regardless of whether the blob delete succeeded.
+     * `false` can mean the file was already gone *or* that a live blob could
+     * not be deleted (locked / permissions error on desktop or iOS, which
+     * returns false without throwing). In the latter case the file is accepted
+     * as stranded: this is bounded, rare, and fully reclaimable via the user's
+     * "Clear DJ cache" action or OS storage tools. Keeping the row would cause
+     * trim to rescan and retry the missing-blob path on every future call,
+     * which is worse. Reuses the `last_used_at`-indexed
+     * `selectDjAudioOlderThan` read and the delete-by-key `deleteDjAudio`
+     * query, so no new SQL or migration is needed. Every step is wrapped so
+     * eviction can never throw into a caller.
      */
     suspend fun trimStale(olderThanMs: Long): Int = withContext(IODispatcher) {
         var removed = 0
