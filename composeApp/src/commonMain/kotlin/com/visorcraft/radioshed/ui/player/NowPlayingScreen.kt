@@ -1881,17 +1881,16 @@ private fun TransportRow(
         return
     }
 
-    // Drive Mode bumps every transport hit-target by 25% so they're
-    // unambiguous to hit while glancing at the screen at speed. Non-
-    // drive sizes match the original Material recommendation.
-    val baseSize = if (driveMode) 80.dp else 64.dp
-    val emphasizedSize = if (driveMode) 100.dp else 80.dp
-    val iconSize = if (driveMode) 44.dp else 36.dp
-    val emphasizedIconSize = if (driveMode) 60.dp else 48.dp
+    // Sizes match the original Material recommendation; drive-mode sizing
+    // now lives in DriveTransportRow (returned early above).
+    val baseSize = 64.dp
+    val emphasizedSize = 80.dp
+    val iconSize = 36.dp
+    val emphasizedIconSize = 48.dp
 
-    // Smaller seek-±10s buttons. We hide them in drive mode so the
-    // primary three transport targets stay roomy; outside drive mode
-    // they're useful for podcast-y catch-up and missed-chorus rewind.
+    // Smaller seek-±10s buttons; hidden in compact mode so the primary
+    // three transport targets stay roomy. Useful for podcast-y catch-up
+    // and missed-chorus rewind.
     val seekButtonSize = baseSize * 0.7f
     val seekIconSize = iconSize * 0.7f
 
@@ -1909,7 +1908,7 @@ private fun TransportRow(
             onLongClick = onLongPressPrev,
         )
 
-        if (!driveMode && !compact) {
+        if (!compact) {
             // Replay: tap = 10s back, long-press = 30s back. Pattern
             // mirrors podcast apps' fast-rewind affordance.
             Box {
@@ -1950,7 +1949,7 @@ private fun TransportRow(
             onLongClick = onLongPressTogglePlayPause,
         )
 
-        if (!driveMode && !compact) {
+        if (!compact) {
             // Forward: tap = 10s, long-press = 30s. See onReplay above
             // for the rationale.
             Box {
