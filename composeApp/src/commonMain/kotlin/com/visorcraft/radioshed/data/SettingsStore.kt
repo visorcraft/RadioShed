@@ -763,6 +763,11 @@ class SettingsStore(private val settings: Settings) {
     fun getLastAutoBackupAt(): Long = settings.getLong(KEY_AUTO_BACKUP_LAST, 0L)
     fun setLastAutoBackupAt(ts: Long) = settings.putLong(KEY_AUTO_BACKUP_LAST, ts)
 
+    fun getSmartQueryRefreshLast(): Long =
+        settings.getLong(KEY_SMARTQUERY_REFRESH_LAST, 0L)
+    fun setSmartQueryRefreshLast(ts: Long) =
+        settings.putLong(KEY_SMARTQUERY_REFRESH_LAST, ts)
+
     // ---- One-shot migrations (set on first run, never re-run) ----
 
     /**
@@ -1100,6 +1105,16 @@ class SettingsStore(private val settings: Settings) {
                 )
             }
         }
+        // Longs
+        listOf(
+            KEY_SMARTQUERY_REFRESH_LAST,
+        ).forEach { key ->
+            if (settings.hasKey(key)) {
+                out[key] = com.visorcraft.radioshed.source.BackupSettingValue.LongValue(
+                    settings.getLong(key, 0L),
+                )
+            }
+        }
         return out
     }
 
@@ -1211,6 +1226,7 @@ class SettingsStore(private val settings: Settings) {
         KEY_THEME_SEED, KEY_ACCENT_SEED,
         KEY_DJ_FREQUENCY_N, KEY_DJ_FREQUENCY_MINUTES,
         KEY_DJ_QUIET_START_MIN, KEY_DJ_QUIET_END_MIN -> SettingType.INT
+        KEY_SMARTQUERY_REFRESH_LAST -> SettingType.LONG
         else -> null
     }
 
@@ -1279,6 +1295,7 @@ class SettingsStore(private val settings: Settings) {
         const val KEY_AUTO_BACKUP = "backup.autoEnabled"
         const val KEY_AUTO_BACKUP_LAST = "backup.autoLastAt"
         const val KEY_AUTO_RESCAN_ON_LAUNCH = "library.autoRescanOnLaunch"
+        const val KEY_SMARTQUERY_REFRESH_LAST = "smartquery.refreshLastAt"
         const val KEY_END_FADE_SEC = "audio.endFadeSec"
         const val KEY_LYRICS_SCALE = "ui.lyricsScale"
         const val KEY_DRIVE_MODE = "ui.driveMode"

@@ -69,6 +69,7 @@ fun App(
     scrobbleSync: com.visorcraft.radioshed.source.ScrobbleSync = koinInject(),
     mediaSourceRegistry: com.visorcraft.radioshed.source.MediaSourceRegistry = koinInject(),
     subsonicSource: com.visorcraft.radioshed.source.SubsonicSource = koinInject(),
+    smartQueryRefresh: com.visorcraft.radioshed.stations.SmartQueryRefresh = koinInject(),
 ) {
     // Live-mutable theme inputs: read once from the persisted settings,
     // then hold in state so the AppSettingsScreen picker can re-theme
@@ -200,6 +201,12 @@ fun App(
             if (settings.hasSubsonicConfig()) {
                 mediaSourceRegistry.register(subsonicSource)
             }
+        }
+
+        // Refresh SmartQuery-backed stations once per day. No-op when
+        // the interval hasn't elapsed or there are no SmartQuery stations.
+        LaunchedEffect(Unit) {
+            runCatching { smartQueryRefresh.refreshIfDue(nowMillis()) }
         }
 
         // Auto-resume the last station once per process lifetime — gated

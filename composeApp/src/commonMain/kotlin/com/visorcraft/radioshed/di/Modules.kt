@@ -142,6 +142,13 @@ val sharedModule: Module = module {
         )
     }
     single { SourceRuleEvaluator(get(), get(), get(), get()) }
+    single {
+        com.visorcraft.radioshed.stations.SmartQueryRefresh(
+            settings = get(),
+            stationRepo = get(),
+            evaluate = { get<SourceRuleEvaluator>().evaluate(it) },
+        )
+    }
     // Phase DJ: announcer orchestrates TTS announcements between tracks.
     // Constructor order: (settings, djCache, tts, clipPlayer, audioEngine,
     // sleepTimer, weather). TtsEngine + ClipPlayer + WeatherFetcher come from
