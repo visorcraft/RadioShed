@@ -899,14 +899,15 @@ media source.
 - Create: `composeApp/src/desktopMain/kotlin/com/visorcraft/radioshed/source/DesktopSubsonicClient.kt`
 - Modify: `PlatformModule.desktop.kt`
 
-- [ ] **Step 1:** Mirror `AndroidSubsonicClient` (read it fully first —
+- [x] **Step 1:** Mirror `AndroidSubsonicClient` (read it fully first —
   token auth: `t = md5(password + salt)`, never send the cleartext
   password; same one-GET-per-call `HttpURLConnection` style). Swap the
   desktop binding.
-- [ ] **Step 2:** `./gradlew :composeApp:run` → Settings → Subsonic →
+- [x] **Step 2:** `./gradlew :composeApp:run` → Settings → Subsonic →
   configure a server (Navidrome test instance) → `SubsonicBrowseScreen`
   lists artists/albums; streaming a song plays through libvlc (http input).
-- [ ] **Step 3:** Commit: `Enable Subsonic on desktop (PLAN 5.1)`
+  *(Live Navidrome smoke owed to the human — no server here.)*
+- [x] **Step 3:** Commit: `Enable Subsonic on desktop (PLAN 5.1)`
 
 ### Task 5.2: `SubsonicSource` MediaSource impl (TDD)
 
