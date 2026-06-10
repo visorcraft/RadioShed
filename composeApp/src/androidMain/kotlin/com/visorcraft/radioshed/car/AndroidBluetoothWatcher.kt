@@ -29,6 +29,14 @@ import kotlinx.coroutines.flow.asStateFlow
  * adapter/device access is wrapped in [runCatching] so a [SecurityException]
  * (e.g. permission revoked between the check and the read) degrades to "no
  * device" rather than crashing.
+ *
+ * Lifecycle note: [start] and [stop] are each idempotent (multiple consecutive
+ * calls are safe), but a stop→start cycle cannot recover peers that were already
+ * connected at the time [start] is called — there is no cheap "currently connected"
+ * snapshot API short of opening per-profile proxies (A2DP, HFP, etc.), so
+ * [connectedDevices] starts empty and is seeded exclusively by ACL broadcast events.
+ * In production this class is started once for the lifetime of the app and never
+ * restarted.
  */
 class AndroidBluetoothWatcher(private val context: Context) : BluetoothWatcher {
 
@@ -111,9 +119,12 @@ class AndroidBluetoothWatcher(private val context: Context) : BluetoothWatcher {
     }
 
     private fun hasConnectPermission(): Boolean {
-        // BLUETOOTH_CONNECT is only a runtime permission on API 31+. On earlier
-        // releases the legacy BLUETOOTH permission is install-time, so the
-        // adapter/name reads are always allowed.
+        // Below API 31 the legacy BLUETOOTH permission is declared in the manifest
+        // with android:maxSdkVersion="30" and is granted at install time — no runtime
+        // prompt is ever shown. Returning true here is genuinely correct: the grant
+        // is unconditional on those releases.
+        // From API 31 onward the legacy permission no longer exists; BLUETOOTH_CONNECT
+        // is a runtime permission that the config UI must request explicitly.
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return true
         return ContextCompat.checkSelfPermission(
             context,

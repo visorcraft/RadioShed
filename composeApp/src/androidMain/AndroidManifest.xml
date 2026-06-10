@@ -28,6 +28,8 @@
          Drive Mode config UI requests it). Without the grant the watcher
          populates nothing and bonded-device enumeration returns empty, so the
          trigger is silently inert. -->
+    <!-- Legacy install-time permission for API 30; BLUETOOTH_CONNECT supersedes from API 31. -->
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
 
     <!-- Required for the "Set as ringtone" Track Info action. WRITE_SETTINGS
