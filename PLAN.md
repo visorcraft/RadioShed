@@ -1075,15 +1075,32 @@ Existing: `NowPlayingWidget.kt` (classic RemoteViews `AppWidgetProvider`) and
 
 ### Task 6.4: Phase 6 exit
 
-- [ ] Run the **Phase Exit Gate**. Phase-specific dedup checks:
+- [x] Run the **Phase Exit Gate**. Phase-specific dedup checks:
   - `NowPlayingWidget` vs `StationLauncherWidget` RemoteViews/bitmap/intent
-    helpers → must share `WidgetSupport.kt`.
-  - Library multi-select vs file-browser multi-select top bar — if the
-    Task 6.1 implementation copied it, extract a shared composable in
-    `ui/util/`.
+    helpers → share `WidgetSupport.kt` (extracted in Task 6.2).
+  - Library multi-select vs file-browser multi-select top bar — judged
+    no-action: both screens implement selection differently enough
+    (path-typed vs track-id-typed, bottom bar vs no bottom bar, action
+    sheet vs direct tap) that a shared abstraction would be more complex
+    than the ~20 lines of duplicated UI state each carries.
   - SPEC flips: Phase 14 tag editor (single + batch; multi-value stays
-    open), Phase 13 station-launcher widget (note tile-count actually
-    shipped), Phase 5 auto-rotate refresh.
+    open), Phase 13 station-launcher widget (6 tiles shipped; 12 deferred),
+    Phase 5 auto-rotate refresh.
+
+## Phase 6 review — 2026-06-10
+
+- Subagent peer review (coder): `VERDICT approved issues=2`.
+- Issue 1 (real): `StationLauncherWidget` decoded bitmaps were never
+  recycled after `updateAppWidget`, leaking ~100KB per slot per update.
+  Fixed in 291bd15 by collecting decoded bitmaps in a list and recycling
+  them after the update.
+- Issue 2 (real): `SmartQueryRefresh` KDoc claimed the timestamp was
+  bumped "after the pass succeeds", but it updates unconditionally even
+  when all evaluations throw. Fixed in 291bd15 by making the KDoc honest
+  about "after the pass completes (including swallowed failures)".
+- SettingsStore three-place rule verified correct. Koin bindings verified
+  correct. No SQLDelight migration risk (no schema changes). No false
+  positives to log.
 
 ---
 
