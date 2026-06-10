@@ -1181,7 +1181,7 @@ Goal: user can create stations; engine plays tracks per source + playback rules.
 - [x] No-repeat memory (artist/album spacing requires per-track artist pre-load — Phase 5 part 2)
 - [x] Weighting policies: `Uniform`, `FavorRecent` *(others fall back to Uniform in v1; need richer per-track stats — Phase 5 part 2)*
 - [x] Adaptive Mix smart query (learns from listening history) — `SourceRuleEvaluator.evaluateAdaptiveMix` over-fetches a 3× candidate pool from `leastPlayedTracks`, then scores each track on (a) play penalty (high lifetime plays push the score down), (b) recency boost (saturates at 30 days since last play; never-played = max boost), (c) rating boost (unrated tracks get a 0.2 baseline so discovery still works on un-rated libraries), and (d) ±5 % jitter so consecutive queue refreshes don't replay the same Top-N order. Backed by a new `selectPlayCountsForTracks` batch query and `RatingRepository.playCountsForTracks` returning a `Map<Long, PlayCountStats>`.
-- [ ] Auto-rotate refresh job for SmartQueries (e.g. Latest Hits re-eval daily) *(deferred)*
+- [x] Auto-rotate refresh job for SmartQueries (e.g. Latest Hits re-eval daily) — `SmartQueryRefresh` wired to app launch, gated by 24 h interval via `SettingsStore.KEY_SMARTQUERY_REFRESH_LAST`. (PLAN 6.3)
 - [x] Built-in presets registry — `PresetSeeder` seeds Latest Hits / All Music / Discover / Top Rated / Recently Added / Forgotten Gems / Liked Songs at first-scan completion. **Genre auto-stations** ship as a one-tap "Generate genre stations" card in Settings → Library: picks top-N genre tags by track count (≥20 tracks), creates `Genre: X` stations seeded with `TagFilter("GENRE", [name])` + Smart Shuffle, idempotent. **Decade auto-stations** ship as a sibling "Generate decade stations" card: buckets albums by `Album.year` into Pre-50s / 50s / 60s / … / 2020s, creates a `Decade: X` station seeded with `AlbumSelector` over the in-decade album IDs (≥3 albums per bucket), idempotent. Backed by a new `selectAlbumIdsByYearRange` SQL query and `LibraryRepository.albumIdsByYearRange(min, max)`.
 - [x] Station editor UI: identity, source builder, playback rules — `ui/stations/StationEditorScreen.kt` covers identity, color, every `SourceRule` selector + set-operator combiner, and every `PlaybackRule` knob.
 - [x] Drag-to-reorder station list — `ui/stations/ReorderStationsScreen.kt` via the shared `ui/util/DragReorder.kt` utility. The Stations Home long-press sheet also offers per-row Move up / Move down for one-step nudges without entering reorder mode.
@@ -1345,7 +1345,7 @@ Goal: home-screen presence on both platforms.
 
 - [~] **(Android)** Glance widget infrastructure — shipped via classic `RemoteViews` + `AppWidgetProvider` (`androidMain/widget/NowPlayingWidget.kt`) rather than Jetpack Glance. Functionally equivalent for the Now-Playing widget; revisit Glance when more widget variants land.
 - [x] **(Android)** Now-Playing widget — small + medium + large `RemoteViews` layouts with art thumb (decoded at widget-target size, recycled on re-render to avoid the OOM bug we hit pre-#290), title / artist, and `PendingIntent` transport buttons routed through `RadioShedMediaSessionService`.
-- [ ] **(Android)** Station-launcher widget (1 / 4 / 6 / 12 tiles) *(deferred — pairs with widget config UI)*
+- [x] **(Android)** Station-launcher widget (1 / 4 / 6 tiles) — `StationLauncherWidget` with `WidgetSupport` shared helpers, `WidgetConfigRepository` persistence per slot, Compose config activity. 12-tile variant deferred pending RemoteViews grid adapter. (PLAN 6.2)
 - [ ] **(Android)** Library-stats widget *(deferred)*
 - [ ] **(iOS)** WidgetKit extension target *(deferred — needs Mac)*
 - [ ] **(iOS)** Now-Playing widget (small / medium / large / extra-large / Lock-screen) *(deferred — needs Mac)*
@@ -1360,7 +1360,7 @@ Goal: home-screen presence on both platforms.
 Goal: every "Advanced" setting from §7.5 is implemented and works.
 
 - [~] All Settings groups fully implemented (16 sections per §7.5) — Library, Stations defaults via station editor, Audio (EQ + ReplayGain + sleep timer), Playback rules per station, Online (single connectivity policy gate), UI/Theme (light/dark/Material You + reduce-motion), Backup & Restore, Privacy (history retention via clear-history), and About all ship. AI DJ, Cast & output, In-Car (beyond toggle), Hardware, Tags & Metadata, Widgets, and the Advanced developer panel are still deferred / partial.
-- [ ] Tag editor (single-track + batch) *(deferred — only the lyrics-search artist/title override exists today)*
+- [x] Tag editor (single-track + batch) — `EditTagsDialog` covers single-track and multi-select batch via `BatchTagMerge`/`MergedTagView`. Multi-value tag editing stays deferred. (PLAN 6.1)
 - [ ] Multi-value tag editor with separator preview *(deferred)*
 - [ ] File rename templates *(deferred)*
 - [ ] DB browser UI (read-only) *(deferred)*

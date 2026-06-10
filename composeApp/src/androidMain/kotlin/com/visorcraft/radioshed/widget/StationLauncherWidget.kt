@@ -13,7 +13,6 @@ import com.visorcraft.radioshed.widget.WidgetSupport.decodeArtworkBitmap
 import com.visorcraft.radioshed.widget.WidgetSupport.openAppIntent
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.koin.core.context.GlobalContext
 
