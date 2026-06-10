@@ -192,11 +192,11 @@ fun App(
         // in-session path (the user saving credentials in Settings) is
         // handled directly by the "Test & save" callback in
         // SubsonicConfigRow, which registers the same singleton source
-        // immediately. The source reads credentials live, so a same-host
-        // credential edit needs no re-registration. Caveat: editing the
-        // URL to a DIFFERENT host registers the new id but leaves the old
-        // id registered until next launch — an acceptable edge for a
-        // single-server setup.
+        // immediately. The source reads credentials live and registers
+        // under the fixed id "subsonic" (SubsonicSource.id), so editing
+        // the URL or credentials — even to a different host — needs no
+        // re-registration and can't strand a stale entry: re-registering
+        // is an idempotent map-put on that one key.
         LaunchedEffect(Unit) {
             if (settings.hasSubsonicConfig()) {
                 mediaSourceRegistry.register(subsonicSource)

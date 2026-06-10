@@ -2,6 +2,7 @@ package com.visorcraft.radioshed.audio
 
 import android.media.AudioAttributes
 import android.media.MediaPlayer
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 
@@ -11,8 +12,10 @@ import kotlin.coroutines.resume
  * [playFile] suspends until the clip finishes (or fails) and always releases
  * the underlying [MediaPlayer] — on completion, on error, and on coroutine
  * cancellation. A clip failure is a silent no-op: DJ speech is decorative,
- * never fatal, so every path is wrapped in [runCatching] and the function
- * returns normally instead of propagating.
+ * never fatal, so every failure path is wrapped in [runCatching] and the
+ * function returns normally instead of propagating. [CancellationException]
+ * is deliberately rethrown — cancellation is the caller tearing us down, not
+ * a clip failure, and swallowing it would leave the caller running cancelled.
  *
  * The listener→coroutine bridge here is deliberately NOT shared with
  * AndroidTtsEngine: that one fans out a single engine-wide
@@ -71,5 +74,10 @@ class AndroidClipPlayer : ClipPlayer {
                 }
             }
         }
+            // runCatching catches ALL Throwables including the
+            // CancellationException thrown when the awaiting coroutine is
+            // cancelled mid-clip; rethrow it so cancellation still propagates
+            // (invokeOnCancellation above has already released the player).
+            .onFailure { if (it is CancellationException) throw it }
     }
 }

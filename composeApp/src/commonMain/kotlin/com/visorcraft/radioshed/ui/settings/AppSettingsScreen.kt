@@ -2592,33 +2592,53 @@ private fun SubsonicConfigRow(
                                 testing = true
                                 status = "Testing connection…"
                                 pingJob = scope.launch {
-                                    val server = com.visorcraft.radioshed.source.SubsonicServer(
-                                        baseUrl = u,
-                                        username = user,
-                                        password = pass,
-                                    )
-                                    val result = client.ping(server)
-                                    if (result == null) {
-                                        status = "Couldn't connect. Verify URL, " +
-                                            "username, password, and that the server is " +
-                                            "reachable from this device."
-                                    } else {
-                                        settings.setSubsonicUrl(u)
-                                        settings.setSubsonicUsername(user)
-                                        settings.setSubsonicPassword(pass)
-                                        url = settings.getSubsonicUrl()
-                                        username = settings.getSubsonicUsername()
-                                        password = settings.getSubsonicPassword()
-                                        // Register the cloud MediaSource now
-                                        // that a server is confirmed reachable;
-                                        // the source reads these same settings
-                                        // live on each enumeration.
-                                        mediaSourceRegistry.register(subsonicSource)
-                                        status = "Connected to ${result.product} v${result.version}."
-                                        dialogOpen = false
+                                    try {
+                                        val server = com.visorcraft.radioshed.source.SubsonicServer(
+                                            baseUrl = u,
+                                            username = user,
+                                            password = pass,
+                                        )
+                                        // ping() reports failure as null, but this
+                                        // launch has no other safety net — anything
+                                        // that still escapes (clients can't predict
+                                        // every URL/transport quirk) must read as
+                                        // "ping failed", not crash the app.
+                                        // Cancellation is rethrown so a dialog
+                                        // dismiss doesn't paint a stale status.
+                                        val result = try {
+                                            client.ping(server)
+                                        } catch (e: kotlinx.coroutines.CancellationException) {
+                                            throw e
+                                        } catch (e: Exception) {
+                                            null
+                                        }
+                                        if (result == null) {
+                                            status = "Couldn't connect. Verify URL, " +
+                                                "username, password, and that the server is " +
+                                                "reachable from this device."
+                                        } else {
+                                            settings.setSubsonicUrl(u)
+                                            settings.setSubsonicUsername(user)
+                                            settings.setSubsonicPassword(pass)
+                                            url = settings.getSubsonicUrl()
+                                            username = settings.getSubsonicUsername()
+                                            password = settings.getSubsonicPassword()
+                                            // Register the cloud MediaSource now
+                                            // that a server is confirmed reachable;
+                                            // the source reads these same settings
+                                            // live on each enumeration.
+                                            mediaSourceRegistry.register(subsonicSource)
+                                            status = "Connected to ${result.product} v${result.version}."
+                                            dialogOpen = false
+                                        }
+                                    } finally {
+                                        // Clear the in-flight flag on every exit —
+                                        // success, failure, or cancellation —
+                                        // otherwise the confirm button sticks on
+                                        // "Testing…" forever.
+                                        testing = false
+                                        pingJob = null
                                     }
-                                    testing = false
-                                    pingJob = null
                                 }
                             }
                         }

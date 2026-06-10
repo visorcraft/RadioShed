@@ -65,51 +65,70 @@ class AndroidListenBrainzClient : ListenBrainzClient {
             }
         """.trimIndent()
 
-        val url = URI("$LB_BASE/1/submit-listens").toURL()
-        val conn = (url.openConnection() as HttpURLConnection).apply {
-            requestMethod = "POST"
-            doOutput = true
-            connectTimeout = CONNECT_TIMEOUT_MS
-            readTimeout = READ_TIMEOUT_MS
-            setRequestProperty("Authorization", "Token ${listen.token}")
-            setRequestProperty("Content-Type", "application/json")
-            setRequestProperty("User-Agent", USER_AGENT)
-            setRequestProperty("Accept", "application/json")
-        }
         try {
-            conn.outputStream.use { it.write(payload.encodeToByteArray()) }
-            val code = conn.responseCode
-            code in 200..299
-        } catch (e: java.io.IOException) {
+            val url = URI("$LB_BASE/1/submit-listens").toURL()
+            val conn = (url.openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                doOutput = true
+                connectTimeout = CONNECT_TIMEOUT_MS
+                readTimeout = READ_TIMEOUT_MS
+                setRequestProperty("Authorization", "Token ${listen.token}")
+                setRequestProperty("Content-Type", "application/json")
+                setRequestProperty("User-Agent", USER_AGENT)
+                setRequestProperty("Accept", "application/json")
+            }
+            try {
+                conn.outputStream.use { it.write(payload.encodeToByteArray()) }
+                val code = conn.responseCode
+                code in 200..299
+            } finally {
+                conn.disconnect()
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // Cancellation must propagate, never become "submit failed".
+            throw e
+        } catch (e: Exception) {
+            // Connection setup sits inside the try because it can throw
+            // outside IOException — e.g. setRequestProperty rejects a
+            // pasted token containing CR/LF with IllegalArgumentException
+            // on Android. Every non-cancellation failure means "this
+            // listen didn't make it", which is what false reports.
             false
-        } finally {
-            conn.disconnect()
         }
     }
 
     override suspend fun validateToken(token: String): Boolean = withContext(IODispatcher) {
         if (token.isBlank()) return@withContext false
-        val url = URI("$LB_BASE/1/validate-token").toURL()
-        val conn = (url.openConnection() as HttpURLConnection).apply {
-            requestMethod = "GET"
-            connectTimeout = CONNECT_TIMEOUT_MS
-            readTimeout = READ_TIMEOUT_MS
-            setRequestProperty("Authorization", "Token $token")
-            setRequestProperty("Accept", "application/json")
-            setRequestProperty("User-Agent", USER_AGENT)
-        }
         try {
-            val code = conn.responseCode
-            if (code !in 200..299) return@withContext false
-            val body = conn.inputStream.use { it.readBytes() }.decodeToString()
-            // Response shape: {"code":200,"message":"...","valid":true,"user_name":"..."}
-            runCatching {
-                json.decodeFromString(ValidateResponse.serializer(), body).valid == true
-            }.getOrDefault(false)
-        } catch (e: java.io.IOException) {
+            val url = URI("$LB_BASE/1/validate-token").toURL()
+            val conn = (url.openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                connectTimeout = CONNECT_TIMEOUT_MS
+                readTimeout = READ_TIMEOUT_MS
+                setRequestProperty("Authorization", "Token $token")
+                setRequestProperty("Accept", "application/json")
+                setRequestProperty("User-Agent", USER_AGENT)
+            }
+            try {
+                val code = conn.responseCode
+                if (code !in 200..299) return@withContext false
+                val body = conn.inputStream.use { it.readBytes() }.decodeToString()
+                // Response shape: {"code":200,"message":"...","valid":true,"user_name":"..."}
+                runCatching {
+                    json.decodeFromString(ValidateResponse.serializer(), body).valid == true
+                }.getOrDefault(false)
+            } finally {
+                conn.disconnect()
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // Cancellation must propagate, never become "token invalid".
+            throw e
+        } catch (e: Exception) {
+            // Same broad net as submit(): header validation of a bad
+            // pasted token throws IllegalArgumentException before any
+            // IO starts. False ("couldn't validate") is the right
+            // outcome for every non-cancellation failure.
             false
-        } finally {
-            conn.disconnect()
         }
     }
 
@@ -146,8 +165,6 @@ class AndroidListenBrainzClient : ListenBrainzClient {
 
     private companion object {
         const val LB_BASE = "https://api.listenbrainz.org"
-        const val USER_AGENT =
-            "RadioShed/0.1 (https://radioshed.app)"
         const val CONNECT_TIMEOUT_MS = 10_000
         const val READ_TIMEOUT_MS = 15_000
     }

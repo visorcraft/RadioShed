@@ -112,8 +112,6 @@ class AndroidMusicBrainzClient : MusicBrainzClient {
 
     private companion object {
         const val MB_BASE = "https://musicbrainz.org"
-        const val USER_AGENT =
-            "RadioShed/0.1 (https://radioshed.app)"
         const val CONNECT_TIMEOUT_MS = 10_000
         const val READ_TIMEOUT_MS = 15_000
         val LUCENE_SPECIALS = setOf(

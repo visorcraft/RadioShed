@@ -150,9 +150,9 @@ class DesktopSubsonicClient : SubsonicClient {
         // Subsonic needs an absolute http(s) base URL. Bail early when
         // the field is empty / scheme-less so the "user hit Test &
         // save before typing anything" path returns a clean null
-        // (which the UI surfaces as a connection failure) instead of
-        // crashing the process via MalformedURLException out of the
-        // URL constructor on the IO worker.
+        // (which the UI surfaces as a connection failure) without
+        // even attempting a URI parse; anything that slips past this
+        // check is still caught by the broad catch below.
         if (!base.startsWith("http://") && !base.startsWith("https://")) {
             return null
         }
@@ -175,10 +175,19 @@ class DesktopSubsonicClient : SubsonicClient {
             } finally {
                 conn.disconnect()
             }
-        } catch (e: java.io.IOException) {
-            // Covers MalformedURLException (still possible if the URL
-            // passes the prefix check but is otherwise unparseable),
-            // connect/read timeouts, and the generic IO failures.
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // The Test & save dialog cancels the in-flight ping on
+            // dismiss; cancellation must propagate, never become null.
+            throw e
+        } catch (e: Exception) {
+            // Deliberately broad. Beyond IOException (connect/read
+            // timeouts, MalformedURLException, generic IO failures),
+            // URI() throws URISyntaxException for URLs that pass the
+            // http(s) prefix check but are still unparseable (embedded
+            // space, bad port, ...), and toURL()/openConnection() can
+            // throw IllegalArgumentException. Callers already treat
+            // null as "connection failed", which is the right outcome
+            // for every one of these.
             null
         }
     }
@@ -293,8 +302,6 @@ class DesktopSubsonicClient : SubsonicClient {
         const val API_VERSION = "1.16.1"
         const val CLIENT_NAME = "RadioShed"
         const val SALT_LENGTH = 12
-        const val USER_AGENT =
-            "RadioShed/0.1 (https://radioshed.app)"
         const val CONNECT_TIMEOUT_MS = 10_000
         const val READ_TIMEOUT_MS = 20_000
     }

@@ -8,11 +8,16 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 /**
- * Periodic refresher for SmartQuery-backed stations. Because
- * [SourceRuleEvaluator.evaluate] is lazy per-play, the "refresh" is just
- * a re-evaluation that warms any in-memory cache and ensures the track
- * set reflects the current library state (new imports, updated ratings,
- * changed play counts). Runs at most once per 24 hours.
+ * Daily pass over SmartQuery-backed stations: re-runs the injected
+ * evaluator on each one (at most once per 24 hours) and discards the
+ * results. Be honest about what that buys today: nothing is cached or
+ * persisted — [SourceRuleEvaluator] keeps no cache, and
+ * [StationPlayback] re-evaluates from scratch on every station start —
+ * so the only durable effect of a pass is bumping
+ * [SettingsStore.KEY_SMARTQUERY_REFRESH_LAST]. It does not precompute
+ * or speed up anything. Whether the pass should persist its results
+ * (or be removed) is a deferred product decision; keep this KDoc in
+ * sync if that changes.
  *
  * The refresh cadence is gated by [SettingsStore.KEY_SMARTQUERY_REFRESH_LAST].
  * Failures on individual stations are swallowed with a log so a single

@@ -55,6 +55,7 @@ import com.visorcraft.radioshed.stations.DjTemplateVars
 import com.visorcraft.radioshed.stations.encodeTemplatesJson
 import com.visorcraft.radioshed.stations.parseTemplatesJson
 import com.visorcraft.radioshed.ui.util.rememberHapticTick
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -217,11 +218,15 @@ fun DjSettingsScreen(
                                 if (!ok) return@runCatching
                                 audioEngine.setVolume(settings.getDjDuckFraction())
                                 clipPlayer.playFile(outPath)
-                            }
+                                // runCatching DOES catch CancellationException (it
+                                // catches all Throwables); rethrow so disposing the
+                                // screen mid-preview cancels this coroutine cleanly
+                                // instead of completing it as a swallowed failure.
+                            }.onFailure { if (it is CancellationException) throw it }
                         } finally {
-                            // Cancellation-proof: restore must run even if the
-                            // screen is disposed mid-clip. runCatching does NOT
-                            // catch CancellationException, so without this the
+                            // Cancellation-proof restore: a cancelled coroutine
+                            // rejects further suspension, so without NonCancellable
+                            // this withContext would throw before running and the
                             // ducked volume would be stranded.
                             withContext(NonCancellable) {
                                 audioEngine.setVolume(prior)

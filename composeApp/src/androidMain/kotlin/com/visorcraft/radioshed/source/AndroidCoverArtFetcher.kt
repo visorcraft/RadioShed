@@ -52,9 +52,5 @@ class AndroidCoverArtFetcher : CoverArtFetcher {
         const val SIZE_PX = 500
         const val CONNECT_TIMEOUT_MS = 10_000
         const val READ_TIMEOUT_MS = 20_000
-        // CAA asks clients to identify themselves; "AppName/Version (contact)"
-        // is the canonical pattern. We don't expose contact info in v1 —
-        // app name + version is sufficient for ToS compliance.
-        const val USER_AGENT = "RadioShed/1.0 (https://radioshed.app)"
     }
 }

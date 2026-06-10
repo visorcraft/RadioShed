@@ -19,6 +19,7 @@ import com.visorcraft.radioshed.domain.Track
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -320,6 +321,16 @@ class StationPlayback(
      */
     @Volatile private var suppressEndedForCrossfade: Boolean = false
 
+    /**
+     * The delayed task that lowers [suppressEndedForCrossfade] after the
+     * overlap (+ grace) drains. Tracked so an aborted crossfade (skip, stop,
+     * station change) cancels it — a stale timer left running from a
+     * cancelled crossfade would otherwise lower the latch a LATER crossfade
+     * has raised, letting the outgoing track's Ended double-advance on top
+     * of that in-flight crossfade.
+     */
+    private var crossfadeGraceJob: Job? = null
+
     /** Wall-clock millis when [currentTrack] started playing. Used to
      *  compute `listened_ms` for the persistent station_history row
      *  written on the next transition. */
@@ -353,23 +364,14 @@ class StationPlayback(
                 if (state == PlayerState.Ended && !suppressAutoAdvance &&
                     !suppressEndedForCrossfade
                 ) {
+                    // Snapshot which track this Ended belongs to BEFORE taking
+                    // the mutex: the crossfade grace watchdog (see
+                    // maybeStartCrossfade) can win the race and advance first,
+                    // in which case re-advancing here would skip a track.
+                    val endedTrackId = currentTrack?.id
                     advanceMutex.withLock {
-                        // Sleep timer (end-of-track mode) — pause the
-                        // engine here, INSIDE the mutex, BEFORE the
-                        // queue moves on. Previously SleepTimer had
-                        // its own coroutine watching for Ended, which
-                        // raced with this auto-advance: whichever ran
-                        // first decided whether the pause landed on
-                        // the intended track or the next one.
-                        if (sleepTimer.consumeEndOfTrackPause()) {
-                            if (settings.getSleepStopOnExpire()) audioEngine.stop()
-                            else audioEngine.pause()
-                            return@withLock
-                        }
-                        if (_repeatMode.value == RepeatMode.One) {
-                            replayCurrentTrack()
-                        } else {
-                            advanceToNext()
+                        if (currentTrack?.id == endedTrackId) {
+                            advanceAfterEndedLocked()
                         }
                     }
                 }
@@ -432,6 +434,34 @@ class StationPlayback(
     }
 
     /**
+     * What to do when the engine reports `Ended` and auto-advance is not
+     * suppressed. Caller MUST hold [advanceMutex]. Shared between the state
+     * collector (the normal path) and the crossfade grace-window watchdog in
+     * [maybeStartCrossfade] (the rescue path for an Ended emission that was
+     * swallowed while [suppressEndedForCrossfade] was raised — StateFlow
+     * dedupes, so a swallowed Ended never re-emits on its own).
+     */
+    private suspend fun advanceAfterEndedLocked() {
+        // Sleep timer (end-of-track mode) — pause the
+        // engine here, INSIDE the mutex, BEFORE the
+        // queue moves on. Previously SleepTimer had
+        // its own coroutine watching for Ended, which
+        // raced with this auto-advance: whichever ran
+        // first decided whether the pause landed on
+        // the intended track or the next one.
+        if (sleepTimer.consumeEndOfTrackPause()) {
+            if (settings.getSleepStopOnExpire()) audioEngine.stop()
+            else audioEngine.pause()
+            return
+        }
+        if (_repeatMode.value == RepeatMode.One) {
+            replayCurrentTrack()
+        } else {
+            advanceToNext()
+        }
+    }
+
+    /**
      * Begin a crossfade into the next queued track. Runs the SAME queue
      * bookkeeping as [advanceToNext] (record previous, push history, consume
      * the queue head, update [currentTrack]) so history / station_history /
@@ -465,14 +495,52 @@ class StationPlayback(
                     return@withLock
                 }
                 republishPriorityCount()
+                // Mirror of shouldArmCrossfade's outgoing-side length check,
+                // applied to the INCOMING track: a track shorter than twice
+                // the fade would reach its own Ended while the suppression
+                // latch is still raised, and the swallowed emission (StateFlow
+                // dedupes) would stall playback. The queue head is already
+                // consumed (peekUpcoming is not a reliable prediction under
+                // shuffle), so instead of bailing we clamp the fade to fit —
+                // half the incoming track's length, floor 1s. Unknown duration
+                // (<= 0, e.g. some streams) keeps the full plan; the grace
+                // watchdog below is the backstop for any residual case.
+                val effectivePlan = if (
+                    next.durationMs > 0L && next.durationMs < plan.durationMs * 2L
+                ) {
+                    plan.copy(durationMs = (next.durationMs / 2L).coerceAtLeast(1_000L))
+                } else {
+                    plan
+                }
                 // suppressEndedForCrossfade is already raised (by the poll); it
                 // keeps the OUTGOING track's natural Ended from triggering a
                 // second advance on top of this crossfade. Lower it after the
-                // overlap (+ grace) drains.
-                playTrack(next, recordHistory = true, crossfade = plan)
-                scope.launch {
-                    kotlinx.coroutines.delay(plan.durationMs + CROSSFADE_ENDED_GRACE_MS)
+                // overlap (+ grace) drains. The job is tracked so an aborted
+                // crossfade (skip / stop / station change) cancels it instead
+                // of letting a stale timer lower a LATER crossfade's latch.
+                playTrack(next, recordHistory = true, crossfade = effectivePlan)
+                crossfadeGraceJob?.cancel()
+                crossfadeGraceJob = scope.launch {
+                    kotlinx.coroutines.delay(effectivePlan.durationMs + CROSSFADE_ENDED_GRACE_MS)
                     suppressEndedForCrossfade = false
+                    // Watchdog: if the engine is sitting at Ended now that the
+                    // latch is lowered, the emission was swallowed while it was
+                    // raised (incoming track ended inside the window, or the
+                    // engine-side crossfade failed and the outgoing track ran
+                    // out). StateFlow never re-emits it, so re-dispatch the
+                    // advance here or playback stalls forever. The id re-check
+                    // inside the lock keeps this from double-advancing when the
+                    // normal collector won the race.
+                    if (audioEngine.state.value == PlayerState.Ended && !suppressAutoAdvance) {
+                        advanceMutex.withLock {
+                            if (audioEngine.state.value == PlayerState.Ended &&
+                                !suppressAutoAdvance && !suppressEndedForCrossfade &&
+                                currentTrack?.id == next.id
+                            ) {
+                                advanceAfterEndedLocked()
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -725,6 +793,12 @@ class StationPlayback(
             audioEngine.cancelCrossfade()
             suppressEndedForCrossfade = false
             crossfadeArmed = false
+            // Kill the pending latch-lowering timer too: left running, it
+            // would fire during a LATER crossfade and lower that crossfade's
+            // freshly-raised latch, re-exposing the double-advance it guards
+            // against.
+            crossfadeGraceJob?.cancel()
+            crossfadeGraceJob = null
         }
     }
 
@@ -1130,9 +1204,11 @@ class StationPlayback(
         // DJ announcement hook. Fire-and-forget on [scope] so a slow TTS
         // synthesis or clip never blocks the queue advance; the announcer
         // swallows every failure internally (decorative, never fatal) and
-        // self-gates on the user's enable/frequency/quiet-hours settings, so
-        // the unconditional launch here stays cheap when the DJ is off.
-        maybeAnnounce(endedTrack = endedTrack, startingTrack = track)
+        // self-gates on the user's enable/frequency/quiet-hours settings.
+        // The crossfade plan is passed so the announcement waits out the
+        // ramp — the duck and the ramp both write the player volume and
+        // would fight each other during the overlap.
+        maybeAnnounce(endedTrack = endedTrack, startingTrack = track, crossfade = crossfade)
         // Recompute finite-queue progress against the position
         // cursor (NOT a track-id lookup, since the same track can
         // appear multiple times in a list). The cursor advances
@@ -1205,20 +1281,38 @@ class StationPlayback(
     /**
      * Build a [TrackTransition] from what's in scope and hand it to the DJ
      * announcer on [scope]. Resolving artist names + the up-next track is a
-     * couple of indexed reads, kept off the advance path by launching. The
-     * announcer self-gates (disabled / not-due / quiet hours) so this is a
-     * near-free no-op when the DJ is off — the common case.
+     * couple of indexed reads, kept off the advance path by launching — and
+     * skipped entirely when the DJ is disabled (the common case), so a
+     * DJ-off user pays one boolean settings read per transition, nothing
+     * more. The announcer still self-gates (frequency / quiet hours).
+     *
+     * When the transition is a crossfade, the announcement is deferred until
+     * the ramp has drained: the DJ duck and the crossfade ramp both write the
+     * player volume on a tick loop, so a duck issued mid-overlap is
+     * overwritten by the next ramp tick and the clip plays over un-ducked
+     * music. After the wait, bail if the user has already moved on.
      */
-    private fun maybeAnnounce(endedTrack: Track?, startingTrack: Track) {
+    private fun maybeAnnounce(
+        endedTrack: Track?,
+        startingTrack: Track,
+        crossfade: CrossfadePlan? = null,
+    ) {
         val station = _currentStation.value
         // Station switch = the track starts under a different station id than
         // the DJ last saw. First-ever start (null) is NOT a switch — it's the
         // initial tune-in, handled by the same up-next/station-id slot logic.
+        // Tracked BEFORE the enabled gate so toggling the DJ on mid-session
+        // doesn't misread the next transition as a station switch.
         val stationChanged = station != null &&
             lastDjStationId != null &&
             lastDjStationId != station.id
         lastDjStationId = station?.id
+        if (!settings.getDjEnabled()) return
         scope.launch {
+            if (crossfade != null) {
+                kotlinx.coroutines.delay(crossfade.durationMs + CROSSFADE_ENDED_GRACE_MS)
+                if (currentTrack?.id != startingTrack.id) return@launch
+            }
             runCatching {
                 val startingArtist = libraryRepo.artistsForTrack(startingTrack.id)
                     .firstOrNull()?.name
@@ -1265,6 +1359,11 @@ class StationPlayback(
                         ),
                     )
                 }
+            }.onFailure {
+                // The DJ is decorative — swallow real failures — but a
+                // cancellation must unwind, not be converted into a normal
+                // return (runCatching catches CancellationException too).
+                if (it is kotlinx.coroutines.CancellationException) throw it
             }
         }
     }

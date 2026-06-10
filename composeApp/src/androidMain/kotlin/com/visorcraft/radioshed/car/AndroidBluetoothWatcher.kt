@@ -3,6 +3,7 @@ package com.visorcraft.radioshed.car
 import android.Manifest
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
+import android.bluetooth.BluetoothProfile
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -31,12 +32,14 @@ import kotlinx.coroutines.flow.asStateFlow
  * device" rather than crashing.
  *
  * Lifecycle note: [start] and [stop] are each idempotent (multiple consecutive
- * calls are safe), but a stop→start cycle cannot recover peers that were already
- * connected at the time [start] is called — there is no cheap "currently connected"
- * snapshot API short of opening per-profile proxies (A2DP, HFP, etc.), so
- * [connectedDevices] starts empty and is seeded exclusively by ACL broadcast events.
- * In production this class is started once for the lifetime of the app and never
- * restarted.
+ * calls are safe). [start] also kicks off a best-effort, one-shot seed of
+ * [connectedDevices] from the A2DP/HEADSET profile proxies — the proxy callback
+ * is async, so the seed lands shortly after [start] returns and is merged
+ * (union) into whatever ACL broadcasts have already reported. Without it a peer
+ * connected *before* the app launched (the primary Drive Mode case: the car
+ * stereo auto-connects, then the user opens the app) would never appear, because
+ * no fresh ACL event fires for an existing connection. Seeding failure of any
+ * kind degrades to "no seed"; ACL broadcasts keep the set current from then on.
  */
 class AndroidBluetoothWatcher(private val context: Context) : BluetoothWatcher {
 
@@ -82,21 +85,66 @@ class AndroidBluetoothWatcher(private val context: Context) : BluetoothWatcher {
             addAction(BluetoothDevice.ACTION_ACL_CONNECTED)
             addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED)
         }
-        // Seed empty and rely on ACL events. The adapter exposes bonded devices
-        // but NOT a cheap "which bonded devices are currently connected" query
-        // without per-profile proxies (A2DP/headset), which is more machinery
-        // than this trigger warrants — so we start empty and let the first
-        // connect/disconnect broadcast populate the set.
+        // ACL events keep the set current from here on; the profile-proxy seed
+        // below back-fills peers that connected before we registered, since no
+        // fresh ACL broadcast ever fires for an already-established link.
         runCatching {
             ContextCompat.registerReceiver(context, r, filter, ContextCompat.RECEIVER_EXPORTED)
         }
         receiver = r
+        seedAlreadyConnected()
     }
 
     override fun stop() {
         receiver?.let { r -> runCatching { context.unregisterReceiver(r) } }
         receiver = null
+        // Seed proxies whose async callback hasn't fired yet are released by
+        // the callback itself (it checks [receiver] and skips the merge once
+        // stopped) — there is no handle to close before the binder connects.
         _connectedDevices.value = emptySet()
+    }
+
+    /**
+     * Best-effort, one-shot seed of [connectedDevices] from the audio profile
+     * proxies (A2DP for media, HEADSET for HFP — car stereos expose one or
+     * both). [BluetoothManager.getAdapter]'s `getProfileProxy` is inherently
+     * async: the snapshot arrives in `onServiceConnected` on a binder-driven
+     * callback, so this never blocks [start]. Each callback MERGES into the
+     * set (existing macs win) rather than replacing it, so an ACL broadcast
+     * that raced ahead of the proxy bind is never lost, then releases the
+     * proxy immediately. Permission-guarded and [runCatching]-wrapped like
+     * every other adapter read in this file: any failure degrades to "no
+     * seed", never a crash.
+     */
+    private fun seedAlreadyConnected() {
+        if (!hasConnectPermission()) return
+        runCatching {
+            val adapter = (context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)
+                ?.adapter ?: return
+            val listener = object : BluetoothProfile.ServiceListener {
+                override fun onServiceConnected(profile: Int, proxy: BluetoothProfile) {
+                    runCatching {
+                        // stop() may have run while the proxy was binding; in
+                        // that case skip the merge so the cleared set isn't
+                        // repopulated, but still fall through to the close.
+                        if (receiver != null) {
+                            val current = _connectedDevices.value
+                            val newPeers = proxy.connectedDevices.orEmpty()
+                                .map { it.toPeer() }
+                                .filterNot { peer -> current.any { it.mac == peer.mac } }
+                            if (newPeers.isNotEmpty()) {
+                                _connectedDevices.value = current + newPeers
+                            }
+                        }
+                    }
+                    runCatching { adapter.closeProfileProxy(profile, proxy) }
+                }
+
+                override fun onServiceDisconnected(profile: Int) {}
+            }
+            adapter.getProfileProxy(context, listener, BluetoothProfile.A2DP)
+            adapter.getProfileProxy(context, listener, BluetoothProfile.HEADSET)
+        }
     }
 
     override fun bondedDevices(): List<BtPeer> {

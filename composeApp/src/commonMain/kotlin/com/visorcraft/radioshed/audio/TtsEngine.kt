@@ -13,7 +13,9 @@ interface TtsEngine {
 
     /**
      * Synthesize [text] to [outPath]. Returns true on success. Must not
-     * throw on engine failure — DJ speech is decorative, never fatal.
+     * throw on engine failure — DJ speech is decorative, never fatal — but
+     * must let CancellationException propagate like any suspend function so
+     * cancelled callers stop instead of reading a bogus `false`.
      *
      * [outPath] must be an absolute path in an app-writable directory (e.g. the DJ
      * cache dir); the caller guarantees the parent exists.

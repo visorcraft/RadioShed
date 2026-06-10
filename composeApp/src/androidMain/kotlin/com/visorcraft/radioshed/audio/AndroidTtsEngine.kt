@@ -26,8 +26,10 @@ import kotlinx.coroutines.sync.withLock
  * prepared for [synthesizeToFile] to return `false` if the device TTS engine
  * is unavailable.
  *
- * [synthesizeToFile] never throws — any engine failure or exception yields `false`.
- * DJ speech is decorative, never fatal.
+ * [synthesizeToFile] never throws on engine failure — any TTS error yields
+ * `false` (DJ speech is decorative, never fatal). [CancellationException] is
+ * the one exception: it is rethrown so a cancelled caller actually stops
+ * instead of treating its own cancellation as a synthesis failure.
  *
  * [TextToSpeech.shutdown] is intentionally omitted — this is a Koin single bound
  * for app lifetime; Android reclaims the service connection on process exit.
@@ -65,7 +67,7 @@ class AndroidTtsEngine(private val context: Context) : TtsEngine {
      * [outPath] must be an absolute path in an app-writable directory (e.g. the DJ
      * cache dir); the caller guarantees the parent exists.
      *
-     * Returns false on any failure; never throws.
+     * Returns false on any engine failure; rethrows [CancellationException] (see class KDoc).
      */
     override suspend fun synthesizeToFile(text: String, voice: DjVoice?, outPath: String): Boolean =
         runCatching {
@@ -104,7 +106,13 @@ class AndroidTtsEngine(private val context: Context) : TtsEngine {
                 utteranceListeners.remove(utteranceId)
                 throw e
             }
-        }.getOrDefault(false)
+        }
+            // runCatching catches ALL Throwables — including the
+            // CancellationException rethrown above — so without this rethrow a
+            // cancelled caller would see plain `false` and keep running zombie
+            // work. Only engine failures map to false.
+            .onFailure { if (it is CancellationException) throw it }
+            .getOrDefault(false)
 
     /**
      * Ensures [TextToSpeech] is initialised exactly once, even under concurrent callers.

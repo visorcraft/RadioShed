@@ -1,5 +1,6 @@
 package com.visorcraft.radioshed.stations
 
+import com.visorcraft.radioshed.audio.Playable
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -7,9 +8,9 @@ import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
 /**
- * Tests for the PURE decision core [DjAnnouncer.shouldAnnounce]. The function is
- * deterministic — plain params only, no clock reads, no DI — so every case below
- * fixes all inputs explicitly.
+ * Tests for the PURE decision cores [DjAnnouncer.shouldAnnounce] and
+ * [DjAnnouncer.slotFor]. Both are deterministic — plain params only, no clock
+ * reads, no DI — so every case below fixes all inputs explicitly.
  */
 class DjAnnouncerTest {
 
@@ -162,5 +163,89 @@ class DjAnnouncerTest {
         // Different tracks get different seeds → variety survives across the
         // queue even though selection is deterministic per track.
         assertNotEquals(seedA, seedB)
+    }
+
+    // ── slotFor ──────────────────────────────────────────────────────────────
+    // slotFor must be a PURE function of the transition: precacheUpcoming and
+    // announceIfDue call it independently for the same transition, and the
+    // cache key is the rendered text — a divergent slot pick would mean the
+    // precached clip is never the one the live lookup finds.
+
+    private fun playable(id: Long, artist: String? = "Artist $id") = Playable(
+        trackId = id,
+        uri = "file:///music/$id.mp3",
+        title = "Track $id",
+        artist = artist,
+    )
+
+    private fun transition(
+        startId: Long,
+        ended: Playable? = playable(startId - 1),
+        stationChanged: Boolean = false,
+    ) = TrackTransition(
+        stationName = "Test FM",
+        endedTrack = ended,
+        startingTrack = playable(startId),
+        nextTrack = playable(startId + 1),
+        stationChanged = stationChanged,
+    )
+
+    @Test
+    fun stationChangeAlwaysPicksStationId() {
+        // The station switch overrides the hashed pick for every track.
+        for (id in 1L..50L) {
+            assertEquals(
+                DjSlots.STATION_ID,
+                DjAnnouncer.slotFor(transition(startId = id, stationChanged = true)),
+            )
+        }
+    }
+
+    @Test
+    fun slotPickIsDeterministicForSameTransition() {
+        for (id in 1L..50L) {
+            assertEquals(
+                DjAnnouncer.slotFor(transition(startId = id)),
+                DjAnnouncer.slotFor(transition(startId = id)),
+            )
+        }
+    }
+
+    @Test
+    fun recapRequiresEndedTrackWithArtist() {
+        // RECAP copy speaks "{track} by {artist}" of the track that just ended;
+        // without an ended track (or with an unknown artist, which would blank
+        // every default recap variant) the slot must never be picked.
+        for (id in 1L..200L) {
+            assertNotEquals(
+                DjSlots.RECAP,
+                DjAnnouncer.slotFor(transition(startId = id, ended = null)),
+            )
+            assertNotEquals(
+                DjSlots.RECAP,
+                DjAnnouncer.slotFor(
+                    transition(startId = id, ended = playable(id - 1, artist = null)),
+                ),
+            )
+        }
+    }
+
+    @Test
+    fun slotDistributionCoversAllEligibleSlots() {
+        // Across varied tracks the hashed pick must reach every eligible slot
+        // (no dead template cards in the editor) and never STATION_ID without
+        // a station change. UP_NEXT carries double weight in the pool, so it
+        // should also be the most common pick.
+        val counts = mutableMapOf<String, Int>()
+        for (id in 1L..400L) {
+            val slot = DjAnnouncer.slotFor(transition(startId = id))
+            counts[slot] = (counts[slot] ?: 0) + 1
+        }
+        assertFalse(counts.containsKey(DjSlots.STATION_ID))
+        assertTrue((counts[DjSlots.UP_NEXT] ?: 0) > 0)
+        assertTrue((counts[DjSlots.RECAP] ?: 0) > 0)
+        assertTrue((counts[DjSlots.TIME] ?: 0) > 0)
+        assertTrue((counts[DjSlots.UP_NEXT] ?: 0) > (counts[DjSlots.RECAP] ?: 0))
+        assertTrue((counts[DjSlots.UP_NEXT] ?: 0) > (counts[DjSlots.TIME] ?: 0))
     }
 }

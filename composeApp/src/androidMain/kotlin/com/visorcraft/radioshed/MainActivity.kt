@@ -74,9 +74,19 @@ class MainActivity : ComponentActivity() {
         // user tapped an .mp3 in a file manager) or via the Google Assistant
         // voice-search bridge. Handle here because setContent ⇢ Koin ⇢
         // AudioEngine is now ready.
-        handleViewIntent(intent)
-        handleSearchIntent(intent)
-        handleStationIntent(intent)
+        //
+        // Gated on savedInstanceState == null for ALL launch-intent handlers:
+        // with launchMode=singleTask and no configChanges opt-out, rotation /
+        // theme change / process-death recreation re-runs onCreate with the
+        // ORIGINAL launch intent still attached, and unconditional handling
+        // would replay it (restarting a widget station, ad-hoc file, or voice
+        // search mid-listen). Genuinely new intents while the task is alive
+        // arrive via onNewIntent instead and are unaffected by this gate.
+        if (savedInstanceState == null) {
+            handleViewIntent(intent)
+            handleSearchIntent(intent)
+            handleStationIntent(intent)
+        }
     }
 
     override fun onDestroy() {
@@ -149,6 +159,12 @@ class MainActivity : ComponentActivity() {
     private fun handleStationIntent(intent: Intent?) {
         val stationId = intent?.getLongExtra(WidgetSupport.EXTRA_STATION_ID, -1L)
             ?.takeIf { it >= 0 } ?: return
+        // Consume the extra once handled: onNewIntent calls setIntent(intent),
+        // so the activity's sticky intent would otherwise carry the station id
+        // into a later process-death restoration and replay the widget launch
+        // mid-listen (the savedInstanceState gate alone doesn't cover the
+        // sticky copy).
+        intent.removeExtra(WidgetSupport.EXTRA_STATION_ID)
         searchScope.launch {
             runCatching {
                 stationPlayback.playStation(stationId)

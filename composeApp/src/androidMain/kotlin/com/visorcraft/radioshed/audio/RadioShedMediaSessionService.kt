@@ -1,6 +1,8 @@
 package com.visorcraft.radioshed.audio
 
 import android.content.Intent
+import android.media.AudioFocusRequest
+import android.media.AudioManager
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -65,7 +67,10 @@ import org.koin.core.context.GlobalContext
  * Audio attributes:
  *  - USAGE_MEDIA + CONTENT_TYPE_MUSIC so the system treats us as a music
  *    app (matters for ducking, BT routing, Do-Not-Disturb interaction).
- *  - handleAudioFocus = true so we honor incoming calls / alarms.
+ *  - handleAudioFocus = false on BOTH pair players; the service holds one
+ *    focus request itself (see [audioFocusRequest]) so we still honor
+ *    incoming calls / alarms, but the two crossfade players never fight
+ *    each other for focus.
  *  - handleAudioBecomingNoisy = true so unplugging headphones pauses
  *    instead of blasting through the speaker.
  *
@@ -94,11 +99,152 @@ class RadioShedMediaSessionService : MediaLibraryService() {
     /**
      * Dual-ExoPlayer pair powering true crossfade + gapless preload
      * (PLAN 3.2). The session player always wraps [CrossfadePlayerPair.active]
-     * in a [StationAwarePlayer]; on a crossfade swap we re-wrap the new active
-     * player and call [MediaLibrarySession.setPlayer] so the notification /
-     * Auto / lock-screen follow the swap and show the incoming track.
+     * in a [StationAwarePlayer]; on a crossfade swap we look up the new active
+     * player's cached wrapper and call [MediaLibrarySession.setPlayer] so the
+     * notification / Auto / lock-screen follow the swap and show the incoming
+     * track.
      */
     private var playerPair: CrossfadePlayerPair? = null
+
+    /**
+     * Cached [StationAwarePlayer] wrappers, one per underlying ExoPlayer in
+     * the pair, created lazily and reused on every crossfade swap.
+     *
+     * Why a cache instead of wrapping fresh in [swapSessionPlayer]: a
+     * [androidx.media3.common.ForwardingPlayer] registers every
+     * `addListener` call on the WRAPPED player, and nothing ever calls
+     * `removeListener` for a retired wrapper — so building a new wrapper
+     * per swap leaked one listener set (plus the wrapper itself) onto the
+     * long-lived ExoPlayer on every crossfade for the service lifetime.
+     * With at most two underlying players, two cached wrappers cover all
+     * swaps with zero accumulation.
+     */
+    private val stationPlayerCache = HashMap<ExoPlayer, StationAwarePlayer>()
+
+    /**
+     * The service's single audio-focus request (PLAN 3.2 follow-up). Both
+     * ExoPlayers are built with `handleAudioFocus = false` because Android
+     * audio focus has NO same-app exemption: if each player managed its own
+     * focus, the crossfade's incoming player would request AUDIOFOCUS_GAIN
+     * on `play()` and the framework would hand the OUTGOING player
+     * AUDIOFOCUS_LOSS — pausing it instantly and collapsing every
+     * "crossfade" into an abrupt cut. Instead the service requests focus
+     * ONCE, at the level above both players, so the grant covers whichever
+     * player(s) are audible — including the window where both run during a
+     * ramp. Built lazily on first use; abandoned on user pause/stop,
+     * permanent focus loss, and [onDestroy].
+     */
+    private var audioFocusRequest: AudioFocusRequest? = null
+
+    /**
+     * True while our focus request is registered with the AudioManager
+     * (requested and not yet abandoned). Makes [requestAudioFocus]
+     * idempotent — every `isPlaying = true` edge would otherwise re-issue
+     * the system call. Main-thread only (player listeners + focus listener
+     * + onDestroy all run on Main), so no @Volatile needed.
+     */
+    private var hasAudioFocus = false
+
+    /**
+     * Set on AUDIOFOCUS_LOSS_TRANSIENT so the matching AUDIOFOCUS_GAIN
+     * resumes playback. Doubles as the "this pause was focus-driven"
+     * marker: the active player's `isPlaying = false` edge skips abandoning
+     * the (still-registered) request while this is set, otherwise the
+     * system could never deliver the GAIN that ends the interruption.
+     */
+    private var resumeOnFocusGain = false
+
+    /**
+     * Focus-change callback. Delivered on the main looper (the handler
+     * passed to the request builder), so it can drive the session-facing
+     * player directly. Pausing/resuming via `librarySession.player` (the
+     * [StationAwarePlayer] wrapper) rather than a raw pair player keeps
+     * MediaController / notification / Auto state consistent with what the
+     * user sees.
+     */
+    private val audioFocusListener = AudioManager.OnAudioFocusChangeListener { change ->
+        val player = librarySession?.player
+        when (change) {
+            AudioManager.AUDIOFOCUS_LOSS -> {
+                // Permanent loss (another media app took over): pause and
+                // drop the request entirely. No auto-resume — the user must
+                // explicitly restart playback, per platform convention.
+                resumeOnFocusGain = false
+                player?.pause()
+                abandonAudioFocus()
+            }
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
+                // Short interruption (phone call, alarm): pause but KEEP the
+                // request registered and remember to resume — the system
+                // delivers AUDIOFOCUS_GAIN when the interruption ends.
+                resumeOnFocusGain = true
+                player?.pause()
+            }
+            AudioManager.AUDIOFOCUS_GAIN -> {
+                if (resumeOnFocusGain) {
+                    resumeOnFocusGain = false
+                    player?.play()
+                }
+            }
+            // AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK: deliberately unhandled —
+            // setWillPauseWhenDucked(false) on the request tells the system
+            // to duck our streams itself and restore them afterwards.
+        }
+    }
+
+    /**
+     * Request audio focus for the whole service (idempotent — see
+     * [hasAudioFocus]). Returns true when focus is held. Called from the
+     * ACTIVE player's `isPlaying = true` edge; the standby player's
+     * crossfade playback is covered by this same service-level grant, so
+     * neither pair player ever steals focus from the other.
+     */
+    private fun requestAudioFocus(): Boolean {
+        if (hasAudioFocus) return true
+        val audioManager = getSystemService(AudioManager::class.java) ?: return false
+        val request = audioFocusRequest ?: AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+            .setAudioAttributes(
+                // Platform (not Media3) attributes; must mirror the
+                // USAGE_MEDIA / CONTENT_TYPE_MUSIC the players are built
+                // with so the focus stack classifies us the same way the
+                // audio routing does.
+                android.media.AudioAttributes.Builder()
+                    .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
+                    .setContentType(android.media.AudioAttributes.CONTENT_TYPE_MUSIC)
+                    .build(),
+            )
+            // A delayed grant would mean "stay silent now, start later on
+            // GAIN" — wrong for playback the user just explicitly started;
+            // they should see it either play or stay visibly paused.
+            .setAcceptsDelayedFocusGain(false)
+            // Let the system duck us on CAN_DUCK events (navigation
+            // prompts, notifications) instead of forcing a hard pause.
+            .setWillPauseWhenDucked(false)
+            .setOnAudioFocusChangeListener(audioFocusListener, Handler(Looper.getMainLooper()))
+            .build()
+            .also { audioFocusRequest = it }
+        val result = audioManager.requestAudioFocus(request)
+        hasAudioFocus = result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+        if (!hasAudioFocus) {
+            Log.w(TAG, "requestAudioFocus: denied (result=$result)")
+        }
+        return hasAudioFocus
+    }
+
+    /**
+     * Abandon the service-level focus request (no-op when not held). Called
+     * on user-initiated pause/stop, permanent focus loss, and [onDestroy] so
+     * other apps see us release the focus stack as soon as we go silent.
+     */
+    private fun abandonAudioFocus() {
+        if (!hasAudioFocus) return
+        hasAudioFocus = false
+        resumeOnFocusGain = false
+        val request = audioFocusRequest ?: return
+        runCatching {
+            getSystemService(AudioManager::class.java)?.abandonAudioFocusRequest(request)
+        }
+    }
 
     /**
      * Service-scoped supervisor. Used by the library callback to bridge
@@ -130,8 +276,16 @@ class RadioShedMediaSessionService : MediaLibraryService() {
             .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
             .build()
 
+        // handleAudioFocus = false on BOTH players: audio focus is owned
+        // ONCE at the service level (see [audioFocusRequest]). With
+        // per-player focus, CrossfadePlayerPair.crossfadeTo's
+        // `incoming.play()` would make the incoming player's
+        // AudioFocusManager request AUDIOFOCUS_GAIN, and Android — which
+        // has no same-app exemption — would deliver AUDIOFOCUS_LOSS to the
+        // outgoing player and pause it on the spot, turning every
+        // crossfade into a hard cut instead of an overlap.
         fun buildExoPlayer(): ExoPlayer = ExoPlayer.Builder(this)
-            .setAudioAttributes(attributes, /* handleAudioFocus = */ true)
+            .setAudioAttributes(attributes, /* handleAudioFocus = */ false)
             .setHandleAudioBecomingNoisy(true)
             .build()
             .also { attachEffectsAndWidgetListeners(it) }
@@ -186,12 +340,16 @@ class RadioShedMediaSessionService : MediaLibraryService() {
     }
 
     /**
-     * Attach the equalizer-routing + widget-update listeners to an ExoPlayer.
-     * Applied to BOTH players in the pair (in [CrossfadePlayerPair]'s
-     * constructor args via [buildExoPlayer]) so effects re-attach and widgets
-     * repaint regardless of which player is currently active after a crossfade
-     * swap. The session id differs per player, so the equalizer reattaches on
-     * the swap's onAudioSessionIdChanged for the newly-active one.
+     * Attach the equalizer-routing + widget-update + audio-focus listeners to
+     * an ExoPlayer. Applied to BOTH players in the pair (in
+     * [CrossfadePlayerPair]'s constructor args via [buildExoPlayer]) so the
+     * hooks fire regardless of which player is currently active after a
+     * crossfade swap. NOTE: ExoPlayer emits onAudioSessionIdChanged exactly
+     * once, when the audio sink first binds — a crossfade swap does NOT
+     * re-fire it (the session ids are fixed per player), and the standby
+     * player's one-shot emission is suppressed by the active-player guard
+     * below. [swapSessionPlayer] therefore forwards the new active player's
+     * session id to the equalizer explicitly on every swap.
      */
     private fun attachEffectsAndWidgetListeners(exoPlayer: ExoPlayer) {
         exoPlayer.addListener(object : androidx.media3.common.Player.Listener {
@@ -200,13 +358,7 @@ class RadioShedMediaSessionService : MediaLibraryService() {
                 // chain; a standby player's session id (it preloads silently)
                 // must not steal the equalizer away from what's audible.
                 if (exoPlayer !== playerPair?.active) return
-                runCatching {
-                    val ctrl = GlobalContext.get()
-                        .get<com.visorcraft.radioshed.audio.EqualizerController>()
-                    if (ctrl is com.visorcraft.radioshed.audio.AndroidEqualizerController) {
-                        ctrl.onAudioSessionIdChanged(audioSessionId)
-                    }
-                }
+                forwardAudioSessionToEqualizer(audioSessionId)
             }
 
             override fun onMediaItemTransition(
@@ -225,6 +377,25 @@ class RadioShedMediaSessionService : MediaLibraryService() {
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 if (exoPlayer !== playerPair?.active) return
+                if (isPlaying) {
+                    // The active player just became audible: take the
+                    // service-level focus (idempotent; see
+                    // [audioFocusRequest] for why it lives here and not
+                    // inside each player). A denial — e.g. an ongoing call
+                    // with a strict focus policy — must not leave us playing
+                    // unfocused, so pause through the session-facing player
+                    // so the controller / notification reflect the truth.
+                    if (!requestAudioFocus()) {
+                        librarySession?.player?.pause()
+                    }
+                } else if (!exoPlayer.playWhenReady && !resumeOnFocusGain) {
+                    // User-initiated pause/stop: playWhenReady dropped AND
+                    // this isn't a transient-focus-loss pause (which must
+                    // keep the request registered to receive the later
+                    // AUDIOFOCUS_GAIN). Release the focus so other apps see
+                    // us leave the stack as soon as we go silent.
+                    abandonAudioFocus()
+                }
                 // Same reason as onMediaItemTransition — flip the
                 // widget's play/pause glyph when state changes.
                 runCatching {
@@ -236,13 +407,42 @@ class RadioShedMediaSessionService : MediaLibraryService() {
     }
 
     /**
-     * Wrap [exoPlayer] in a [StationAwarePlayer] and attach the custom-layout
-     * refresh listeners (repeat / shuffle / track change). Used both at
-     * construction and on every crossfade swap so the new session player keeps
-     * routing skip commands through [StationPlayback] and keeps the Auto /
-     * notification glyphs in sync.
+     * Forward [audioSessionId] to the equalizer controller so the global
+     * AudioEffect chain (re)attaches to the audible player's session. Called
+     * from the active player's onAudioSessionIdChanged AND from
+     * [swapSessionPlayer] (the swap path never re-emits the event — see
+     * [attachEffectsAndWidgetListeners]). The controller dedupes repeated
+     * ids and treats 0 as "tear down", so calling this liberally is safe.
      */
-    private fun wrapAsStationPlayer(exoPlayer: ExoPlayer): StationAwarePlayer {
+    private fun forwardAudioSessionToEqualizer(audioSessionId: Int) {
+        runCatching {
+            val ctrl = GlobalContext.get()
+                .get<com.visorcraft.radioshed.audio.EqualizerController>()
+            if (ctrl is com.visorcraft.radioshed.audio.AndroidEqualizerController) {
+                ctrl.onAudioSessionIdChanged(audioSessionId)
+            }
+        }
+    }
+
+    /**
+     * Return the (cached) [StationAwarePlayer] wrapper for [exoPlayer]. Used
+     * both at construction and on every crossfade swap so the session player
+     * keeps routing skip commands through [StationPlayback] and keeps the
+     * Auto / notification glyphs in sync. The cache guarantees exactly ONE
+     * wrapper — and exactly one set of `addListener` registrations on the
+     * long-lived underlying player — per pair player; see
+     * [stationPlayerCache] for the leak this prevents.
+     */
+    private fun wrapAsStationPlayer(exoPlayer: ExoPlayer): StationAwarePlayer =
+        stationPlayerCache.getOrPut(exoPlayer) { createStationPlayer(exoPlayer) }
+
+    /**
+     * Build a [StationAwarePlayer] around [exoPlayer] and attach the
+     * custom-layout refresh listeners (repeat / shuffle / track change).
+     * Only ever called via [wrapAsStationPlayer]'s cache miss — once per
+     * underlying ExoPlayer for the service lifetime.
+     */
+    private fun createStationPlayer(exoPlayer: ExoPlayer): StationAwarePlayer {
         val player = StationAwarePlayer(
             underlying = exoPlayer,
             onSkipNext = {
@@ -302,6 +502,23 @@ class RadioShedMediaSessionService : MediaLibraryService() {
         val wrapper = wrapAsStationPlayer(newActive)
         runCatching { session.setPlayer(wrapper) }
             .onFailure { Log.e(TAG, "swapSessionPlayer failed", it) }
+        // Re-point the equalizer at the new active player's audio session.
+        // ExoPlayer emits onAudioSessionIdChanged exactly once (at sink
+        // bind), and that one-shot fired while this player was still
+        // standby — suppressed by the active-player guard in
+        // attachEffectsAndWidgetListeners — so without this explicit
+        // forward the AudioEffect chain would stay attached to the retired
+        // player's session and the EQ would audibly stop applying after
+        // the first crossfade.
+        forwardAudioSessionToEqualizer(newActive.audioSessionId)
+        // Repaint the home-screen widget. The incoming player's
+        // onMediaItemTransition / onIsPlayingChanged fired pre-swap while
+        // it was still standby (suppressed by the same guard), so this is
+        // the first moment the widget can learn about the new track —
+        // without it the widget shows the previous track indefinitely.
+        runCatching {
+            com.visorcraft.radioshed.widget.NowPlayingWidget.pushUpdate(this)
+        }
         libraryCallback.refreshCustomLayout()
     }
 
@@ -354,6 +571,11 @@ class RadioShedMediaSessionService : MediaLibraryService() {
         runCatching {
             GlobalContext.get().get<com.visorcraft.radioshed.audio.SleepTimer>().cancel()
         }
+        // Drop the service-level audio focus before releasing the players.
+        // The players never requested focus themselves (handleAudioFocus =
+        // false), so nothing else releases this — skipping it would leave a
+        // stale entry on the system focus stack until process death.
+        abandonAudioFocus()
         // Flush the Bluetooth multi-click debounce handler. Without
         // this, a Runnable posted shortly before service teardown
         // could fire after `librarySession` is released and crash on

@@ -14,6 +14,7 @@ import com.visorcraft.radioshed.data.nowMillis
 import com.visorcraft.radioshed.source.WeatherFetcher
 import com.visorcraft.radioshed.source.formatWeather
 import com.visorcraft.radioshed.util.isInMinuteWindow
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.builtins.MapSerializer
@@ -25,7 +26,10 @@ import kotlinx.serialization.builtins.serializer
  * Contract: the DJ is purely decorative. EVERY side-effecting path is wrapped
  * in [runCatching] so a TTS failure, a missing voice, a clip-decode error, or
  * a corrupt template blob can NEVER break music playback. The worst outcome of
- * any failure is "no announcement this time".
+ * any failure is "no announcement this time". The one deliberate exception:
+ * [CancellationException] is rethrown out of every catch (runCatching catches
+ * ALL Throwables, cancellation included), because swallowing it would leave a
+ * cancelled caller running zombie work instead of stopping.
  *
  * Flow per [announceIfDue]:
  *  1. cheap gates — DJ disabled, or no TTS engine on this platform.
@@ -82,7 +86,10 @@ class DjAnnouncer(
      * track transition — most calls are cheap no-ops.
      */
     suspend fun announceIfDue(transition: TrackTransition) {
+        // Rethrow CancellationException: runCatching would otherwise convert
+        // the caller's own cancellation into a silent "announcement failed".
         runCatching { announceIfDueInner(transition) }
+            .onFailure { if (it is CancellationException) throw it }
     }
 
     private suspend fun announceIfDueInner(transition: TrackTransition) {
@@ -120,10 +127,11 @@ class DjAnnouncer(
         }
         if (!due) return
 
-        // 3. Slot pick. A station switch gets a station ID; otherwise we tease
-        //    the up-next track. RECAP / TIME slots stay reachable through
-        //    user-authored custom templates (a later UI), so we keep the
-        //    automatic selection to these two for now.
+        // 3. Slot pick. A station switch gets a station ID; otherwise [slotFor]
+        //    chooses deterministically among UP_NEXT / RECAP / TIME from the
+        //    transition alone, so this pick and the earlier precache pick for
+        //    the same transition always agree (the cache key is the rendered
+        //    text — a divergent slot would mean a guaranteed cache miss).
         val slot = slotFor(transition)
 
         // 4 + 5. Templates → variant → render → cache-or-synthesize, all through
@@ -181,7 +189,8 @@ class DjAnnouncer(
     /**
      * Pre-synthesize announcement clips for upcoming transitions so a due
      * announcement plays instantly instead of waiting on the TTS engine.
-     * Best-effort: failures are swallowed; cache hits are no-ops.
+     * Best-effort: failures are swallowed (cancellation excepted — it rethrows);
+     * cache hits are no-ops.
      */
     suspend fun precacheUpcoming(transitions: List<TrackTransition>) {
         // Cheap exits mirror the announce path's gates so we don't synthesize
@@ -195,21 +204,35 @@ class DjAnnouncer(
         if (sleepTimer.state.value is SleepTimer.State.Running) return
         val templates = parseTemplatesJson(settings.getDjTemplates()) ?: DEFAULT_DJ_TEMPLATES
         for (transition in transitions) {
-            // Precache renders against the current wall clock for the {time}
-            // token. A drift between now and announce time only matters for
-            // time-bearing templates; a clock-token miss simply re-synthesizes
-            // at announce time (still correct, just not pre-warmed), so we
-            // accept it. No ducking, no playback, no counter mutation —
-            // precache only warms the cache.
+            // The TIME slot's copy is dominated by the {time} token, which
+            // renders the CURRENT clock. The cache key is the rendered text, so
+            // a precached TIME clip can never speak a stale time — the announce
+            // render would produce different text and simply miss — but that
+            // also means the precache is almost always wasted (the minute rolls
+            // over before the announcement) and would strand one orphan blob
+            // per pass until the stale trim. Skip it; TIME announcements
+            // synthesize live instead.
+            val slot = slotFor(transition)
+            if (slot == DjSlots.TIME) continue
+            // Precache renders against the current wall clock for any {time}
+            // token in the remaining slots. A drift between now and announce
+            // time only matters for time-bearing templates; a clock-token miss
+            // simply re-synthesizes at announce time (still correct, just not
+            // pre-warmed), so we accept it. No ducking, no playback, no counter
+            // mutation — precache only warms the cache. The rethrow keeps a
+            // cancelled precache loop from marching on through the remaining
+            // transitions (runCatching catches CancellationException too).
             runCatching {
-                renderAndEnsureCached(transition, slotFor(transition), templates, formatClockTime(nowMillis()))
-            }
+                renderAndEnsureCached(transition, slot, templates, formatClockTime(nowMillis()))
+            }.onFailure { if (it is CancellationException) throw it }
         }
         // Piggy-back stale-cache eviction onto the precache pass: it already
         // runs off the hot path, and gating by [lastTrimMs] keeps it to at most
         // once per [TRIM_INTERVAL_MS] of process lifetime. runCatching so a trim
-        // failure can never break precaching (which is itself best-effort).
+        // failure can never break precaching (which is itself best-effort);
+        // cancellation still propagates.
         runCatching { maybeTrimStaleCache() }
+            .onFailure { if (it is CancellationException) throw it }
     }
 
     /** A playable clip plus the variant that produced it. [renderAndEnsureCached]
@@ -268,7 +291,7 @@ class DjAnnouncer(
         } else {
             null
         }
-        val rendered = DjTemplate.render(template, transition.toVars(timeText, weatherText))
+        val rendered = DjTemplate.render(template, transition.toVars(slot, timeText, weatherText))
         if (rendered.isBlank()) return null
         // Key the clip by the rendered text + voice so identical copy re-uses the
         // existing synthesized file. "system" is the only voice id today (custom
@@ -365,11 +388,42 @@ class DjAnnouncer(
 
         /**
          * The slot the announce path picks for [transition]: a station switch
-         * gets a station ID; otherwise we tease the up-next track. Pure so the
-         * announce and precache paths share one decision point.
+         * always gets a station ID; otherwise one of UP_NEXT / RECAP / TIME is
+         * chosen deterministically from a stable hash of the starting track's
+         * identity. PURE — a function of the transition only, never of the
+         * mutable counters or the clock — so the announce and precache paths
+         * (which call it independently for the same transition) always agree,
+         * and the precached clip is exactly the one the live lookup finds.
+         *
+         * Weighting: UP_NEXT appears twice in the pool (~2x) because teasing
+         * the next track is the bread-and-butter DJ line; RECAP and TIME are
+         * the variety sprinkled in. RECAP is only eligible when the ended
+         * track AND its artist are known — the default recap copy speaks
+         * "{track} by {artist}" of the track that just finished, and with a
+         * null artist every default variant would render blank (sentence
+         * dropped), turning a due announcement into silence.
          */
-        fun slotFor(transition: TrackTransition): String =
-            if (transition.stationChanged) DjSlots.STATION_ID else DjSlots.UP_NEXT
+        fun slotFor(transition: TrackTransition): String {
+            if (transition.stationChanged) return DjSlots.STATION_ID
+            val pool = buildList {
+                add(DjSlots.UP_NEXT)
+                add(DjSlots.UP_NEXT)
+                if (transition.endedTrack?.artist != null) add(DjSlots.RECAP)
+                add(DjSlots.TIME)
+            }
+            // FNV-1a of (trackId + uri), not String.hashCode(): hashCode isn't
+            // contractually stable across runtimes, and slot choice must be
+            // reproducible between the precache and announce processes' calls.
+            val hash = stableHash("slot|${transition.startingTrack.trackId}|${transition.startingTrack.uri}")
+                .toULong(16)
+            // FNV-1a's LOW bits disperse poorly across near-identical inputs
+            // (library URIs share long prefixes and suffixes), and a small
+            // modulo reads only the low bits — measured over sequential ids,
+            // `% 4` hit only {0, 2}, silently making two pool slots
+            // unreachable. Fold the well-mixed high half in before reducing.
+            val mixed = hash xor (hash shr 32)
+            return pool[(mixed % pool.size.toULong()).toInt()]
+        }
 
         /**
          * Stable cache key for a synthesized clip: FNV-1a-64 of (rendered text +
@@ -474,15 +528,21 @@ data class TrackTransition(
     val stationChanged: Boolean,
 )
 
-/** Maps the transition into the template variable bag. [time] is the
- *  already-formatted wall-clock string for the `{time}` token; [weather] is the
- *  pre-formatted weather string (e.g. "12 degrees and clear") or null when the
- *  picked template doesn't use {weather} or no snapshot was available. */
-private fun TrackTransition.toVars(time: String, weather: String?): DjTemplateVars = DjTemplateVars(
-    station = stationName,
-    track = startingTrack.title,
-    artist = startingTrack.artist,
-    nextTrack = nextTrack?.title,
-    time = time,
-    weather = weather,
-)
+/** Maps the transition into the template variable bag. [slot] decides which
+ *  track `{track}`/`{artist}` refer to: RECAP copy ("That was {track} by
+ *  {artist}") speaks the track that just ENDED, every other slot speaks the
+ *  track now starting. [time] is the already-formatted wall-clock string for
+ *  the `{time}` token; [weather] is the pre-formatted weather string (e.g.
+ *  "12 degrees and clear") or null when the picked template doesn't use
+ *  {weather} or no snapshot was available. */
+private fun TrackTransition.toVars(slot: String, time: String, weather: String?): DjTemplateVars {
+    val subject = if (slot == DjSlots.RECAP) endedTrack else startingTrack
+    return DjTemplateVars(
+        station = stationName,
+        track = subject?.title,
+        artist = subject?.artist,
+        nextTrack = nextTrack?.title,
+        time = time,
+        weather = weather,
+    )
+}

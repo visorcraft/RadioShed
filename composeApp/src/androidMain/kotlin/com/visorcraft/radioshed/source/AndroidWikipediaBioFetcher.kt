@@ -89,8 +89,6 @@ class AndroidWikipediaBioFetcher : WikipediaBioFetcher {
 
     private companion object {
         const val WP_BASE = "https://en.wikipedia.org"
-        const val USER_AGENT =
-            "RadioShed/0.1 (https://radioshed.app)"
         const val CONNECT_TIMEOUT_MS = 10_000
         const val READ_TIMEOUT_MS = 15_000
     }

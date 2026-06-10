@@ -3,6 +3,7 @@ package com.visorcraft.radioshed.widget
 import android.app.Activity
 import android.appwidget.AppWidgetManager
 import android.content.Context
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -97,7 +98,14 @@ class StationLauncherWidgetConfigActivity : ComponentActivity() {
                 stationRepo = stationRepo,
                 widgetConfigRepo = widgetConfigRepo,
                 onSaveAndFinish = {
-                    setResult(Activity.RESULT_OK)
+                    // The appwidget configure contract requires RESULT_OK to
+                    // carry EXTRA_APPWIDGET_ID back; some third-party hosts
+                    // treat its absence as a failed configuration and delete
+                    // the freshly placed widget.
+                    setResult(
+                        Activity.RESULT_OK,
+                        Intent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId),
+                    )
                     finish()
                 },
                 onCancel = {

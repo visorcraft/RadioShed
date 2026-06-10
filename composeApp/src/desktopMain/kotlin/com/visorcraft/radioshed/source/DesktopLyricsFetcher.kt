@@ -88,6 +88,5 @@ class DesktopLyricsFetcher : LyricsFetcher {
         const val LRCLIB_BASE = "https://lrclib.net"
         const val CONNECT_TIMEOUT_MS = 10_000
         const val READ_TIMEOUT_MS = 20_000
-        const val USER_AGENT = "RadioShed/1.0 (https://radioshed.app)"
     }
 }
