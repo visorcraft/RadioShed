@@ -865,10 +865,14 @@ CREATE TABLE scrobble_queue (
 
 ### Task 4.4: Scrobble status surface + Phase 4 exit
 
-- [ ] **Step 1:** Settings → the existing ListenBrainz section gains a status
+- [x] **Step 1:** Settings → the existing ListenBrainz section gains a status
   line: "N queued" (from `countAll`) + "Retry now" button (calls `drain()`),
   only visible when N > 0.
-- [ ] **Step 2:** Run the **Phase Exit Gate**. Phase-specific dedup checks:
+- [x] **Step 2:** Run the **Phase Exit Gate**. Phase-specific dedup checks:
+  *(G1 — 7467e09: InMemorySettings ×3 extracted to testutil/, stale Modules.kt
+  comment fixed, client pair verified byte-identical. G2 green incl. desktopTest.
+  G3 pushed. G4 — opencode VERDICT approved issues=0. G5 — 3231073.
+  G6 deferred to W5. Live-token desktop scrobble smoke owed to the human.)*
   - Android vs desktop ListenBrainz clients — diff them
     (`diff <(sed ...) <(sed ...)` on the two files): only imports/class
     names may differ. If the bodies diverged, reconcile.
@@ -1144,3 +1148,12 @@ peer-review gates actually ran.
   (user volume AND ReplayGain — CRITICAL), outgoing-ramp start jump, stale
   _volume StateFlow, playback-rate reset across desktop swaps, Ended flicker,
   onDestroy ordering (twice — see issue 1), WMO-style stale copy in settings.
+
+## Phase 4 review — 2026-06-10
+
+- opencode (deepseek, --variant high): `VERDICT approved issues=0`.
+- Task-review loop this phase caught and fixed: CAP/SQL drift cross-reference,
+  data-driven prune test, one-batch under-drain (drain now flushes until empty
+  or failure, +1 test), InMemorySettings test-fixture triplication.
+- StationPlayback ctor slimmed (client+gate → ScrobbleSync); gate logic now
+  lives in exactly one place.
