@@ -47,6 +47,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.visorcraft.radioshed.data.FolderRepository
 import com.visorcraft.radioshed.data.StationRepository
+import com.visorcraft.radioshed.domain.Crossfade
+import com.visorcraft.radioshed.domain.CrossfadeCurve
 import com.visorcraft.radioshed.domain.PlayOrder
 import com.visorcraft.radioshed.domain.PlaybackRule
 import com.visorcraft.radioshed.domain.SmartQueryKind
@@ -109,6 +111,11 @@ fun StationEditorScreen(
     var noRepeatDepth by remember { mutableStateOf(25) }
     var artistSpacing by remember { mutableStateOf(5) }
     var albumSpacing by remember { mutableStateOf(3) }
+    // Crossfade. Stored as the three-way mode sentinel + the timed-mode
+    // sub-fields so switching modes doesn't lose previously-entered values.
+    var crossfadeMode by remember { mutableStateOf(CrossfadeMode.Smart) }
+    var crossfadeSeconds by remember { mutableStateOf(6) }
+    var crossfadeCurve by remember { mutableStateOf(CrossfadeCurve.EqualPower) }
 
     // Source-rule state. We hold per-type fields ALL the time; switching
     // types just changes which set is read on save. The other slots
@@ -169,6 +176,15 @@ fun StationEditorScreen(
         noRepeatDepth = station.playback.noRepeatDepth
         artistSpacing = station.playback.artistSpacing
         albumSpacing = station.playback.albumSpacing
+        when (val cf = station.playback.crossfade) {
+            is Crossfade.Off -> crossfadeMode = CrossfadeMode.Off
+            is Crossfade.Fixed -> {
+                crossfadeMode = CrossfadeMode.Timed
+                crossfadeSeconds = cf.seconds.coerceIn(1, 12)
+                crossfadeCurve = cf.curve
+            }
+            is Crossfade.Smart -> crossfadeMode = CrossfadeMode.Smart
+        }
         when (val src = station.source) {
             is SourceRule.FolderSelector -> {
                 sourceType = SourceType.Folders
@@ -399,6 +415,16 @@ fun StationEditorScreen(
                 onChange = { artistSpacing = it },
                 enabled = !isBuiltIn,
             )
+            Spacer(Modifier.height(12.dp))
+            CrossfadeControl(
+                mode = crossfadeMode,
+                onMode = { crossfadeMode = it },
+                seconds = crossfadeSeconds,
+                onSeconds = { crossfadeSeconds = it },
+                curve = crossfadeCurve,
+                onCurve = { crossfadeCurve = it },
+                enabled = !isBuiltIn,
+            )
 
             // ---- Save row ----
             Spacer(Modifier.height(20.dp))
@@ -489,6 +515,9 @@ fun StationEditorScreen(
                                     noRepeatDepth = noRepeatDepth,
                                     artistSpacing = artistSpacing,
                                     albumSpacing = albumSpacing,
+                                    crossfadeMode = crossfadeMode,
+                                    crossfadeSeconds = crossfadeSeconds,
+                                    crossfadeCurve = crossfadeCurve,
                                 )
 
                                 // Step 3: Kick off scans for the newly-
@@ -606,6 +635,13 @@ private enum class SourceType(val label: String) {
     PathPattern("Path Pattern"),
 }
 
+/** Three-way UI sentinel for the crossfade picker. Maps to [Crossfade] sealed subtypes on save. */
+private enum class CrossfadeMode(val label: String) {
+    Off("Off"),
+    Timed("Timed"),
+    Smart("Smart"),
+}
+
 private suspend fun saveStation(
     repo: StationRepository,
     existing: Station?,
@@ -628,6 +664,9 @@ private suspend fun saveStation(
     noRepeatDepth: Int,
     artistSpacing: Int,
     albumSpacing: Int,
+    crossfadeMode: CrossfadeMode,
+    crossfadeSeconds: Int,
+    crossfadeCurve: CrossfadeCurve,
 ) {
     val source: SourceRule = when {
         sourceLocked && existing != null -> existing.source
@@ -638,12 +677,21 @@ private suspend fun saveStation(
             SourceType.PathPattern -> SourceRule.PathPattern(pathIncludes, pathExcludes)
         }
     }
+    val crossfade: Crossfade = when (crossfadeMode) {
+        CrossfadeMode.Off -> Crossfade.Off
+        CrossfadeMode.Timed -> Crossfade.Fixed(
+            seconds = crossfadeSeconds.coerceIn(1, 12),
+            curve = crossfadeCurve,
+        )
+        CrossfadeMode.Smart -> Crossfade.Smart
+    }
     val playback = (existing?.playback ?: PlaybackRule()).copy(
         order = playOrder,
         weighting = weighting,
         noRepeatDepth = noRepeatDepth.coerceIn(0, 50),
         artistSpacing = artistSpacing.coerceIn(0, 15),
         albumSpacing = albumSpacing.coerceIn(0, 10),
+        crossfade = crossfade,
     )
     if (existing == null) {
         // Insert path doesn't currently expose artworkUri; the upload
@@ -1175,6 +1223,94 @@ private fun ShufflePolicySlider(
     }
 }
 
+/**
+ * Three-way crossfade picker: Off / Timed / Smart. Timed expands to a
+ * duration slider (1–12 s) and a curve selector. Smart shows an honest
+ * caption noting that content-aware analysis is planned.
+ */
+@Composable
+private fun CrossfadeControl(
+    mode: CrossfadeMode,
+    onMode: (CrossfadeMode) -> Unit,
+    seconds: Int,
+    onSeconds: (Int) -> Unit,
+    curve: CrossfadeCurve,
+    onCurve: (CrossfadeCurve) -> Unit,
+    enabled: Boolean,
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        // Mode row — three equal-weight Surface buttons mirroring MatchModeSelector.
+        Text(
+            "Crossfade",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
+        )
+        Spacer(Modifier.height(4.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            CrossfadeMode.entries.forEach { entry ->
+                val selected = entry == mode
+                Surface(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable(enabled = enabled) { onMode(entry) },
+                    color = if (selected) MaterialTheme.colorScheme.primaryContainer
+                            else MaterialTheme.colorScheme.surfaceVariant.copy(
+                                alpha = if (enabled) 0.4f else 0.2f,
+                            ),
+                    shape = RoundedCornerShape(10.dp),
+                ) {
+                    Text(
+                        text = entry.label,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                        color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer
+                                else MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 12.dp),
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    )
+                }
+            }
+        }
+        when (mode) {
+            CrossfadeMode.Off -> Unit
+            CrossfadeMode.Timed -> {
+                Spacer(Modifier.height(10.dp))
+                ShufflePolicySlider(
+                    label = "Crossfade duration",
+                    description = "Overlap the outgoing and incoming tracks for this many seconds.",
+                    value = seconds,
+                    range = 1..12,
+                    onChange = onSeconds,
+                    enabled = enabled,
+                )
+                Spacer(Modifier.height(8.dp))
+                EnumPicker(
+                    label = "Curve",
+                    values = CrossfadeCurve.entries.toList(),
+                    selected = curve,
+                    onPick = onCurve,
+                    labelOf = { it.uiLabel() },
+                    enabled = enabled,
+                )
+            }
+            CrossfadeMode.Smart -> {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "Currently equals Timed with a 6-second fade; " +
+                        "content-aware fades are planned.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun SectionHeader(text: String) {
     Text(
@@ -1331,6 +1467,12 @@ private fun Weighting.uiLabel(): String = when (this) {
     Weighting.FavorRecent -> "Favor recently added"
     Weighting.FavorUnderPlayed -> "Favor under-played"
     Weighting.FavorHigherRated -> "Favor higher-rated"
+}
+
+private fun CrossfadeCurve.uiLabel(): String = when (this) {
+    CrossfadeCurve.EqualPower -> "Equal power"
+    CrossfadeCurve.Linear -> "Linear"
+    CrossfadeCurve.SCurve -> "S-curve"
 }
 
 private fun SmartQueryKind.uiLabel(): String = when (this) {

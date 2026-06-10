@@ -1332,9 +1332,8 @@ private fun ThemeSwatchTrio(mode: ThemeMode) {
 }
 
 /**
- * Slider for the end-of-track fade duration. 0 disables.
- * Honest naming — this is a track-end fade-out, not real
- * crossfade (no overlap into the next track).
+ * Slider for the auto-backup retention count. Distinct from the
+ * end-of-track fade slider ([EndFadeSlider]) below.
  */
 @Composable
 private fun BackupRetentionSlider(value: Int, onChange: (Int) -> Unit) {
@@ -1411,9 +1410,9 @@ private fun EndFadeSlider(seconds: Int, onChange: (Int) -> Unit) {
         }
         Text(
             text = "Ramps the volume down over the last few seconds of " +
-                "each track to soften the cut. Doesn't overlap into the " +
-                "next track — true crossfade needs deeper plumbing and " +
-                "is on the roadmap.",
+                "each track to soften the cut. Applies only when a station's " +
+                "crossfade is Off — per-station crossfade (with true overlap) " +
+                "is configured in Station editor → Playback rules.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
         )

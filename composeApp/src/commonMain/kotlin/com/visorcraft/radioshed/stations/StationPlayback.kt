@@ -383,10 +383,11 @@ class StationPlayback(
         // next track-load (applyEffectiveVolume re-reads
         // _userVolume.value, which we don't mutate here).
         //
-        // This is NOT true crossfade — there's no overlap with the
-        // next track. But it eliminates the most jarring symptom:
-        // hard cuts mid-decay. Real crossfade needs dual ExoPlayer
-        // and is tracked in SPEC's deferred list.
+        // This is the single-player end-fade (SettingsStore.getEndFadeSec),
+        // distinct from the per-station crossfade in PlaybackRule.crossfade.
+        // End-fade only softens the cut; crossfade overlaps tracks via the
+        // dual-player arm-and-fade path below. End-fade runs only when no
+        // crossfade plan is active (see the plan != null guard below).
         scope.launch {
             audioEngine.position.collect { pos ->
                 val track = currentTrack ?: return@collect

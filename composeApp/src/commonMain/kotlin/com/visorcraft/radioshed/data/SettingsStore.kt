@@ -734,9 +734,10 @@ class SettingsStore(private val settings: Settings) {
     /**
      * Length (seconds) of the volume ramp at the end of each track.
      * 0 disables the feature entirely (default). Range 0..10.
-     * NOT true crossfade — there's no overlap with the next track,
-     * just a fade-out so abrupt cuts don't jar. Real crossfade
-     * needs dual-ExoPlayer architecture and is tracked separately.
+     * This is a track-end fade-out, not crossfade — no overlap with
+     * the next track. It applies only when a station's crossfade rule
+     * is Off. Per-station crossfade (with true overlap) is configured
+     * in PlaybackRule.crossfade and handled by the audio engine.
      */
     /**
      * Lyrics font-size multiplier. 1.0 is the Material baseline; the
