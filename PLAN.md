@@ -832,18 +832,18 @@ CREATE TABLE scrobble_queue (
 - Modify: `di/Modules.kt`, `App.kt` (drain on launch)
 - Test: `composeApp/src/commonTest/kotlin/com/visorcraft/radioshed/source/ScrobbleSyncTest.kt`
 
-- [ ] **Step 1:** Failing tests with a fake `ListenBrainzClient`
+- [x] **Step 1:** Failing tests with a fake `ListenBrainzClient`
   (succeed/fail scriptable): submit-success leaves queue empty;
   submit-failure enqueues; `drain()` submits FIFO and stops at first
   failure (bumping attempts); drain respects `NetworkPolicyGate` deny;
   entries with `attempts >= 10` are dropped with a log.
-- [ ] **Step 2:** Implement `ScrobbleSync(queue, client, settings, gate)`:
+- [x] **Step 2:** Implement `ScrobbleSync(queue, client, settings, gate)`:
   `suspend fun submitOrEnqueue(listen)`, `suspend fun drain()`. Change the
   `StationPlayback` call site (~line 891) to call `submitOrEnqueue` instead
   of the bare `listenBrainz.submit(...)`. Drain triggers: app launch
   (`App.kt`) and after every successful live submit.
-- [ ] **Step 3:** Tests PASS; `assembleDebug` green.
-- [ ] **Step 4:** Commit: `Queue failed scrobbles and drain on launch (PLAN 4.2)`
+- [x] **Step 3:** Tests PASS; `assembleDebug` green.
+- [x] **Step 4:** Commit: `Queue failed scrobbles and drain on launch (PLAN 4.2)`
 
 ### Task 4.3: Desktop ListenBrainz client
 
