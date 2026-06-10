@@ -66,6 +66,12 @@ class DjAnnouncer(
     // back-to-back announcements don't pick the identical phrasing.
     private var lastRenderedTemplate: String? = null
 
+    // Process-lifetime epoch millis of the last stale-cache eviction; 0 = never
+    // trimmed this session. Gates [maybeTrimStaleCache] to at most once per
+    // [TRIM_INTERVAL_MS]. @Volatile because precacheUpcoming can run on a
+    // background scope where two passes could otherwise both read 0 and trim.
+    @Volatile private var lastTrimMs: Long = 0L
+
     /**
      * Decide whether to announce on this transition, then (if due) render,
      * synthesize-or-cache, duck, play, and restore. Safe to call on every
@@ -116,55 +122,18 @@ class DjAnnouncer(
         //    automatic selection to these two for now.
         val slot = slotFor(transition)
 
-        // 4. Templates: user blob (JSON map of slot -> variants) or defaults.
-        //    parseTemplatesJson (shared with the settings editor) returns null
-        //    on blank/corrupt input, so we fall back to defaults here.
+        // 4 + 5. Templates → variant → render → cache-or-synthesize, all through
+        //    the shared helper so the clip is keyed and stored identically to the
+        //    precache path. Passes the already-captured announce-time clock so the
+        //    {time} token (and thus the cache key) matches whatever was rendered.
+        //    A null result (no templates, blank render, or synthesis failure)
+        //    aborts silently — no duck, no announcement. The helper hands back the
+        //    EXACT variant it picked so we record precisely the line we'll play as
+        //    [lastRenderedTemplate] — no second pick to drift from it.
         val templates = parseTemplatesJson(settings.getDjTemplates()) ?: DEFAULT_DJ_TEMPLATES
-        val variants = templates[slot]?.takeIf { it.isNotEmpty() }
-            ?: DEFAULT_DJ_TEMPLATES[slot]
-            ?: return
-        // Seed deterministically per (startingTrack.trackId, slot) — NOT the
-        // wall clock — so the precache path (which can't know the announce-time
-        // clock) renders the SAME variant the announce path will look up. Two
-        // consecutive tracks have different ids → different seeds → variety is
-        // preserved; replaying the same track yields the same line, which is
-        // acceptable. The avoid argument still suppresses an immediate
-        // back-to-back repeat of identical phrasing.
-        val template = DjTemplate.pickVariant(
-            variants,
-            seed = variantSeedFor(transition.startingTrack.trackId, slot),
-            avoid = lastRenderedTemplate,
-        )
-        val rendered = DjTemplate.render(template, transition.toVars(formatClockTime(now)))
-        // Empty render (e.g. every sentence referenced a null variable) is not
-        // an announcement — bail without touching counters.
-        if (rendered.isBlank()) return
-
-        // 5. Cache. Key the clip by the rendered text + voice so identical copy
-        //    re-uses the existing synthesized file. "system" is the only voice
-        //    id today (custom DjVoice selection lands with the voice picker).
-        val voiceId = "system"
-        val contentHash = cacheKeyFor(rendered, voiceId)
-        val existing = djCache.get(contentHash)
-        val clipPath = if (existing != null) {
-            djCache.touch(contentHash)
-            existing.blobPath
-        } else {
-            val dir = tts.cacheDir() ?: return
-            val outPath = "$dir/$contentHash.wav"
-            // Synthesis failure aborts silently — no duck, no announcement.
-            val ok = tts.synthesizeToFile(rendered, voice = null, outPath = outPath)
-            if (!ok) return
-            djCache.put(
-                cacheKey = contentHash,
-                blobPath = outPath,
-                templateHash = stableHash(template),
-                voiceId = voiceId,
-                variablesJson = encodeVars(transition),
-                durationMs = 0L,
-            )
-            outPath
-        }
+        val clip = renderAndEnsureCached(transition, slot, templates, formatClockTime(now)) ?: return
+        val clipPath = clip.blobPath
+        val template = clip.template
 
         // 6. Duck → play → restore. Capture the level we ducked FROM so the
         //    restore returns to whatever the rest of the pipeline (ReplayGain,
@@ -222,42 +191,81 @@ class DjAnnouncer(
         if (sleepTimer.state.value is SleepTimer.State.Running) return
         val templates = parseTemplatesJson(settings.getDjTemplates()) ?: DEFAULT_DJ_TEMPLATES
         for (transition in transitions) {
-            runCatching { precacheOne(transition, templates) }
+            // Precache renders against the current wall clock for the {time}
+            // token. A drift between now and announce time only matters for
+            // time-bearing templates; a clock-token miss simply re-synthesizes
+            // at announce time (still correct, just not pre-warmed), so we
+            // accept it. No ducking, no playback, no counter mutation —
+            // precache only warms the cache.
+            runCatching { renderAndEnsureCached(transition, slotFor(transition), templates, formatClockTime(nowMillis())) }
         }
+        // Piggy-back stale-cache eviction onto the precache pass: it already
+        // runs off the hot path, and gating by [lastTrimMs] keeps it to at most
+        // once per [TRIM_INTERVAL_MS] of process lifetime. runCatching so a trim
+        // failure can never break precaching (which is itself best-effort).
+        runCatching { maybeTrimStaleCache() }
     }
 
+    /** A playable clip plus the variant that produced it. [renderAndEnsureCached]
+     *  returns both so the announce path records exactly the line it plays as the
+     *  next avoid value rather than re-picking. */
+    private data class RenderedClip(val blobPath: String, val template: String)
+
     /**
-     * Render + synthesize-or-cache a single predicted transition. Uses the
-     * SAME slot pick, deterministic variant seed, render, cache key, and blob
-     * path as [announceIfDueInner], so the clip this writes is exactly the one
-     * the live announce path will look up. No ducking, no playback, no counter
-     * mutation — precache only warms the cache.
+     * Shared render → cache-key → blob-path → synthesize → put pipeline for both
+     * the live announce path and [precacheUpcoming]. Picks the SAME deterministic
+     * variant (seeded per (startingTrack.trackId, slot), avoiding the last
+     * rendered phrasing) and the SAME cache key in both callers, so a
+     * pre-synthesized clip is exactly the one the live lookup finds.
+     *
+     * Fast paths preserved from both callers: a cache HIT touches the row and
+     * returns the existing blob path (the announce path's instant replay; the
+     * precache no-op). A blank render or any synthesis failure returns null.
+     *
+     * @param timeText pre-formatted wall-clock string for the `{time}` token —
+     *  the announce path passes its already-captured announce-time clock so the
+     *  rendered text (and thus the cache key) matches; precache passes the
+     *  current clock.
+     * @return the cached or freshly synthesized blob path PLUS the variant that
+     *  produced it (so the announce path can record exactly what it'll play as
+     *  the next avoid value, without a second pick that could drift), or null on
+     *  any failure / blank render. Counters, ducking, and playback stay OUTSIDE
+     *  this helper — it only produces a playable clip.
      */
-    private suspend fun precacheOne(transition: TrackTransition, templates: Map<String, List<String>>) {
-        val slot = slotFor(transition)
+    private suspend fun renderAndEnsureCached(
+        transition: TrackTransition,
+        slot: String,
+        templates: Map<String, List<String>>,
+        timeText: String,
+    ): RenderedClip? {
         val variants = templates[slot]?.takeIf { it.isNotEmpty() }
             ?: DEFAULT_DJ_TEMPLATES[slot]
-            ?: return
-        // Avoid the last rendered phrasing exactly as the announce path does so
-        // the avoid-repeat fallback lands on the same variant in both paths.
+            ?: return null
         val template = DjTemplate.pickVariant(
             variants,
             seed = variantSeedFor(transition.startingTrack.trackId, slot),
             avoid = lastRenderedTemplate,
         )
-        // Precache renders against the current wall clock for the {time} token.
-        // A drift between now and announce time only matters for time-bearing
-        // templates; a clock-token miss simply re-synthesizes at announce time
-        // (still correct, just not pre-warmed), so we accept it.
-        val rendered = DjTemplate.render(template, transition.toVars(formatClockTime(nowMillis())))
-        if (rendered.isBlank()) return
+        val rendered = DjTemplate.render(template, transition.toVars(timeText))
+        if (rendered.isBlank()) return null
+        // Key the clip by the rendered text + voice so identical copy re-uses the
+        // existing synthesized file. "system" is the only voice id today (custom
+        // DjVoice selection lands with the voice picker).
         val voiceId = "system"
         val contentHash = cacheKeyFor(rendered, voiceId)
-        if (djCache.get(contentHash) != null) return // already cached → no-op
-        val dir = tts.cacheDir() ?: return
+        val existing = djCache.get(contentHash)
+        if (existing != null) {
+            djCache.touch(contentHash)
+            return RenderedClip(existing.blobPath, template)
+        }
+        val dir = tts.cacheDir() ?: return null
         val outPath = "$dir/$contentHash.wav"
         val ok = tts.synthesizeToFile(rendered, voice = null, outPath = outPath)
-        if (!ok) return
+        if (!ok) return null
+        // Benign double-synthesis race: if the announce and precache callers ever
+        // overlap on the same key, both synthesize to the SAME path (key → bytes
+        // are deterministic) and last put wins — identical content, identical
+        // pointer, so the overlap costs a redundant synth but never corrupts.
         djCache.put(
             cacheKey = contentHash,
             blobPath = outPath,
@@ -266,6 +274,23 @@ class DjAnnouncer(
             variablesJson = encodeVars(transition),
             durationMs = 0L,
         )
+        return RenderedClip(outPath, template)
+    }
+
+    /**
+     * Evict DJ clips unused for [DJ_CACHE_MAX_AGE_MS], at most once per
+     * [TRIM_INTERVAL_MS] of process lifetime (tracked by [lastTrimMs]). Driven
+     * off [precacheUpcoming] so it never sits on the announce hot path. The
+     * gate is a cheap millis compare, so calling it on every precache pass is
+     * fine. Wrapped by its caller in [runCatching] — eviction is pure cleanup
+     * and must never break anything.
+     */
+    private suspend fun maybeTrimStaleCache() {
+        val now = nowMillis()
+        val last = lastTrimMs
+        if (last != 0L && now - last < TRIM_INTERVAL_MS) return
+        lastTrimMs = now
+        djCache.trimStale(olderThanMs = now - DJ_CACHE_MAX_AGE_MS)
     }
 
     private fun encodeVars(transition: TrackTransition): String = runCatching {
@@ -289,6 +314,25 @@ class DjAnnouncer(
          * audible step yet comfortably above float rounding.
          */
         private const val VOLUME_EPSILON = 0.001f
+
+        /**
+         * A DJ clip not played for this long is evicted by
+         * [maybeTrimStaleCache]. 30 days: long enough that a track the user
+         * still rotates through keeps its pre-synthesized line, short enough
+         * that copy from a since-deleted station or a one-off skip doesn't
+         * accrete blobs on disk forever. Regenerating an evicted clip is cheap
+         * (one TTS pass on next play).
+         */
+        private const val DJ_CACHE_MAX_AGE_MS = 30L * 24 * 60 * 60 * 1000 // 30 days
+
+        /**
+         * Minimum process-lifetime gap between stale-cache sweeps. 6 hours: the
+         * cache only grows by a clip per announcement, so sweeping more often
+         * buys nothing, and a long-running session still trims a few times a
+         * day. The gate is in-memory (not persisted), so each fresh launch
+         * trims once on its first precache pass.
+         */
+        private const val TRIM_INTERVAL_MS = 6L * 60 * 60 * 1000 // 6 hours
 
         /**
          * The slot the announce path picks for [transition]: a station switch
@@ -315,7 +359,13 @@ class DjAnnouncer(
          * suppresses identical back-to-back phrasing).
          */
         fun variantSeedFor(trackId: Long, slot: String): Long =
-            stableHash("$trackId|$slot").hashCode().toLong()
+            // Parse the full FNV-1a-64 hex directly into the seed instead of
+            // funnelling it through String.hashCode() (which would collapse 64
+            // bits of entropy into 32, raising collisions between distinct
+            // tracks). stableHash emits UNSIGNED 64-bit hex, so values above
+            // Long.MAX_VALUE would overflow a plain toLong(16); parse as ULong
+            // and reinterpret the bit pattern to keep every value representable.
+            stableHash("$trackId|$slot").toULong(16).toLong()
 
         /**
          * Pure, deterministic scheduling decision — no clock reads, no DI, all

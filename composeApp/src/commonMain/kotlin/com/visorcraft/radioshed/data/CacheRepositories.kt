@@ -180,6 +180,31 @@ class DjCacheRepository(private val db: RadioShedDatabase) {
         db.cachesQueries.deleteAllDjAudio()
     }
 
+    /**
+     * Evict DJ clips not used since [olderThanMs] (epoch millis): delete each
+     * stale row AND the on-disk blob it points at. Returns the number of rows
+     * removed. Best-effort — a blob that's already gone (manual file-manager
+     * pass) or unreadable still drops its row, so the table never strands
+     * pointers to files that won't be recreated. Reuses the
+     * `last_used_at`-indexed `selectDjAudioOlderThan` read and the
+     * delete-by-key `deleteDjAudio` query, so no new SQL or migration is
+     * needed. Every step is wrapped so eviction can never throw into a caller.
+     */
+    suspend fun trimStale(olderThanMs: Long): Int = withContext(IODispatcher) {
+        var removed = 0
+        runCatching {
+            val stale = db.cachesQueries.selectDjAudioOlderThan(olderThanMs).executeAsList()
+            stale.forEach { row ->
+                runCatching {
+                    com.visorcraft.radioshed.source.deleteFileIfExists(row.blob_path)
+                    db.cachesQueries.deleteDjAudio(row.cache_key)
+                    removed += 1
+                }
+            }
+        }
+        removed
+    }
+
     /** Snapshot of every cached DJ row — used so the call site can
      *  delete the on-disk blobs each row points at before wiping the
      *  table. */
