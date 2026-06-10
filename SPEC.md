@@ -1206,7 +1206,7 @@ Goal: app feels like a music app, not a tech demo. Looks great on every form fac
 
 - [x] Stations Home: responsive grid (1 col compact, adaptive ≥240dp tiles for medium+) *(Phase 6 part 1 — sort/group/list-toggle deferred)*
 - [~] Stations Home: list/grid view toggle, sort menus, tile size XS–L preference — **tile-size selector + sort menu ship**. Tile size: Small / Medium / Large / Extra-large (200 / 240 / 280 / 360 dp Adaptive minSize, persisted via `SettingsStore.getStationsTileSizeDp`, top-bar dropdown). Sort: Custom (drag-order) / Name A→Z / Name Z→A / Most played / Least played / Recently played, persisted via `SettingsStore.getStationsSort` and applied last in the filter pipeline so the user's hide-built-ins / text-filter operations stay stable. Compact widths still force single-column. The list/grid toggle is still deferred — the tile-size selector covers most density needs and the list view would require duplicating the StationCard composable for a wider single-column layout.
-- [~] Long-press tile → quick actions — `StationActionSheet` (in `StationsHomeScreen.kt`) ships Open station / Edit / Duplicate / Pin to top / Move up / Move down / Reset stats / Delete. **"Add to Drive Mode quick-list" and "Add to Widget" are still deferred** — they pair with the Drive Mode overlay (Phase 8) and the widget-config UI (Phase 13).
+- [~] Long-press tile → quick actions — `StationActionSheet` (in `StationsHomeScreen.kt`) ships Open station / Edit / Duplicate / Pin to top / Move up / Move down / Reset stats / Delete / **Add to Drive Mode quick-list** (quick-list action ships; Phase 8). **"Add to Widget" is still deferred** — pairs with the widget-config UI (Phase 13).
 - [x] Now Playing screen: full-screen art, scrubber, controls — Coil-driven `AsyncImage` artwork, full transport, blurred backdrop (`BlurredBackdrop`), tap-to-expand fullscreen lightbox.
 - [x] Now Playing: layout variants for compact (stacked) and medium+ (two-pane) *(Phase 6 part 1 — three-pane queue/lyrics deferred to large-tablet pass)*
 - [x] Album-art aspect-ratio handling (square crop + blurred letterbox fill) — `AlbumArtPlaceholder` renders a two-layer composition: a `Modifier.blur(28.dp)`-cropped backdrop of the same image plus a `ContentScale.Fit` foreground. Square art reads as a single image (the layers are pixel-identical inside the frame); non-square art shows the full image with its own blurred halo filling the letterbox instead of edge-clipping.
@@ -1252,13 +1252,13 @@ Goal: RadioShed is usable while driving on both platforms.
 
 #### Android — Drive Mode
 
-- [ ] Drive Mode trigger registry (BT MAC, speed, schedule, headlight, manual) *(not started — requires `BluetoothManager` + `LocationManager` plumbing)*
-- [~] Big-button overlay UI — a manual Drive Mode toggle (`SettingsStore.getDriveMode()`) re-skins Now Playing's transport row with oversized hit targets and hides Replay-10/Forward-10 to keep the surface scannable. The full overlay scaling for non-standard console aspect ratios (1024×600, 1280×720, 1920×720, 1920×1080) is still deferred.
-- [ ] Configurable button selection (4–6 from available actions) *(deferred with overlay)*
-- [ ] Big-button station picker (6-tile grid, configurable contents) *(deferred with overlay)*
-- [~] Voice command engine — RecognizerIntent voice search (`ui/util/VoiceInput.kt`) ships in the Search field. The full offline-STT engine + wake word ("Hey RadioShed" / custom / off) is still deferred.
+- [~] Drive Mode trigger registry (BT MAC, speed, schedule, headlight, manual) — BT MAC (connect/disconnect via `AndroidBluetoothWatcher` ACL receiver), schedule (cross-midnight window via `util/MinuteWindow`), and manual toggle ship, orchestrated by `car/DriveModeController` (edge-triggered). Speed and headlight triggers are still deferred (need location/vehicle plumbing).
+- [~] Big-button overlay UI — a manual Drive Mode toggle (`SettingsStore.getDriveMode()`) re-skins Now Playing's transport row with oversized hit targets and hides Replay-10/Forward-10 to keep the surface scannable. Configurable button row now ships via `ui/car/DriveTransportRow` (reads `KEY_DRIVE_BUTTONS`). The full console-aspect-ratio overlay scaling for non-standard ratios (1024×600, 1280×720, 1920×720, 1920×1080) is still deferred.
+- [x] Configurable button selection (4–6 from available actions) — `ui/car/DriveModeSettingsScreen` buttons section + `DriveTransportRow` rendering (canonical order, 4-min enforced).
+- [x] Big-button station picker (6-tile grid, configurable contents) — `ui/car/DriveStationPicker` (quick-list driven, most-played fallback; 2×3 / 1-col responsive).
+- [~] Voice command engine — RecognizerIntent voice search (`ui/util/VoiceInput.kt`) ships in the Search field; drive transport row gains a voice-search button (`ui/car/DriveTransportRow` `bestStationMatch` via `VoiceInput`). The full offline-STT engine + wake word ("Hey RadioShed" / custom / off) is still deferred.
 - [ ] Steering-wheel key capture-and-bind UI *(deferred — needs `KeyEvent` capture flow)*
-- [ ] Auto-exit conditions (BT disconnect, speed threshold, manual) *(deferred with trigger registry)*
+- [~] Auto-exit conditions (BT disconnect, speed threshold, manual) — BT-disconnect and manual ship (`KEY_DRIVE_AUTO_EXIT`, `DriveModeController` falling edge). Speed-threshold exit is still deferred.
 - [ ] Integration test on AutoLinkR Elite hardware *(deferred — pairs with overlay)*
 
 #### iOS — CarPlay
