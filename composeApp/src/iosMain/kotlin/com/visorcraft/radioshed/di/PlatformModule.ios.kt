@@ -6,6 +6,8 @@ import com.visorcraft.radioshed.audio.AudioEngine
 import com.visorcraft.radioshed.audio.AudioEngineIos
 import com.visorcraft.radioshed.audio.EqualizerController
 import com.visorcraft.radioshed.audio.NullEqualizerController
+import com.visorcraft.radioshed.audio.NullTtsEngine
+import com.visorcraft.radioshed.audio.TtsEngine
 import com.visorcraft.radioshed.crash.CrashLogReader
 import com.visorcraft.radioshed.crash.CrashLogSharer
 import com.visorcraft.radioshed.crash.IosCrashLogReader
@@ -91,6 +93,7 @@ actual val platformModule: Module = module {
     // Phase 4: audio engine stub
     single<AudioEngine> { AudioEngineIos() }
     single<EqualizerController> { NullEqualizerController() }
+    single<TtsEngine> { NullTtsEngine() }
 
     // Crash log reader — iOS surfaces crashes via Xcode/TestFlight, not
     // an in-app feed. Stub returns empty.

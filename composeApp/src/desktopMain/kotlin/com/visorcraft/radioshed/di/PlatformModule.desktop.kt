@@ -6,6 +6,8 @@ import com.visorcraft.radioshed.audio.AudioEngine
 import com.visorcraft.radioshed.audio.AudioEngineDesktop
 import com.visorcraft.radioshed.audio.EqualizerController
 import com.visorcraft.radioshed.audio.NullEqualizerController
+import com.visorcraft.radioshed.audio.NullTtsEngine
+import com.visorcraft.radioshed.audio.TtsEngine
 import com.visorcraft.radioshed.crash.CrashLogReader
 import com.visorcraft.radioshed.crash.CrashLogSharer
 import com.visorcraft.radioshed.data.DatabaseDriverFactory
@@ -109,6 +111,7 @@ actual val platformModule: Module = module {
     // rather than crashing app startup.
     single<AudioEngine> { AudioEngineDesktop() }
     single<EqualizerController> { NullEqualizerController() }
+    single<TtsEngine> { NullTtsEngine() }
 
     single<CrashLogReader> { DesktopCrashLogReader() }
     single<CrashLogSharer> { DesktopCrashLogSharer() }
