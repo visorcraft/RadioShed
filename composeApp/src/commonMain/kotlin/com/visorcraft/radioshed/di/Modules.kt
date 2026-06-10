@@ -19,6 +19,7 @@ import com.visorcraft.radioshed.data.StationRepository
 import com.visorcraft.radioshed.data.WidgetConfigRepository
 import com.visorcraft.radioshed.db.RadioShedDatabase
 import com.visorcraft.radioshed.audio.SleepTimer
+import com.visorcraft.radioshed.car.DriveModeController
 import com.visorcraft.radioshed.scanner.Scanner
 import com.visorcraft.radioshed.source.BackupService
 import com.visorcraft.radioshed.source.LyricsService
@@ -115,6 +116,24 @@ val sharedModule: Module = module {
     single { DjAnnouncer(get(), get(), get(), get(), get(), get(), get()) }
     single { StationPlayback(get(), get(), get(), get(), get(), get(), get(), get(), get(), get()) }
     single { PresetSeeder(get(), get()) }
+
+    // Auto Drive Mode: activates Drive Mode from BluetoothWatcher matches +
+    // schedule windows. Given a dedicated app-lifetime scope (SupervisorJob so
+    // a collector failure can't tear down the whole controller; crashGuard so
+    // an uncaught exception logs instead of popping the OS "stopped" dialog).
+    // BluetoothWatcher is platform-bound (real on Android, Null elsewhere).
+    // App.kt calls start() once at launch.
+    single {
+        DriveModeController(
+            watcher = get(),
+            settings = get(),
+            scope = kotlinx.coroutines.CoroutineScope(
+                kotlinx.coroutines.SupervisorJob() +
+                    kotlinx.coroutines.Dispatchers.Default +
+                    com.visorcraft.radioshed.util.crashGuard("DriveModeController"),
+            ),
+        )
+    }
 }
 
 /** Convenience entry-point used by both platforms. */

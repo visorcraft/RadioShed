@@ -21,6 +21,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import com.visorcraft.radioshed.audio.AudioEngine
 import com.visorcraft.radioshed.audio.PlayerState
 import com.visorcraft.radioshed.audio.isMediaPlaybackAvailable
+import com.visorcraft.radioshed.car.DriveModeController
 import com.visorcraft.radioshed.data.LibraryRepository
 import com.visorcraft.radioshed.data.SettingsStore
 import com.visorcraft.radioshed.data.nowMillis
@@ -64,6 +65,7 @@ fun App(
     backupService: BackupService = koinInject(),
     presetSeeder: PresetSeeder = koinInject(),
     audioEngine: AudioEngine = koinInject(),
+    driveModeController: DriveModeController = koinInject(),
 ) {
     // Live-mutable theme inputs: read once from the persisted settings,
     // then hold in state so the AppSettingsScreen picker can re-theme
@@ -162,6 +164,14 @@ fun App(
             }
             current = target
         }
+
+        // Auto Drive Mode: start the trigger watcher once per process
+        // lifetime. Idempotent start(); the controller runs on its own
+        // app-lifetime scope and only writes Drive Mode on a trigger edge,
+        // so a manual toggle is never stomped between edges. No-op on
+        // desktop/iOS (NullBluetoothWatcher + no schedule ticks unless the
+        // user configured a Schedule trigger).
+        LaunchedEffect(Unit) { driveModeController.start() }
 
         // Auto-resume the last station once per process lifetime — gated
         // by an opt-in setting (off by default). LaunchedEffect(Unit)

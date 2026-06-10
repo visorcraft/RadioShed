@@ -22,6 +22,14 @@
          and returns null when it's absent, so weather is silently skipped. -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
+    <!-- Auto Drive Mode bt_device trigger: AndroidBluetoothWatcher reads the
+         connected/bonded device list + names to match a configured device's
+         MAC. Declared here only; the runtime grant stays user-initiated (the
+         Drive Mode config UI requests it). Without the grant the watcher
+         populates nothing and bonded-device enumeration returns empty, so the
+         trigger is silently inert. -->
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+
     <!-- Required for the "Set as ringtone" Track Info action. WRITE_SETTINGS
          is a special-permission grant the user toggles via the system
          Settings activity (not a runtime dialog) — we only need to declare

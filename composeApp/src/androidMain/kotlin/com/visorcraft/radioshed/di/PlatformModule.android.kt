@@ -11,6 +11,8 @@ import com.visorcraft.radioshed.audio.AndroidClipPlayer
 import com.visorcraft.radioshed.audio.AndroidTtsEngine
 import com.visorcraft.radioshed.audio.ClipPlayer
 import com.visorcraft.radioshed.audio.TtsEngine
+import com.visorcraft.radioshed.car.AndroidBluetoothWatcher
+import com.visorcraft.radioshed.car.BluetoothWatcher
 import com.visorcraft.radioshed.crash.AndroidCrashLogReader
 import com.visorcraft.radioshed.crash.AndroidCrashLogSharer
 import com.visorcraft.radioshed.crash.CrashLogReader
@@ -101,6 +103,9 @@ actual val platformModule: Module = module {
     single<HistoryExporter> { AndroidHistoryExporter(androidContext()) }
     single { StoragePermissions(androidContext()) }
     single { StorageVolumes(androidContext()) }
+
+    // Auto Drive Mode: real Bluetooth watcher on Android (Null elsewhere).
+    single<BluetoothWatcher> { AndroidBluetoothWatcher(androidContext()) }
 
     // Phase 4: audio engine
     single<AudioEngine> { AudioEngineAndroid(androidContext()) }

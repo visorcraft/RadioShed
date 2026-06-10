@@ -10,6 +10,8 @@ import com.visorcraft.radioshed.audio.NullClipPlayer
 import com.visorcraft.radioshed.audio.NullEqualizerController
 import com.visorcraft.radioshed.audio.NullTtsEngine
 import com.visorcraft.radioshed.audio.TtsEngine
+import com.visorcraft.radioshed.car.BluetoothWatcher
+import com.visorcraft.radioshed.car.NullBluetoothWatcher
 import com.visorcraft.radioshed.crash.CrashLogReader
 import com.visorcraft.radioshed.crash.CrashLogSharer
 import com.visorcraft.radioshed.data.DatabaseDriverFactory
@@ -110,6 +112,9 @@ actual val platformModule: Module = module {
     single { StoragePermissions() }
     single { StorageVolumes() }
     single { SyncthingDetector() }
+
+    // Auto Drive Mode: no Bluetooth peer on desktop — Null watcher.
+    single<BluetoothWatcher> { NullBluetoothWatcher() }
 
     // Phase 4: audio engine — JNA libvlc binding, lazily initialised on
     // first play() call so a missing libvlc surfaces as a clear error

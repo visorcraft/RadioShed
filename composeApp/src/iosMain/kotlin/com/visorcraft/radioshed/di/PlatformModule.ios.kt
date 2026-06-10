@@ -10,6 +10,8 @@ import com.visorcraft.radioshed.audio.NullClipPlayer
 import com.visorcraft.radioshed.audio.NullEqualizerController
 import com.visorcraft.radioshed.audio.NullTtsEngine
 import com.visorcraft.radioshed.audio.TtsEngine
+import com.visorcraft.radioshed.car.BluetoothWatcher
+import com.visorcraft.radioshed.car.NullBluetoothWatcher
 import com.visorcraft.radioshed.crash.CrashLogReader
 import com.visorcraft.radioshed.crash.CrashLogSharer
 import com.visorcraft.radioshed.crash.IosCrashLogReader
@@ -94,6 +96,9 @@ actual val platformModule: Module = module {
     single<HistoryExporter> { IosHistoryExporter() }
     single { StoragePermissions() }
     single { StorageVolumes() }
+
+    // Auto Drive Mode: no Bluetooth peer on iOS yet — Null watcher.
+    single<BluetoothWatcher> { NullBluetoothWatcher() }
 
     // Phase 4: audio engine stub
     single<AudioEngine> { AudioEngineIos() }

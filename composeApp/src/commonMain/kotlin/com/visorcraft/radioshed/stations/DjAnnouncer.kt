@@ -13,6 +13,7 @@ import com.visorcraft.radioshed.data.localMinutesOfDay
 import com.visorcraft.radioshed.data.nowMillis
 import com.visorcraft.radioshed.source.WeatherFetcher
 import com.visorcraft.radioshed.source.formatWeather
+import com.visorcraft.radioshed.util.isInMinuteWindow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.builtins.MapSerializer
@@ -441,17 +442,11 @@ class DjAnnouncer(
         /**
          * True when [minuteOfDay] falls inside the quiet window. An empty
          * window (start == end) suppresses nothing. A window where start > end
-         * wraps across midnight (e.g. 22:00 → 07:00).
+         * wraps across midnight (e.g. 22:00 → 07:00). Delegates to the shared
+         * [isInMinuteWindow] helper, which encodes exactly these semantics.
          */
-        private fun inQuietHours(minuteOfDay: Int, startMin: Int, endMin: Int): Boolean {
-            if (startMin == endMin) return false
-            return if (startMin < endMin) {
-                minuteOfDay in startMin until endMin
-            } else {
-                // Crosses midnight: inside if at/after start OR before end.
-                minuteOfDay >= startMin || minuteOfDay < endMin
-            }
-        }
+        private fun inQuietHours(minuteOfDay: Int, startMin: Int, endMin: Int): Boolean =
+            minuteOfDay.isInMinuteWindow(startMin, endMin)
 
         /**
          * FNV-1a 64-bit hash rendered as hex — a stable, platform-independent
