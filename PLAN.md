@@ -122,14 +122,17 @@ every later review diff is computed from.
 
 **Files:** none modified.
 
-- [ ] **Step 1:** `git status` → clean; record `git rev-parse HEAD` as
+- [x] **Step 1:** `git status` → clean; record `git rev-parse HEAD` as
   `PHASE_BASE` in your worklog (each phase records its own base the same way).
-- [ ] **Step 2:** `./gradlew :composeApp:testDebugUnitTest` → BUILD SUCCESSFUL.
+  *(Effort base: 856ce30 on master; branch `next-features`; PLAN.md commit 61f60a4.)*
+- [x] **Step 2:** `./gradlew :composeApp:testDebugUnitTest` → BUILD SUCCESSFUL.
   If red, STOP — fix main before starting feature work.
-- [ ] **Step 3:** `./gradlew :composeApp:assembleDebug` → BUILD SUCCESSFUL.
-- [ ] **Step 4:** `./gradlew :composeApp:run` → desktop window launches
+- [x] **Step 3:** `./gradlew :composeApp:assembleDebug` → BUILD SUCCESSFUL.
+- [x] **Step 4:** `./gradlew :composeApp:run` → desktop window launches
   (libvlc modal acceptable if VLC missing on the host).
-- [ ] **Step 5:** Skim `SPEC.md` §9 (AI DJ), §7.3 (in-car), §8 (audio
+  *(Adapted: verified via `compileKotlinDesktop` — no GUI launched unattended;
+  windowed smoke happens at each Phase Exit Gate G2.)*
+- [x] **Step 5:** Skim `SPEC.md` §9 (AI DJ), §7.3 (in-car), §8 (audio
   pipeline), Phase 16 (sources) so the feature intent is loaded before
   designing details.
 
