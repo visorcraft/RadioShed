@@ -122,9 +122,10 @@ writes. (See FAQ for what to do if you need those.)
 
 ### Batch tag editor
 
-Library → Songs tab → long-press any track to enter **selection mode**.
-Taps then toggle checkboxes instead of playing; a bottom bar shows the
-count and an **Edit tags** button.
+Library → Songs tab → long-press any track and choose **Select** from
+the context sheet to enter **selection mode**. Taps then toggle checkboxes
+instead of playing; a bottom bar shows the count and an **Edit tags**
+button.
 
 The batch editor merges the selected tracks' tags:
 
@@ -134,10 +135,10 @@ The batch editor merges the selected tracks' tags:
 - **Empty** — placeholder shows *"Empty"*; same rule — untouched means
   unchanged.
 
-Only fields you actually edit are written. The dialog shows a live count
-(*"47 written, 2 failed"*). On success, every affected folder rescans
-automatically so the library DB updates. Switching to another tab
-clears the selection.
+Only fields you actually edit are written. After saving, the dialog
+shows a summary count (*"47 written, 2 failed"*). On success, every
+affected folder rescans automatically so the library DB updates.
+Switching to another tab clears the selection.
 
 ---
 
@@ -180,7 +181,7 @@ Per-station crossfade is configured in the Station Editor:
 
 - **Off** — no overlap; the end-fade setting applies if configured.
 - **Timed** — fixed overlap in seconds (1–12 s) with a choice of curve
-  (Equal Power, Linear, S-Curve).
+  (Equal Power, Linear, S-curve).
 - **Smart** — lets the engine decide overlap based on track content
   (default).
 
