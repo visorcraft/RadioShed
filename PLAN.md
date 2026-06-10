@@ -234,7 +234,7 @@ class NullTtsEngine : TtsEngine {
 - Create: `composeApp/src/commonMain/kotlin/com/visorcraft/radioshed/stations/DjTemplate.kt`
 - Test: `composeApp/src/commonTest/kotlin/com/visorcraft/radioshed/stations/DjTemplateTest.kt`
 
-- [ ] **Step 1:** Write the failing tests first:
+- [x] **Step 1:** Write the failing tests first:
 
 ```kotlin
 package com.visorcraft.radioshed.stations
@@ -296,19 +296,19 @@ class DjTemplateTest {
 }
 ```
 
-- [ ] **Step 2:** Run
+- [x] **Step 2:** Run
   `./gradlew :composeApp:testDebugUnitTest --tests "com.visorcraft.radioshed.stations.DjTemplateTest"`
   → FAIL (unresolved references).
-- [ ] **Step 3:** Implement `DjTemplateVars` (data class of nullable strings)
+- [x] **Step 3:** Implement `DjTemplateVars` (data class of nullable strings)
   and `object DjTemplate` with `render(template, vars)` (sentence-split on
   `.`/`!`/`?`, drop sentences whose `{var}` resolved null, substitute the
   rest) and `pickVariant(variants, seed, avoid = null)` (seeded
   `kotlin.random.Random(seed)`; re-pick once if the result equals `avoid`).
-- [ ] **Step 4:** Same test command → PASS.
-- [ ] **Step 5:** Add `DEFAULT_DJ_TEMPLATES` in the same file: 3–4 variants
+- [x] **Step 4:** Same test command → PASS.
+- [x] **Step 5:** Add `DEFAULT_DJ_TEMPLATES` in the same file: 3–4 variants
   for each of the four template slots (station ID, up-next, recap,
   time-of-day) per SPEC §9 — plain Kotlin `List<String>` constants.
-- [ ] **Step 6:** Commit: `Add DJ template engine with variant randomizer (PLAN 1.3)`
+- [x] **Step 6:** Commit: `Add DJ template engine with variant randomizer (PLAN 1.3)`
 
 ### Task 1.4: DJ settings + backup keys
 
