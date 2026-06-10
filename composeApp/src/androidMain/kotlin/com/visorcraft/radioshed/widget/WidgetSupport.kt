@@ -20,8 +20,11 @@ internal object WidgetSupport {
      * Decode a file-backed artwork URI to a Bitmap scaled to [ARTWORK_TARGET_PX].
      * Returns null on any failure (missing file, bad URI, decode error).
      *
-     * The caller owns the returned Bitmap and must recycle it after the
-     * RemoteViews have been applied via [android.appwidget.AppWidgetManager.updateAppWidget].
+     * The caller owns the returned Bitmap and must recycle it **after**
+     * [android.appwidget.AppWidgetManager.updateAppWidget] has returned.
+     * Recycling before that point parcells a recycled bitmap across IPC,
+     * which yields either a blank tile or "Canvas: trying to use a recycled
+     * bitmap" inside AppWidgetHost.
      */
     fun decodeArtworkBitmap(uriString: String?): Bitmap? {
         if (uriString.isNullOrBlank()) return null

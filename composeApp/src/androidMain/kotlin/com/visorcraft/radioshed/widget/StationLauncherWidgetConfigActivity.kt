@@ -150,9 +150,7 @@ private fun StationLauncherConfigScreen(
                 actions = {
                     IconButton(onClick = {
                         scope.launch {
-                            val nonNegative = assignedIds.map { if (it < 0) null else it }
-                                .filterNotNull()
-                            val config = LauncherConfig(stationIds = nonNegative)
+                            val config = LauncherConfig(stationIds = assignedIds)
                             widgetConfigRepo.upsert(
                                 widgetKey = StationLauncherWidget.widgetKey(appWidgetId),
                                 widgetType = "station-launcher",
