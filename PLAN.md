@@ -317,11 +317,11 @@ class DjTemplateTest {
 - Test: extend the existing settings/backup round-trip test class (find it via
   `grep -rl "dumpForBackup" composeApp/src/commonTest/`)
 
-- [ ] **Step 1:** Failing test: round-trip the new keys through
+- [x] **Step 1:** Failing test: round-trip the new keys through
   `dumpForBackup()` → `restoreFromBackup()` and assert values survive
   (mirror the existing test's structure for adjacent keys).
-- [ ] **Step 2:** Run it → FAIL.
-- [ ] **Step 3:** Add keys + getter/setters, each in **all three places**
+- [x] **Step 2:** Run it → FAIL.
+- [x] **Step 3:** Add keys + getter/setters, each in **all three places**
   (getter/setter, `dumpForBackup` bucket, `expectedTypeForKey`):
   - `KEY_DJ_ENABLED` (Boolean, default false)
   - `KEY_DJ_FREQUENCY` (String enum: `off` / `every` / `every_n` /
@@ -333,8 +333,8 @@ class DjTemplateTest {
   - `KEY_DJ_DUCK_FRACTION` (Float, default 0.2f, coerce 0.0f..0.6f)
   - `KEY_DJ_TEMPLATES` (String, JSON map slot→list of variants; empty string
     = use `DEFAULT_DJ_TEMPLATES`)
-- [ ] **Step 4:** Test → PASS.
-- [ ] **Step 5:** Commit: `Add DJ settings keys with backup round-trip (PLAN 1.4)`
+- [x] **Step 4:** Test → PASS.
+- [x] **Step 5:** Commit: `Add DJ settings keys with backup round-trip (PLAN 1.4)`
 
 ### Task 1.5: `DjAnnouncer` orchestration (common, TDD on the decision logic)
 
