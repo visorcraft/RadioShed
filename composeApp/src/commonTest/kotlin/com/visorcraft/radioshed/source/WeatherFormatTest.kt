@@ -22,6 +22,10 @@ class WeatherFormatTest {
             67 to "rainy",
             71 to "snowy",
             77 to "snowy",
+            80 to "rainy",  // rain shower: slight
+            81 to "rainy",  // rain shower: moderate
+            82 to "rainy",  // rain shower: violent
+            85 to "snowy",
             86 to "snowy",
             95 to "stormy",
             99 to "stormy",
@@ -37,6 +41,8 @@ class WeatherFormatTest {
         assertEquals("unsettled", describeWmoCode(4))
         assertEquals("unsettled", describeWmoCode(44))
         assertEquals("unsettled", describeWmoCode(70))
+        assertEquals("unsettled", describeWmoCode(78))  // gap: snow grains (unused in Open-Meteo)
+        assertEquals("unsettled", describeWmoCode(83))  // gap: freezing rain showers (unused)
         assertEquals("unsettled", describeWmoCode(100))
         assertEquals("unsettled", describeWmoCode(-1))
     }
