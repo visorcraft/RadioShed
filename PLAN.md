@@ -1034,11 +1034,11 @@ documented in `EditTagsDialog.kt:40`).
 Existing: `NowPlayingWidget.kt` (classic RemoteViews `AppWidgetProvider`) and
 `WidgetConfigRepository` + `Widgets.sq` (already in DI) for per-widget config.
 
-- [ ] **Step 1:** Read `NowPlayingWidget.kt` fully; extract any
+- [x] **Step 1:** Read `NowPlayingWidget.kt` fully; extract any
   PendingIntent/bitmap helpers you'd otherwise copy into a shared
   `widget/WidgetSupport.kt` (this is a known dedup hotspot — flagged in the
   exit gate).
-- [ ] **Step 2:** `StationLauncherWidget`: grid of 1/4/6 station tiles
+- [x] **Step 2:** `StationLauncherWidget`: grid of 1/4/6 station tiles
   (artwork + name via RemoteViews; 12-tile XL variant only if RemoteViews
   grid behaves — otherwise document the cap), tap = launch app + start that
   station through the same intent path the Now-Playing widget uses for its
@@ -1047,9 +1047,9 @@ Existing: `NowPlayingWidget.kt` (classic RemoteViews `AppWidgetProvider`) and
   stations per slot, persisted in `WidgetConfigRepository` keyed by
   `appWidgetId`; deleted widgets clean their rows
   (`onDeleted`).
-- [ ] **Step 3:** Device: add 1×1 and 2×3 widgets, launch stations from
+- [x] **Step 3:** Device: add 1×1 and 2×3 widgets, launch stations from
   cold + warm app states; rotate; remove widget → config row gone.
-- [ ] **Step 4:** Commit: `Add station-launcher home-screen widget (PLAN 6.2)`
+- [x] **Step 4:** Commit: `Add station-launcher home-screen widget (PLAN 6.2)`
 
 ### Task 6.3: SmartQuery auto-rotate refresh (TDD)
 
@@ -1179,15 +1179,22 @@ peer-review gates actually ran.
 - StationPlayback ctor slimmed (client+gate → ScrobbleSync); gate logic now
   lives in exactly one place.
 
-## Phase 5 status — paused 2026-06-10 (phase incomplete)
+## Phase 5 status — completed 2026-06-10
 
 - 5.1 desktop Subsonic client: byte-identical mirror verified, approved.
 - 5.2 SubsonicSource: committed 6c0a35e; implementer-run opencode approved
-  issues=0; controller spec/quality reviews owed on resume.
-- 5.3 hybrid stations (editor UI + end-to-end) and 5.4 phase exit gate: not
-  started. No SPEC Phase 16 boxes flipped yet for this phase.
-- Process note adopted mid-phase (user demand, also added by the user to
-  AGENTS.md): all subagent/peer-review prompt+output scratch files must use
-  collision-proof mktemp paths, never /tmp/prompt.txt. Earlier phases'
-  reviews used generic paths; one contaminated review (foreign-project
-  findings) was detected and discarded during Phase 1's Task 1.6.
+  issues=0; controller spec/quality reviews completed on resume.
+- 5.3 hybrid stations: committed 1e76d14.
+- 5.4 phase exit gate: committed 8fd2bcc + 941740d + 04acb82.
+
+## Task 6.2 review — 2026-06-10
+
+- opencode (deepseek, --variant high): `VERDICT approved issues=3`.
+- Issue 1 (real): `WidgetSupport.decodeArtworkBitmap` KDoc said caller must
+  recycle, but didn't stress the *after updateAppWidget* timing. Fixed in
+  39db323 with an explicit warning about pre-updateAppWidget recycling.
+- Issue 2 (real): config save path dropped empty-slot `-1L` sentinels,
+  collapsing positions on reload. Fixed in 39db323 by saving the full
+  `assignedIds` list including sentinels.
+- Issue 3 (real): `strings.xml` lacked final newline. Fixed in 39db323.
+- No false positives to log.
