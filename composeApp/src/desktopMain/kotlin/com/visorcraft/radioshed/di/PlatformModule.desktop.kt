@@ -48,8 +48,8 @@ import com.visorcraft.radioshed.source.LyricsFetcher
 import com.visorcraft.radioshed.source.MusicBrainzClient
 import com.visorcraft.radioshed.source.DesktopLocalLyricsLoader
 import com.visorcraft.radioshed.source.DesktopLyricsFetcher
+import com.visorcraft.radioshed.source.DesktopListenBrainzClient
 import com.visorcraft.radioshed.source.NullCoverArtFetcher
-import com.visorcraft.radioshed.source.NullListenBrainzClient
 import com.visorcraft.radioshed.source.NullMusicBrainzClient
 import com.visorcraft.radioshed.source.NullSubsonicClient
 import com.visorcraft.radioshed.source.NullWikipediaBioFetcher
@@ -71,9 +71,9 @@ import java.util.prefs.Preferences
 /**
  * Desktop Koin module. Mirrors the iOS module's structure but binds
  * desktop-specific implementations: real DB driver, real file
- * scanning + tag reading + artwork persisting, JNA libvlc audio, and
- * Null* stubs for the surfaces deferred from the spike (lyrics fetchers,
- * MusicBrainz, ListenBrainz, etc.).
+ * scanning + tag reading + artwork persisting, JNA libvlc audio,
+ * real ListenBrainz scrobbling, and Null* stubs for surfaces still
+ * deferred (MusicBrainz, Subsonic, etc.).
  *
  * Settings: backed by `java.util.prefs.Preferences` under the
  * `com/visorcraft/radioshed` user node. Cross-platform with the
@@ -93,7 +93,7 @@ actual val platformModule: Module = module {
     single<BackupPackager> { DesktopBackupPackager() }
     single<MusicBrainzClient> { NullMusicBrainzClient() }
     single<WikipediaBioFetcher> { NullWikipediaBioFetcher() }
-    single<ListenBrainzClient> { NullListenBrainzClient() }
+    single<ListenBrainzClient> { DesktopListenBrainzClient() }
     single<SubsonicClient> { NullSubsonicClient() }
     single<ArtworkPersister> { DesktopArtworkPersister() }
     single<CoverArtFetcher> { NullCoverArtFetcher() }
