@@ -34,6 +34,8 @@ import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -118,6 +120,10 @@ fun LibraryBrowserScreen(
     // Sister surface to TrackContextSheet, but at album/artist scope.
     var contextAlbum by remember { mutableStateOf<Album?>(null) }
     var contextArtist by remember { mutableStateOf<Artist?>(null) }
+    // Batch-selection state (Songs tab only).
+    var selectedTrackIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
+    val inSelectionMode = selectedTrackIds.isNotEmpty()
+    var showBatchEditDialog by remember { mutableStateOf(false) }
     // Now-playing indicator on Songs rows: collect the engine's
     // current track id so each row can self-tag.
     val nowPlaying by audioEngine.nowPlaying.collectAsState()
@@ -220,7 +226,10 @@ fun LibraryBrowserScreen(
     // `LibraryTab.Songs ->` branch and silently reset every time the
     // user navigated away and back).
     var songsFilter by remember { mutableStateOf("") }
-    LaunchedEffect(selectedTab) { settings.setLibraryTabIndex(selectedTab.ordinal) }
+    LaunchedEffect(selectedTab) {
+        settings.setLibraryTabIndex(selectedTab.ordinal)
+        selectedTrackIds = emptySet()
+    }
     LaunchedEffect(sortOrder) { settings.setLibrarySongSort(sortOrder.name) }
     LaunchedEffect(artistSort) { settings.setLibraryArtistSort(artistSort.name) }
     LaunchedEffect(albumSort) { settings.setLibraryAlbumSort(albumSort.name) }
@@ -230,26 +239,35 @@ fun LibraryBrowserScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    // Subtitle line shows the live counts beneath the
-                    // header so users get a sense of library size at a
-                    // glance — and the count helps confirm that a fresh
-                    // scan picked things up.
-                    Column {
-                        Text("Library", style = MaterialTheme.typography.titleSmall)
-                        val countLabel = buildString {
-                            append("${allTracks.size} tracks")
-                            if (artists.isNotEmpty()) append(" · ${artists.size} artists")
-                            if (albums.isNotEmpty()) append(" · ${albums.size} albums")
+                    if (inSelectionMode) {
+                        Text("${selectedTrackIds.size} selected")
+                    } else {
+                        // Subtitle line shows the live counts beneath the
+                        // header so users get a sense of library size at a
+                        // glance — and the count helps confirm that a fresh
+                        // scan picked things up.
+                        Column {
+                            Text("Library", style = MaterialTheme.typography.titleSmall)
+                            val countLabel = buildString {
+                                append("${allTracks.size} tracks")
+                                if (artists.isNotEmpty()) append(" · ${artists.size} artists")
+                                if (albums.isNotEmpty()) append(" · ${albums.size} albums")
+                            }
+                            Text(
+                                text = countLabel,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                            )
                         }
-                        Text(
-                            text = countLabel,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                        )
                     }
                 },
                 navigationIcon = { TextButton(onClick = onBack) { Text("Back") } },
                 actions = {
+                    if (inSelectionMode) {
+                        TextButton(onClick = { selectedTrackIds = emptySet() }) {
+                            Text("Clear")
+                        }
+                    } else {
                     if (selectedTab == LibraryTab.Albums && albums.isNotEmpty()) {
                         // Random-album entry point on the Albums view: picks
                         // one album from the visible grid at random and
@@ -435,11 +453,39 @@ fun LibraryBrowserScreen(
                             contentDescription = "Manage folders",
                         )
                     }
+                    }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface,
                 ),
             )
+        },
+        bottomBar = {
+            if (inSelectionMode && selectedTab == LibraryTab.Songs) {
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    tonalElevation = 3.dp,
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = "${selectedTrackIds.size} selected",
+                            style = MaterialTheme.typography.titleSmall,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Button(
+                            onClick = { showBatchEditDialog = true },
+                        ) {
+                            Text("Edit tags")
+                        }
+                    }
+                }
+            }
         },
         containerColor = MaterialTheme.colorScheme.background,
     ) { padding ->
@@ -621,8 +667,27 @@ fun LibraryBrowserScreen(
                                     startIndex = idx,
                                 )
                             },
-                            onLongPress = { track -> contextTrackId = track.id },
+                            onLongPress = { track ->
+                                if (!inSelectionMode) {
+                                    selectedTrackIds = setOf(track.id)
+                                } else {
+                                    selectedTrackIds = if (track.id in selectedTrackIds) {
+                                        selectedTrackIds - track.id
+                                    } else {
+                                        selectedTrackIds + track.id
+                                    }
+                                }
+                            },
                             albumNameById = albumNameById,
+                            selectionMode = inSelectionMode,
+                            selectedIds = selectedTrackIds,
+                            onToggleSelection = { id ->
+                                selectedTrackIds = if (id in selectedTrackIds) {
+                                    selectedTrackIds - id
+                                } else {
+                                    selectedTrackIds + id
+                                }
+                            },
                         )
                     } else {
                         SongList(
@@ -632,8 +697,27 @@ fun LibraryBrowserScreen(
                                 val idx = sorted.indexOf(track).coerceAtLeast(0)
                                 stationPlayback.playTracks(sorted, startIndex = idx)
                             },
-                            onLongPress = { track -> contextTrackId = track.id },
+                            onLongPress = { track ->
+                                if (!inSelectionMode) {
+                                    selectedTrackIds = setOf(track.id)
+                                } else {
+                                    selectedTrackIds = if (track.id in selectedTrackIds) {
+                                        selectedTrackIds - track.id
+                                    } else {
+                                        selectedTrackIds + track.id
+                                    }
+                                }
+                            },
                             albumNameById = albumNameById,
+                            selectionMode = inSelectionMode,
+                            selectedIds = selectedTrackIds,
+                            onToggleSelection = { id ->
+                                selectedTrackIds = if (id in selectedTrackIds) {
+                                    selectedTrackIds - id
+                                } else {
+                                    selectedTrackIds + id
+                                }
+                            },
                         )
                     }
                 }
@@ -793,6 +877,17 @@ fun LibraryBrowserScreen(
             onMerged = { mergingArtist = null },
         )
     }
+    if (showBatchEditDialog) {
+        val selectedTracks = allTracks.filter { it.id in selectedTrackIds }
+        BatchEditTagsDialog(
+            tracks = selectedTracks,
+            onDismiss = {
+                showBatchEditDialog = false
+                selectedTrackIds = emptySet()
+            },
+            onSaved = { selectedTrackIds = emptySet() },
+        )
+    }
 }
 
 private enum class LibraryTab(val label: String) {
@@ -843,6 +938,9 @@ private fun SongList(
     onPlay: (Track) -> Unit,
     onLongPress: (Track) -> Unit = {},
     albumNameById: Map<Long, String> = emptyMap(),
+    selectionMode: Boolean = false,
+    selectedIds: Set<Long> = emptySet(),
+    onToggleSelection: (Long) -> Unit = {},
 ) {
     if (tracks.isEmpty()) {
         EmptyHint("No songs match this view.")
@@ -867,7 +965,10 @@ private fun SongList(
                 SongRow(
                     track = track,
                     isCurrent = track.id == currentTrackId,
+                    isSelected = track.id in selectedIds,
+                    selectionMode = selectionMode,
                     onTap = { onPlay(track) },
+                    onToggleSelection = { onToggleSelection(track.id) },
                     onLongPress = { onLongPress(track) },
                     albumName = track.albumId?.let { albumNameById[it] },
                 )
@@ -906,15 +1007,25 @@ private fun SongList(
 private fun SongRow(
     track: Track,
     isCurrent: Boolean = false,
+    isSelected: Boolean = false,
+    selectionMode: Boolean = false,
     onTap: () -> Unit,
+    onToggleSelection: () -> Unit = {},
     onLongPress: () -> Unit = {},
     albumName: String? = null,
 ) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .combinedClickable(onClick = onTap, onLongClick = onLongPress),
-        color = Color.Transparent,
+            .combinedClickable(
+                onClick = if (selectionMode) onToggleSelection else onTap,
+                onLongClick = onLongPress,
+            ),
+        color = if (isSelected) {
+            MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+        } else {
+            Color.Transparent
+        },
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
@@ -964,6 +1075,13 @@ private fun SongRow(
                     color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
+                )
+            }
+            if (selectionMode) {
+                Spacer(Modifier.size(12.dp))
+                Checkbox(
+                    checked = isSelected,
+                    onCheckedChange = { onToggleSelection() },
                 )
             }
         }
