@@ -9,6 +9,7 @@ import java.io.File
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -83,7 +84,14 @@ class AndroidTtsEngine(private val context: Context) : TtsEngine {
                 return@runCatching false
             }
 
-            resultDeferred.await()
+            // Guard against cancellation leaking the map entry: the TTS callback will
+            // never fire for a coroutine that was cancelled, so remove the entry here.
+            try {
+                resultDeferred.await()
+            } catch (e: CancellationException) {
+                utteranceListeners.remove(utteranceId)
+                throw e
+            }
         }.getOrDefault(false)
 
     /**
