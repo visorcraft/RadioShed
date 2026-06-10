@@ -213,19 +213,20 @@ class NullTtsEngine : TtsEngine {
 - Create: `composeApp/src/androidMain/kotlin/com/visorcraft/radioshed/audio/AndroidTtsEngine.kt`
 - Modify: `composeApp/src/androidMain/kotlin/com/visorcraft/radioshed/di/PlatformModule.android.kt`
 
-- [ ] **Step 1:** Implement `AndroidTtsEngine(private val context: Context)`:
+- [x] **Step 1:** Implement `AndroidTtsEngine(private val context: Context)`:
   lazy `TextToSpeech` init guarded by a `CompletableDeferred<Boolean>` for the
   init callback; `synthesizeToFile` wraps
   `TextToSpeech.synthesizeToFile(text, params, File(outPath), utteranceId)` +
   `setOnUtteranceProgressListener` completion into a suspending call
   (`suspendCancellableCoroutine`); apply `voice?.rate`/`voice?.pitch` via
   `setSpeechRate` / `setPitch`; `runCatching` everything → false on failure.
-- [ ] **Step 2:** Swap the Android binding:
+- [x] **Step 2:** Swap the Android binding:
   `single<TtsEngine> { AndroidTtsEngine(androidContext()) }`.
-- [ ] **Step 3:** `./gradlew :composeApp:assembleDebug` → BUILD SUCCESSFUL.
-- [ ] **Step 4:** Manual device check (deferred to Task 1.7's end-to-end pass
+- [x] **Step 3:** `./gradlew :composeApp:assembleDebug` → BUILD SUCCESSFUL.
+- [x] **Step 4:** Manual device check (deferred to Task 1.7's end-to-end pass
   is acceptable): a debug toast/log that a file > 0 bytes was produced.
-- [ ] **Step 5:** Commit: `Add Android TextToSpeech engine (PLAN 1.2)`
+  *(Deferred to the Phase 1 device pass per this step's own note.)*
+- [x] **Step 5:** Commit: `Add Android TextToSpeech engine (PLAN 1.2)`
 
 ### Task 1.3: DJ template engine (pure common, fully TDD)
 
