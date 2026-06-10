@@ -1277,17 +1277,17 @@ Goal: RadioShed is usable while driving on both platforms.
 
 Goal: optional radio-style voice between tracks, configurable per station.
 
-- [ ] TTS abstraction in `commonMain`
-- [ ] **(Android)** `TextToSpeech` impl
+- [x] TTS abstraction in `commonMain` — `audio/TtsEngine.kt` (`TtsEngine` interface, `NullTtsEngine`, `ClipPlayer`)
+- [x] **(Android)** `TextToSpeech` impl — `audio/AndroidTtsEngine.kt` (`AndroidTtsEngine.synthesizeToFile`)
 - [ ] **(iOS)** `AVSpeechSynthesizer` impl
-- [ ] Template engine: `{station}`, `{track}`, `{artist}`, `{next_track}`, `{time}`, `{weather}`
-- [ ] Markov-style phrasing randomizer to avoid identical-sounding repeats
-- [ ] Default templates library (station ID, up-next, recap, time)
-- [ ] Template editor UI
-- [ ] TTS pre-cache (1–2 tracks ahead, disk-keyed by hash)
-- [ ] Music ducking implementation in both audio engines
-- [ ] Per-station DJ frequency config (off / every / every N / minutes / station-change)
-- [ ] Quiet-hours window
+- [x] Template engine: `{station}`, `{track}`, `{artist}`, `{next_track}`, `{time}`, `{weather}` — `stations/DjTemplate.kt` (`DjTemplate.render`)
+- [~] Markov-style phrasing randomizer to avoid identical-sounding repeats — `stations/DjTemplate.kt` (`DjTemplate.pickVariant`); seeded-RNG + avoid-last, not a Markov chain (no transition-probability table)
+- [x] Default templates library (station ID, up-next, recap, time) — `stations/DjTemplate.kt` (`DEFAULT_DJ_TEMPLATES`, `DjSlots`)
+- [x] Template editor UI — `ui/settings/DjSettingsScreen.kt`
+- [x] TTS pre-cache (1–2 tracks ahead, disk-keyed by hash) — `stations/DjAnnouncer.kt` (`precacheUpcoming`, `cacheKeyFor` FNV-64, `DjCacheRepository`, `trimStale`)
+- [x] Music ducking implementation in both audio engines — `stations/DjAnnouncer.kt` (engine-agnostic duck/restore via `AudioEngine.setVolume`; desktop announces no-op due to `NullTtsEngine`, not missing duck code)
+- [~] Per-station DJ frequency config (off / every / every N / minutes / station-change) — shipped global only (`SettingsStore` `KEY_DJ_FREQUENCY*`); per-station override not implemented
+- [x] Quiet-hours window — `stations/DjAnnouncer.kt` (`shouldAnnounce` / `inQuietHours`, cross-midnight logic; `KEY_DJ_QUIET_START_MIN` / `KEY_DJ_QUIET_END_MIN`)
 - [ ] Cloud TTS plugin point + ElevenLabs reference impl (BYO API key)
 
 ### Phase 10 — Online integrations (~1–2 weeks)
@@ -1303,7 +1303,7 @@ Goal: power users with connectivity get richer art, lyrics, scrobbling, recs.
 - [ ] Last.fm OAuth flow + scrobbling client *(deferred)*
 - [ ] ListenBrainz token-based scrobbling client *(deferred)*
 - [ ] AcoustID + Chromaprint fingerprinting *(deferred)*
-- [ ] Open-Meteo client (weather variable for DJ templates) *(deferred — paired with AI DJ)*
+- [x] Open-Meteo client (weather variable for DJ templates) — `source/WeatherFetcher.kt` + `AndroidWeatherFetcher` (15-min cache, connectivity-gated)
 - [ ] Wikipedia/Wikidata client (artist bio) *(deferred)*
 - [x] Per-service toggle UI in Settings → Online & Sync — Settings → Online exposes the four-way global `ConnectivityPolicy` picker (Always / Wi-Fi only / Ask each time / Never), plus per-service Inherit / Always / Wi-Fi only / Never overrides for Cover Art Archive and LRClib lyrics. `NetworkPolicyGate.allowAutomaticFetch(service)` / `allowUserInitiatedFetch(service)` consult `SettingsStore.getServicePolicyOverride(service)` and only fall back to the global policy on `Inherit`. Override values round-trip through backup; `Inherit` is stored as the absence of a row to keep default-config bundles small.
 
