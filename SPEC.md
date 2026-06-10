@@ -1235,8 +1235,8 @@ Goal: power-user audio features work and sound right on both platforms.
 - [ ] Background LUFS scan job for tag-less files *(deferred)*
 - [ ] **Graphic EQ: 10 / 15 / 31-band selectable** on both engines *(deferred — needs custom DSP via biquad cascade. 5-band shipped today via Android system Equalizer.)*
 - [ ] **Parametric EQ** peaks/notches on both engines *(deferred with band-count work)*
-- [ ] **AutoEQ profile import** (1000+ headphone presets bundled or user-importable) *(deferred with band-count work)*
-- [ ] **Equalizer APO `.txt` config import** *(deferred with band-count work)*
+- [x] **AutoEQ profile import** (1000+ headphone presets bundled or user-importable) — shipped in 2026-05-04x batch (#3599).
+- [x] **Equalizer APO `.txt` config import** — shipped in 2026-05-04x batch (#3589).
 - [ ] **Per-output-device EQ profiles** (auto-switch on route change) *(deferred — needs route-change observer + per-route preset binding)*
 - [x] EQ preset manager UI + JSON import/export — `ui/settings/EqualizerScreen.kt` with built-in presets (Flat / Bass Boost / Vocal / Treble), user "Save current…" custom presets, long-press chip to delete, and JSON import / export round-trip via `EqPresetIO`. Bypass switch + persisted band gains.
 - [ ] Output normalization limiter (LUFS target, soft-knee) *(deferred)*
@@ -1298,13 +1298,13 @@ Goal: power users with connectivity get richer art, lyrics, scrobbling, recs.
 - [~] Ktor HTTP client with persistent disk cache + rate-limit handling — Cover Art Archive (`AndroidCoverArtFetcher`) and LRClib (`AndroidLyricsFetcher`) use Ktor with on-disk caches keyed by trackId / album MBID; transient HTTP errors no longer fall through as "not found". Rate-limit backoff + a unified Ktor `HttpClient` factory still deferred.
 - [x] Cover Art Archive client — direct MBID fetch + release-group fallback, missing-artwork sync sweeps the library on demand (`MissingArtworkSync`).
 - [ ] **fanart.tv client** (HQ artist images) *(deferred)*
-- [ ] MusicBrainz client (track ID + metadata fix) *(deferred — Cover Art Archive uses cached MBIDs only)*
+- [x] MusicBrainz client (track ID + metadata fix) — shipped in 2026-05-04x batch (#3610); Cover Art Archive still uses cached MBIDs for its own lookups.
 - [x] LRCLib client (synced + plain lyrics) — `AndroidLyricsFetcher` resolves via title/artist with multiple query candidates (`LyricsQueryCandidates`), persists to `lyrics_cache` with TTL, falls back to local `.lrc` sidecar (`LocalLyricsLoader`) and embedded USLT/SYLT (`Scanner` extracts at scan), and accepts manual artist/title overrides for stubborn matches.
 - [ ] Last.fm OAuth flow + scrobbling client *(deferred pending a registered API key — PLAN Phase 4 decision gate)*
 - [x] ListenBrainz token-based scrobbling client — offline queue (`db/Scrobbles.sq`, `ScrobbleQueueRepository`, 500-cap), queue-then-drain (`source/ScrobbleSync`, max 10 attempts, full-flush on launch + after live submits), desktop client (`DesktopListenBrainzClient`), settings status row; pre-plan Android submit completed in Phase 4.
 - [ ] AcoustID + Chromaprint fingerprinting *(deferred)*
 - [x] Open-Meteo client (weather variable for DJ templates) — `source/WeatherFetcher.kt` + `AndroidWeatherFetcher` (15-min cache, connectivity-gated)
-- [ ] Wikipedia/Wikidata client (artist bio) *(deferred)*
+- [x] Wikipedia/Wikidata client (artist bio) — shipped in 2026-05-04x batch (#3619); disambiguation-page picker deferred.
 - [x] Per-service toggle UI in Settings → Online & Sync — Settings → Online exposes the four-way global `ConnectivityPolicy` picker (Always / Wi-Fi only / Ask each time / Never), plus per-service Inherit / Always / Wi-Fi only / Never overrides for Cover Art Archive and LRClib lyrics. `NetworkPolicyGate.allowAutomaticFetch(service)` / `allowUserInitiatedFetch(service)` consult `SettingsStore.getServicePolicyOverride(service)` and only fall back to the global policy on `Inherit`. Override values round-trip through backup; `Inherit` is stored as the absence of a row to keep default-config bundles small.
 
 ### Phase 11 — Cast & multi-room output (~1–2 weeks)
@@ -1363,14 +1363,14 @@ Goal: every "Advanced" setting from §7.5 is implemented and works.
 - [x] Tag editor (single-track + batch) — `EditTagsDialog` covers single-track and multi-select batch via `BatchTagMerge`/`MergedTagView`. Multi-value tag editing stays deferred. (PLAN 6.1)
 - [ ] Multi-value tag editor with separator preview *(deferred)*
 - [ ] File rename templates *(deferred)*
-- [ ] DB browser UI (read-only) *(deferred)*
+- [x] DB browser UI (read-only) — shipped in 2026-05-04v batch (#3502); raw SQL console still deferred.
 - [ ] Raw SQL console (developer panel) *(deferred)*
 - [~] Log export — Settings → Crash Logs (`CrashLogScreen`) lists per-process exit reasons with expandable stack traces and a Share button per entry. A general "export full log" action across non-crash logs is not yet built.
 - [x] Force re-scan, clear caches, DB vacuum — "Rescan all folders" (#156), "Clear lyrics cache" (#257), force-rescan-on-folder-change (#217), unified "Clear all online caches" with confirmation gate, and "Compact database" (VACUUM via `DatabaseMaintenanceRepository`) all ship in App Settings.
 - [ ] DJ template scripting hooks (sandboxed) *(deferred — pairs with AI DJ)*
 - [ ] Custom voice model upload *(deferred — pairs with AI DJ)*
-- [ ] Path-glob exclude tester ("show me what this rule would skip") *(deferred)*
-- [ ] Duplicate detection UI (by hash + by tag fuzz) *(deferred)*
+- [x] Path-glob exclude tester ("show me what this rule would skip") — shipped in 2026-05-04v batch (#3480).
+- [x] Duplicate detection UI (by hash + by tag fuzz) — shipped in 2026-05-04v batch (#3490); read-only, no in-app delete action.
 - [ ] AutoEQ profile bundled library + import wizard *(deferred — pairs with band-count work in Phase 7)*
 
 ### Phase 15 — Hardening, beta, launch (~2–3 weeks)
@@ -1381,8 +1381,8 @@ Goal: shipped on both platforms.
 - [ ] Battery profiling (Android Battery Historian, iOS Energy Log)
 - [ ] Memory profiling (heap dump analysis, leak detection) *(NowPlayingWidget bitmap recycle bug #290 was caught and fixed without a formal pass)*
 - [x] Local crash handler — `crash/CrashLogReader` reads `getHistoricalProcessExitReasons()` on Android; the Settings → Crash Logs screen surfaces them with per-entry Share so users can export a stack trace without ADB. iOS is a Null stub (TestFlight handles iOS crashes natively).
-- [ ] User documentation: `USER_GUIDE.md`
-- [ ] FAQ
+- [x] User documentation: `USER_GUIDE.md` — shipped in v1.3.0 batch (batch tag editor, station launcher widget, Drive Mode auto-triggers, crossfade docs).
+- [x] FAQ — shipped in v1.3.0 batch.
 - [ ] App Store assets: screenshots (matrix of form factors), video preview, descriptions, keywords
 - [ ] App Store Privacy Nutrition Label (will be empty — no data collection)
 - [ ] Play Store assets (if pursuing Play Store flavor)
