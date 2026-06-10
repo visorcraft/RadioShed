@@ -80,6 +80,18 @@ class RadioShedMediaSessionService : MediaLibraryService() {
     private var librarySession: MediaLibrarySession? = null
 
     /**
+     * Set true at the very top of [onDestroy] (PLAN 3.5). Gates
+     * [swapSessionPlayer] so a crossfade ramp's `finally` that resumes during
+     * teardown can never call `session.setPlayer` against an already-released
+     * MediaSession. The pair's own `released` flag should already short-circuit
+     * the swap callback before it reaches here, but this is the belt to that
+     * suspenders: it also covers the window between `librarySession.release()`
+     * and `librarySession = null` where the reference is non-null yet dead.
+     */
+    @Volatile
+    private var destroyed: Boolean = false
+
+    /**
      * Dual-ExoPlayer pair powering true crossfade + gapless preload
      * (PLAN 3.2). The session player always wraps [CrossfadePlayerPair.active]
      * in a [StationAwarePlayer]; on a crossfade swap we re-wrap the new active
@@ -280,6 +292,12 @@ class RadioShedMediaSessionService : MediaLibraryService() {
      * the real players.
      */
     private fun swapSessionPlayer(newActive: ExoPlayer) {
+        // Teardown gate (PLAN 3.5): if a crossfade ramp's finally resumes during
+        // onDestroy, it must not re-point a released session. `destroyed` is set
+        // before the session is released, so bail before touching it. (The pair's
+        // own `released` flag normally stops the swap callback ever firing here,
+        // but guarding at the session boundary too is cheap belt-and-braces.)
+        if (destroyed) return
         val session = librarySession ?: return
         val wrapper = wrapAsStationPlayer(newActive)
         runCatching { session.setPlayer(wrapper) }
@@ -316,6 +334,12 @@ class RadioShedMediaSessionService : MediaLibraryService() {
 
     override fun onDestroy() {
         Log.i(TAG, "onDestroy: tearing down service")
+        // Mark destroyed FIRST so any crossfade swap callback that resumes
+        // during teardown (see CrossfadePlayerPair.release's FIFO reasoning)
+        // bails out of swapSessionPlayer before touching the soon-released
+        // session. Set before scope.cancel() so the cancellation continuation
+        // — which lands on Main behind this onDestroy — already observes it.
+        destroyed = true
         // Tear down the equalizer + sleep timer FIRST. The equalizer
         // holds a native AudioEffect reference scoped to ExoPlayer's
         // audio session; releasing the player without first releasing
@@ -337,15 +361,23 @@ class RadioShedMediaSessionService : MediaLibraryService() {
         // detaches the session reference so any in-flight refresh
         // tasks no-op rather than touch released resources.
         libraryCallback.detach()
-        // Cancel the coroutine scope BEFORE releasing the players so that any
-        // crossfade ramp suspended at delay() cannot resume its finally block
-        // against already-released ExoPlayer instances.
+        // Cancel the coroutine scope. This is NON-blocking on Main: a ramp
+        // suspended at delay() does not unwind here — its cancellation resume is
+        // queued on the Main looper and runs only after this onDestroy returns.
+        // CrossfadePlayerPair.release() (below) handles that asynchrony: it sets
+        // its `released` flag and, if a ramp was in flight, DEFERS the real
+        // ExoPlayer release behind the queued ramp finally (Main-queue FIFO) so
+        // the finally drains first and no-ops on the players. See that method's
+        // comment block for the full reasoning.
         scope.cancel()
         // Release the session first (detaches it from the player), then release
         // BOTH ExoPlayers via the pair. We don't call session.player.release()
         // separately — that wrapper's underlying ExoPlayer is one of the two
         // the pair owns, so the pair's release() covers it without a
-        // double-release on the active player.
+        // double-release on the active player. The pair's release may post the
+        // actual player.release() to Main (when a ramp was in flight); that's
+        // fine — the session is already detached, and `destroyed` + the pair's
+        // `released` flag keep the deferred work from touching dead resources.
         librarySession?.release()
         playerPair?.release()
         playerPair = null

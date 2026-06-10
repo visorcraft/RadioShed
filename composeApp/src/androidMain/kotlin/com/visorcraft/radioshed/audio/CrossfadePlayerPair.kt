@@ -1,5 +1,7 @@
 package com.visorcraft.radioshed.audio
 
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackParameters
@@ -74,6 +76,17 @@ class CrossfadePlayerPair(
     @Volatile
     var crossfadeInFlight: Boolean = false
         private set
+
+    /**
+     * Set true the instant [release] decides to tear down (BEFORE it posts any
+     * deferred ExoPlayer release). Gates the in-flight ramp's `finally`: once
+     * set, the `finally` must touch NO ExoPlayer and NO session — it only
+     * cleans local coroutine state. See the FIFO comment in [release] for why
+     * this is read-after-write-correct without further synchronization (both
+     * the writer in [release] and the reader in the `finally` run on Main).
+     */
+    @Volatile
+    private var released: Boolean = false
 
     /**
      * Cancel an in-flight crossfade ramp (a skip / stop arrived). The ramp's
@@ -164,6 +177,18 @@ class CrossfadePlayerPair(
                     delay(STEP_MS)
                 }
             } finally {
+                // TEARDOWN GATE (PLAN 3.5): if the pair was released while this
+                // ramp was suspended at delay(), the ExoPlayers may already be
+                // released (or about to be — see the deferred-release FIFO
+                // reasoning in [release]). Touching them here, or re-pointing
+                // the (also-released) MediaSession via onActivePlayerChanged,
+                // would throw / crash. When released, skip ALL player + session
+                // interaction and only unwind local coroutine state.
+                if (released) {
+                    crossfadeInFlight = false
+                    rampJob = null
+                    return@withLock
+                }
                 // Land in a coherent end state whether we finished the ramp or
                 // were cancelled: incoming is the new active at its effective
                 // volume (user × ReplayGain), outgoing is stopped/cleared and
@@ -193,10 +218,79 @@ class CrossfadePlayerPair(
         }
     }
 
-    /** Release both players. The service owns lifecycle; call from onDestroy. */
+    /**
+     * Release both players. The service owns lifecycle; call from onDestroy
+     * (on the main thread).
+     *
+     * ── Why this is not just two release() calls (PLAN 3.5) ──────────────────
+     *
+     * onDestroy runs on Dispatchers.Main and calls scope.cancel() before
+     * release(). scope.cancel() is NON-blocking: a ramp suspended at delay()
+     * does not unwind synchronously — its CancellationException resume is
+     * POSTED to the Main looper as a continuation and only runs once the
+     * current Main callback (onDestroy itself) returns. So at the moment
+     * release() executes, the ramp's `finally` has NOT run yet; it is sitting
+     * in the Main message queue behind us.
+     *
+     * If we released the ExoPlayers inline right here, that queued `finally`
+     * would later resume and touch already-released players (volumes, stop,
+     * clearMediaItems) and re-point an already-released MediaSession via the
+     * onActivePlayerChanged swap callback — a crash. We also cannot
+     * runBlocking-join the ramp on Main: the ramp's `finally` needs Main to
+     * run, and we are Main → deadlock.
+     *
+     * The fix exploits Main-queue FIFO ordering:
+     *   1. Set `released` (volatile) FIRST. The ramp's `finally` reads it and,
+     *      when set, skips every player/session interaction (see crossfadeTo).
+     *   2. Cancel the rampJob (belt-and-braces — onDestroy's scope.cancel()
+     *      usually already did this; a redundant cancel is a no-op). The
+     *      cancellation resume is ALREADY enqueued on Main by whoever cancelled
+     *      first, so it sits ahead of anything we post next.
+     *   3. If a ramp was in flight, POST the real release() calls to Main.
+     *      Because the cancel-resume was enqueued first, FIFO guarantees the
+     *      ramp's `finally` drains BEFORE our posted release runs — and that
+     *      `finally` no-ops on players thanks to `released`. Result: players are
+     *      released exactly once, after the ramp is fully unwound, with no
+     *      access-after-release and no deadlock.
+     *   4. If no ramp was in flight, there is nothing queued ahead of us, so
+     *      release inline as before (cheapest path, the common case).
+     *
+     * Why we test `crossfadeInFlight`, NOT `rampJob.isActive`: by the time
+     * release() runs, onDestroy has already called scope.cancel(), so the ramp
+     * job is in the *Cancelling* state and `isActive` is already false — keying
+     * off it would always take the inline branch and the (suspended-but-not-yet-
+     * unwound) `finally` could still race a synchronous release. `crossfadeInFlight`
+     * is set true inside the ramp and cleared ONLY in its `finally`, which has
+     * not run yet (it is queued behind us on Main). It is therefore the correct
+     * cancellation-independent "a finally is still pending" signal.
+     *
+     * Do NOT "simplify" this back to inline release(): the deferral is load-
+     * bearing precisely because the cancellation continuation is asynchronous
+     * on the same thread that calls release().
+     */
     fun release() {
-        runCatching { primary.release() }
-        runCatching { secondary.release() }
+        // Mark released BEFORE cancelling / posting so the ramp's finally — which
+        // may already be queued behind us on Main — sees the flag and no-ops.
+        released = true
+        // A ramp's finally is still pending iff crossfadeInFlight is set: it is
+        // raised inside the ramp and lowered only by that finally, which is
+        // queued behind us on Main and has not run. NOT rampJob.isActive — the
+        // job is already Cancelling (scope.cancel ran in onDestroy), so isActive
+        // would read false and wrongly pick the inline branch. See kdoc.
+        val rampWasInFlight = crossfadeInFlight
+        // Cancel defensively (typically a no-op — scope.cancel already did it).
+        // The cancel-resume is enqueued on Main ahead of the post below (FIFO),
+        // so the ramp's finally runs before our deferred release.
+        rampJob?.cancel()
+        if (rampWasInFlight) {
+            Handler(Looper.getMainLooper()).post {
+                runCatching { primary.release() }
+                runCatching { secondary.release() }
+            }
+        } else {
+            runCatching { primary.release() }
+            runCatching { secondary.release() }
+        }
     }
 
     private companion object {
