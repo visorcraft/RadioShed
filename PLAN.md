@@ -436,18 +436,18 @@ data class TrackTransition(
 - Modify: `composeApp/src/commonMain/kotlin/com/visorcraft/radioshed/stations/DjAnnouncer.kt`,
   `StationPlayback.kt`
 
-- [ ] **Step 1:** Failing test: `DjAnnouncerTest.precacheKeyIsStableForSameInputs`
+- [x] **Step 1:** Failing test: `DjAnnouncerTest.precacheKeyIsStableForSameInputs`
   (hash function returns identical cache keys for identical text+voice, and
   differs when text differs).
-- [ ] **Step 2:** Implement `suspend fun precacheUpcoming(transitions: List<TrackTransition>)`
+- [x] **Step 2:** Implement `suspend fun precacheUpcoming(transitions: List<TrackTransition>)`
   — render + synthesize for the next 1–2 queue items if not already cached;
   call it from `StationPlayback` wherever the queue advances (same hook as
   1.5, after the current announcement decision). Cache rows go through
   `DjCacheRepository` so its existing eviction applies.
-- [ ] **Step 3:** Tests + `assembleDebug` green. Device check: with DJ on,
+- [x] **Step 3:** Tests + `assembleDebug` green. Device check: with DJ on,
   no audible synthesis delay on track change (clip starts <300 ms after
-  duck).
-- [ ] **Step 4:** Commit: `Pre-cache DJ clips one queue-step ahead (PLAN 1.7)`
+  duck). *(Device timing check deferred to the Phase 1 device pass.)*
+- [x] **Step 4:** Commit: `Pre-cache DJ clips one queue-step ahead (PLAN 1.7)`
 
 ### Task 1.8 (optional, do last): Open-Meteo `{weather}` variable
 
