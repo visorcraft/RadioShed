@@ -120,6 +120,25 @@ so the library DB picks up the new metadata.
 Out of scope for v1: multi-value tags, custom TXXX/Vorbis frames, lyrics
 writes. (See FAQ for what to do if you need those.)
 
+### Batch tag editor
+
+Library → Songs tab → long-press any track to enter **selection mode**.
+Taps then toggle checkboxes instead of playing; a bottom bar shows the
+count and an **Edit tags** button.
+
+The batch editor merges the selected tracks' tags:
+
+- **Uniform** — all tracks share the same value; the field is pre-filled.
+- **Mixed** — placeholder shows *"Multiple values"*; leave it untouched
+  and those tracks keep their original values.
+- **Empty** — placeholder shows *"Empty"*; same rule — untouched means
+  unchanged.
+
+Only fields you actually edit are written. The dialog shows a live count
+(*"47 written, 2 failed"*). On success, every affected folder rescans
+automatically so the library DB updates. Switching to another tab
+clears the selection.
+
 ---
 
 ## Playback
@@ -156,9 +175,18 @@ weighting per-station in the Station Editor.
 
 ### Crossfade and gapless
 
-End-of-track fade-out is enabled by default (configurable seconds in
-Settings). True dual-player crossfade and sample-accurate gapless are
-deferred — see SPEC §7.
+End-of-track fade-out is configurable in Settings (0–10 s, default off).
+Per-station crossfade is configured in the Station Editor:
+
+- **Off** — no overlap; the end-fade setting applies if configured.
+- **Timed** — fixed overlap in seconds (1–12 s) with a choice of curve
+  (Equal Power, Linear, S-Curve).
+- **Smart** — lets the engine decide overlap based on track content
+  (default).
+
+Gapless is on by default and handled at the engine level. Both features
+use a dual-player architecture on Android (overlapping players) and
+libvlc gapless on desktop.
 
 ### Sleep timer
 
@@ -169,8 +197,19 @@ countdown badge while a timer is active.
 ### Drive Mode
 
 Settings → Drive Mode toggle. Renders large transport buttons across
-MiniPlayer and Now Playing for in-car use. Auto-trigger registry (BT MAC,
-speed, schedule) is deferred — manual toggle for now.
+MiniPlayer and Now Playing for in-car use.
+
+**Auto-triggers** — Drive Mode can turn on automatically:
+
+- **Bluetooth device** — pick a paired device; when it connects, Drive
+  Mode activates.
+- **Schedule** — set a daily time window (e.g. 07:00–09:00 for the
+  commute). Windows can cross midnight.
+
+Auto-exit is configurable: when the trigger ends (device disconnects or
+ the window closes), Drive Mode either turns off automatically or stays
+on until you exit manually. The controller only acts on *edges* — a
+manual toggle while no trigger is active won't be overridden.
 
 ---
 
@@ -259,6 +298,28 @@ though it's tagged as Indie".
 
 Stations Home → menu → Reorder. Drag-and-drop. Order persists across
 launches.
+
+---
+
+## Widgets (Android)
+
+### Station Launcher
+
+A home-screen widget with up to **6 station tiles**. Long-press the home
+screen → Widgets → RadioShed → Station Launcher. On first placement a
+configuration screen opens where you pick a station for each slot; tap
+an empty slot to assign it, tap a filled slot to change it.
+
+Tapping a tile launches RadioShed and immediately starts that station.
+The widget artwork refreshes when the underlying station changes, but
+not in real time — swipe away or wait for the next system refresh if
+a station's art looks stale after an edit.
+
+### Now Playing
+
+A 4×1 widget showing the current track, play/pause, and next. Tapping
+the track body opens the app. Artwork and transport state update on
+every track change.
 
 ---
 

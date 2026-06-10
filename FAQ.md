@@ -59,6 +59,18 @@ preserved — easy fix is to `touch` the file or just resave it.
 
 ---
 
+### "Batch tag editor shows 'Multiple values' — will it overwrite everything?"
+
+No. The placeholder *"Multiple values"* (or *"Empty"*) is just a hint.
+Only fields you actually type into are written; untouched fields are
+skipped entirely, so every track keeps its original value for that tag.
+
+If you want to set the same value across all selected tracks, type it
+into the field — the new value is applied to every selected track on
+Save.
+
+---
+
 ### "Glob `**/Music/**` doesn't match my Music folder"
 
 Globs are matched against the path **relative to the folder root**. If
@@ -220,10 +232,20 @@ in any UI and don't get queued.
 
 ### "Drive Mode auto-trigger from BT didn't fire"
 
-Auto-triggers are deferred. The Drive Mode toggle exists today; the
-"automatic on BT-X-connected" / "automatic above 25 km/h" / "automatic
-between 8am-9am" registry is on the SPEC roadmap but not built. Use the
-manual toggle in Settings or NowPlaying for now.
+Check three things:
+
+1. **The trigger is configured.** Settings → Drive Mode → "Add trigger" →
+   pick a paired Bluetooth device or set a schedule window. Triggers are
+   saved per-device; if you renamed or re-paired the car unit, re-add it.
+2. **Permission.** Android 12+ needs **Nearby devices** (BLUETOOTH_CONNECT)
+   granted for MAC matching. RadioShed asks when you open the trigger
+   picker; if you denied it, grant it in system Settings.
+3. **Auto-exit.** If auto-exit is OFF, the trigger's *falling* edge
+   (disconnect / end of window) is ignored and Drive Mode stays on.
+   Turn auto-exit ON if you want it to shut off when the trigger ends.
+
+Note: speed-based triggers (e.g. "above 25 km/h") are deferred and not
+built yet. Bluetooth and schedule triggers are the ones that ship today.
 
 ---
 
@@ -263,6 +285,19 @@ for an underlying exception.
 If counts are "0" but you have music in the app, you're probably
 looking at a freshly-restored backup and the rescan hasn't run yet.
 Library Settings → rescan all folders.
+
+---
+
+### "The Station Launcher widget shows empty slots / old artwork"
+
+The widget updates when the system asks for a refresh (typically on
+placement, on boot, and when the app explicitly signals an update).
+It does **not** live-update in real time when you edit a station.
+
+To force a refresh: remove the widget and re-add it, or restart the
+device. If a slot shows "Empty" even though you configured it, open
+the widget config again and re-save — the placement flow sometimes
+skips the config screen on certain launchers.
 
 ---
 
