@@ -215,6 +215,8 @@ fun DjSettingsScreen(
                             audioEngine.setVolume(settings.getDjDuckFraction())
                             clipPlayer.playFile(outPath)
                         }
+                        // Intentionally outside runCatching: restore must run even
+                        // if duck/synthesis/playback failed (finally-equivalent).
                         audioEngine.setVolume(prior)
                         previewing = false
                     }
@@ -236,6 +238,7 @@ fun DjSettingsScreen(
             SLOT_ORDER.forEach { (slot, label) ->
                 TemplateSlotCard(
                     label = label,
+                    enabled = enabled,
                     variants = templates[slot] ?: DEFAULT_DJ_TEMPLATES[slot].orEmpty(),
                     onVariantsChange = { next ->
                         persistTemplates(templates.toMutableMap().apply { put(slot, next) })
@@ -245,6 +248,7 @@ fun DjSettingsScreen(
             }
 
             ResetTemplatesRow(
+                enabled = enabled,
                 onReset = {
                     // Empty blob ↔ "use defaults" (SettingsStore.getDjTemplates
                     // contract). Mirror that in-memory so the cards re-render
@@ -609,6 +613,7 @@ private fun PreviewVoiceRow(
 @Composable
 private fun TemplateSlotCard(
     label: String,
+    enabled: Boolean,
     variants: List<String>,
     onVariantsChange: (List<String>) -> Unit,
 ) {
@@ -624,7 +629,9 @@ private fun TemplateSlotCard(
                 label,
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
+                color = MaterialTheme.colorScheme.onSurface.copy(
+                    alpha = if (enabled) 1f else 0.4f,
+                ),
             )
             Spacer(Modifier.height(6.dp))
             variants.forEachIndexed { index, variant ->
@@ -635,10 +642,15 @@ private fun TemplateSlotCard(
                     Text(
                         variant,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
+                        color = MaterialTheme.colorScheme.onSurface.copy(
+                            alpha = if (enabled) 0.85f else 0.4f,
+                        ),
                         modifier = Modifier.weight(1f),
                     )
-                    TextButton(onClick = { editingIndex = index }) { Text("Edit") }
+                    TextButton(
+                        onClick = { editingIndex = index },
+                        enabled = enabled,
+                    ) { Text("Edit") }
                     // A slot must keep at least one variant: disable delete on
                     // the last remaining line.
                     IconButton(
@@ -647,7 +659,7 @@ private fun TemplateSlotCard(
                                 variants.toMutableList().apply { removeAt(index) },
                             )
                         },
-                        enabled = variants.size > 1,
+                        enabled = enabled && variants.size > 1,
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Delete,
@@ -657,7 +669,10 @@ private fun TemplateSlotCard(
                 }
             }
             Spacer(Modifier.height(4.dp))
-            TextButton(onClick = { editingIndex = -1 }) { Text("+ Add variant") }
+            TextButton(
+                onClick = { editingIndex = -1 },
+                enabled = enabled,
+            ) { Text("+ Add variant") }
         }
     }
 
@@ -735,10 +750,11 @@ private fun VariantEditDialog(
 }
 
 @Composable
-private fun ResetTemplatesRow(onReset: () -> Unit) {
+private fun ResetTemplatesRow(enabled: Boolean, onReset: () -> Unit) {
     var confirmOpen by remember { mutableStateOf(false) }
     Surface(
-        modifier = Modifier.fillMaxWidth().clickable { confirmOpen = true },
+        modifier = Modifier.fillMaxWidth()
+            .clickable(enabled = enabled) { confirmOpen = true },
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
         shape = RoundedCornerShape(12.dp),
     ) {
@@ -746,13 +762,17 @@ private fun ResetTemplatesRow(onReset: () -> Unit) {
             Text(
                 "Reset templates to defaults",
                 style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.error,
+                color = MaterialTheme.colorScheme.error.copy(
+                    alpha = if (enabled) 1f else 0.4f,
+                ),
                 fontWeight = FontWeight.Medium,
             )
             Text(
                 "Discards every custom phrasing above and restores the built-in set.",
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                color = MaterialTheme.colorScheme.onBackground.copy(
+                    alpha = if (enabled) 0.6f else 0.3f,
+                ),
             )
         }
     }
