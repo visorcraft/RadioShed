@@ -5,7 +5,6 @@ import platform.Foundation.NSCalendarUnitHour
 import platform.Foundation.NSCalendarUnitMinute
 import platform.Foundation.NSCalendarUnitYear
 import platform.Foundation.NSDate
-import platform.Foundation.NSDateFormatterShortStyle
 import platform.Foundation.timeIntervalSince1970
 
 internal actual fun nowMillis(): Long =
@@ -41,8 +40,7 @@ internal actual fun localMinutesOfDay(epochMs: Long): Int {
 internal actual fun formatClockTime(epochMs: Long): String {
     val date = NSDate.dateWithTimeIntervalSince1970(epochMs / 1000.0)
     val fmt = platform.Foundation.NSDateFormatter()
-    // Short time style follows the device 12/24-hour locale preference.
-    fmt.timeStyle = NSDateFormatterShortStyle
-    fmt.dateStyle = platform.Foundation.NSDateFormatterNoStyle
+    // dateFormat string is the only NSDateFormatter surface verified in this file; no Mac to compile-check new API.
+    fmt.dateFormat = "h:mm a"
     return fmt.stringFromDate(date)
 }
