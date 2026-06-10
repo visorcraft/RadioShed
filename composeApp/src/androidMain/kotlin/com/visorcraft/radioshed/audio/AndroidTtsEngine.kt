@@ -8,7 +8,6 @@ import com.visorcraft.radioshed.domain.DjVoice
 import java.io.File
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.sync.Mutex
@@ -29,11 +28,13 @@ import kotlinx.coroutines.sync.withLock
  *
  * [synthesizeToFile] never throws — any engine failure or exception yields `false`.
  * DJ speech is decorative, never fatal.
+ *
+ * [TextToSpeech.shutdown] is intentionally omitted — this is a Koin single bound
+ * for app lifetime; Android reclaims the service connection on process exit.
  */
 class AndroidTtsEngine(private val context: Context) : TtsEngine {
 
     private val initMutex = Mutex()
-    private val initAttempted = AtomicBoolean(false)
 
     @Volatile private var tts: TextToSpeech? = null
     @Volatile private var initDeferred: CompletableDeferred<Boolean>? = null
@@ -62,6 +63,9 @@ class AndroidTtsEngine(private val context: Context) : TtsEngine {
         runCatching {
             val engine = awaitInit() ?: return@runCatching false
 
+            // setSpeechRate/setPitch are engine-global: concurrent synthesizeToFile calls with
+            // differing voice params would race. Acceptable — the DJ pipeline issues one synthesis
+            // at a time.
             engine.setSpeechRate((voice?.rate ?: 1.0).toFloat())
             engine.setPitch((voice?.pitch ?: 1.0).toFloat())
 
@@ -97,25 +101,30 @@ class AndroidTtsEngine(private val context: Context) : TtsEngine {
     /**
      * Ensures [TextToSpeech] is initialised exactly once, even under concurrent callers.
      * Returns the engine on success, null on failure.
+     *
+     * The lock is held only long enough to construct the engine and deferred once;
+     * the actual [CompletableDeferred.await] happens outside the lock so concurrent
+     * callers co-suspend on the same deferred without serialising behind the mutex
+     * for the full 100–500 ms TTS init duration.
      */
     private suspend fun awaitInit(): TextToSpeech? {
-        // Fast path: already initialised successfully.
+        // Fast path: already initialised.
         if (initSucceeded == true) return tts
         if (initSucceeded == false) return null
 
-        initMutex.withLock {
+        val deferred = initMutex.withLock {
             // Double-checked inside the lock.
             if (initSucceeded == true) return tts
             if (initSucceeded == false) return null
 
-            if (!initAttempted.getAndSet(true)) {
-                val deferred = CompletableDeferred<Boolean>()
-                initDeferred = deferred
+            if (initDeferred == null) {
+                val d = CompletableDeferred<Boolean>()
+                initDeferred = d
 
                 val engine = TextToSpeech(context) { status ->
                     val ok = status == TextToSpeech.SUCCESS
                     initSucceeded = ok
-                    deferred.complete(ok)
+                    d.complete(ok)
                 }
                 tts = engine
 
@@ -139,9 +148,10 @@ class AndroidTtsEngine(private val context: Context) : TtsEngine {
                 })
             }
 
-            val ok = initDeferred?.await() ?: (initSucceeded == true)
-            return if (ok) tts else null
+            initDeferred!!
         }
+
+        return if (deferred.await()) tts else null
     }
 
     /** Called from the TTS internal thread — must not block. */
