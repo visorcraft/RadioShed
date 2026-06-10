@@ -727,18 +727,19 @@ the new logic into `CrossfadePlayerPair` rather than growing the service.
 - Modify: `composeApp/src/desktopMain/kotlin/com/visorcraft/radioshed/audio/AudioEngineDesktop.kt`,
   `composeApp/src/desktopMain/kotlin/com/visorcraft/radioshed/audio/NativeLibVlc.kt`
 
-- [ ] **Step 1:** Extend `NativeLibVlc` with a second media-player handle
+- [x] **Step 1:** Extend `NativeLibVlc` with a second media-player handle
   (factory already exists); add `setPlayerVolume(handle, 0..100)` binding if
   not present (`libvlc_audio_set_volume`).
-- [ ] **Step 2:** Mirror the `CrossfadePlayerPair` ramp inside the existing
+- [x] **Step 2:** Mirror the `CrossfadePlayerPair` ramp inside the existing
   ~250 ms polling architecture (ramp steps can ride the poll loop at
   ~100 ms granularity — coarser than Android, acceptable). Reuse
   `FadeCurves` for gains; same suppression of the end-fade path; the
   Ended-transition auto-advance must not double-fire when a crossfade
   already started the next track (guard flag).
-- [ ] **Step 3:** `./gradlew :composeApp:run` with VLC installed: listen to
+- [x] **Step 3:** `./gradlew :composeApp:run` with VLC installed: listen to
   a 5 s crossfade between two local tracks; skip mid-fade; pause mid-fade.
-- [ ] **Step 4:** Commit: `Desktop libvlc crossfade via second player handle (PLAN 3.3)`
+  *(Audible smoke deferred to the Phase Exit Gate desktop run / per-OS release smoke.)*
+- [x] **Step 4:** Commit: `Desktop libvlc crossfade via second player handle (PLAN 3.3)`
 
 ### Task 3.4: Per-station crossfade editing + global default
 
