@@ -1106,21 +1106,21 @@ Existing: `NowPlayingWidget.kt` (classic RemoteViews `AppWidgetProvider`) and
 
 # Final wrap-up
 
-- [ ] **W1:** Full regression: `testDebugUnitTest`, `assembleDebug`,
+- [x] **W1:** Full regression: `testDebugUnitTest`, `assembleDebug`,
   `packageSingleFileAppImage`, desktop run, device install
   (`adb install -r ...`) and a 30-minute mixed soak: DJ on, Drive Mode BT
   trigger, crossfading station, hybrid Subsonic station, scrobbles landing.
-- [ ] **W2:** One final `opencode` review over the whole effort
+- [x] **W2:** One final `opencode` review over the whole effort
   (`git diff <phase0-base>..HEAD`) — same recipe as the Phase Exit Gate; this
   catches cross-phase duplication individual phase reviews couldn't see.
-- [ ] **W3:** Docs: update `USER_GUIDE.md` (AI DJ, Drive Mode triggers,
+- [x] **W3:** Docs: update `USER_GUIDE.md` (AI DJ, Drive Mode triggers,
   crossfade, Subsonic stations, batch tags, widget) and `FAQ.md` where
   features change answers.
-- [ ] **W4:** `SPEC.md` final sweep — every box this plan flipped has a cite;
+- [x] **W4:** `SPEC.md` final sweep — every box this plan flipped has a cite;
   every box deliberately left open (speed trigger, Smart Fades
   content-analysis, Last.fm, multi-value tags, cloud TTS) has a one-line
   "deferred because" note.
-- [ ] **W5:** Release per AGENTS.md: bump `version.properties` (minor),
+- [x] **W5:** Release per AGENTS.md: bump `version.properties` (minor),
   `buildDate` to today UTC, tag `vX.Y.0`, `gh release create` + upload
   per-platform assets (debug-signed APK recipe in AGENTS.md; zipalign
   before apksigner).
