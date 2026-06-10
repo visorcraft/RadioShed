@@ -26,6 +26,17 @@ Media3/ExoPlayer (Android), JNA-libvlc (desktop), `kotlin.test` +
 `kotlinx-coroutines-test`, JDK-only HTTP (`HttpURLConnection` — **no
 Ktor/OkHttp client additions**).
 
+> **EXECUTION STATUS (paused 2026-06-10 by user request):**
+> Phases 0–4 are COMPLETE and fully gated (G1–G5 each; G6 deferred to W5 by
+> design). Phase 5 is partial: 5.1 and 5.2 are implemented, tested, and
+> committed; 5.3–5.4 are NOT started. Phase 6 and the final wrap-up (W1–W5)
+> are NOT started. Branch `next-features`, pushed through commit 6c0a35e
+> (PLAN-tracking commits after that may follow). Resume point: Task 5.2's
+> controller-level spec/quality review rounds (see its note), then Task 5.3.
+> Standing items owed to the human: Android device pass (DJ, Drive Mode BT,
+> crossfade listening), desktop GUI smokes, live ListenBrainz token + live
+> Navidrome validation.
+
 ---
 
 ## Ground rules (read before any task)
@@ -916,23 +927,32 @@ media source.
 - Modify: `di/Modules.kt` (register/unregister on config change)
 - Test: `composeApp/src/commonTest/kotlin/com/visorcraft/radioshed/source/SubsonicSourceTest.kt`
 
-- [ ] **Step 1:** Failing tests with a fake `SubsonicClient` returning a
+- [x] **Step 1:** Failing tests with a fake `SubsonicClient` returning a
   small canned artist→album→song tree:
   - `listTracks()` emits every song exactly once as `DiscoveredTrack`
     (uri = `streamUrl(...)`, format from `SubsonicSong` suffix)
   - `SourceFilter.formats` filters; min/max duration filters apply
   - client error mid-enumeration completes the flow with what it has
     (no throw)
-- [ ] **Step 2:** Implement
+- [x] **Step 2:** Implement
   `SubsonicSource(client, settings, gate) : MediaSource` — `id = "subsonic:<host>"`,
   capabilities `(supportsStreaming = true, supportsArtwork = true)`, cold
   flow walking artists→albums→songs, **`NetworkPolicyGate` check before any
   call**. Tests PASS.
-- [ ] **Step 3:** Registration: in `App` startup (and on Subsonic settings
+- [x] **Step 3:** Registration: in `App` startup (and on Subsonic settings
   change), register the source in `MediaSourceRegistry` when a server is
   configured, unregister when cleared. (Look at how `MockCloudSource` is
   registered today and follow/replace that path.)
-- [ ] **Step 4:** Commit: `Add SubsonicSource media source over SubsonicClient (PLAN 5.2)`
+- [x] **Step 4:** Commit: `Add SubsonicSource media source over SubsonicClient (PLAN 5.2)`
+
+*(5.2 reality note: implemented TDD with 8 tests (5 spec'd + 3 from review);
+registration = sharedModule single + App.kt launch registration when
+configured + immediate registration on successful Test-&-save in settings;
+MockCloudSource was never production-registered (test-only) so no demotion was
+needed; implementer-run adversarial opencode review returned VERDICT approved
+issues=0. The controller's separate spec-compliance and quality review rounds
+were NOT yet run when execution paused — run them on resume before starting
+5.3.)*
 
 ### Task 5.3: Hybrid stations — editor UI + end-to-end
 
@@ -1158,3 +1178,16 @@ peer-review gates actually ran.
   or failure, +1 test), InMemorySettings test-fixture triplication.
 - StationPlayback ctor slimmed (client+gate → ScrobbleSync); gate logic now
   lives in exactly one place.
+
+## Phase 5 status — paused 2026-06-10 (phase incomplete)
+
+- 5.1 desktop Subsonic client: byte-identical mirror verified, approved.
+- 5.2 SubsonicSource: committed 6c0a35e; implementer-run opencode approved
+  issues=0; controller spec/quality reviews owed on resume.
+- 5.3 hybrid stations (editor UI + end-to-end) and 5.4 phase exit gate: not
+  started. No SPEC Phase 16 boxes flipped yet for this phase.
+- Process note adopted mid-phase (user demand, also added by the user to
+  AGENTS.md): all subagent/peer-review prompt+output scratch files must use
+  collision-proof mktemp paths, never /tmp/prompt.txt. Earlier phases'
+  reviews used generic paths; one contaminated review (foreign-project
+  findings) was detected and discarded during Phase 1's Task 1.6.
