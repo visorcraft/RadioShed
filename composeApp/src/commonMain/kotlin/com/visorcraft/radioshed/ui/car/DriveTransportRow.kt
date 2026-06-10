@@ -25,7 +25,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -35,6 +34,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -98,25 +98,33 @@ fun DriveTransportRow(
     onLongPressTogglePlayPause: (() -> Unit)?,
     onNext: () -> Unit,
     onLongPressNext: (() -> Unit)?,
+    preMuteLevel: Float,
+    onPreMuteLevelChange: (Float) -> Unit,
     settings: SettingsStore = koinInject(),
     stationPlayback: StationPlayback = koinInject(),
     stationRepo: StationRepository = koinInject(),
 ) {
     val playing = state == PlayerState.Playing
     val haptic = rememberHapticTick()
+    // Distinct "rejection" buzz for a voice command that was heard but
+    // matched no station — same haptic helper, different feedback type, so
+    // the driver gets eyes-free confirmation the command failed rather than
+    // silence. No-op on platforms without haptics (iOS/desktop), like the tick.
+    val rejectHaptic = rememberHapticTick(HapticFeedbackType.Reject)
     val scope = rememberCoroutineScope()
 
     val volume by stationPlayback.userVolume.collectAsState()
     // Pre-mute level so unmute restores the prior level rather than a fixed
-    // default. Held at row scope so a recomposition doesn't lose it.
-    var preMuteLevel by remember { mutableFloatStateOf(0.6f) }
+    // default. Hoisted to the NowPlaying screen scope (shared with the
+    // VolumeRow mute toggle) so muting via one control and unmuting via the
+    // other restores the same level rather than two desynced snapshots.
 
     var pickerOpen by remember { mutableStateOf(false) }
 
     val voicePicker = rememberVoiceInput { spoken ->
         scope.launch {
             val match = bestStationMatch(stationRepo.list().map { it.id to it.name }, spoken)
-            if (match != null) stationPlayback.playStation(match)
+            if (match != null) stationPlayback.playStation(match) else rejectHaptic()
         }
     }
 
@@ -189,7 +197,7 @@ fun DriveTransportRow(
                                 stationPlayback.previewUserVolume(target)
                                 stationPlayback.commitUserVolume(target)
                             } else {
-                                preMuteLevel = volume
+                                onPreMuteLevelChange(volume)
                                 stationPlayback.previewUserVolume(0f)
                                 stationPlayback.commitUserVolume(0f)
                             }

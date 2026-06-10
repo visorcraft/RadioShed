@@ -1260,6 +1260,8 @@ private fun CompactLayout(
             },
             onDislikeOnStation = onDislikeOnStation,
             driveMode = driveMode,
+            preMuteLevel = preMuteLevel,
+            onPreMuteLevelChange = onPreMuteLevelChange,
         )
         Spacer(Modifier.height(20.dp))
         RatingRow(
@@ -1388,6 +1390,8 @@ private fun TwoPaneLayout(
                 },
                 onDislikeOnStation = onDislikeOnStation,
                 driveMode = driveMode,
+                preMuteLevel = preMuteLevel,
+                onPreMuteLevelChange = onPreMuteLevelChange,
             )
             Spacer(Modifier.height(28.dp))
             RatingRow(
@@ -1856,6 +1860,11 @@ private fun TransportRow(
     onForward: (deltaMs: Long) -> Unit,
     onDislikeOnStation: () -> Unit,
     driveMode: Boolean,
+    // Threaded through to DriveTransportRow's mute button so it shares the
+    // screen-scoped pre-mute snapshot with VolumeRow rather than holding a
+    // private desynced copy. Unused by the non-drive layout below.
+    preMuteLevel: Float = 0.6f,
+    onPreMuteLevelChange: (Float) -> Unit = {},
 ) {
     var dislikeMenuOpen by remember { mutableStateOf(false) }
     val playing = state == PlayerState.Playing
@@ -1877,6 +1886,8 @@ private fun TransportRow(
             // Long-press Next mirrors the dropdown's "don't play on this
             // station again" so the dislike affordance survives the re-skin.
             onLongPressNext = onDislikeOnStation,
+            preMuteLevel = preMuteLevel,
+            onPreMuteLevelChange = onPreMuteLevelChange,
         )
         return
     }
@@ -3557,6 +3568,8 @@ private fun TriplePaneLayout(
                 },
                 onDislikeOnStation = onDislikeOnStation,
                 driveMode = driveMode,
+                preMuteLevel = preMuteLevel,
+                onPreMuteLevelChange = onPreMuteLevelChange,
             )
             Spacer(Modifier.height(16.dp))
             RatingRow(

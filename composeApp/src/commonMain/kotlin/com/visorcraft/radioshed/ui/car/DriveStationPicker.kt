@@ -33,7 +33,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
@@ -44,6 +43,8 @@ import com.visorcraft.radioshed.data.StationRepository
 import com.visorcraft.radioshed.domain.Station
 import com.visorcraft.radioshed.nav.PlatformBackHandler
 import com.visorcraft.radioshed.stations.StationPlayback
+import com.visorcraft.radioshed.ui.stations.stationColor
+import com.visorcraft.radioshed.ui.stations.stationGradient
 import com.visorcraft.radioshed.ui.util.rememberHapticTick
 import org.koin.compose.koinInject
 
@@ -192,7 +193,7 @@ private fun DriveStationTile(
     station: Station,
     onTap: () -> Unit,
 ) {
-    val accent = driveStationColor(station)
+    val accent = stationColor(station)
     Surface(
         shape = RoundedCornerShape(20.dp),
         modifier = Modifier
@@ -206,7 +207,7 @@ private fun DriveStationTile(
                 modifier = Modifier
                     .fillMaxWidth()
                     .aspectRatio(1.5f)
-                    .background(driveStationGradient(accent)),
+                    .background(stationGradient(accent)),
                 contentAlignment = Alignment.Center,
             ) {
                 if (station.artworkUri != null) {
@@ -238,35 +239,4 @@ private fun DriveStationTile(
             )
         }
     }
-}
-
-/** Brand-amber default when the station has no custom colour, mirroring
- *  Stations Home's `stationColor`. */
-private fun driveStationColor(station: Station): Color {
-    if (station.color == 0) return Color(0xFFFF7F1A)
-    return Color(station.color.toLong() and 0xFFFFFFFFL)
-}
-
-/** Three-stop diagonal gradient off the accent, matching Stations Home's
- *  `stationGradient` so the fallback tiles read consistently. */
-private fun driveStationGradient(accent: Color): Brush {
-    val darker = Color(
-        red = accent.red * 0.55f,
-        green = accent.green * 0.55f,
-        blue = accent.blue * 0.65f,
-        alpha = 1f,
-    )
-    val lighter = Color(
-        red = (accent.red + 0.1f).coerceAtMost(1f),
-        green = (accent.green + 0.1f).coerceAtMost(1f),
-        blue = (accent.blue + 0.1f).coerceAtMost(1f),
-        alpha = 0.85f,
-    )
-    return Brush.linearGradient(
-        colorStops = arrayOf(
-            0f to accent,
-            0.55f to darker,
-            1f to lighter,
-        ),
-    )
 }
