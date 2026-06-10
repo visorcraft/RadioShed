@@ -34,9 +34,9 @@ import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -76,6 +76,7 @@ import com.visorcraft.radioshed.data.SettingsStore
 import com.visorcraft.radioshed.domain.Album
 import com.visorcraft.radioshed.domain.Artist
 import com.visorcraft.radioshed.domain.Track
+import com.visorcraft.radioshed.nav.PlatformBackHandler
 import com.visorcraft.radioshed.stations.StationPlayback
 import com.visorcraft.radioshed.ui.playlists.TrackContextSheet
 import kotlinx.coroutines.launch
@@ -234,6 +235,10 @@ fun LibraryBrowserScreen(
     LaunchedEffect(artistSort) { settings.setLibraryArtistSort(artistSort.name) }
     LaunchedEffect(albumSort) { settings.setLibraryAlbumSort(albumSort.name) }
     LaunchedEffect(genreSort) { settings.setLibraryGenreSort(genreSort.name) }
+
+    PlatformBackHandler(enabled = inSelectionMode) {
+        selectedTrackIds = emptySet()
+    }
 
     Scaffold(
         topBar = {
@@ -638,6 +643,24 @@ fun LibraryBrowserScreen(
                     val albumNameById = remember(albums) {
                         albums.associate { it.id to it.title }
                     }
+                    val onSongLongPress: (Track) -> Unit = { track ->
+                        if (!inSelectionMode) {
+                            contextTrackId = track.id
+                        } else {
+                            selectedTrackIds = if (track.id in selectedTrackIds) {
+                                selectedTrackIds - track.id
+                            } else {
+                                selectedTrackIds + track.id
+                            }
+                        }
+                    }
+                    val onToggleSelection: (Long) -> Unit = { id ->
+                        selectedTrackIds = if (id in selectedTrackIds) {
+                            selectedTrackIds - id
+                        } else {
+                            selectedTrackIds + id
+                        }
+                    }
                     if (artistFilter != null) {
                         var artistTracks by remember(artistFilter) { mutableStateOf<List<Track>>(emptyList()) }
                         LaunchedEffect(artistFilter) {
@@ -667,27 +690,11 @@ fun LibraryBrowserScreen(
                                     startIndex = idx,
                                 )
                             },
-                            onLongPress = { track ->
-                                if (!inSelectionMode) {
-                                    selectedTrackIds = setOf(track.id)
-                                } else {
-                                    selectedTrackIds = if (track.id in selectedTrackIds) {
-                                        selectedTrackIds - track.id
-                                    } else {
-                                        selectedTrackIds + track.id
-                                    }
-                                }
-                            },
+                            onLongPress = onSongLongPress,
                             albumNameById = albumNameById,
                             selectionMode = inSelectionMode,
                             selectedIds = selectedTrackIds,
-                            onToggleSelection = { id ->
-                                selectedTrackIds = if (id in selectedTrackIds) {
-                                    selectedTrackIds - id
-                                } else {
-                                    selectedTrackIds + id
-                                }
-                            },
+                            onToggleSelection = onToggleSelection,
                         )
                     } else {
                         SongList(
@@ -697,27 +704,11 @@ fun LibraryBrowserScreen(
                                 val idx = sorted.indexOf(track).coerceAtLeast(0)
                                 stationPlayback.playTracks(sorted, startIndex = idx)
                             },
-                            onLongPress = { track ->
-                                if (!inSelectionMode) {
-                                    selectedTrackIds = setOf(track.id)
-                                } else {
-                                    selectedTrackIds = if (track.id in selectedTrackIds) {
-                                        selectedTrackIds - track.id
-                                    } else {
-                                        selectedTrackIds + track.id
-                                    }
-                                }
-                            },
+                            onLongPress = onSongLongPress,
                             albumNameById = albumNameById,
                             selectionMode = inSelectionMode,
                             selectedIds = selectedTrackIds,
-                            onToggleSelection = { id ->
-                                selectedTrackIds = if (id in selectedTrackIds) {
-                                    selectedTrackIds - id
-                                } else {
-                                    selectedTrackIds + id
-                                }
-                            },
+                            onToggleSelection = onToggleSelection,
                         )
                     }
                 }
@@ -790,6 +781,9 @@ fun LibraryBrowserScreen(
         TrackContextSheet(
             trackId = id,
             onDismiss = { contextTrackId = null },
+            onSelect = {
+                selectedTrackIds = setOf(id)
+            },
         )
     }
     contextAlbum?.let { album ->

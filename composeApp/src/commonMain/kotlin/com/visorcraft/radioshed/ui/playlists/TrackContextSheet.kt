@@ -18,6 +18,7 @@ import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Lyrics
@@ -71,6 +72,7 @@ import org.koin.compose.koinInject
 fun TrackContextSheet(
     trackId: Long,
     onDismiss: () -> Unit,
+    onSelect: (() -> Unit)? = null,
     libraryRepo: LibraryRepository = koinInject(),
     stationPlayback: StationPlayback = koinInject(),
     ratingRepo: RatingRepository = koinInject(),
@@ -155,6 +157,7 @@ fun TrackContextSheet(
                     onDismiss()
                     navToLyrics(trackId)
                 },
+                onSelect = onSelect,
             )
             Step.PlaylistPicker -> AddToPlaylistInline(
                 trackId = trackId,
@@ -184,6 +187,7 @@ private fun MainStep(
     onGoToAlbum: (Long) -> Unit,
     onGoToArtist: (Long) -> Unit,
     onViewLyrics: () -> Unit,
+    onSelect: (() -> Unit)? = null,
 ) {
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp)) {
         // Track title header — gives the user a moment of confirmation
@@ -205,6 +209,17 @@ private fun MainStep(
             onClick = onToggleLike,
             iconTint = if (liked) MaterialTheme.colorScheme.primary else null,
         )
+        if (onSelect != null) {
+            ContextActionRow(
+                icon = Icons.Filled.Check,
+                label = "Select",
+                enabled = track != null,
+                onClick = {
+                    onSelect()
+                    onDismiss()
+                },
+            )
+        }
         ContextActionRow(
             icon = Icons.Filled.PlayArrow,
             label = "Play next",

@@ -360,6 +360,11 @@ fun BatchEditTagsDialog(
                         }
                         status = "$successes written, $failures failed"
 
+                        if (failures > 0) {
+                            saving = false
+                            return@launch
+                        }
+
                         val allFolders = folderRepo.list()
                         val affectedFolderIds = tracks.mapNotNull { track ->
                             allFolders
