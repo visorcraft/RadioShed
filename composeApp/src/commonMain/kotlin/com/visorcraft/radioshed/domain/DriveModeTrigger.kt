@@ -1,7 +1,9 @@
 package com.visorcraft.radioshed.domain
 
+import com.visorcraft.radioshed.data.RadioShedJson
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.builtins.ListSerializer
 
 /**
  * Describes a condition that automatically activates Drive Mode.
@@ -31,3 +33,26 @@ sealed interface DriveModeTrigger {
     @SerialName("schedule")
     data class Schedule(val startMin: Int, val endMin: Int) : DriveModeTrigger
 }
+
+/** Serializer for the persisted trigger list. */
+private val DRIVE_TRIGGERS_SERIALIZER = ListSerializer(DriveModeTrigger.serializer())
+
+/**
+ * Decodes the persisted trigger JSON blob into a list of triggers.
+ *
+ * Returns an empty list when [json] is blank or fails to decode, so a corrupt
+ * or empty blob degrades to "no auto triggers" through a single shared decision
+ * point. This is the canonical parser used by both
+ * [com.visorcraft.radioshed.car.DriveModeController] (runtime evaluation) and
+ * the Drive Mode settings editor (display + edit).
+ */
+fun decodeDriveTriggers(json: String): List<DriveModeTrigger> {
+    if (json.isBlank()) return emptyList()
+    return runCatching {
+        RadioShedJson.decodeFromString(DRIVE_TRIGGERS_SERIALIZER, json)
+    }.getOrDefault(emptyList())
+}
+
+/** Serializes a trigger list back into the persisted JSON blob form. */
+fun encodeDriveTriggers(triggers: List<DriveModeTrigger>): String =
+    RadioShedJson.encodeToString(DRIVE_TRIGGERS_SERIALIZER, triggers)

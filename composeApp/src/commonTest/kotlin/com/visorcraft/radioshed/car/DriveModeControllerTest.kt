@@ -1,9 +1,9 @@
 package com.visorcraft.radioshed.car
 
 import com.russhwolf.settings.Settings
-import com.visorcraft.radioshed.data.RadioShedJson
 import com.visorcraft.radioshed.data.SettingsStore
 import com.visorcraft.radioshed.domain.DriveModeTrigger
+import com.visorcraft.radioshed.domain.encodeDriveTriggers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -11,7 +11,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
-import kotlinx.serialization.builtins.ListSerializer
 import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -71,14 +70,11 @@ class DriveModeControllerTest {
 
     private fun store(): SettingsStore = SettingsStore(InMemorySettings())
 
-    private fun encodeTriggers(triggers: List<DriveModeTrigger>): String =
-        RadioShedJson.encodeToString(ListSerializer(DriveModeTrigger.serializer()), triggers)
-
     @Test
     fun btConnectMatchingTriggerActivates() = runTest {
         val watcher = FakeWatcher()
         val settings = store()
-        settings.setDriveTriggers(encodeTriggers(listOf(DriveModeTrigger.BtDevice("AA:BB", "Car"))))
+        settings.setDriveTriggers(encodeDriveTriggers(listOf(DriveModeTrigger.BtDevice("AA:BB", "Car"))))
         val controller = DriveModeController(
             watcher = watcher,
             settings = settings,
@@ -102,7 +98,7 @@ class DriveModeControllerTest {
     fun btDisconnectWithAutoExitDeactivates() = runTest {
         val watcher = FakeWatcher()
         val settings = store()
-        settings.setDriveTriggers(encodeTriggers(listOf(DriveModeTrigger.BtDevice("AA:BB", "Car"))))
+        settings.setDriveTriggers(encodeDriveTriggers(listOf(DriveModeTrigger.BtDevice("AA:BB", "Car"))))
         settings.setDriveAutoExit(true)
         val controller = DriveModeController(watcher, settings, backgroundScope, MutableSharedFlow()) { 0 }
         controller.start()
@@ -122,7 +118,7 @@ class DriveModeControllerTest {
     fun autoExitOffStaysActive() = runTest {
         val watcher = FakeWatcher()
         val settings = store()
-        settings.setDriveTriggers(encodeTriggers(listOf(DriveModeTrigger.BtDevice("AA:BB", "Car"))))
+        settings.setDriveTriggers(encodeDriveTriggers(listOf(DriveModeTrigger.BtDevice("AA:BB", "Car"))))
         settings.setDriveAutoExit(false)
         val controller = DriveModeController(watcher, settings, backgroundScope, MutableSharedFlow()) { 0 }
         controller.start()
@@ -143,7 +139,7 @@ class DriveModeControllerTest {
     fun scheduleWindowActivates() = runTest {
         val watcher = FakeWatcher()
         val settings = store()
-        settings.setDriveTriggers(encodeTriggers(listOf(DriveModeTrigger.Schedule(540, 1020))))
+        settings.setDriveTriggers(encodeDriveTriggers(listOf(DriveModeTrigger.Schedule(540, 1020))))
         val ticker = MutableSharedFlow<Unit>()
         var now = 600 // 10:00, inside 09:00..17:00
         val controller = DriveModeController(watcher, settings, backgroundScope, ticker) { now }
@@ -161,7 +157,7 @@ class DriveModeControllerTest {
     fun scheduleCrossMidnightActivates() = runTest {
         val watcher = FakeWatcher()
         val settings = store()
-        settings.setDriveTriggers(encodeTriggers(listOf(DriveModeTrigger.Schedule(1380, 60))))
+        settings.setDriveTriggers(encodeDriveTriggers(listOf(DriveModeTrigger.Schedule(1380, 60))))
         val ticker = MutableSharedFlow<Unit>()
         var now = 30 // 00:30, inside 23:00..01:00 (crosses midnight)
         val controller = DriveModeController(watcher, settings, backgroundScope, ticker) { now }
@@ -187,7 +183,7 @@ class DriveModeControllerTest {
         // leaves it on; a later genuine trigger edge resumes normal control.
         val watcher = FakeWatcher()
         val settings = store()
-        settings.setDriveTriggers(encodeTriggers(listOf(DriveModeTrigger.BtDevice("AA:BB", "Car"))))
+        settings.setDriveTriggers(encodeDriveTriggers(listOf(DriveModeTrigger.BtDevice("AA:BB", "Car"))))
         settings.setDriveAutoExit(true)
         val ticker = MutableSharedFlow<Unit>()
         val controller = DriveModeController(watcher, settings, backgroundScope, ticker) { 0 }

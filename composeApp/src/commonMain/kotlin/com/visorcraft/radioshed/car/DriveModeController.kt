@@ -1,10 +1,10 @@
 package com.visorcraft.radioshed.car
 
-import com.visorcraft.radioshed.data.RadioShedJson
 import com.visorcraft.radioshed.data.SettingsStore
 import com.visorcraft.radioshed.data.localMinutesOfDay
 import com.visorcraft.radioshed.data.nowMillis
 import com.visorcraft.radioshed.domain.DriveModeTrigger
+import com.visorcraft.radioshed.domain.decodeDriveTriggers
 import com.visorcraft.radioshed.util.isInMinuteWindow
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -15,7 +15,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.serialization.builtins.ListSerializer
 
 /**
  * Drives Drive Mode automatically from the user's configured
@@ -112,7 +111,7 @@ class DriveModeController(
      */
     private suspend fun evaluate() {
         mutex.withLock {
-            val triggers = parseTriggers()
+            val triggers = decodeDriveTriggers(settings.getDriveTriggers())
             val connectedMacs = watcher.connectedDevices.value.map { it.mac }.toSet()
             val nowMin = nowMinutesOfDay()
             val triggerActive = triggers.any { trigger ->
@@ -135,14 +134,6 @@ class DriveModeController(
             }
         }
     }
-
-    /** Parse the configured triggers; a malformed/empty blob yields no triggers. */
-    private fun parseTriggers(): List<DriveModeTrigger> =
-        runCatching {
-            val json = settings.getDriveTriggers()
-            if (json.isEmpty()) emptyList()
-            else RadioShedJson.decodeFromString(ListSerializer(DriveModeTrigger.serializer()), json)
-        }.getOrDefault(emptyList())
 
     companion object {
         /** Emits Unit once per minute. Injectable so tests pump it manually. */

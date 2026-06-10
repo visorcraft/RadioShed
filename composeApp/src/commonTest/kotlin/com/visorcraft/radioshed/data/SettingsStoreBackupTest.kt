@@ -259,20 +259,20 @@ class SettingsStoreBackupTest {
         storeA.setDriveButtons(listOf("next", "warp_drive"))
         assertEquals("next", storeA.getDriveButtons())
 
-        // (b) All-invalid ids: getter returns the hardcoded default.
+        // (b) All-invalid ids: getter returns the default.
         val storeB = newStore()
         storeB.setDriveButtons(listOf("warp_drive", "turbo_boost"))
         assertEquals(
-            "previous,play_pause,next,station_picker",
+            SettingsStore.DRIVE_BUTTONS_DEFAULT,
             storeB.getDriveButtons(),
             "All-invalid ids should fall back to the default button set",
         )
 
-        // (c) Empty list: getter returns the hardcoded default.
+        // (c) Empty list: getter returns the default.
         val storeC = newStore()
         storeC.setDriveButtons(emptyList())
         assertEquals(
-            "previous,play_pause,next,station_picker",
+            SettingsStore.DRIVE_BUTTONS_DEFAULT,
             storeC.getDriveButtons(),
             "Empty list should fall back to the default button set",
         )
@@ -283,10 +283,9 @@ class SettingsStoreBackupTest {
         // A bundle from a different/older app version may carry a
         // key whose type doesn't match what dumpForBackup writes
         // today. Restore should silently skip it rather than
-        // poisoning the slot. We construct a synthetic bundle by
-        // hand using the public key string ("online.connectivityPolicy")
-        // because the SettingsStore companion is private; we
-        // discover the key via a real dump first.
+        // poisoning the slot. We discover the actual key string via a
+        // real dump first (rather than hardcoding "online.connectivityPolicy")
+        // so this stays robust if the key constant is ever renamed.
         val seed = newStore()
         seed.setConnectivityPolicy(ConnectivityPolicy.WiFiOnly)
         val connectivityKey = seed.dumpForBackup().keys

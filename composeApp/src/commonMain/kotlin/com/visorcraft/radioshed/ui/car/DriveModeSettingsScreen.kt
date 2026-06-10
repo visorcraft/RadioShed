@@ -45,18 +45,18 @@ import androidx.compose.ui.unit.dp
 import com.visorcraft.radioshed.car.BluetoothWatcher
 import com.visorcraft.radioshed.car.BtPeer
 import com.visorcraft.radioshed.car.NullBluetoothWatcher
-import com.visorcraft.radioshed.data.RadioShedJson
 import com.visorcraft.radioshed.data.SettingsStore
 import com.visorcraft.radioshed.data.StationRepository
 import com.visorcraft.radioshed.domain.DriveModeTrigger
 import com.visorcraft.radioshed.domain.Station
+import com.visorcraft.radioshed.domain.decodeDriveTriggers
+import com.visorcraft.radioshed.domain.encodeDriveTriggers
 import com.visorcraft.radioshed.permissions.rememberBluetoothConnectGate
 import com.visorcraft.radioshed.ui.settings.MinutesOfDaySlider
 import com.visorcraft.radioshed.ui.settings.SettingsSectionHeader
 import com.visorcraft.radioshed.ui.settings.SettingsToggleRow
 import com.visorcraft.radioshed.ui.settings.formatHhMm
 import com.visorcraft.radioshed.ui.util.rememberHapticTick
-import kotlinx.serialization.builtins.ListSerializer
 import org.koin.compose.koinInject
 
 /** Human labels for the Drive Mode button-bar action ids. The id ORDER (and
@@ -95,10 +95,10 @@ private const val MIN_BUTTONS = 4
  * re-encodes and writes straight through so the change survives process death
  * and is picked up by the running [com.visorcraft.radioshed.car.DriveModeController].
  *
- * Triggers round-trip through [RadioShedJson] + a [ListSerializer] of
- * [DriveModeTrigger] (the same encoding the controller decodes). The quick-list
- * is comma-joined station ids (≤6); the button bar is comma-joined action ids
- * persisted in [DRIVE_BUTTON_ORDER].
+ * Triggers round-trip through [encodeDriveTriggers] / [decodeDriveTriggers]
+ * (the same codec the controller decodes with). The quick-list is comma-joined
+ * station ids (≤6); the button bar is comma-joined action ids ordered by
+ * [SettingsStore.DRIVE_BUTTON_ID_ORDER].
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -117,10 +117,10 @@ fun DriveModeSettingsScreen(
     var driveMode by remember { mutableStateOf(settings.getDriveMode()) }
     var autoExit by remember { mutableStateOf(settings.getDriveAutoExit()) }
 
-    var triggers by remember { mutableStateOf(decodeTriggers(settings.getDriveTriggers())) }
+    var triggers by remember { mutableStateOf(decodeDriveTriggers(settings.getDriveTriggers())) }
     val persistTriggers: (List<DriveModeTrigger>) -> Unit = { next ->
         triggers = next
-        settings.setDriveTriggers(encodeTriggers(next))
+        settings.setDriveTriggers(encodeDriveTriggers(next))
     }
 
     var quickList by remember { mutableStateOf(parseIds(settings.getDriveQuickList())) }
@@ -701,17 +701,6 @@ private fun AddStationDialog(
         },
     )
 }
-
-/** Decode the persisted triggers JSON; a corrupt/empty blob yields no triggers. */
-private fun decodeTriggers(json: String): List<DriveModeTrigger> {
-    if (json.isBlank()) return emptyList()
-    return runCatching {
-        RadioShedJson.decodeFromString(ListSerializer(DriveModeTrigger.serializer()), json)
-    }.getOrDefault(emptyList())
-}
-
-private fun encodeTriggers(triggers: List<DriveModeTrigger>): String =
-    RadioShedJson.encodeToString(ListSerializer(DriveModeTrigger.serializer()), triggers)
 
 /** Split a comma-joined id string into a clean list (drops blanks). */
 private fun parseIds(joined: String): List<String> =

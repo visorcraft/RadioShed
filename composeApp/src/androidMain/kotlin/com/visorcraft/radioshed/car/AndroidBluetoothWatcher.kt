@@ -56,7 +56,13 @@ class AndroidBluetoothWatcher(private val context: Context) : BluetoothWatcher {
                         } ?: return@runCatching
                     when (intent.action) {
                         BluetoothDevice.ACTION_ACL_CONNECTED ->
-                            _connectedDevices.value = _connectedDevices.value + device.toPeer()
+                            // Dedupe on mac: BtPeer equality includes the name, so a
+                            // reconnect that resolves a different name (permission just
+                            // granted, cached vs live name) would otherwise leave two
+                            // peers for one device. Replace any same-mac entry.
+                            _connectedDevices.value =
+                                _connectedDevices.value.filterNot { it.mac == device.address }.toSet() +
+                                    device.toPeer()
                         BluetoothDevice.ACTION_ACL_DISCONNECTED ->
                             _connectedDevices.value =
                                 _connectedDevices.value.filterNot { it.mac == device.address }.toSet()
