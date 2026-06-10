@@ -28,6 +28,7 @@ import com.visorcraft.radioshed.source.MediaSourceRegistry
 import com.visorcraft.radioshed.source.MissingArtworkSync
 import com.visorcraft.radioshed.source.MissingLyricsSync
 import com.visorcraft.radioshed.source.NetworkPolicyGate
+import com.visorcraft.radioshed.source.ScrobbleSync
 import com.visorcraft.radioshed.stations.DjAnnouncer
 import com.visorcraft.radioshed.stations.PresetSeeder
 import com.visorcraft.radioshed.stations.SourceRuleEvaluator
@@ -80,6 +81,20 @@ val sharedModule: Module = module {
         )
     }
 
+    // Scrobble queue-then-drain coordinator. ListenBrainzClient comes
+    // from platformModule (real on Android, Null stub on desktop/iOS).
+    // The network gate is passed as a lambda over the NetworkPolicyGate's
+    // automatic-fetch check — same gate StationPlayback consulted before
+    // the live submit moved here.
+    single {
+        ScrobbleSync(
+            queue = get(),
+            client = get(),
+            settings = get(),
+            allowNetwork = { get<NetworkPolicyGate>().allowAutomaticFetch() },
+        )
+    }
+
     // Cover Art Archive sweep. CoverArtFetcher is platform-specific
     // (Android uses HttpURLConnection; iOS is a Null stub for now).
     single { MissingArtworkSync(get(), get(), get(), get()) }
@@ -116,7 +131,7 @@ val sharedModule: Module = module {
     // platformModule (Null on desktop/iOS). SleepTimer lets the DJ stand down
     // during a sleep fade so the two volume drivers don't fight (registered above).
     single { DjAnnouncer(get(), get(), get(), get(), get(), get(), get()) }
-    single { StationPlayback(get(), get(), get(), get(), get(), get(), get(), get(), get(), get()) }
+    single { StationPlayback(get(), get(), get(), get(), get(), get(), get(), get(), get()) }
     single { PresetSeeder(get(), get()) }
 
     // Auto Drive Mode: activates Drive Mode from BluetoothWatcher matches +

@@ -66,6 +66,7 @@ fun App(
     presetSeeder: PresetSeeder = koinInject(),
     audioEngine: AudioEngine = koinInject(),
     driveModeController: DriveModeController = koinInject(),
+    scrobbleSync: com.visorcraft.radioshed.source.ScrobbleSync = koinInject(),
 ) {
     // Live-mutable theme inputs: read once from the persisted settings,
     // then hold in state so the AppSettingsScreen picker can re-theme
@@ -172,6 +173,15 @@ fun App(
         // desktop/iOS (NullBluetoothWatcher + no schedule ticks unless the
         // user configured a Schedule trigger).
         LaunchedEffect(Unit) { driveModeController.start() }
+
+        // Flush any scrobbles that failed to submit while offline, once
+        // per process lifetime. ScrobbleSync's gate check no-ops this
+        // when the connectivity policy denies, scrobbling is off, or no
+        // token is set; runCatching keeps a flush failure from surfacing
+        // as a playback error banner.
+        LaunchedEffect(Unit) {
+            runCatching { scrobbleSync.drain() }
+        }
 
         // Auto-resume the last station once per process lifetime — gated
         // by an opt-in setting (off by default). LaunchedEffect(Unit)

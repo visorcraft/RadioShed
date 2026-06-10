@@ -52,8 +52,7 @@ class StationPlayback(
     private val libraryRepo: LibraryRepository,
     private val settings: SettingsStore,
     private val sleepTimer: com.visorcraft.radioshed.audio.SleepTimer,
-    private val listenBrainz: com.visorcraft.radioshed.source.ListenBrainzClient,
-    private val networkPolicy: com.visorcraft.radioshed.source.NetworkPolicyGate,
+    private val scrobbleSync: com.visorcraft.radioshed.source.ScrobbleSync,
     private val djAnnouncer: DjAnnouncer,
 ) {
     /**
@@ -1039,27 +1038,24 @@ class StationPlayback(
                 // ListenBrainz scrobble — only on completed plays per
                 // ListenBrainz / Last.fm convention (>=50% or >=4min,
                 // captured here by the COMPLETION_FRACTION threshold
-                // already used for skip detection). Connectivity-policy-
-                // gated, no-token-no-op via the client itself.
+                // already used for skip detection). ScrobbleSync handles
+                // the enabled / no-token no-op, the connectivity gate,
+                // the live-submit-then-enqueue fallback, and draining
+                // the offline backlog — this site only resolves the
+                // artist / album metadata it can't see.
                 if (completed && settings.getListenBrainzEnabled()) {
-                    val token = settings.getListenBrainzToken()
-                    if (token.isNotBlank() && networkPolicy.allowAutomaticFetch()) {
-                        val artistName = libraryRepo.artistsForTrack(prev.id)
-                            .firstOrNull()?.name
-                        val albumName = prev.albumId?.let {
-                            libraryRepo.getAlbumById(it)?.title
-                        }
-                        if (!artistName.isNullOrBlank()) {
-                            listenBrainz.submit(
-                                com.visorcraft.radioshed.source.ListenBrainzClient.Listen(
-                                    artist = artistName,
-                                    track = prev.title,
-                                    album = albumName,
-                                    listenedAtSeconds = startedAt / 1000L,
-                                    token = token,
-                                ),
-                            )
-                        }
+                    val artistName = libraryRepo.artistsForTrack(prev.id)
+                        .firstOrNull()?.name
+                    val albumName = prev.albumId?.let {
+                        libraryRepo.getAlbumById(it)?.title
+                    }
+                    if (!artistName.isNullOrBlank()) {
+                        scrobbleSync.submitOrEnqueue(
+                            artist = artistName,
+                            track = prev.title,
+                            album = albumName,
+                            listenedAtSeconds = startedAt / 1000L,
+                        )
                     }
                 }
             }
