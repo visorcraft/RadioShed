@@ -98,8 +98,9 @@ The main Android dev host is **Windows 11**. `adb` lives at
 
 **No release signing is configured** (no `signingConfigs` in `android {}`),
 so `assembleRelease` / `bundleRelease` emit **unsigned** artifacts. To ship
-an installable APK, debug-sign + `zipalign` it out-of-band (what the v1.1.0
-asset did) or add a real `signingConfig`. Keystores and
+an installable APK, debug-sign + `zipalign` it out-of-band (how every
+published release APK is made — recipe under Releases) or add a real
+`signingConfig`. Keystores and
 `keystore.properties` / `*.jks` / `*.keystore` are gitignored and
 machine-specific — never commit them.
 
@@ -501,17 +502,22 @@ Per-platform shippable artifacts (command → output):
 | Linux `.deb` | `:composeApp:packageDistributionForCurrentOS` | `composeApp/build/compose/binaries/main/deb/radioshed_<version>_amd64.deb` |
 | Windows `.msi` / macOS `.dmg` | `:composeApp:packageDistributionForCurrentOS` (on that host) | jpackage native installer for the host OS |
 
-Asset naming used for v1.1.0: `RadioShed-1.1.0-debug-signed.apk` (release APK
-debug-signed to be installable), `RadioShed-1.1.0-release.aab`,
-`RadioShed-1.1.0-x86_64.AppImage`, `radioshed_1.1.0_amd64.deb`.
+Asset naming (used since v1.1.0): `RadioShed-<v>-debug-signed.apk` (release
+APK debug-signed to be installable), `RadioShed-<v>-release.aab`,
+`RadioShed-<v>-x86_64.AppImage`, `radioshed_<v>_amd64.deb`. Debug-signing
+recipe (build-tools `36.0.0`; **zipalign before apksigner**):
+`zipalign -f 4 in.apk aligned.apk`, then `apksigner sign
+--ks ~/.android/debug.keystore --ks-pass pass:android
+--ks-key-alias androiddebugkey --out <name>.apk aligned.apk`, then
+`apksigner verify` (don't ship the `.idsig` side-file).
 
 **Desktop GPL status — RESOLVED (no blocker).** Desktop audio is the
 Kotlin + JNA libvlc binding (libvlc LGPL, JNA Apache-2.0), not VLCJ, so no
 GPL artifact ships and there is no conflict with the proprietary `LICENSE`
-(SPEC Appendix C). Caveats: smoke-test desktop playback per OS before a
+(SPEC Appendix C). v1.2.0+ releases ship the JNA binding; only the v1.1.0
+assets contain VLCJ. Caveat: smoke-test desktop playback per OS before a
 public desktop release (JNA-binding playback not yet verified on every
-VLC-equipped OS), and the already-published v1.1.0 assets *did* ship VLCJ —
-the de-GPL applies from the next release.
+VLC-equipped OS).
 
 ### Commits
 
