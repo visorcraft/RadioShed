@@ -1,8 +1,12 @@
 package com.visorcraft.radioshed.stations
 
 import com.visorcraft.radioshed.audio.AudioEngine
+import com.visorcraft.radioshed.audio.CrossfadePlan
 import com.visorcraft.radioshed.audio.PlayerState
+import com.visorcraft.radioshed.audio.resolveCrossfadePlan
+import com.visorcraft.radioshed.audio.shouldArmCrossfade
 import com.visorcraft.radioshed.audio.toPlayable
+import com.visorcraft.radioshed.domain.Crossfade
 import com.visorcraft.radioshed.data.LibraryRepository
 import com.visorcraft.radioshed.data.RatingRepository
 import com.visorcraft.radioshed.data.SettingsStore
@@ -292,6 +296,31 @@ class StationPlayback(
      *  history when the user advances forward. */
     private var currentTrack: Track? = null
 
+    /**
+     * Resolved crossfade plan for the active station (null = Off / no
+     * crossfade → today's gapless / hard-cut path). Set when the station
+     * changes. When non-null, the end-fade is suppressed (it would
+     * double-attenuate the overlap) and the position poll arms a crossfade
+     * into the next track instead.
+     */
+    @Volatile private var crossfadePlan: CrossfadePlan? = null
+
+    /**
+     * Set true once the position poll has triggered the crossfade into the
+     * next track, so the same near-end window can't fire it twice. Reset on
+     * every fresh track load.
+     */
+    @Volatile private var crossfadeArmed: Boolean = false
+
+    /**
+     * Raised across a crossfade transition so the auto-advance `Ended`
+     * collector ignores the OUTGOING track's natural end — the crossfade has
+     * already consumed the queue and started the next track, so a second
+     * advance here would skip a track. Lowered after a grace window long
+     * enough for the outgoing player's Ended to drain.
+     */
+    @Volatile private var suppressEndedForCrossfade: Boolean = false
+
     /** Wall-clock millis when [currentTrack] started playing. Used to
      *  compute `listened_ms` for the persistent station_history row
      *  written on the next transition. */
@@ -322,7 +351,9 @@ class StationPlayback(
         // default behaviour.
         scope.launch {
             audioEngine.state.collect { state ->
-                if (state == PlayerState.Ended && !suppressAutoAdvance) {
+                if (state == PlayerState.Ended && !suppressAutoAdvance &&
+                    !suppressEndedForCrossfade
+                ) {
                     advanceMutex.withLock {
                         // Sleep timer (end-of-track mode) — pause the
                         // engine here, INSIDE the mutex, BEFORE the
@@ -358,15 +389,90 @@ class StationPlayback(
         // and is tracked in SPEC's deferred list.
         scope.launch {
             audioEngine.position.collect { pos ->
-                val fadeSec = settings.getEndFadeSec()
-                if (fadeSec <= 0) return@collect
                 val track = currentTrack ?: return@collect
                 if (pos.durationMs <= 0L) return@collect
                 val remainingMs = pos.durationMs - pos.currentMs
+
+                // Active crossfade takes precedence over the single-player
+                // end-fade — running both would double-attenuate the overlap.
+                // When armed and we're inside the crossfade window, advance
+                // into the next track with an audible overlap instead of
+                // letting the track hard-end.
+                val plan = crossfadePlan
+                if (plan != null) {
+                    // Don't re-arm while a crossfade is already in flight: the
+                    // position flow still reports the OUTGOING track (the
+                    // session swaps only when the ramp completes), so without
+                    // this guard the next poll tick would falsely see the old
+                    // track near its end and arm a SECOND crossfade. Both
+                    // latches are raised here (before launching the advance)
+                    // so the Ended collector also sees the suppression if the
+                    // outgoing track ends between this tick and the mutex
+                    // acquisition inside maybeStartCrossfade.
+                    if (!crossfadeArmed && !suppressEndedForCrossfade &&
+                        shouldArmCrossfade(pos.currentMs, pos.durationMs, plan.durationMs)
+                    ) {
+                        crossfadeArmed = true
+                        suppressEndedForCrossfade = true
+                        maybeStartCrossfade(plan)
+                    }
+                    return@collect
+                }
+
+                // No crossfade: the existing single-player end-fade.
+                val fadeSec = settings.getEndFadeSec()
+                if (fadeSec <= 0) return@collect
                 val fadeWindowMs = fadeSec * 1_000L
                 if (remainingMs in 1L..fadeWindowMs) {
                     val attenuation = remainingMs.toFloat() / fadeWindowMs.toFloat()
                     applyEffectiveVolumeAttenuated(track, attenuation)
+                }
+            }
+        }
+    }
+
+    /**
+     * Begin a crossfade into the next queued track. Runs the SAME queue
+     * bookkeeping as [advanceToNext] (record previous, push history, consume
+     * the queue head, update [currentTrack]) so history / station_history /
+     * DJ stay correct, then hands the audible overlap to the engine via
+     * [AudioEngine.crossfadeTo] instead of a hard [AudioEngine.play].
+     *
+     * Mutex-guarded so it can't race with skipNext / advanceToNext. If the
+     * queue is exhausted we leave the current track to end naturally (the
+     * normal [advanceToNext] stop path then runs on Ended).
+     */
+    private fun maybeStartCrossfade(plan: CrossfadePlan) {
+        scope.launch {
+            advanceMutex.withLock {
+                // Re-check under the lock: a skip / stop / station change may
+                // have run between the poll arming and acquiring the mutex (any
+                // of those calls cancelCrossfadeIfActive, clearing the latches).
+                if (!crossfadeArmed || !suppressEndedForCrossfade) return@withLock
+                // No track to fade into → abort the crossfade and LOWER the
+                // latches so the outgoing track's natural Ended is honoured
+                // (RepeatMode.One replays; an exhausted queue stops). Leaving
+                // them raised here would suppress that Ended and stall playback.
+                val q = queue
+                val next = if (q == null || _repeatMode.value == RepeatMode.One) {
+                    null
+                } else {
+                    q.next(allowWrap = _repeatMode.value == RepeatMode.All)
+                }
+                if (next == null) {
+                    crossfadeArmed = false
+                    suppressEndedForCrossfade = false
+                    return@withLock
+                }
+                republishPriorityCount()
+                // suppressEndedForCrossfade is already raised (by the poll); it
+                // keeps the OUTGOING track's natural Ended from triggering a
+                // second advance on top of this crossfade. Lower it after the
+                // overlap (+ grace) drains.
+                playTrack(next, recordHistory = true, crossfade = plan)
+                scope.launch {
+                    kotlinx.coroutines.delay(plan.durationMs + CROSSFADE_ENDED_GRACE_MS)
+                    suppressEndedForCrossfade = false
                 }
             }
         }
@@ -508,11 +614,22 @@ class StationPlayback(
             // otherwise the listening session gets attributed to the new
             // station the user just switched to.
             recordPreviousIfAny()
+            // A station switch mid-crossfade must abort the running ramp so it
+            // doesn't promote the old station's next track on top of the new
+            // station's first track.
+            cancelCrossfadeIfActive()
 
             _currentStation.value = station
             queue = newQueue
             _candidateCount.value = newQueue.candidateCount
             _priorityCountFlow.value = 0
+            // Resolve this station's crossfade rule and tell the engine, so its
+            // dual-player pipeline (Android) knows whether to preload for an
+            // overlap. Null plan reverts to the gapless / end-fade path.
+            crossfadePlan = resolveCrossfadePlan(station.playback.crossfade)
+            crossfadeArmed = false
+            suppressEndedForCrossfade = false
+            audioEngine.setCrossfade(station.playback.crossfade)
             // Surface a hint when a station resolves to zero tracks
             // instead of silently no-op'ing. Common causes: rule
             // matches nothing in the user's current library, all
@@ -592,8 +709,22 @@ class StationPlayback(
         scope.launch {
             advanceMutex.withLock {
                 userSkipPending = true
+                cancelCrossfadeIfActive()
                 advanceToNext()
             }
+        }
+    }
+
+    /**
+     * If a crossfade is mid-flight, abort the engine ramp and clear the
+     * suppress latch so the upcoming explicit advance (skip / stop) hard-cuts
+     * cleanly instead of racing the still-running fade. Caller holds the mutex.
+     */
+    private fun cancelCrossfadeIfActive() {
+        if (suppressEndedForCrossfade) {
+            audioEngine.cancelCrossfade()
+            suppressEndedForCrossfade = false
+            crossfadeArmed = false
         }
     }
 
@@ -742,10 +873,17 @@ class StationPlayback(
                 // we tear down the station context so it doesn't get
                 // silently dropped on tap-to-play from a list view.
                 recordPreviousIfAny()
+                cancelCrossfadeIfActive()
                 _currentStation.value = null
                 history.clear()
                 currentTrack = null
                 trackStartedAtMs = null
+                // Ad-hoc playback (Library tap, playlist) has no station
+                // crossfade rule — fall back to gapless butt-joins.
+                crossfadePlan = null
+                crossfadeArmed = false
+                suppressEndedForCrossfade = false
+                audioEngine.setCrossfade(Crossfade.Off)
                 val newQueue = PlaybackQueue(
                     candidates = tracks,
                     rule = PlaybackRule(order = PlayOrder.Sequential),
@@ -798,6 +936,7 @@ class StationPlayback(
         scope.launch {
             advanceMutex.withLock {
                 userSkipPending = true
+                cancelCrossfadeIfActive()
                 val prev = history.removeLastOrNull()
                 if (prev == null) {
                     // No previous track to go to — seek-to-start is a
@@ -827,6 +966,7 @@ class StationPlayback(
                 // lost; THEN clear state. Order matters — once currentStation
                 // and currentTrack are nulled, recordPreviousIfAny is a no-op.
                 recordPreviousIfAny()
+                cancelCrossfadeIfActive()
                 suppressAutoAdvance = true
                 audioEngine.stop()
                 _currentStation.value = null
@@ -839,6 +979,9 @@ class StationPlayback(
                 history.clear()
                 currentTrack = null
                 trackStartedAtMs = null
+                crossfadePlan = null
+                crossfadeArmed = false
+                suppressEndedForCrossfade = false
             }
         }
     }
@@ -969,7 +1112,7 @@ class StationPlayback(
      * previously-current track is pushed onto [history] (capped) so
      * skip-previous can navigate back through it.
      */
-    private fun playTrack(track: Track, recordHistory: Boolean) {
+    private fun playTrack(track: Track, recordHistory: Boolean, crossfade: CrossfadePlan? = null) {
         if (recordHistory) {
             currentTrack?.let { prev ->
                 history.addLast(prev)
@@ -1008,13 +1151,22 @@ class StationPlayback(
                 null
             }
         }
+        // A fresh load clears the crossfade-armed latch for the new track.
+        // (maybeStartCrossfade set it for the OUTGOING track; the incoming
+        // track must be able to arm its own crossfade when it nears its end.)
+        crossfadeArmed = false
         // Apply ReplayGain to the player volume BEFORE issuing play(),
         // so the new track starts at the corrected level instead of
         // glitching at full and then snapping down. The track value is
         // preferred over the album value (matches what most players do
         // for shuffle-heavy listening — album values bias toward the
         // album's loudest cut rather than this specific track).
-        applyReplayGain(track)
+        //
+        // Skip it on the crossfade path: the engine's dual-player ramp owns
+        // the ExoPlayer volume during the overlap, so we must not also drive
+        // the session-volume multiplier mid-fade (it would fight the ramp).
+        // ReplayGain on crossfaded transitions is a documented follow-up.
+        if (crossfade == null) applyReplayGain(track)
         // Resolve the track's album artwork URI before handing the Playable
         // to the player. The lookup is one indexed primary-key SELECT and
         // takes <1ms; doing it inline (as a launch) keeps advance order
@@ -1022,7 +1174,22 @@ class StationPlayback(
         // belatedly populates artwork.
         scope.launch {
             val artworkUri = track.albumId?.let { libraryRepo.getAlbumById(it)?.artworkUri }
-            audioEngine.play(track.toPlayable(artworkUri = artworkUri))
+            val playable = track.toPlayable(artworkUri = artworkUri)
+            if (crossfade != null) {
+                // Audible overlap into the already-resolved next track. The
+                // service runs the dual-ExoPlayer ramp and re-points the
+                // MediaSession at the incoming track.
+                audioEngine.crossfadeTo(playable, crossfade.durationMs, crossfade.curve)
+            } else {
+                audioEngine.play(playable)
+                // Preload the following track so it's ready for a gapless
+                // butt-join (crossfade Off) or an instant crossfade. Peek one
+                // ahead without consuming the queue.
+                upcoming(1).firstOrNull()?.let { up ->
+                    val upArt = up.albumId?.let { libraryRepo.getAlbumById(it)?.artworkUri }
+                    audioEngine.setUpNext(up.toPlayable(artworkUri = upArt))
+                }
+            }
         }
     }
 
@@ -1188,6 +1355,11 @@ class StationPlayback(
          *  emit any spurious Ended from the prior media item; short
          *  enough that a real natural-end fires through promptly. */
         const val SUPPRESS_GRACE_MS = 600L
+
+        /** Extra slack after a crossfade's nominal duration before we stop
+         *  suppressing the outgoing track's Ended — covers buffering jitter
+         *  and the service-side ramp completing slightly late. */
+        const val CROSSFADE_ENDED_GRACE_MS = 1_500L
     }
 }
 

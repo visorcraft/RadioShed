@@ -80,6 +80,15 @@ class RadioShedMediaSessionService : MediaLibraryService() {
     private var librarySession: MediaLibrarySession? = null
 
     /**
+     * Dual-ExoPlayer pair powering true crossfade + gapless preload
+     * (PLAN 3.2). The session player always wraps [CrossfadePlayerPair.active]
+     * in a [StationAwarePlayer]; on a crossfade swap we re-wrap the new active
+     * player and call [MediaLibrarySession.setPlayer] so the notification /
+     * Auto / lock-screen follow the swap and show the incoming track.
+     */
+    private var playerPair: CrossfadePlayerPair? = null
+
+    /**
      * Service-scoped supervisor. Used by the library callback to bridge
      * between Media3's `ListenableFuture`-based API and our coroutine-based
      * repos. Cancelled in [onDestroy]. crashGuard prevents an AA voice-
@@ -109,17 +118,119 @@ class RadioShedMediaSessionService : MediaLibraryService() {
             .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
             .build()
 
-        val exoPlayer = ExoPlayer.Builder(this)
+        fun buildExoPlayer(): ExoPlayer = ExoPlayer.Builder(this)
             .setAudioAttributes(attributes, /* handleAudioFocus = */ true)
             .setHandleAudioBecomingNoisy(true)
             .build()
+            .also { attachEffectsAndWidgetListeners(it) }
 
-        // Wrap ExoPlayer in StationAwarePlayer so external surfaces
+        // Two players: one audible (active), one standby for the crossfade /
+        // gapless preload. The pair re-points the MediaSession at whichever is
+        // active when a crossfade swap completes.
+        val pair = CrossfadePlayerPair(
+            primary = buildExoPlayer(),
+            secondary = buildExoPlayer(),
+            onActivePlayerChanged = { newActive -> swapSessionPlayer(newActive) },
+        )
+        playerPair = pair
+
+        // Wrap the active ExoPlayer in StationAwarePlayer so external surfaces
         // (Android Auto, lock-screen, Bluetooth AVRCP) see skip-next /
         // skip-previous as always available, and pressing those buttons
         // routes through StationPlayback's queue logic instead of
         // ExoPlayer's default seek-within-current-queue behavior. See
         // [StationAwarePlayer] kdoc for the full rationale.
+        val player = wrapAsStationPlayer(pair.active)
+
+        Log.i(TAG, "onCreate: building MediaLibrarySession")
+        librarySession = MediaLibrarySession.Builder(this, player, libraryCallback)
+            .build()
+        Log.i(TAG, "onCreate: MediaLibrarySession built; token=${librarySession?.token}")
+        // Hand the live session back to the callback so it can update
+        // the custom layout (heart state, repeat/shuffle glyph) when
+        // the user taps an action or playback state changes. Using a
+        // field on the callback rather than re-deriving from
+        // onGetSession lets the callback push setCustomLayout
+        // unconditionally (Media3 dedupes redundant updates internally).
+        libraryCallback.attach(librarySession)
+        // Mirror REPEAT_MODE / shuffleModeEnabled changes back into the
+        // custom layout so the notification glyph reflects whatever
+        // toggled the state — including in-app NowPlaying buttons,
+        // not just the notification's own action taps.
+        // Override the default media notification provider so the
+        // status-bar small icon is the RadioShed antenna silhouette
+        // rather than the system-default media-playback icon (which
+        // is generic across all media apps and looks unprofessional).
+        // Default channel id / name / button order are preserved.
+        val notificationProvider = DefaultMediaNotificationProvider.Builder(this)
+            .setNotificationId(NOTIFICATION_ID)
+            .setChannelId(NOTIFICATION_CHANNEL_ID)
+            .setChannelName(R.string.notification_channel_playback)
+            .build()
+            .apply {
+                setSmallIcon(R.drawable.ic_radioshed_notification)
+            }
+        setMediaNotificationProvider(notificationProvider)
+    }
+
+    /**
+     * Attach the equalizer-routing + widget-update listeners to an ExoPlayer.
+     * Applied to BOTH players in the pair (in [CrossfadePlayerPair]'s
+     * constructor args via [buildExoPlayer]) so effects re-attach and widgets
+     * repaint regardless of which player is currently active after a crossfade
+     * swap. The session id differs per player, so the equalizer reattaches on
+     * the swap's onAudioSessionIdChanged for the newly-active one.
+     */
+    private fun attachEffectsAndWidgetListeners(exoPlayer: ExoPlayer) {
+        exoPlayer.addListener(object : androidx.media3.common.Player.Listener {
+            override fun onAudioSessionIdChanged(audioSessionId: Int) {
+                // Only the active player should own the global AudioEffect
+                // chain; a standby player's session id (it preloads silently)
+                // must not steal the equalizer away from what's audible.
+                if (exoPlayer !== playerPair?.active) return
+                runCatching {
+                    val ctrl = GlobalContext.get()
+                        .get<com.visorcraft.radioshed.audio.EqualizerController>()
+                    if (ctrl is com.visorcraft.radioshed.audio.AndroidEqualizerController) {
+                        ctrl.onAudioSessionIdChanged(audioSessionId)
+                    }
+                }
+            }
+
+            override fun onMediaItemTransition(
+                mediaItem: androidx.media3.common.MediaItem?,
+                reason: Int,
+            ) {
+                if (exoPlayer !== playerPair?.active) return
+                // Push a fresh paint to any home-screen widget
+                // instances so they catch up to the new track.
+                // Cheap (no-op when zero widgets exist).
+                runCatching {
+                    com.visorcraft.radioshed.widget.NowPlayingWidget
+                        .pushUpdate(this@RadioShedMediaSessionService)
+                }
+            }
+
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                if (exoPlayer !== playerPair?.active) return
+                // Same reason as onMediaItemTransition — flip the
+                // widget's play/pause glyph when state changes.
+                runCatching {
+                    com.visorcraft.radioshed.widget.NowPlayingWidget
+                        .pushUpdate(this@RadioShedMediaSessionService)
+                }
+            }
+        })
+    }
+
+    /**
+     * Wrap [exoPlayer] in a [StationAwarePlayer] and attach the custom-layout
+     * refresh listeners (repeat / shuffle / track change). Used both at
+     * construction and on every crossfade swap so the new session player keeps
+     * routing skip commands through [StationPlayback] and keeps the Auto /
+     * notification glyphs in sync.
+     */
+    private fun wrapAsStationPlayer(exoPlayer: ExoPlayer): StationAwarePlayer {
         val player = StationAwarePlayer(
             underlying = exoPlayer,
             onSkipNext = {
@@ -139,62 +250,6 @@ class RadioShedMediaSessionService : MediaLibraryService() {
                 }
             },
         )
-
-        // Forward ExoPlayer's audio session id to the equalizer so it can
-        // (re)attach. The session id is 0 until AudioSink binds on first
-        // playback; subsequent track transitions can re-issue the event.
-        // We listen on the underlying ExoPlayer (not the StationAwarePlayer
-        // wrapper) so the wrapper's command-override logic stays separate
-        // from effects routing.
-        exoPlayer.addListener(object : androidx.media3.common.Player.Listener {
-            override fun onAudioSessionIdChanged(audioSessionId: Int) {
-                runCatching {
-                    val ctrl = GlobalContext.get()
-                        .get<com.visorcraft.radioshed.audio.EqualizerController>()
-                    if (ctrl is com.visorcraft.radioshed.audio.AndroidEqualizerController) {
-                        ctrl.onAudioSessionIdChanged(audioSessionId)
-                    }
-                }
-            }
-
-            override fun onMediaItemTransition(
-                mediaItem: androidx.media3.common.MediaItem?,
-                reason: Int,
-            ) {
-                // Push a fresh paint to any home-screen widget
-                // instances so they catch up to the new track.
-                // Cheap (no-op when zero widgets exist).
-                runCatching {
-                    com.visorcraft.radioshed.widget.NowPlayingWidget
-                        .pushUpdate(this@RadioShedMediaSessionService)
-                }
-            }
-
-            override fun onIsPlayingChanged(isPlaying: Boolean) {
-                // Same reason as onMediaItemTransition — flip the
-                // widget's play/pause glyph when state changes.
-                runCatching {
-                    com.visorcraft.radioshed.widget.NowPlayingWidget
-                        .pushUpdate(this@RadioShedMediaSessionService)
-                }
-            }
-        })
-
-        Log.i(TAG, "onCreate: building MediaLibrarySession")
-        librarySession = MediaLibrarySession.Builder(this, player, libraryCallback)
-            .build()
-        Log.i(TAG, "onCreate: MediaLibrarySession built; token=${librarySession?.token}")
-        // Hand the live session back to the callback so it can update
-        // the custom layout (heart state, repeat/shuffle glyph) when
-        // the user taps an action or playback state changes. Using a
-        // field on the callback rather than re-deriving from
-        // onGetSession lets the callback push setCustomLayout
-        // unconditionally (Media3 dedupes redundant updates internally).
-        libraryCallback.attach(librarySession)
-        // Mirror REPEAT_MODE / shuffleModeEnabled changes back into the
-        // custom layout so the notification glyph reflects whatever
-        // toggled the state — including in-app NowPlaying buttons,
-        // not just the notification's own action taps.
         player.addListener(object : Player.Listener {
             override fun onRepeatModeChanged(repeatMode: Int) {
                 libraryCallback.refreshCustomLayout()
@@ -213,21 +268,23 @@ class RadioShedMediaSessionService : MediaLibraryService() {
                 libraryCallback.refreshCustomLayout()
             }
         })
+        return player
+    }
 
-        // Override the default media notification provider so the
-        // status-bar small icon is the RadioShed antenna silhouette
-        // rather than the system-default media-playback icon (which
-        // is generic across all media apps and looks unprofessional).
-        // Default channel id / name / button order are preserved.
-        val notificationProvider = DefaultMediaNotificationProvider.Builder(this)
-            .setNotificationId(NOTIFICATION_ID)
-            .setChannelId(NOTIFICATION_CHANNEL_ID)
-            .setChannelName(R.string.notification_channel_playback)
-            .build()
-            .apply {
-                setSmallIcon(R.drawable.ic_radioshed_notification)
-            }
-        setMediaNotificationProvider(notificationProvider)
+    /**
+     * Re-point the MediaSession at [newActive] after a crossfade swap. The new
+     * active ExoPlayer already holds the incoming track, so the notification /
+     * Auto / lock-screen metadata flips to it here. The previous wrapper is
+     * NOT released — its underlying ExoPlayer lives on as the pair's standby
+     * (reset to silence by [CrossfadePlayerPair]); only [onDestroy] releases
+     * the real players.
+     */
+    private fun swapSessionPlayer(newActive: ExoPlayer) {
+        val session = librarySession ?: return
+        val wrapper = wrapAsStationPlayer(newActive)
+        runCatching { session.setPlayer(wrapper) }
+            .onFailure { Log.e(TAG, "swapSessionPlayer failed", it) }
+        libraryCallback.refreshCustomLayout()
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? {
@@ -280,10 +337,14 @@ class RadioShedMediaSessionService : MediaLibraryService() {
         // detaches the session reference so any in-flight refresh
         // tasks no-op rather than touch released resources.
         libraryCallback.detach()
-        librarySession?.run {
-            player.release()
-            release()
-        }
+        // Release the session first (detaches it from the player), then release
+        // BOTH ExoPlayers via the pair. We don't call session.player.release()
+        // separately — that wrapper's underlying ExoPlayer is one of the two
+        // the pair owns, so the pair's release() covers it without a
+        // double-release on the active player.
+        librarySession?.release()
+        playerPair?.release()
+        playerPair = null
         librarySession = null
         scope.cancel()
         super.onDestroy()
@@ -501,6 +562,13 @@ class RadioShedMediaSessionService : MediaLibraryService() {
                 .add(SessionCommand(ACTION_TOGGLE_LIKE, Bundle.EMPTY))
                 .add(SessionCommand(ACTION_CYCLE_REPEAT, Bundle.EMPTY))
                 .add(SessionCommand(ACTION_TOGGLE_SHUFFLE, Bundle.EMPTY))
+                // Crossfade / gapless control channel (PLAN 3.2). The in-app
+                // AudioEngineAndroid proxy forwards setUpNext / crossfadeTo down
+                // to this service via these custom commands, since the real
+                // ExoPlayer pair lives here, not in the proxy.
+                .add(SessionCommand(CrossfadeIpc.ACTION_SET_UP_NEXT, Bundle.EMPTY))
+                .add(SessionCommand(CrossfadeIpc.ACTION_CROSSFADE_TO, Bundle.EMPTY))
+                .add(SessionCommand(CrossfadeIpc.ACTION_CANCEL_CROSSFADE, Bundle.EMPTY))
                 .build()
 
             val layout = runCatching { buildCustomLayout() }
@@ -691,6 +759,49 @@ class RadioShedMediaSessionService : MediaLibraryService() {
                 ACTION_TOGGLE_SHUFFLE -> {
                     player.shuffleModeEnabled = !player.shuffleModeEnabled
                     refreshCustomLayout()
+                    return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+                }
+                CrossfadeIpc.ACTION_SET_UP_NEXT -> {
+                    // When crossfade is active, preload the next item onto the
+                    // standby player so the upcoming crossfade starts instantly
+                    // (buffered, not cold). When crossfade is Off the standby
+                    // preload still warms the decoder for a snappier next-track
+                    // load; sample-accurate single-player gapless is a deeper
+                    // re-architecture tracked separately (SPEC Phase 7).
+                    val item = mediaItemFromArgs(args)
+                    val pair = playerPair
+                    if (item != null && pair != null) {
+                        runCatching { pair.preloadUpNext(item) }
+                            .onFailure { Log.e(TAG, "preloadUpNext failed", it) }
+                    }
+                    return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+                }
+                CrossfadeIpc.ACTION_CANCEL_CROSSFADE -> {
+                    // A skip / stop arrived: interrupt any in-flight ramp so it
+                    // jump-cuts to a sane end state and the proxy's follow-up
+                    // play() doesn't fight a still-running fade.
+                    runCatching { playerPair?.cancelActiveCrossfade() }
+                    return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+                }
+                CrossfadeIpc.ACTION_CROSSFADE_TO -> {
+                    val item = mediaItemFromArgs(args)
+                    val durationMs = args.getLong(CrossfadeIpc.EXTRA_CROSSFADE_DURATION_MS, 0L)
+                    val curveName = args.getString(CrossfadeIpc.EXTRA_CROSSFADE_CURVE)
+                    val pair = playerPair
+                    if (item != null && pair != null && durationMs > 0L) {
+                        val curve = runCatching {
+                            com.visorcraft.radioshed.domain.CrossfadeCurve.valueOf(
+                                curveName ?: "EqualPower",
+                            )
+                        }.getOrDefault(com.visorcraft.radioshed.domain.CrossfadeCurve.EqualPower)
+                        // Launch on the service scope (Main) — ExoPlayer needs
+                        // its single app thread, and crashGuard keeps a ramp
+                        // failure from killing the session.
+                        scope.launch {
+                            runCatching { pair.crossfadeTo(item, durationMs, curve) }
+                                .onFailure { Log.e(TAG, "crossfadeTo failed", it) }
+                        }
+                    }
                     return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
                 }
             }
@@ -1552,6 +1663,46 @@ class RadioShedMediaSessionService : MediaLibraryService() {
                 ),
             )
         }
+    }
+
+    /**
+     * Rebuild a playable [MediaItem] from the flat fields a crossfade / up-next
+     * custom command carries in its [Bundle]. Mirrors `Playable.toMediaItem`
+     * but without the inline-artwork-bytes path: the preloaded/crossfaded item
+     * only needs to decode and play; the artwork URI is enough for the
+     * notification, and the proxy's normal `play()` already pushed full
+     * metadata for the steady-state track. Returns null when no URI is present.
+     */
+    private fun mediaItemFromArgs(args: Bundle): MediaItem? {
+        val uri = args.getString(CrossfadeIpc.EXTRA_ITEM_URI)
+            ?.takeIf { it.isNotBlank() } ?: return null
+        val trackId = args.getLong(CrossfadeIpc.EXTRA_ITEM_TRACK_ID, 0L)
+        val builder = MediaItem.Builder()
+            .setUri(uri)
+            .setMediaId(trackId.toString())
+            .setMediaMetadata(
+                MediaMetadata.Builder()
+                    .setTitle(args.getString(CrossfadeIpc.EXTRA_ITEM_TITLE))
+                    .setArtist(args.getString(CrossfadeIpc.EXTRA_ITEM_ARTIST))
+                    .setAlbumTitle(args.getString(CrossfadeIpc.EXTRA_ITEM_ALBUM))
+                    .also { mb ->
+                        args.getString(CrossfadeIpc.EXTRA_ITEM_ARTWORK_URI)
+                            ?.takeIf { it.isNotBlank() }
+                            ?.let { mb.setArtworkUri(android.net.Uri.parse(it)) }
+                    }
+                    .build(),
+            )
+        val cueStart = args.getLong(CrossfadeIpc.EXTRA_ITEM_CUE_START_MS, -1L)
+        val cueEnd = args.getLong(CrossfadeIpc.EXTRA_ITEM_CUE_END_MS, -1L)
+        if (cueStart >= 0L || cueEnd >= 0L) {
+            builder.setClippingConfiguration(
+                MediaItem.ClippingConfiguration.Builder()
+                    .setStartPositionMs(if (cueStart >= 0L) cueStart else 0L)
+                    .also { cc -> if (cueEnd >= 0L) cc.setEndPositionMs(cueEnd) }
+                    .build(),
+            )
+        }
+        return builder.build()
     }
 
     private fun browseableItem(mediaId: String, title: String): MediaItem =

@@ -255,6 +255,58 @@ class AudioEngineAndroid(private val appContext: Context) : AudioEngine {
         runCatching { controller?.setPlaybackSpeed(clamped) }
     }
 
+    override fun setCrossfade(crossfade: com.visorcraft.radioshed.domain.Crossfade?) {
+        // No-op on Android: the crossfade-arming decision lives in
+        // StationPlayback (it polls position and owns the queue), and it hands
+        // the resolved duration + curve straight to [crossfadeTo]. The service
+        // therefore never needs the rule object itself — only the per-transition
+        // ramp params. Kept as an override (vs the interface default) to make
+        // the "intentionally nothing to forward here" decision explicit; desktop
+        // (PLAN 3.3) will use this hook to arm its own libvlc ramp.
+    }
+
+    override fun setUpNext(playable: Playable?) {
+        if (playable == null) return
+        sendServiceCommand(CrossfadeIpc.ACTION_SET_UP_NEXT) {
+            putAll(CrossfadeIpc.bundleForItem(playable))
+        }
+    }
+
+    override fun crossfadeTo(
+        playable: Playable,
+        durationMs: Long,
+        curve: com.visorcraft.radioshed.domain.CrossfadeCurve,
+    ) {
+        sendServiceCommand(CrossfadeIpc.ACTION_CROSSFADE_TO) {
+            putAll(CrossfadeIpc.bundleForItem(playable))
+            putLong(CrossfadeIpc.EXTRA_CROSSFADE_DURATION_MS, durationMs)
+            putString(CrossfadeIpc.EXTRA_CROSSFADE_CURVE, curve.name)
+        }
+    }
+
+    override fun cancelCrossfade() {
+        sendServiceCommand(CrossfadeIpc.ACTION_CANCEL_CROSSFADE) {}
+    }
+
+    /**
+     * Send a custom [SessionCommand] to the playback service once the
+     * controller is connected. Awaits the controller (these commands are
+     * harmless to drop if the service never comes up) and swallows failures
+     * the same way the other transport calls do.
+     */
+    private fun sendServiceCommand(action: String, fill: android.os.Bundle.() -> Unit) {
+        val args = android.os.Bundle().apply(fill)
+        scope.launch {
+            val c = awaitControllerOrSurface() ?: return@launch
+            runCatching {
+                c.sendCustomCommand(
+                    androidx.media3.session.SessionCommand(action, android.os.Bundle.EMPTY),
+                    args,
+                )
+            }
+        }
+    }
+
     /** Call from process/app shutdown if you want the controller to release cleanly. */
     fun release() {
         positionJob?.cancel()

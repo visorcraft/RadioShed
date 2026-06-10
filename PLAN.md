@@ -685,30 +685,41 @@ class FadeCurvesTest {
 construction + queue-advance regions fully before touching it, and extract
 the new logic into `CrossfadePlayerPair` rather than growing the service.
 
-- [ ] **Step 1:** `CrossfadePlayerPair(context, attrs)`: owns `primary` +
-  `secondary` ExoPlayer; `suspend fun crossfadeTo(item: MediaItem, durationMs: Long, curve: CrossfadeCurve)`
-  — prepares `secondary`, starts it at volume 0, ramps both volumes along
-  `FadeCurves.gain(...)` in a ~50 ms-step coroutine loop, then swaps
-  roles and resets the retired player. Single in-flight crossfade enforced
-  with a `Mutex`; a skip during a fade cancels the ramp and jump-cuts.
-- [ ] **Step 2:** Trigger: position watcher (the engine already polls
-  position for `position` StateFlow) arms when
-  `remaining <= crossfadeDurationMs` for the active station's
-  `PlaybackRule.crossfade`; `Off` keeps today's path; the existing
-  end-fade (`KEY_END_FADE_SEC`) is **suppressed** whenever a crossfade rule
-  is active (they'd double-attenuate).
-- [ ] **Step 3:** MediaSession correctness: the session's active player must
-  swap with the roles (use a ForwardingPlayer or re-set the session player
-  on swap); notification metadata/artwork must follow the incoming track at
-  fade start. Verify lock-screen + AVRCP metadata on the device.
-- [ ] **Step 4:** Gapless: when crossfade is `Off`, keep ≥1 upcoming queue
-  item preloaded in the player playlist (`setMediaItems` window) so
-  back-to-back album tracks have no gap.
-- [ ] **Step 5:** Device listening pass (wired + Bluetooth): equal-power
-  fade sounds level-constant; rapid skip during fade doesn't crash or leak a
-  playing player; pause mid-fade pauses both.
-- [ ] **Step 6:** `testDebugUnitTest` + `assembleDebug` green. Commit:
-  `Implement dual-ExoPlayer crossfade and gapless preload (PLAN 3.2)`
+- [x] **Step 1:** `CrossfadePlayerPair` (androidMain/audio) owns `primary` +
+  `secondary` ExoPlayer; `suspend fun crossfadeTo(item, durationMs, curve)`
+  prepares the standby at volume 0, starts it, ramps both volumes along
+  `FadeCurves.gain(...)` in a 50 ms-step loop, swaps roles, resets the
+  retired player. Single in-flight crossfade via `Mutex`; cancel-safe
+  `finally` jump-cuts to the incoming track at full volume.
+- [x] **Step 2:** Trigger lives in `StationPlayback`'s existing position
+  collector (it owns the queue, so it advances). Arming math is the
+  common, tested `shouldArmCrossfade(...)` + `resolveCrossfadePlan(...)`
+  (`audio/CrossfadePlan.kt`); `Crossfade.Off` keeps today's path; the
+  `KEY_END_FADE_SEC` end-fade is suppressed whenever a crossfade plan is
+  active. "Smart" = fixed `SMART_CROSSFADE_DEFAULT_SEC` this phase
+  (documented in `CrossfadePlan.kt`).
+- [x] **Step 3:** MediaSession follows the swap via
+  `MediaLibrarySession.setPlayer(StationAwarePlayer(newActive))` from
+  `CrossfadePlayerPair.onActivePlayerChanged`; the incoming ExoPlayer
+  already holds the incoming item, so notification/Auto metadata flips at
+  swap. *(Lock-screen + AVRCP visual confirmation still needs a device pass
+  — see Step 5.)*
+- [x] **Step 4:** Gapless: `StationPlayback` peeks one queue item ahead and
+  pushes it via `AudioEngine.setUpNext(...)`; the service preloads it on the
+  standby ExoPlayer. NOTE: this warms the decoder for a fast next-track
+  start, not single-player sample-accurate gapless — that re-architecture
+  stays deferred (SPEC Phase 7 "Gapless verified sample-accurate").
+- [ ] **Step 5:** Device listening pass (wired + Bluetooth) — NOT done in
+  this session (no device/emulator in the build env). Smoke-test on hardware
+  before a public release: equal-power fade level-constant; skip during fade
+  no crash/leak; lock-screen + AVRCP metadata follow the swap. KNOWN EDGE:
+  skip/stop mid-crossfade cancels the ramp and honours the new track
+  (`cancelCrossfade` IPC + cancel-safe `finally`), but the cancel command and
+  the follow-up `play()` cross the controller boundary on separate channels,
+  so in the rare exact-overlap-skip case a sub-second blip of the crossfade
+  target may precede the skip target. No crash/leak; volumes land sane.
+- [x] **Step 6:** `testDebugUnitTest` + `assembleDebug` + `compileKotlinDesktop`
+  green. Commit: `Implement dual-ExoPlayer crossfade and gapless preload (PLAN 3.2)`
 
 ### Task 3.3: Desktop dual-libvlc crossfade
 

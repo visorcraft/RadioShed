@@ -1,5 +1,6 @@
 package com.visorcraft.radioshed.audio
 
+import com.visorcraft.radioshed.domain.CrossfadeCurve
 import com.visorcraft.radioshed.domain.Track
 import kotlinx.coroutines.flow.StateFlow
 
@@ -65,6 +66,46 @@ interface AudioEngine {
      * 2.0. iOS stub is a no-op for now.
      */
     fun setPlaybackSpeed(speed: Float)
+
+    /**
+     * Declare whether crossfade is active for the current station, so the
+     * engine can prepare its dual-player pipeline (Android) and so callers
+     * know to suppress the single-player end-fade (which would otherwise
+     * double-attenuate the overlap). Null / [com.visorcraft.radioshed.domain.Crossfade.Off]
+     * means "no crossfade" and reverts to gapless / hard-cut behaviour.
+     *
+     * No-op on iOS (stub) and on desktop until the libvlc dual-player ramp
+     * lands (PLAN 3.3). The Android impl forwards this to the playback
+     * service that owns the actual ExoPlayer pair.
+     */
+    fun setCrossfade(crossfade: com.visorcraft.radioshed.domain.Crossfade?) {}
+
+    /**
+     * Pre-declare the next [Playable] so the engine can preload it for
+     * gapless album-track butt-joins (and as the crossfade target). Pass
+     * null to clear. Default no-op so platforms without a preload pipeline
+     * (iOS stub, desktop pending) compile unchanged.
+     */
+    fun setUpNext(playable: Playable?) {}
+
+    /**
+     * Audibly crossfade from the currently-playing track to [playable] over
+     * [durationMs], ramping volumes along [curve]. The caller (StationPlayback)
+     * has ALREADY done the queue bookkeeping (history, recordPlay, cursor
+     * advance) for [playable] — this method only performs the audible overlap
+     * and hands the session over to the incoming track. Fire-and-forget.
+     *
+     * Default no-op so iOS/desktop fall through to their existing
+     * one-track-at-a-time path until their dual-player ramps land.
+     */
+    fun crossfadeTo(playable: Playable, durationMs: Long, curve: CrossfadeCurve) {}
+
+    /**
+     * Abort an in-flight crossfade ramp (the user skipped / stopped during the
+     * overlap) so it jump-cuts to a coherent end state instead of fighting the
+     * follow-up transition. Default no-op for platforms without a ramp.
+     */
+    fun cancelCrossfade() {}
 }
 
 /**
