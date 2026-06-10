@@ -253,6 +253,32 @@ class SettingsStoreBackupTest {
     }
 
     @Test
+    fun driveButtons_filterContract() {
+        // (a) One valid id + one unknown id: only the valid id survives.
+        val storeA = newStore()
+        storeA.setDriveButtons(listOf("next", "warp_drive"))
+        assertEquals("next", storeA.getDriveButtons())
+
+        // (b) All-invalid ids: getter returns the hardcoded default.
+        val storeB = newStore()
+        storeB.setDriveButtons(listOf("warp_drive", "turbo_boost"))
+        assertEquals(
+            "previous,play_pause,next,station_picker",
+            storeB.getDriveButtons(),
+            "All-invalid ids should fall back to the default button set",
+        )
+
+        // (c) Empty list: getter returns the hardcoded default.
+        val storeC = newStore()
+        storeC.setDriveButtons(emptyList())
+        assertEquals(
+            "previous,play_pause,next,station_picker",
+            storeC.getDriveButtons(),
+            "Empty list should fall back to the default button set",
+        )
+    }
+
+    @Test
     fun unknownTypeInBundle_isIgnored() {
         // A bundle from a different/older app version may carry a
         // key whose type doesn't match what dumpForBackup writes

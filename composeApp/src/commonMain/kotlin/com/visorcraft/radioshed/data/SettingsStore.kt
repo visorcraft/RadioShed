@@ -555,7 +555,7 @@ class SettingsStore(private val settings: Settings) {
     }
 
     fun setDriveButtons(ids: List<String>) {
-        val filtered = ids.filter { it in DRIVE_BUTTON_IDS }
+        val filtered = ids.map { it.trim() }.filter { it in DRIVE_BUTTON_IDS }
         if (filtered.isEmpty()) settings.remove(KEY_DRIVE_BUTTONS)
         else settings.putString(KEY_DRIVE_BUTTONS, filtered.joinToString(","))
     }
@@ -1281,6 +1281,7 @@ class SettingsStore(private val settings: Settings) {
         const val KEY_END_FADE_SEC = "audio.endFadeSec"
         const val KEY_LYRICS_SCALE = "ui.lyricsScale"
         const val KEY_DRIVE_MODE = "ui.driveMode"
+        // ---- DJ ----
         const val KEY_DJ_ENABLED = "dj.enabled"
         const val KEY_DJ_FREQUENCY = "dj.frequency"
         const val KEY_DJ_FREQUENCY_N = "dj.frequencyN"
