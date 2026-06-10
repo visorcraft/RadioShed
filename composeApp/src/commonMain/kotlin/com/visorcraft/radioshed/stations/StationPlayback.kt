@@ -1164,8 +1164,9 @@ class StationPlayback(
         //
         // Skip it on the crossfade path: the engine's dual-player ramp owns
         // the ExoPlayer volume during the overlap, so we must not also drive
-        // the session-volume multiplier mid-fade (it would fight the ramp).
-        // ReplayGain on crossfaded transitions is a documented follow-up.
+        // the player volume mid-fade (it would fight the ramp). ReplayGain (and
+        // user volume) are instead honoured by handing the incoming track's
+        // effective volume to crossfadeTo as the ramp's fade-in target (below).
         if (crossfade == null) applyReplayGain(track)
         // Resolve the track's album artwork URI before handing the Playable
         // to the player. The lookup is one indexed primary-key SELECT and
@@ -1178,8 +1179,19 @@ class StationPlayback(
             if (crossfade != null) {
                 // Audible overlap into the already-resolved next track. The
                 // service runs the dual-ExoPlayer ramp and re-points the
-                // MediaSession at the incoming track.
-                audioEngine.crossfadeTo(playable, crossfade.durationMs, crossfade.curve)
+                // MediaSession at the incoming track. We DON'T call
+                // applyEffectiveVolume here (that would drive the session
+                // volume mid-fade and fight the ramp); instead the incoming
+                // track's effective volume (user × ReplayGain) is passed to the
+                // ramp as its fade-in target so it lands at the right level. The
+                // engine's volume StateFlow re-syncs to that level after the
+                // swap (AudioEngineAndroid observes the player's onVolumeChanged).
+                audioEngine.crossfadeTo(
+                    playable,
+                    crossfade.durationMs,
+                    crossfade.curve,
+                    effectiveVolumeFor(track),
+                )
             } else {
                 audioEngine.play(playable)
                 // Preload the following track so it's ready for a gapless
@@ -1310,19 +1322,26 @@ class StationPlayback(
      * stands alone.
      */
     private fun applyEffectiveVolume(track: Track) {
+        audioEngine.setVolume(effectiveVolumeFor(track))
+    }
+
+    /**
+     * The engine volume the non-crossfade path would set for [track]:
+     * userVolume × ReplayGain attenuation (clamped to ≤1.0). Single source of
+     * truth for both [applyEffectiveVolume] (steady-state load) and the
+     * crossfade target handed to [AudioEngine.crossfadeTo] — so a crossfaded
+     * transition lands the incoming track at exactly the level a hard cut
+     * would have, honouring both user volume and ReplayGain. v1 only
+     * attenuates; boosting quiet tracks is deferred (see [applyEffectiveVolume]
+     * history).
+     */
+    private fun effectiveVolumeFor(track: Track): Float {
         val user = _userVolume.value
-        if (!settings.getReplayGainEnabled()) {
-            audioEngine.setVolume(user)
-            return
-        }
-        val gainDb = track.replayGainTrack ?: track.replayGainAlbum
-        if (gainDb == null) {
-            audioEngine.setVolume(user)
-            return
-        }
+        if (!settings.getReplayGainEnabled()) return user.coerceIn(0f, 1f)
+        val gainDb = track.replayGainTrack ?: track.replayGainAlbum ?: return user.coerceIn(0f, 1f)
         val preamp = settings.getReplayGainPreampDb()
         val rg = 10.0.pow((gainDb + preamp) / 20.0).toFloat().coerceIn(0f, 1f)
-        audioEngine.setVolume((user * rg).coerceIn(0f, 1f))
+        return (user * rg).coerceIn(0f, 1f)
     }
 
     /** Backwards-compat alias for the call site that used to invoke

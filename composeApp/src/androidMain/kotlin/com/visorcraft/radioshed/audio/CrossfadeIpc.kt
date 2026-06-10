@@ -21,6 +21,11 @@ internal object CrossfadeIpc {
     const val EXTRA_CROSSFADE_DURATION_MS = "xfade.durationMs"
     const val EXTRA_CROSSFADE_CURVE = "xfade.curve"
 
+    /** Effective volume (user × ReplayGain) the incoming track should land at,
+     *  so the ramp doesn't strand it at raw 1.0 and bypass both. Defaults to 1f
+     *  on the read side when absent (older callers / no attenuation). */
+    const val EXTRA_CROSSFADE_TARGET_VOLUME = "xfade.targetVolume"
+
     /** Flat Playable fields for up-next / crossfade-target items. */
     const val EXTRA_ITEM_URI = "item.uri"
     const val EXTRA_ITEM_TRACK_ID = "item.trackId"

@@ -787,6 +787,13 @@ class RadioShedMediaSessionService : MediaLibraryService() {
                     val item = mediaItemFromArgs(args)
                     val durationMs = args.getLong(CrossfadeIpc.EXTRA_CROSSFADE_DURATION_MS, 0L)
                     val curveName = args.getString(CrossfadeIpc.EXTRA_CROSSFADE_CURVE)
+                    // Effective volume the incoming track should land at (user ×
+                    // ReplayGain, computed by StationPlayback). Default 1f when
+                    // absent so a legacy / unattenuated caller still plays.
+                    val targetVolume = args.getFloat(
+                        CrossfadeIpc.EXTRA_CROSSFADE_TARGET_VOLUME,
+                        1f,
+                    )
                     val pair = playerPair
                     if (item != null && pair != null && durationMs > 0L) {
                         val curve = runCatching {
@@ -798,7 +805,7 @@ class RadioShedMediaSessionService : MediaLibraryService() {
                         // its single app thread, and crashGuard keeps a ramp
                         // failure from killing the session.
                         scope.launch {
-                            runCatching { pair.crossfadeTo(item, durationMs, curve) }
+                            runCatching { pair.crossfadeTo(item, durationMs, curve, targetVolume) }
                                 .onFailure { Log.e(TAG, "crossfadeTo failed", it) }
                         }
                     }

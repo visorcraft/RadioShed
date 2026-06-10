@@ -72,4 +72,76 @@ class CrossfadePlanTest {
         // A 12s track == 2× fade is the boundary: allowed.
         assertTrue(shouldArmCrossfade(positionMs = 7_000L, durationMs = 12_000L, crossfadeMs = 6_000L))
     }
+
+    // ---- Crossfade volume-scaling contract (PLAN 3.2) ----
+    //
+    // The Android dual-ExoPlayer ramp is platform code and can't run in
+    // commonTest, but the gain × target composition it relies on is pure
+    // FadeCurves math. These tests pin that contract so the ramp's invariants
+    // (incoming lands at its effective target, outgoing fades from its current
+    // level, neither side bypasses user volume / ReplayGain) can't silently
+    // regress: the ramp computes incoming = gain(curve, f, fadeIn=true) ×
+    // incomingTarget and outgoing = gain(curve, f) × outgoingStart.
+
+    private fun incomingRamp(curve: CrossfadeCurve, f: Float, target: Float) =
+        FadeCurves.gain(curve, f, fadeIn = true) * target
+
+    private fun outgoingRamp(curve: CrossfadeCurve, f: Float, start: Float) =
+        FadeCurves.gain(curve, f, fadeIn = false) * start
+
+    @Test
+    fun incomingFadeInLandsAtEffectiveTargetNotUnity() {
+        // A track attenuated to 0.30 (user volume × ReplayGain) must end the
+        // crossfade at 0.30, never 1.0 — the whole point of PLAN 3.2.
+        val target = 0.30f
+        assertEquals(0f, incomingRamp(CrossfadeCurve.Linear, 0f, target), 1e-4f)
+        assertEquals(target, incomingRamp(CrossfadeCurve.Linear, 1f, target), 1e-4f)
+        // Midpoint is scaled, never the raw curve value.
+        assertEquals(0.5f * target, incomingRamp(CrossfadeCurve.Linear, 0.5f, target), 1e-4f)
+    }
+
+    @Test
+    fun outgoingFadeOutStartsAtCurrentLevelNoStartJump() {
+        // An outgoing track sitting at its attenuated level (0.30) must START
+        // the fade AT 0.30 — not snap to 1.0 on the first tick (the sibling
+        // bug). At f→0 the fade-out gain is 1.0, so the product is the captured
+        // start level.
+        val start = 0.30f
+        assertEquals(start, outgoingRamp(CrossfadeCurve.Linear, 0f, start), 1e-4f)
+        assertEquals(start, outgoingRamp(CrossfadeCurve.EqualPower, 0f, start), 1e-4f)
+        assertEquals(start, outgoingRamp(CrossfadeCurve.SCurve, 0f, start), 1e-4f)
+        // And it drains to silence at the end.
+        assertEquals(0f, outgoingRamp(CrossfadeCurve.Linear, 1f, start), 1e-4f)
+    }
+
+    @Test
+    fun scalingNeverExceedsTargetCeilings() {
+        // Scaled gains stay within [0, level] across the whole sweep — the ramp
+        // can't transiently overshoot a user's chosen / ReplayGain-capped level.
+        val target = 0.40f
+        val start = 0.55f
+        for (curve in CrossfadeCurve.entries) {
+            var f = 0f
+            while (f <= 1f) {
+                val incoming = incomingRamp(curve, f, target)
+                val outgoing = outgoingRamp(curve, f, start)
+                assertTrue(incoming in 0f..target + 1e-4f, "incoming $incoming > $target at f=$f/$curve")
+                assertTrue(outgoing in 0f..start + 1e-4f, "outgoing $outgoing > $start at f=$f/$curve")
+                f += 0.1f
+            }
+        }
+    }
+
+    @Test
+    fun unityTargetReproducesRawCurve() {
+        // The default targetVolume = 1f path (iOS/desktop no-op compat, or no
+        // attenuation) must be identical to the unscaled curve.
+        for (curve in CrossfadeCurve.entries) {
+            assertEquals(
+                FadeCurves.gain(curve, 0.5f, fadeIn = true),
+                incomingRamp(curve, 0.5f, 1f),
+                1e-6f,
+            )
+        }
+    }
 }

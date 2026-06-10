@@ -110,6 +110,19 @@ class AudioEngineAndroid(private val appContext: Context) : AudioEngine {
                     fallbackDurationMs = if (c.duration > 0) c.duration else 0L,
                 )
             }
+
+            override fun onVolumeChanged(volume: Float) {
+                // Keep the volume StateFlow in lockstep with the real player
+                // volume. Critical after a crossfade swap: the service re-points
+                // the session at the incoming ExoPlayer, whose volume the ramp
+                // landed at the incoming track's effective level. Without this,
+                // _volume stays stuck at the OUTGOING track's last setVolume()
+                // value, so the SleepTimer fade and DJ-duck restore would
+                // capture/restore a stale ceiling. (MediaController.volume maps
+                // straight through StationAwarePlayer to the active player's
+                // volume, so this fires on the swap and on every setVolume.)
+                _volume.value = volume.coerceIn(0f, 1f)
+            }
         })
     }
 
@@ -276,11 +289,13 @@ class AudioEngineAndroid(private val appContext: Context) : AudioEngine {
         playable: Playable,
         durationMs: Long,
         curve: com.visorcraft.radioshed.domain.CrossfadeCurve,
+        targetVolume: Float,
     ) {
         sendServiceCommand(CrossfadeIpc.ACTION_CROSSFADE_TO) {
             putAll(CrossfadeIpc.bundleForItem(playable))
             putLong(CrossfadeIpc.EXTRA_CROSSFADE_DURATION_MS, durationMs)
             putString(CrossfadeIpc.EXTRA_CROSSFADE_CURVE, curve.name)
+            putFloat(CrossfadeIpc.EXTRA_CROSSFADE_TARGET_VOLUME, targetVolume.coerceIn(0f, 1f))
         }
     }
 

@@ -95,10 +95,22 @@ interface AudioEngine {
      * advance) for [playable] — this method only performs the audible overlap
      * and hands the session over to the incoming track. Fire-and-forget.
      *
+     * [targetVolume] is the effective volume (user volume × ReplayGain) that the
+     * non-crossfade path would have applied for [playable]. The dual-player ramp
+     * must scale the incoming fade-in by it so the incoming track lands at the
+     * user's chosen level (and ReplayGain-attenuated), NOT at raw 1.0 — otherwise
+     * a crossfade silently bypasses both. Defaults to 1f so platforms that don't
+     * crossfade (iOS stub, desktop) stay source-compatible.
+     *
      * Default no-op so iOS/desktop fall through to their existing
      * one-track-at-a-time path until their dual-player ramps land.
      */
-    fun crossfadeTo(playable: Playable, durationMs: Long, curve: CrossfadeCurve) {}
+    fun crossfadeTo(
+        playable: Playable,
+        durationMs: Long,
+        curve: CrossfadeCurve,
+        targetVolume: Float = 1f,
+    ) {}
 
     /**
      * Abort an in-flight crossfade ramp (the user skipped / stopped during the

@@ -28,14 +28,17 @@ import kotlin.coroutines.coroutineContext
  *  - [standby] is idle (or holding a preloaded up-next item) until a
  *    crossfade promotes it.
  *  - [crossfadeTo] prepares [standby] with the incoming item at volume 0,
- *    starts it, ramps `active → 0` and `standby → 1` along [FadeCurves.gain]
- *    in ~50 ms steps, then swaps the roles and resets the retired player.
+ *    starts it, ramps `active → 0` (scaled by the outgoing player's current
+ *    level) and `standby → targetVolume` (the incoming track's effective
+ *    user × ReplayGain volume) along [FadeCurves.gain] in ~50 ms steps, then
+ *    swaps the roles and resets the retired player.
  *
  * A single [Mutex] guarantees only one crossfade is in flight; a second
  * request (e.g. the user skips during a fade) cancels the running ramp via
  * coroutine cancellation, and the `finally` block lands both volumes in a
- * sane end state (active = 1, standby reset to 0) so no track is left stuck
- * half-attenuated.
+ * sane end state (incoming at its effective target volume, retired player
+ * parked at 1.0 and re-set before its next audible use) so no track is left
+ * stuck half-attenuated.
  *
  * All player access is expected to happen on the service's main thread
  * (ExoPlayer requires a single application thread); the suspending ramp runs
@@ -74,8 +77,9 @@ class CrossfadePlayerPair(
 
     /**
      * Cancel an in-flight crossfade ramp (a skip / stop arrived). The ramp's
-     * `finally` then jump-cuts: incoming → full volume + promoted, outgoing
-     * stopped and reset. Safe to call when no crossfade is running.
+     * `finally` then jump-cuts: incoming → its effective target volume +
+     * promoted, outgoing stopped and reset. Safe to call when no crossfade is
+     * running.
      */
     fun cancelActiveCrossfade() {
         rampJob?.cancel()
@@ -104,16 +108,37 @@ class CrossfadePlayerPair(
     /**
      * Crossfade from [active] to [item] over [durationMs] using [curve].
      *
+     * [targetVolume] is the effective volume (user × ReplayGain) the incoming
+     * track must end at — the non-crossfade path would have set the player to
+     * exactly this. The ramp scales BOTH sides by a captured/target level rather
+     * than driving raw curve gains, so:
+     *  - the outgoing track fades from its CURRENT volume (whatever ReplayGain /
+     *    the user set it to) down to 0 — without this, tick 1 would jump an
+     *    attenuated outgoing player (e.g. 0.3) up to ~1.0 at fade start;
+     *  - the incoming track fades from 0 up to [targetVolume], landing at the
+     *    user's level and ReplayGain-attenuated rather than at raw 1.0 (which
+     *    would bypass both).
+     *
      * Cancel-safe: if the coroutine is cancelled (a skip arrives mid-fade),
-     * the `finally` jump-cuts to the incoming track at full volume and resets
-     * the retired player, so we never strand a track at partial volume.
+     * the `finally` jump-cuts the incoming track straight to [targetVolume] and
+     * resets the retired player, so we never strand a track at partial volume.
      */
-    suspend fun crossfadeTo(item: MediaItem, durationMs: Long, curve: CrossfadeCurve) {
+    suspend fun crossfadeTo(
+        item: MediaItem,
+        durationMs: Long,
+        curve: CrossfadeCurve,
+        targetVolume: Float = 1f,
+    ) {
         crossfadeMutex.withLock {
             crossfadeInFlight = true
             rampJob = coroutineContext.job
             val outgoing = active
             val incoming = standby
+            val incomingTarget = targetVolume.coerceIn(0f, 1f)
+            // Capture the outgoing player's live level (its effective volume,
+            // set when it loaded) so the fade-out scales relative to it instead
+            // of snapping to 1.0 on the first tick.
+            val outgoingStart = outgoing.volume.coerceIn(0f, 1f)
             try {
                 // Prepare incoming at silence unless preloadUpNext already did.
                 val preloaded = incoming.currentMediaItem?.mediaId == item.mediaId &&
@@ -134,22 +159,28 @@ class CrossfadePlayerPair(
                 val steps = (durationMs / STEP_MS).coerceAtLeast(1L)
                 for (i in 1..steps) {
                     val fraction = i.toFloat() / steps.toFloat()
-                    outgoing.volume = FadeCurves.gain(curve, fraction, fadeIn = false)
-                    incoming.volume = FadeCurves.gain(curve, fraction, fadeIn = true)
+                    outgoing.volume = FadeCurves.gain(curve, fraction, fadeIn = false) * outgoingStart
+                    incoming.volume = FadeCurves.gain(curve, fraction, fadeIn = true) * incomingTarget
                     delay(STEP_MS)
                 }
             } finally {
                 // Land in a coherent end state whether we finished the ramp or
-                // were cancelled: incoming is the new active at full volume,
-                // outgoing is stopped/cleared and reset to silence so a later
-                // promote of it starts clean.
-                incoming.volume = 1f
+                // were cancelled: incoming is the new active at its effective
+                // volume (user × ReplayGain), outgoing is stopped/cleared and
+                // reset so a later promote of it starts clean.
+                incoming.volume = incomingTarget
                 runCatching {
                     incoming.playWhenReady = true
                 }
                 runCatching {
                     outgoing.stop()
                     outgoing.clearMediaItems()
+                    // Reset the retired player to 1.0. Safe because every fresh
+                    // use re-sets its volume before it becomes audible: a
+                    // non-crossfade play() goes through applyEffectiveVolume
+                    // (controller.volume), a preload sets volume = 0f, and a
+                    // future crossfade overwrites both sides from tick 1. The
+                    // 1.0 here is just a neutral parking value, never heard.
                     outgoing.volume = 1f
                 }
                 primaryIsActive = !primaryIsActive
