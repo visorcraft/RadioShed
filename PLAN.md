@@ -597,24 +597,28 @@ sealed interface DriveModeTrigger {
   (drive-mode transport row reads `KEY_DRIVE_BUTTONS`; station-picker button
   opens the new picker)
 
-- [ ] **Step 1:** `DriveStationPicker`: full-screen 2×3 grid (one column
+- [x] **Step 1:** `DriveStationPicker`: full-screen 2×3 grid (one column
   under 600 dp width) of quick-list stations — artwork-dominant tiles,
   ≥96 dp hit targets, station name in `headlineMedium`+; tap = switch
   station and dismiss; empty quick-list falls back to the 6 most-played
   stations (`StationRepository` already has play-count sorting).
-- [ ] **Step 2:** Replace the hardcoded drive-mode transport row with the
+- [x] **Step 2:** Replace the hardcoded drive-mode transport row with the
   configured action list from `KEY_DRIVE_BUTTONS` (default: previous,
   play/pause, next, station picker).
-- [ ] **Step 3:** Add "Add to Drive Mode quick-list" to `StationActionSheet`
+- [x] **Step 3:** Add "Add to Drive Mode quick-list" to `StationActionSheet`
   in `StationsHomeScreen.kt` (the deferred SPEC Phase-6 item) — appends to
   `KEY_DRIVE_QUICKLIST`, disabled when full at 6.
-- [ ] **Step 4:** Desktop + device smoke: toggle Drive Mode manually, open
+- [x] **Step 4:** Desktop + device smoke: toggle Drive Mode manually, open
   picker, switch stations, verify oversized layout on a narrow window.
-- [ ] **Step 5:** Commit: `Add big-button drive station picker and button config (PLAN 2.4)`
+- [x] **Step 5:** Commit: `Add big-button drive station picker and button config (PLAN 2.4)`
 
 ### Task 2.5: Phase 2 exit
 
-- [ ] Run the **Phase Exit Gate**. Phase-specific dedup checks:
+- [x] Run the **Phase Exit Gate**.
+  *(G1 — commit c78ead7: BT same-mac dedupe, shared trigger codec in domain file,
+  test constants, import/dead-code sweep; picker-tile and dialog dedup judged
+  no-action with reasons. G2 green. G3 pushed. G4 — see review log; 2 issues
+  fixed in ac54947. G5 — commit 4018795. G6 deferred to W5.)* Phase-specific dedup checks:
   - `DriveStationPicker` tiles vs `StationCard` in Stations Home — share the
     artwork/fallback-initials rendering if both now implement it.
   - Time-window ("crosses midnight") logic exists in BOTH
@@ -1086,3 +1090,20 @@ peer-review gates actually ran.
   sentences, DjAnnouncer volume-restore race, sleep-fade conflict, stranded
   preview duck on screen dispose, weather fetch on Default dispatcher, DJ
   cache eviction gap, and vendor-URL User-Agent policy violations.
+
+## Phase 2 review — 2026-06-10
+
+- opencode (deepseek, --variant high): `Verdict: approved issues=2`.
+- Issue 1 (real, latent): AndroidBluetoothWatcher stop()→start() cannot recover
+  already-connected peers; KDoc overclaimed idempotency. Doc made honest in
+  ac54947 (production uses a single app-lifetime start).
+- Issue 2 (real): API 30 (minSdk) needs legacy BLUETOOTH permission for
+  device name/address reads; manifest only declared BLUETOOTH_CONNECT (31+).
+  Fixed in ac54947 with maxSdkVersion="30" declaration.
+- Reviewer notes not counted as issues: redundant preview+commit volume call
+  (harmless), getDriveMode read-once pattern (matches convention), concrete
+  NullBluetoothWatcher type check (correct for current platform matrix).
+- Task-review loop this phase caught and fixed: trim asymmetry + filter-contract
+  test gap (2.1), permission grant-flow dead end + desktop messaging (2.3),
+  stale drive-mode branches, duplicate preMuteLevel desync, silent voice
+  no-match, station-visuals duplication (2.4).
