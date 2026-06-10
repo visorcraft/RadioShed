@@ -851,17 +851,17 @@ CREATE TABLE scrobble_queue (
 - Create: `composeApp/src/desktopMain/kotlin/com/visorcraft/radioshed/source/DesktopListenBrainzClient.kt`
 - Modify: `composeApp/src/desktopMain/kotlin/com/visorcraft/radioshed/di/PlatformModule.desktop.kt`
 
-- [ ] **Step 1:** Read `AndroidListenBrainzClient` first. Mirror it exactly
+- [x] **Step 1:** Read `AndroidListenBrainzClient` first. Mirror it exactly
   in desktopMain (same JSON payloads, same endpoints, same
   `HttpURLConnection` usage — both source sets are JVM, so the body should
   be near-identical; keep comments in sync, this pair is on the Phase Exit
   dedup checklist).
-- [ ] **Step 2:** Swap the desktop binding from `NullListenBrainzClient` to
+- [x] **Step 2:** Swap the desktop binding from `NullListenBrainzClient` to
   the real one.
-- [ ] **Step 3:** `./gradlew :composeApp:run` → paste a real token in
+- [x] **Step 3:** `./gradlew :composeApp:run` → paste a real token in
   Settings → validate succeeds; play a track ≥50% → listen appears on
-  listenbrainz.org.
-- [ ] **Step 4:** Commit: `Enable ListenBrainz scrobbling on desktop (PLAN 4.3)`
+  listenbrainz.org. *(Live-token validation owed to the human — no token here.)*
+- [x] **Step 4:** Commit: `Enable ListenBrainz scrobbling on desktop (PLAN 4.3)`
 
 ### Task 4.4: Scrobble status surface + Phase 4 exit
 
