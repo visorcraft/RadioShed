@@ -82,7 +82,7 @@ val sharedModule: Module = module {
     }
 
     // Scrobble queue-then-drain coordinator. ListenBrainzClient comes
-    // from platformModule (real on Android, Null stub on desktop/iOS).
+    // from platformModule (real on Android and desktop, Null stub on iOS).
     // The network gate is passed as a lambda over the NetworkPolicyGate's
     // automatic-fetch check — same gate StationPlayback consulted before
     // the live submit moved here.

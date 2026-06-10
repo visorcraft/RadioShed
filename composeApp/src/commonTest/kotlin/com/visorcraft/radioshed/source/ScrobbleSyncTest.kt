@@ -1,10 +1,10 @@
 package com.visorcraft.radioshed.source
 
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
-import com.russhwolf.settings.Settings
 import com.visorcraft.radioshed.data.ScrobbleQueueRepository
 import com.visorcraft.radioshed.data.SettingsStore
 import com.visorcraft.radioshed.db.RadioShedDatabase
+import com.visorcraft.radioshed.testutil.InMemorySettings
 import kotlinx.coroutines.test.runTest
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
@@ -14,7 +14,7 @@ import kotlin.test.assertEquals
 /**
  * Queue-then-drain coverage for [ScrobbleSync]. Wires a real
  * [ScrobbleQueueRepository] over an in-memory [JdbcSqliteDriver] and a
- * real [SettingsStore] over an inlined [Settings] fake (token set), so
+ * real [SettingsStore] over a shared [InMemorySettings] fake (token set), so
  * FIFO drain order, attempt bumping, the max-attempts drop, and the
  * network gate are exercised against actual SQL rather than a mock.
  *
@@ -157,45 +157,4 @@ private class FakeListenBrainzClient(
     }
 
     override suspend fun validateToken(token: String): Boolean = true
-}
-
-/** Inlined in-memory [Settings] (mirrors SettingsStoreBackupTest). */
-private class InMemorySettings : Settings {
-    private val data = mutableMapOf<String, Any>()
-
-    override val keys: Set<String> get() = data.keys.toSet()
-    override val size: Int get() = data.size
-    override fun clear() = data.clear()
-    override fun remove(key: String) { data.remove(key) }
-    override fun hasKey(key: String): Boolean = key in data
-
-    override fun putInt(key: String, value: Int) { data[key] = value }
-    override fun getInt(key: String, defaultValue: Int): Int =
-        (data[key] as? Int) ?: defaultValue
-    override fun getIntOrNull(key: String): Int? = data[key] as? Int
-
-    override fun putLong(key: String, value: Long) { data[key] = value }
-    override fun getLong(key: String, defaultValue: Long): Long =
-        (data[key] as? Long) ?: defaultValue
-    override fun getLongOrNull(key: String): Long? = data[key] as? Long
-
-    override fun putString(key: String, value: String) { data[key] = value }
-    override fun getString(key: String, defaultValue: String): String =
-        (data[key] as? String) ?: defaultValue
-    override fun getStringOrNull(key: String): String? = data[key] as? String
-
-    override fun putFloat(key: String, value: Float) { data[key] = value }
-    override fun getFloat(key: String, defaultValue: Float): Float =
-        (data[key] as? Float) ?: defaultValue
-    override fun getFloatOrNull(key: String): Float? = data[key] as? Float
-
-    override fun putDouble(key: String, value: Double) { data[key] = value }
-    override fun getDouble(key: String, defaultValue: Double): Double =
-        (data[key] as? Double) ?: defaultValue
-    override fun getDoubleOrNull(key: String): Double? = data[key] as? Double
-
-    override fun putBoolean(key: String, value: Boolean) { data[key] = value }
-    override fun getBoolean(key: String, defaultValue: Boolean): Boolean =
-        (data[key] as? Boolean) ?: defaultValue
-    override fun getBooleanOrNull(key: String): Boolean? = data[key] as? Boolean
 }

@@ -1,9 +1,9 @@
 package com.visorcraft.radioshed.car
 
-import com.russhwolf.settings.Settings
 import com.visorcraft.radioshed.data.SettingsStore
 import com.visorcraft.radioshed.domain.DriveModeTrigger
 import com.visorcraft.radioshed.domain.encodeDriveTriggers
+import com.visorcraft.radioshed.testutil.InMemorySettings
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,7 +18,7 @@ import kotlin.test.assertTrue
 /**
  * Tests for [DriveModeController]. A fake [BluetoothWatcher] over a
  * [MutableStateFlow] lets each test push connection state; a real
- * [SettingsStore] over an in-memory [Settings] exercises the actual JSON
+ * [SettingsStore] over an [InMemorySettings] exercises the actual JSON
  * trigger round-trip; a manually-pumped ticker [MutableSharedFlow] plus a
  * mutable `nowMinutesOfDay` lambda make schedule evaluation fully
  * deterministic under virtual time (no real delays).
@@ -29,34 +29,6 @@ import kotlin.test.assertTrue
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class DriveModeControllerTest {
-
-    /** Minimal in-memory [Settings], mirroring SettingsStoreBackupTest's helper. */
-    private class InMemorySettings : Settings {
-        private val data = mutableMapOf<String, Any>()
-        override val keys: Set<String> get() = data.keys.toSet()
-        override val size: Int get() = data.size
-        override fun clear() = data.clear()
-        override fun remove(key: String) { data.remove(key) }
-        override fun hasKey(key: String): Boolean = key in data
-        override fun putInt(key: String, value: Int) { data[key] = value }
-        override fun getInt(key: String, defaultValue: Int) = (data[key] as? Int) ?: defaultValue
-        override fun getIntOrNull(key: String) = data[key] as? Int
-        override fun putLong(key: String, value: Long) { data[key] = value }
-        override fun getLong(key: String, defaultValue: Long) = (data[key] as? Long) ?: defaultValue
-        override fun getLongOrNull(key: String) = data[key] as? Long
-        override fun putString(key: String, value: String) { data[key] = value }
-        override fun getString(key: String, defaultValue: String) = (data[key] as? String) ?: defaultValue
-        override fun getStringOrNull(key: String) = data[key] as? String
-        override fun putFloat(key: String, value: Float) { data[key] = value }
-        override fun getFloat(key: String, defaultValue: Float) = (data[key] as? Float) ?: defaultValue
-        override fun getFloatOrNull(key: String) = data[key] as? Float
-        override fun putDouble(key: String, value: Double) { data[key] = value }
-        override fun getDouble(key: String, defaultValue: Double) = (data[key] as? Double) ?: defaultValue
-        override fun getDoubleOrNull(key: String) = data[key] as? Double
-        override fun putBoolean(key: String, value: Boolean) { data[key] = value }
-        override fun getBoolean(key: String, defaultValue: Boolean) = (data[key] as? Boolean) ?: defaultValue
-        override fun getBooleanOrNull(key: String) = data[key] as? Boolean
-    }
 
     /** Watcher backed by a test-controlled flow. */
     private class FakeWatcher : BluetoothWatcher {
