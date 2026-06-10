@@ -96,11 +96,13 @@ class AudioEngineDesktop : AudioEngine {
      */
     private var standby: Pointer? = null
 
+    /** Last speed set via [setPlaybackSpeed]; carried across crossfades. */
+    private var playbackRate: Float = 1f
+
     /**
      * Single-flight latch for the crossfade ramp, mirroring
-     * [CrossfadePlayerPair]'s mutex. A second [crossfadeTo] (or a
-     * [cancelCrossfade]) cancels the in-flight ramp via [rampJob]; the ramp's
-     * `finally` then lands a coherent end state before the next one proceeds.
+     * [CrossfadePlayerPair]'s mutex. A [cancelCrossfade] cancels the in-flight
+     * ramp via [rampJob]; a second [crossfadeTo] serializes behind the mutex.
      */
     private val crossfadeMutex = Mutex()
 
@@ -177,7 +179,15 @@ class AudioEngineDesktop : AudioEngine {
 
                 if (nativeState != lastPolledState) {
                     lastPolledState = nativeState
-                    mapState(nativeState)?.let { _state.value = it }
+                    // Suppress the sub-250 ms "Ended" flicker while a crossfade
+                    // is mid-flight: the OUTGOING player's tail drains during the
+                    // overlap and briefly reaches Ended before the swap completes.
+                    // Let Error and all other states through so real failures are
+                    // always surfaced; only Ended is gated here.
+                    val suppressEnded = nativeState == LibVlcState.ENDED && crossfadeInFlight
+                    if (!suppressEnded) {
+                        mapState(nativeState)?.let { _state.value = it }
+                    }
                     // Auto-advance on the *transition into* Ended, once
                     // per track — matches the old VLCJ finished() behavior.
                     // Suppress it while a crossfade is mid-flight: the OUTGOING
@@ -313,6 +323,7 @@ class AudioEngineDesktop : AudioEngine {
 
     override fun setPlaybackSpeed(speed: Float) {
         val clamped = speed.coerceIn(0.25f, 4f)
+        playbackRate = clamped
         val p = player ?: return
         lib?.libvlc_media_player_set_rate(p, clamped)
     }
@@ -458,6 +469,9 @@ class AudioEngineDesktop : AudioEngine {
         // fresh player), so this is a neutral parking value, never heard.
         runCatching { loaded.libvlc_audio_set_volume(outgoing, 100) }
         player = incoming
+        // Standby players are created at rate 1.0; carry the user's speed across
+        // the swap — mirrors Android's CrossfadePlayerPair.
+        runCatching { loaded.libvlc_media_player_set_rate(incoming, playbackRate) }
         standby = outgoing
         advancedForThisTrack = false
         _volume.value = incomingTarget
