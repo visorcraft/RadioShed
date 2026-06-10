@@ -456,18 +456,18 @@ data class TrackTransition(
   (interface + Null), `composeApp/src/androidMain/.../source/AndroidWeatherFetcher.kt`
 - Modify: platform modules, `DjAnnouncer.kt`
 
-- [ ] **Step 1:** Interface: `suspend fun current(): WeatherSnapshot?`
+- [x] **Step 1:** Interface: `suspend fun current(): WeatherSnapshot?`
   (`data class WeatherSnapshot(val tempC: Double, val condition: String)`).
   Android impl: one `HttpURLConnection` GET to
   `https://api.open-meteo.com/v1/forecast?latitude=..&longitude=..&current_weather=true`,
   coarse last-known location (no new permission — if location permission is
   absent, return null), 15-minute in-memory cache, **gated through
   `NetworkPolicyGate`** like every other fetcher.
-- [ ] **Step 2:** `DjAnnouncer` fills `vars.weather` ("12 degrees and clear")
+- [x] **Step 2:** `DjAnnouncer` fills `vars.weather` ("12 degrees and clear")
   when a snapshot exists; the Task 1.3 null-drops-clause behavior already
   handles absence.
-- [ ] **Step 3:** Tests + builds green; device check with a weather template.
-- [ ] **Step 4:** Commit: `Add Open-Meteo weather variable for DJ templates (PLAN 1.8)`
+- [x] **Step 3:** Tests + builds green; device check with a weather template. *(Device check deferred to the Phase 1 device pass.)*
+- [x] **Step 4:** Commit: `Add Open-Meteo weather variable for DJ templates (PLAN 1.8)`
 
 ### Task 1.9: Phase 1 exit
 
