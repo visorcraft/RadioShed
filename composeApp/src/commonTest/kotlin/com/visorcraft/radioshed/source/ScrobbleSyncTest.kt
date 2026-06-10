@@ -105,6 +105,23 @@ class ScrobbleSyncTest {
     }
 
     @Test
+    fun drainFlushesMultipleBatches() = runTest {
+        // Enqueue 30 rows — more than the default batch size of 25 — so
+        // drain() must loop across at least two fetches to empty the queue.
+        repeat(30) { i ->
+            queue.enqueue("Artist$i", "Track$i", null, (100L + i))
+        }
+
+        val client = FakeListenBrainzClient(succeed = { true })
+        val sync = ScrobbleSync(queue, client, settings, allowNetwork = { true })
+
+        sync.drain()
+
+        assertEquals(0L, queue.countAll())
+        assertEquals(30, client.submitted.size)
+    }
+
+    @Test
     fun drainDropsAfterMaxAttempts() = runTest {
         queue.enqueue("Poison", "Dead", null, 100)
         val poisonId = queue.oldestBatch(1).first().id
