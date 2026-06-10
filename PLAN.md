@@ -169,7 +169,7 @@ Scope decisions locked in:
   `composeApp/src/desktopMain/kotlin/com/visorcraft/radioshed/di/PlatformModule.desktop.kt`,
   `composeApp/src/iosMain/kotlin/com/visorcraft/radioshed/di/PlatformModule.ios.kt`
 
-- [ ] **Step 1:** Create the interface + Null impl in one file:
+- [x] **Step 1:** Create the interface + Null impl in one file:
 
 ```kotlin
 package com.visorcraft.radioshed.audio
@@ -202,10 +202,10 @@ class NullTtsEngine : TtsEngine {
 }
 ```
 
-- [ ] **Step 2:** Bind `single<TtsEngine> { NullTtsEngine() }` in all three
+- [x] **Step 2:** Bind `single<TtsEngine> { NullTtsEngine() }` in all three
   platform modules (Android gets the real impl in Task 1.2).
-- [ ] **Step 3:** `./gradlew :composeApp:assembleDebug` → BUILD SUCCESSFUL.
-- [ ] **Step 4:** Commit: `Add TtsEngine abstraction with Null impls (PLAN 1.1)`
+- [x] **Step 3:** `./gradlew :composeApp:assembleDebug` → BUILD SUCCESSFUL.
+- [x] **Step 4:** Commit: `Add TtsEngine abstraction with Null impls (PLAN 1.1)`
 
 ### Task 1.2: Android `TextToSpeech` impl
 
