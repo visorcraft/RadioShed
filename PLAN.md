@@ -654,7 +654,7 @@ test, not an automated one.
 - Create: `composeApp/src/commonMain/kotlin/com/visorcraft/radioshed/audio/FadeCurves.kt`
 - Test: `composeApp/src/commonTest/kotlin/com/visorcraft/radioshed/audio/FadeCurvesTest.kt`
 
-- [ ] **Step 1:** Failing tests:
+- [x] **Step 1:** Failing tests:
 
 ```kotlin
 class FadeCurvesTest {
@@ -670,9 +670,9 @@ class FadeCurvesTest {
 }
 ```
 
-- [ ] **Step 2:** FAIL → implement `object FadeCurves { fun gain(curve, fraction, fadeIn = false): Float }`
+- [x] **Step 2:** FAIL → implement `object FadeCurves { fun gain(curve, fraction, fadeIn = false): Float }`
   (equal-power = cos/sin of `fraction * PI/2`; s-curve = smoothstep) → PASS.
-- [ ] **Step 3:** Commit: `Add crossfade gain curves with unity-power tests (PLAN 3.1)`
+- [x] **Step 3:** Commit: `Add crossfade gain curves with unity-power tests (PLAN 3.1)`
 
 ### Task 3.2: Android dual-player crossfade
 
