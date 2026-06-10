@@ -294,7 +294,7 @@ class AndroidSubsonicClient : SubsonicClient {
         const val CLIENT_NAME = "RadioShed"
         const val SALT_LENGTH = 12
         const val USER_AGENT =
-            "RadioShed/0.1 ( https://github.com/anthropics/radioshed/issues )"
+            "RadioShed/0.1 (https://radioshed.app)"
         const val CONNECT_TIMEOUT_MS = 10_000
         const val READ_TIMEOUT_MS = 20_000
     }

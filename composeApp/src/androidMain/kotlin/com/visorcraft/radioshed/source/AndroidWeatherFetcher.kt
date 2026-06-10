@@ -48,22 +48,24 @@ class AndroidWeatherFetcher(
     private var cached: WeatherSnapshot? = null
     private var cachedAtMs: Long = 0L
 
-    override suspend fun current(): WeatherSnapshot? = runCatching {
-        cacheMutex.withLock {
-            val now = System.currentTimeMillis()
-            cached?.let { if (now - cachedAtMs < CACHE_TTL_MS) return@withLock it }
+    override suspend fun current(): WeatherSnapshot? = withContext(IODispatcher) {
+        runCatching {
+            cacheMutex.withLock {
+                val now = System.currentTimeMillis()
+                cached?.let { if (now - cachedAtMs < CACHE_TTL_MS) return@withLock it }
 
-            // Honour the user's connectivity preference before touching the
-            // network — same gate every other automatic fetcher consults.
-            if (!networkGate.allowAutomaticFetch()) return@withLock null
+                // Honour the user's connectivity preference before touching the
+                // network — same gate every other automatic fetcher consults.
+                if (!networkGate.allowAutomaticFetch()) return@withLock null
 
-            val location = lastKnownCoarseLocation() ?: return@withLock null
-            val snapshot = fetchSnapshot(location.first, location.second) ?: return@withLock null
-            cached = snapshot
-            cachedAtMs = now
-            snapshot
-        }
-    }.getOrNull()
+                val location = lastKnownCoarseLocation() ?: return@withLock null
+                val snapshot = fetchSnapshot(location.first, location.second) ?: return@withLock null
+                cached = snapshot
+                cachedAtMs = now
+                snapshot
+            }
+        }.getOrNull()
+    }
 
     /**
      * Coarse last-known position as (latitude, longitude), or null. Reads only
@@ -79,9 +81,14 @@ class AndroidWeatherFetcher(
         if (!granted) return null
         val manager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
             ?: return null
-        val fix = manager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
-            ?: manager.getLastKnownLocation(LocationManager.GPS_PROVIDER)
-            ?: return null
+        // Guard the check-then-use race: permission can be revoked between our
+        // checkSelfPermission call above and getLastKnownLocation.
+        val fix = try {
+            manager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
+                ?: manager.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+        } catch (e: SecurityException) {
+            return null
+        } ?: return null
         return fix.latitude to fix.longitude
     }
 

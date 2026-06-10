@@ -147,7 +147,7 @@ class AndroidListenBrainzClient : ListenBrainzClient {
     private companion object {
         const val LB_BASE = "https://api.listenbrainz.org"
         const val USER_AGENT =
-            "RadioShed/0.1 ( https://github.com/anthropics/radioshed/issues )"
+            "RadioShed/0.1 (https://radioshed.app)"
         const val CONNECT_TIMEOUT_MS = 10_000
         const val READ_TIMEOUT_MS = 15_000
     }
