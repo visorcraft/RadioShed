@@ -76,6 +76,9 @@ sealed interface AppScreen {
     /** Equalizer — 5-band sliders + presets. */
     data object Equalizer : AppScreen
 
+    /** AI DJ settings — cadence, quiet hours, ducking, voice, templates. */
+    data object DjSettings : AppScreen
+
     /** Backup & restore — list saved JSON bundles, create/restore/delete. */
     data object BackupRestore : AppScreen
 

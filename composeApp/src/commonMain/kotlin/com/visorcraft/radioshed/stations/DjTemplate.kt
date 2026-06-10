@@ -1,5 +1,9 @@
 package com.visorcraft.radioshed.stations
 
+import com.visorcraft.radioshed.data.RadioShedJson
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.builtins.MapSerializer
+import kotlinx.serialization.builtins.serializer
 import kotlin.random.Random
 
 /**
@@ -155,3 +159,26 @@ val DEFAULT_DJ_TEMPLATES: Map<String, List<String>> = mapOf(
         "Just gone {time} here on {station}.",
     ),
 )
+
+/** Serializer for the persisted slot → variants template map. */
+private val DJ_TEMPLATES_SERIALIZER =
+    MapSerializer(String.serializer(), ListSerializer(String.serializer()))
+
+/**
+ * Parses a persisted DJ-templates JSON blob into a slot → variants map.
+ *
+ * Returns null when [raw] is blank or fails to decode, so the caller can fall
+ * back to [DEFAULT_DJ_TEMPLATES] with a single shared decision point. This is
+ * the canonical parser used by both [DjAnnouncer] (runtime selection) and the
+ * settings template editor (display + edit).
+ */
+fun parseTemplatesJson(raw: String): Map<String, List<String>>? {
+    if (raw.isBlank()) return null
+    return runCatching {
+        RadioShedJson.decodeFromString(DJ_TEMPLATES_SERIALIZER, raw)
+    }.getOrNull()
+}
+
+/** Serializes a slot → variants map back into the persisted JSON blob form. */
+fun encodeTemplatesJson(templates: Map<String, List<String>>): String =
+    RadioShedJson.encodeToString(DJ_TEMPLATES_SERIALIZER, templates)

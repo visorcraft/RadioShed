@@ -13,7 +13,6 @@ import com.visorcraft.radioshed.data.localMinutesOfDay
 import com.visorcraft.radioshed.data.nowMillis
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.serializer
 
@@ -118,7 +117,9 @@ class DjAnnouncer(
         val slot = if (transition.stationChanged) DjSlots.STATION_ID else DjSlots.UP_NEXT
 
         // 4. Templates: user blob (JSON map of slot -> variants) or defaults.
-        val templates = parseTemplates(settings.getDjTemplates())
+        //    parseTemplatesJson (shared with the settings editor) returns null
+        //    on blank/corrupt input, so we fall back to defaults here.
+        val templates = parseTemplatesJson(settings.getDjTemplates()) ?: DEFAULT_DJ_TEMPLATES
         val variants = templates[slot]?.takeIf { it.isNotEmpty() }
             ?: DEFAULT_DJ_TEMPLATES[slot]
             ?: return
@@ -193,16 +194,6 @@ class DjAnnouncer(
                 }
             }
         }
-    }
-
-    private fun parseTemplates(raw: String): Map<String, List<String>> {
-        if (raw.isBlank()) return DEFAULT_DJ_TEMPLATES
-        return runCatching {
-            RadioShedJson.decodeFromString(
-                MapSerializer(String.serializer(), ListSerializer(String.serializer())),
-                raw,
-            )
-        }.getOrDefault(DEFAULT_DJ_TEMPLATES)
     }
 
     private fun encodeVars(transition: TrackTransition): String = runCatching {

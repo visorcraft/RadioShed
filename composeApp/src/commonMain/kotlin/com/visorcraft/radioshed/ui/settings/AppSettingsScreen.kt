@@ -97,6 +97,7 @@ fun AppSettingsScreen(
     currentFontScale: Float = 1f,
     onFontScaleChange: (Float) -> Unit = {},
     onOpenEqualizer: () -> Unit = {},
+    onOpenDjSettings: () -> Unit = {},
     onOpenPlaylists: () -> Unit = {},
     onOpenBackup: () -> Unit = {},
     onOpenStats: () -> Unit = {},
@@ -339,6 +340,13 @@ fun AppSettingsScreen(
                 title = "Equalizer",
                 subtitle = "5-band EQ with Bass / Vocal / Treble presets",
                 onClick = onOpenEqualizer,
+            )
+            Spacer(Modifier.height(8.dp))
+            NavRow(
+                title = "AI DJ",
+                subtitle = "Automated between-track voice — cadence, quiet hours, " +
+                    "ducking, and editable announcement templates",
+                onClick = onOpenDjSettings,
             )
             Spacer(Modifier.height(8.dp))
             NavRow(

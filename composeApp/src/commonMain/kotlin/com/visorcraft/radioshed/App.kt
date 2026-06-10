@@ -425,6 +425,7 @@ fun App(
                             currentFontScale = fontScale,
                             onFontScaleChange = { fontScale = it },
                             onOpenEqualizer = { current = AppScreen.Equalizer },
+                            onOpenDjSettings = { current = AppScreen.DjSettings },
                             onOpenPlaylists = { current = AppScreen.Playlists },
                             onOpenBackup = { current = AppScreen.BackupRestore },
                             onOpenStats = { current = AppScreen.Stats },
@@ -469,6 +470,13 @@ fun App(
                     AppScreen.Equalizer -> {
                         PlatformBackHandler { current = AppScreen.AppSettings }
                         EqualizerScreen(onBack = { current = AppScreen.AppSettings })
+                    }
+
+                    AppScreen.DjSettings -> {
+                        PlatformBackHandler { current = AppScreen.AppSettings }
+                        com.visorcraft.radioshed.ui.settings.DjSettingsScreen(
+                            onBack = { current = AppScreen.AppSettings },
+                        )
                     }
 
                     AppScreen.BackupRestore -> {
