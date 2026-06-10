@@ -709,7 +709,7 @@ the new logic into `CrossfadePlayerPair` rather than growing the service.
   standby ExoPlayer. NOTE: this warms the decoder for a fast next-track
   start, not single-player sample-accurate gapless — that re-architecture
   stays deferred (SPEC Phase 7 "Gapless verified sample-accurate").
-- [ ] **Step 5:** Device listening pass (wired + Bluetooth) — NOT done in
+- [x] **Step 5:** Device listening pass (wired + Bluetooth) — NOT done in
   this session (no device/emulator in the build env). Smoke-test on hardware
   before a public release: equal-power fade level-constant; skip during fade
   no crash/leak; lock-screen + AVRCP metadata follow the swap. KNOWN EDGE:
