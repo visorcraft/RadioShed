@@ -1059,19 +1059,19 @@ Existing: `NowPlayingWidget.kt` (classic RemoteViews `AppWidgetProvider`) and
   `SettingsStore.kt` (one key)
 - Test: `composeApp/src/commonTest/kotlin/com/visorcraft/radioshed/stations/SmartQueryRefreshTest.kt`
 
-- [ ] **Step 1:** Failing tests: with `KEY_SMARTQUERY_REFRESH_LAST` older
+- [x] **Step 1:** Failing tests: with `KEY_SMARTQUERY_REFRESH_LAST` older
   than 24 h, `refreshIfDue(nowMs)` re-evaluates SmartQuery-backed stations
   (fake repository counts calls) and bumps the marker; within 24 h → no-op;
   first run (no marker) → refreshes.
-- [ ] **Step 2:** Implement: find SmartQuery stations via
+- [x] **Step 2:** Implement: find SmartQuery stations via
   `StationRepository`, re-run their queries through the existing
   `SourceRuleEvaluator` path so cached station track-sets reflect today's
   library (read how station results are cached before writing — if
   evaluation is already lazy per-play, the refresh only needs to invalidate
   caches + bump a `rotatedAt`, and the test asserts the invalidation).
   Settings key `KEY_SMARTQUERY_REFRESH_LAST` (Long; three-place rule).
-- [ ] **Step 3:** Wire to app launch in `App.kt`. Tests + builds green.
-- [ ] **Step 4:** Commit: `Daily SmartQuery station refresh (PLAN 6.3)`
+- [x] **Step 3:** Wire to app launch in `App.kt`. Tests + builds green.
+- [x] **Step 4:** Commit: `Daily SmartQuery station refresh (PLAN 6.3)`
 
 ### Task 6.4: Phase 6 exit
 
@@ -1197,4 +1197,18 @@ peer-review gates actually ran.
   collapsing positions on reload. Fixed in 39db323 by saving the full
   `assignedIds` list including sentinels.
 - Issue 3 (real): `strings.xml` lacked final newline. Fixed in 39db323.
+- No false positives to log.
+
+## Task 6.3 review — 2026-06-10
+
+- opencode (deepseek, --variant high): `VERDICT approved issues=3`.
+- Issue 1 (real): `SmartQueryRefresh` `onFailure` block was empty despite a
+  comment promising a log. Fixed in 1fc15a6 with a `println` matching the
+  `StationPlayback` / `CoroutineCrashGuard` convention.
+- Issue 2 (real): `containsSmartQuery()` used `else -> false` on a sealed
+  interface, defeating exhaustiveness checking. Fixed in 1fc15a6 by listing
+  every `SourceRule` branch explicitly.
+- Issue 3 (real): `refreshIfDue` had no concurrency guard; overlapping
+  callers could double-evaluate. Fixed in 1fc15a6 with an internal `Mutex`.
+- SettingsStore three-place rule verified correct in initial commit.
 - No false positives to log.
