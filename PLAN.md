@@ -343,7 +343,7 @@ class DjTemplateTest {
 - Test: `composeApp/src/commonTest/kotlin/com/visorcraft/radioshed/stations/DjAnnouncerTest.kt`
 - Modify: `composeApp/src/commonMain/kotlin/com/visorcraft/radioshed/di/Modules.kt`
 
-- [ ] **Step 1:** Failing tests for the pure decision core
+- [x] **Step 1:** Failing tests for the pure decision core
   `DjAnnouncer.shouldAnnounce(...)`:
 
 ```kotlin
@@ -361,8 +361,8 @@ class DjAnnouncerTest {
   `shouldAnnounce` takes plain params (frequency mode, counters,
   `nowMinutesOfDay`, quiet window, station-changed flag) — no clock reads
   inside, fully deterministic.
-- [ ] **Step 2:** Run → FAIL. Implement → PASS.
-- [ ] **Step 3:** Define the transition payload at the bottom of
+- [x] **Step 2:** Run → FAIL. Implement → PASS.
+- [x] **Step 3:** Define the transition payload at the bottom of
   `DjAnnouncer.kt` (helpers-in-file convention):
 
 ```kotlin
@@ -388,21 +388,21 @@ data class TrackTransition(
      `finally`.
   All failures swallow to no-op (`runCatching`); DJ must never break
   playback.
-- [ ] **Step 4:** Add `ClipPlayer` interface next to `TtsEngine` in
+- [x] **Step 4:** Add `ClipPlayer` interface next to `TtsEngine` in
   `audio/TtsEngine.kt` (`suspend fun playFile(path: String)`, suspends until
   done) — Android impl `AndroidClipPlayer` using `MediaPlayer` with
   `suspendCancellableCoroutine` on completion; Null impls desktop/iOS. Bind
   in platform modules.
-- [ ] **Step 5:** Bind `DjAnnouncer` as `single` in `sharedModule`
+- [x] **Step 5:** Bind `DjAnnouncer` as `single` in `sharedModule`
   (deps: `SettingsStore`, `DjCacheRepository`, `TtsEngine`, `ClipPlayer`,
   `AudioEngine`); call `announceIfDue` from `StationPlayback`'s
   track-transition path (find the completed-play hook where the
   ListenBrainz scrobble fires — `StationPlayback.kt` ~line 886 — and add the
   DJ hook on the *start-of-next-track* side, launched in the existing scope,
   non-blocking).
-- [ ] **Step 6:** `./gradlew :composeApp:testDebugUnitTest` → PASS;
+- [x] **Step 6:** `./gradlew :composeApp:testDebugUnitTest` → PASS;
   `assembleDebug` → BUILD SUCCESSFUL.
-- [ ] **Step 7:** Commit: `Wire DjAnnouncer into station playback (PLAN 1.5)`
+- [x] **Step 7:** Commit: `Wire DjAnnouncer into station playback (PLAN 1.5)`
 
 ### Task 1.6: DJ settings UI + template editor
 
