@@ -760,7 +760,11 @@ the new logic into `CrossfadePlayerPair` rather than growing the service.
 
 ### Task 3.5: Phase 3 exit
 
-- [ ] Run the **Phase Exit Gate**. Phase-specific dedup checks:
+- [x] Run the **Phase Exit Gate**.
+  *(G1 — e96bb27: symmetric-direction FadeCurves tests added; ramp constants,
+  single end-fade branch, contract-comment parity all verified clean.
+  G2 green incl. desktopTest. G3 pushed. G4 — see review log; the deferred-
+  cancel race fix landed as 68b9bf6. G5 — c35b7e2. G6 deferred to W5.)* Phase-specific dedup checks:
   - Android `CrossfadePlayerPair` ramp loop vs desktop ramp loop: gain math
     and timing constants must come from `FadeCurves` + shared constants in
     commonMain — zero curve math in platform code.
@@ -1121,3 +1125,22 @@ peer-review gates actually ran.
   test gap (2.1), permission grant-flow dead end + desktop messaging (2.3),
   stale drive-mode branches, duplicate preMuteLevel desync, silent voice
   no-match, station-visuals duplication (2.4).
+
+## Phase 3 review — 2026-06-10
+
+- First opencode run timed out exploring (no verdict — not treated as a pass).
+  Rescoped rerun: `VERDICT approved issues=1`.
+- Issue 1 (real, HIGH): scope.cancel() is non-blocking — on the shared Main
+  dispatcher an in-flight ramp's finally was queued to run AFTER onDestroy
+  released the players. Fixed in 68b9bf6: CrossfadePlayerPair.release() sets a
+  @Volatile released flag and defers ExoPlayer releases via a Main-queue post
+  behind the queued cancellation continuation (FIFO); ramp finally and
+  swapSessionPlayer gate on released/destroyed flags. The fix subagent's own
+  review also corrected the deferral signal (crossfadeInFlight, not
+  rampJob.isActive, which is already false in Cancelling state).
+- Reviewer findings 2-3 (desktop startPolling-on-cancelled-scope no-op at
+  close; preload failure retried at crossfade) judged benign — no action.
+- Task-review loop this phase caught and fixed: post-crossfade volume bypass
+  (user volume AND ReplayGain — CRITICAL), outgoing-ramp start jump, stale
+  _volume StateFlow, playback-rate reset across desktop swaps, Ended flicker,
+  onDestroy ordering (twice — see issue 1), WMO-style stale copy in settings.
