@@ -1227,9 +1227,9 @@ Goal: app feels like a music app, not a tech demo. Looks great on every form fac
 
 Goal: power-user audio features work and sound right on both platforms.
 
-- [ ] Crossfade impl on both engines (equal-power, linear, S-curve, custom) *(deferred — needs dual-ExoPlayer pipeline. End-of-track fade-out shipped as the lighter single-player alternative.)*
-- [ ] **Smart Fades** content-aware crossfade (silence/fade-out detection) *(deferred with crossfade)*
-- [ ] Gapless playback verified sample-accurate *(deferred with crossfade)*
+- [~] Crossfade impl on both engines (equal-power, linear, S-curve, custom) — EqualPower/Linear/SCurve ship on Android+desktop (FadeCurves + CrossfadePlayerPair / AudioEngineDesktop); custom curve editor deferred.
+- [ ] **Smart Fades** content-aware crossfade (silence/fade-out detection) — Smart currently aliases Fixed 6s (CrossfadePlan.SMART_CROSSFADE_DEFAULT_SEC); content analysis not implemented.
+- [~] Gapless playback verified sample-accurate — standby-player preload (setUpNext) ships for fast track starts; sample-accurate gapless not implemented.
 - [x] ReplayGain reading from tags — Scanner reads MP3 ID3v2 `TXXX`, FLAC Vorbis comments, Opus header gain into `Track.replayGainTrack` / `replayGainAlbum` / `replayGainTrackPeak`.
 - [x] ReplayGain pre-gain application + pre-amp setting — applied on each track load via `AudioEngineAndroid.applyReplayGain()`; user-tunable pre-amp slider in Settings → Audio.
 - [ ] Background LUFS scan job for tag-less files *(deferred)*
@@ -1435,11 +1435,7 @@ iOS deferred; `[ ]` = still deferred.
 
 #### Big features deferred (multi-day each)
 
-- [ ] **Crossfade + gapless verification (#112)** — needs dual-ExoPlayer
-  pipeline or a custom `AudioProcessor`. Cross-references Phase 4
-  ("Verify contiguous decoding") and Phase 7 ("Crossfade impl on both
-  engines", "Gapless playback verified sample-accurate"). End-of-track
-  fade-out (single-player) ships today as the lighter alternative.
+- [~] **Crossfade + gapless verification (#112)** — dual-player crossfade shipped both engines (PLAN 3.2/3.3); device/per-OS listening verification still owed.
 - [ ] **iOS implementation pass** — every `AudioEngineIos`,
   `FileEnumeratorIos`, `TagReaderIos`, `AVAudioSession`,
   `MPNowPlayingInfoCenter`, document-picker, and security-scoped-bookmark
