@@ -231,6 +231,28 @@ class SettingsStoreBackupTest {
     }
 
     @Test
+    fun driveMode_roundTrip() {
+        // Sets all four Drive Mode keys to non-default values, dumps, restores
+        // into a fresh store, and verifies every value survives intact.
+        val src = newStore()
+        src.setDriveTriggers("""[{"type":"bt_device","mac":"AA:BB:CC:DD:EE:FF","name":"Car"}]""")
+        src.setDriveQuickList(listOf("1", "2", "3"))
+        src.setDriveButtons(listOf("play_pause", "next", "mute"))
+        src.setDriveAutoExit(false)
+
+        val dst = newStore()
+        dst.restoreFromBackup(src.dumpForBackup())
+
+        assertEquals(
+            """[{"type":"bt_device","mac":"AA:BB:CC:DD:EE:FF","name":"Car"}]""",
+            dst.getDriveTriggers(),
+        )
+        assertEquals("1,2,3", dst.getDriveQuickList())
+        assertEquals("play_pause,next,mute", dst.getDriveButtons())
+        assertEquals(false, dst.getDriveAutoExit())
+    }
+
+    @Test
     fun unknownTypeInBundle_isIgnored() {
         // A bundle from a different/older app version may carry a
         // key whose type doesn't match what dumpForBackup writes

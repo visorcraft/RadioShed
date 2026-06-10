@@ -503,6 +503,75 @@ class SettingsStore(private val settings: Settings) {
         else settings.putString(KEY_DJ_TEMPLATES, value)
     }
 
+    // ---- Drive Mode trigger / quick-access settings ----
+    // JSON encode/decode of DriveModeTrigger lives with callers, NOT here.
+    // SettingsStore stays dumb (plain String round-trip), same convention as
+    // KEY_DJ_TEMPLATES. The data layer must not import domain serialization logic.
+
+    /**
+     * JSON-serialized list of [com.visorcraft.radioshed.domain.DriveModeTrigger]
+     * values. Empty string (the default) means no automatic triggers are
+     * configured — Drive Mode is only activated manually. Callers encode/
+     * decode the list using RadioShedJson; this key stores the raw JSON blob.
+     */
+    fun getDriveTriggers(): String =
+        settings.getStringOrNull(KEY_DRIVE_TRIGGERS).orEmpty()
+
+    fun setDriveTriggers(value: String) {
+        if (value.isEmpty()) settings.remove(KEY_DRIVE_TRIGGERS)
+        else settings.putString(KEY_DRIVE_TRIGGERS, value)
+    }
+
+    /**
+     * Comma-joined station ids for the Drive Mode quick-access list, ordered
+     * by the user's chosen sequence. At most 6 ids are stored; the setter
+     * enforces this by calling `take(6)` on the incoming list before joining.
+     * Default "" means the quick-list is empty (not configured).
+     */
+    fun getDriveQuickList(): String =
+        settings.getStringOrNull(KEY_DRIVE_QUICKLIST).orEmpty()
+
+    fun setDriveQuickList(ids: List<String>) {
+        val joined = ids.take(6).joinToString(",")
+        if (joined.isEmpty()) settings.remove(KEY_DRIVE_QUICKLIST)
+        else settings.putString(KEY_DRIVE_QUICKLIST, joined)
+    }
+
+    /**
+     * Comma-joined transport action ids shown in the Drive Mode button bar.
+     * Allowed ids: `previous`, `play_pause`, `next`, `station_picker`,
+     * `voice_search`, `mute`. The getter filters out any id not in the
+     * allowed set so stale stored values can't surface unknown buttons.
+     * When the stored value is blank the getter returns the default set
+     * `"previous,play_pause,next,station_picker"`.
+     */
+    fun getDriveButtons(): String {
+        val raw = settings.getStringOrNull(KEY_DRIVE_BUTTONS)
+        if (raw.isNullOrBlank()) return DRIVE_BUTTONS_DEFAULT
+        val filtered = raw.split(',')
+            .filter { it.trim() in DRIVE_BUTTON_IDS }
+            .joinToString(",")
+        return filtered.ifBlank { DRIVE_BUTTONS_DEFAULT }
+    }
+
+    fun setDriveButtons(ids: List<String>) {
+        val filtered = ids.filter { it in DRIVE_BUTTON_IDS }
+        if (filtered.isEmpty()) settings.remove(KEY_DRIVE_BUTTONS)
+        else settings.putString(KEY_DRIVE_BUTTONS, filtered.joinToString(","))
+    }
+
+    /**
+     * When true, Drive Mode exits automatically once none of the configured
+     * [getDriveTriggers] conditions remain active (e.g. Bluetooth disconnects,
+     * schedule window closes). True by default — users who forget to tap "exit"
+     * shouldn't stay stuck in the enlarged-tap-target layout indefinitely.
+     */
+    fun getDriveAutoExit(): Boolean =
+        settings.getBoolean(KEY_DRIVE_AUTO_EXIT, true)
+
+    fun setDriveAutoExit(value: Boolean) =
+        settings.putBoolean(KEY_DRIVE_AUTO_EXIT, value)
+
     /**
      * Wipe every user-portable preference key — used by the Settings
      * → "Reset settings to defaults" action. Library, ratings,
@@ -543,6 +612,7 @@ class SettingsStore(private val settings: Settings) {
             KEY_DJ_ENABLED, KEY_DJ_FREQUENCY, KEY_DJ_FREQUENCY_N,
             KEY_DJ_FREQUENCY_MINUTES, KEY_DJ_QUIET_START_MIN, KEY_DJ_QUIET_END_MIN,
             KEY_DJ_DUCK_FRACTION, KEY_DJ_TEMPLATES,
+            KEY_DRIVE_TRIGGERS, KEY_DRIVE_QUICKLIST, KEY_DRIVE_BUTTONS, KEY_DRIVE_AUTO_EXIT,
         ).forEach { settings.remove(it) }
         // Reset wipes the underlying entries; mirror flows must
         // republish so live consumers (NowPlaying for driveMode /
@@ -969,6 +1039,10 @@ class SettingsStore(private val settings: Settings) {
             // absence of the row in the dump conveys the same thing,
             // so we only persist when the user has stored something.
             KEY_DJ_FREQUENCY, KEY_DJ_TEMPLATES,
+            // Drive Mode trigger/quick-list/button-bar blobs. Each is a
+            // plain String; JSON decode lives with callers (same convention
+            // as KEY_DJ_TEMPLATES). Absent when unset = use defaults.
+            KEY_DRIVE_TRIGGERS, KEY_DRIVE_QUICKLIST, KEY_DRIVE_BUTTONS,
         ).forEach { key ->
             settings.getStringOrNull(key)?.let {
                 out[key] = com.visorcraft.radioshed.source.BackupSettingValue.Str(it)
@@ -986,6 +1060,7 @@ class SettingsStore(private val settings: Settings) {
             KEY_KEEP_SCREEN_ON, KEY_AUTO_FETCH_LYRICS, KEY_HAPTICS_ENABLED,
             KEY_LISTENBRAINZ_ENABLED,
             KEY_DJ_ENABLED,
+            KEY_DRIVE_AUTO_EXIT,
         ).forEach { key ->
             if (settings.hasKey(key)) {
                 out[key] = com.visorcraft.radioshed.source.BackupSettingValue.Bool(
@@ -1116,14 +1191,16 @@ class SettingsStore(private val settings: Settings) {
         KEY_NETPOLICY_OVERRIDE_COVERART, KEY_NETPOLICY_OVERRIDE_LYRICS,
         KEY_STATIONS_SORT,
         KEY_SUBSONIC_URL, KEY_SUBSONIC_USERNAME,
-        KEY_DJ_FREQUENCY, KEY_DJ_TEMPLATES -> SettingType.STR
+        KEY_DJ_FREQUENCY, KEY_DJ_TEMPLATES,
+        KEY_DRIVE_TRIGGERS, KEY_DRIVE_QUICKLIST, KEY_DRIVE_BUTTONS -> SettingType.STR
         KEY_MATERIAL_YOU, KEY_REDUCE_MOTION, KEY_DRIVE_MODE,
         KEY_REPLAY_GAIN, KEY_AUTO_RESUME_STATION, KEY_AUTO_BACKUP,
         KEY_AUTO_RESCAN_ON_LAUNCH, KEY_EQ_ENABLED,
         KEY_STATIONS_HIDE_BUILTINS, KEY_SLEEP_STOP_ON_EXPIRE,
         KEY_KEEP_SCREEN_ON, KEY_AUTO_FETCH_LYRICS, KEY_HAPTICS_ENABLED,
         KEY_LISTENBRAINZ_ENABLED,
-        KEY_DJ_ENABLED -> SettingType.BOOL
+        KEY_DJ_ENABLED,
+        KEY_DRIVE_AUTO_EXIT -> SettingType.BOOL
         KEY_USER_VOLUME, KEY_REPLAY_GAIN_PREAMP,
         KEY_FONT_SCALE, KEY_LYRICS_SCALE, KEY_PLAYBACK_SPEED,
         KEY_DJ_DUCK_FRACTION -> SettingType.FLOAT
@@ -1215,6 +1292,22 @@ class SettingsStore(private val settings: Settings) {
         const val KEY_DJ_TEMPLATES = "dj.templates"
         /** Valid stored values for KEY_DJ_FREQUENCY. */
         val DJ_FREQUENCY_VALUES = setOf("off", "every", "every_n", "minutes", "station_change")
+
+        // ---- Drive Mode ----
+        /** JSON-serialized List<DriveModeTrigger>. Empty = no auto triggers. */
+        const val KEY_DRIVE_TRIGGERS = "drive.triggers"
+        /** Comma-joined station ids for Drive Mode quick-access (max 6). */
+        const val KEY_DRIVE_QUICKLIST = "drive.quickList"
+        /** Comma-joined transport action ids for the Drive Mode button bar. */
+        const val KEY_DRIVE_BUTTONS = "drive.buttons"
+        /** When true, Drive Mode exits automatically when no trigger condition is active. */
+        const val KEY_DRIVE_AUTO_EXIT = "drive.autoExit"
+        /** Default Drive Mode button bar ids when none are configured. */
+        const val DRIVE_BUTTONS_DEFAULT = "previous,play_pause,next,station_picker"
+        /** Allowed action ids for the Drive Mode button bar. */
+        val DRIVE_BUTTON_IDS = setOf(
+            "previous", "play_pause", "next", "station_picker", "voice_search", "mute",
+        )
         /** Cadence for the auto-backup background export. 7 days = once
          *  per week, which matches typical user back-up cadence
          *  expectations (Google's auto-backup, Time Machine, etc.). */
