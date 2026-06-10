@@ -29,6 +29,7 @@ import com.visorcraft.radioshed.source.MissingArtworkSync
 import com.visorcraft.radioshed.source.MissingLyricsSync
 import com.visorcraft.radioshed.source.NetworkPolicyGate
 import com.visorcraft.radioshed.source.ScrobbleSync
+import com.visorcraft.radioshed.source.SubsonicSource
 import com.visorcraft.radioshed.stations.DjAnnouncer
 import com.visorcraft.radioshed.stations.PresetSeeder
 import com.visorcraft.radioshed.stations.SourceRuleEvaluator
@@ -122,8 +123,24 @@ val sharedModule: Module = module {
 
     // Phase 5: stations engine. AudioEngine comes from platformModule.
     // MediaSourceRegistry starts empty — cloud/remote MediaSources
-    // register themselves when the user configures one.
+    // register themselves when the user configures one (see App.kt's
+    // launch-time SubsonicSource registration).
     single { MediaSourceRegistry() }
+
+    // Subsonic-protocol MediaSource over the platform SubsonicClient.
+    // Reads server credentials live from SettingsStore on every walk, so
+    // a single instance bound here always reflects the current config.
+    // The network gate is a lambda over NetworkPolicyGate.allowAutomaticFetch()
+    // — same seam ScrobbleSync uses. NOT registered into the
+    // MediaSourceRegistry from here; App.kt registers it at launch when a
+    // server is configured and re-registers after a successful save.
+    single {
+        SubsonicSource(
+            client = get(),
+            settings = get(),
+            allowNetwork = { get<NetworkPolicyGate>().allowAutomaticFetch() },
+        )
+    }
     single { SourceRuleEvaluator(get(), get(), get(), get()) }
     // Phase DJ: announcer orchestrates TTS announcements between tracks.
     // Constructor order: (settings, djCache, tts, clipPlayer, audioEngine,

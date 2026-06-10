@@ -67,6 +67,8 @@ fun App(
     audioEngine: AudioEngine = koinInject(),
     driveModeController: DriveModeController = koinInject(),
     scrobbleSync: com.visorcraft.radioshed.source.ScrobbleSync = koinInject(),
+    mediaSourceRegistry: com.visorcraft.radioshed.source.MediaSourceRegistry = koinInject(),
+    subsonicSource: com.visorcraft.radioshed.source.SubsonicSource = koinInject(),
 ) {
     // Live-mutable theme inputs: read once from the persisted settings,
     // then hold in state so the AppSettingsScreen picker can re-theme
@@ -181,6 +183,23 @@ fun App(
         // as a playback error banner.
         LaunchedEffect(Unit) {
             runCatching { scrobbleSync.drain() }
+        }
+
+        // Register the Subsonic MediaSource at launch when a server is
+        // already configured, so station MediaSourceSelector rules can
+        // enumerate the cloud library from the first composition. The
+        // in-session path (the user saving credentials in Settings) is
+        // handled directly by the "Test & save" callback in
+        // SubsonicConfigRow, which registers the same singleton source
+        // immediately. The source reads credentials live, so a same-host
+        // credential edit needs no re-registration. Caveat: editing the
+        // URL to a DIFFERENT host registers the new id but leaves the old
+        // id registered until next launch — an acceptable edge for a
+        // single-server setup.
+        LaunchedEffect(Unit) {
+            if (settings.hasSubsonicConfig()) {
+                mediaSourceRegistry.register(subsonicSource)
+            }
         }
 
         // Auto-resume the last station once per process lifetime — gated

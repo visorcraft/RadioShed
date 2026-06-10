@@ -2515,6 +2515,12 @@ private fun SubsonicConfigRow(
     var password by remember { mutableStateOf(settings.getSubsonicPassword()) }
     var dialogOpen by remember { mutableStateOf(false) }
     val client: com.visorcraft.radioshed.source.SubsonicClient = koinInject()
+    // Registry + source so a successful save can register the Subsonic
+    // MediaSource immediately, without waiting for the next app launch's
+    // configured-on-launch check (App.kt). Station MediaSourceSelector
+    // rules can then enumerate the cloud library the moment it's saved.
+    val mediaSourceRegistry: com.visorcraft.radioshed.source.MediaSourceRegistry = koinInject()
+    val subsonicSource: com.visorcraft.radioshed.source.SubsonicSource = koinInject()
     val scope = rememberCoroutineScope()
     val configured = url.isNotBlank() && username.isNotBlank() && password.isNotBlank()
 
@@ -2603,6 +2609,11 @@ private fun SubsonicConfigRow(
                                         url = settings.getSubsonicUrl()
                                         username = settings.getSubsonicUsername()
                                         password = settings.getSubsonicPassword()
+                                        // Register the cloud MediaSource now
+                                        // that a server is confirmed reachable;
+                                        // the source reads these same settings
+                                        // live on each enumeration.
+                                        mediaSourceRegistry.register(subsonicSource)
                                         status = "Connected to ${result.product} v${result.version}."
                                         dialogOpen = false
                                     }
