@@ -546,31 +546,31 @@ sealed interface DriveModeTrigger {
 - Modify: platform modules, `di/Modules.kt`, `App.kt` (collect controller state)
 - Test: `composeApp/src/commonTest/kotlin/com/visorcraft/radioshed/car/DriveModeControllerTest.kt`
 
-- [ ] **Step 1:** `BluetoothWatcher` interface:
+- [x] **Step 1:** `BluetoothWatcher` interface:
   `val connectedDevices: StateFlow<Set<BtPeer>>` +
   `data class BtPeer(val mac: String, val name: String)` + `fun start()` /
   `fun stop()`. `NullBluetoothWatcher` emits empty set (desktop/iOS).
-- [ ] **Step 2:** Failing controller tests (inject a `MutableStateFlow` as a
+- [x] **Step 2:** Failing controller tests (inject a `MutableStateFlow` as a
   fake watcher; `kotlinx-coroutines-test`):
   - connect of a configured MAC → `active` becomes true
   - disconnect with `KEY_DRIVE_AUTO_EXIT=true` → false; with false → stays true
   - schedule window containing "now" activates; crossing midnight works
   - manual toggle overrides triggers in both directions until next trigger edge
-- [ ] **Step 3:** Implement `DriveModeController(watcher, settings, scope)` —
+- [x] **Step 3:** Implement `DriveModeController(watcher, settings, scope)` —
   combines watcher flow + a minute-tick schedule check + the manual setting
   into `val active: StateFlow<Boolean>`; writes back to `KEY_DRIVE_MODE` so
   every existing consumer (Now Playing re-skin) keeps working unchanged.
   Tests PASS.
-- [ ] **Step 4:** `AndroidBluetoothWatcher`: `BroadcastReceiver` on
+- [x] **Step 4:** `AndroidBluetoothWatcher`: `BroadcastReceiver` on
   `BluetoothDevice.ACTION_ACL_CONNECTED` / `ACTION_ACL_DISCONNECTED`,
   seeded from `BluetoothManager.adapter.bondedDevices` where connected;
   needs `BLUETOOTH_CONNECT` runtime permission on API 31+ — request through
   the existing `permissions/` machinery **only from the trigger-config UI**
   (never at startup); without the grant the watcher emits empty and the UI
   shows why.
-- [ ] **Step 5:** Bind in modules; start/stop the controller from `App.kt`
+- [x] **Step 5:** Bind in modules; start/stop the controller from `App.kt`
   lifecycle. `testDebugUnitTest` + `assembleDebug` green.
-- [ ] **Step 6:** Commit: `Auto Drive Mode via Bluetooth and schedule triggers (PLAN 2.2)`
+- [x] **Step 6:** Commit: `Auto Drive Mode via Bluetooth and schedule triggers (PLAN 2.2)`
 
 ### Task 2.3: Trigger configuration UI
 
