@@ -471,7 +471,14 @@ data class TrackTransition(
 
 ### Task 1.9: Phase 1 exit
 
-- [ ] Run the **Phase Exit Gate** (G1–G6). Phase-specific dedup checks:
+- [x] Run the **Phase Exit Gate** (G1–G6).
+  *(G1 done — commit 223b19b; carried-over getDjFrequency runCatching collapsed,
+  bridge-scaffold/slider dedup judged no-action with reasons. G2 done — full
+  testDebugUnitTest + assembleDebug + compileKotlinDesktop green; interactive
+  desktop window smoke + Android device pass still owed to the human (no
+  unattended GUI/device here). G3 done — pushed to origin/next-features.
+  G4 done — see review log. G5 done — commit 2fe5574. G6 deferred to W5 by
+  design: one minor version bump for the whole plan instead of six.)* Phase-specific dedup checks:
   - `AndroidTtsEngine` / `AndroidClipPlayer` callback-to-coroutine bridging —
     if both grew the same `suspendCancellableCoroutine` listener scaffold,
     extract a private helper in `androidMain/audio/`.
@@ -1061,3 +1068,20 @@ Append one subsection per phase as reviews complete:
 `## Phase N review — <date>` with the VERDICT line, issues fixed, and false
 positives (with one-line reasons). This is the audit trail that the
 peer-review gates actually ran.
+
+## Phase 1 review — 2026-06-10
+
+- First opencode run hit the 280s timeout before emitting a verdict (not
+  treated as a pass); rerun with a budget-for-verdict instruction completed.
+- `VERDICT approved issues=1` (deepseek, --variant high).
+- Issue 1 (real): `describeWmoCode` classified WMO 80–82 (rain showers) as
+  "snowy" and absorbed gap codes 78/83. Fixed in c668271 with table-driven
+  test updates (80–82 → rainy; 71–77, 85–86 → snowy; 78/83 → unsettled).
+- The run also verified: Koin arities, three-place settings rule, the two
+  DjAnnouncer mutexes + sleep-timer guard, AndroidTtsEngine double-checked
+  init. No false positives to log.
+- Subagent task reviews this phase additionally caught and fixed: TTS init
+  lock held across await, utterance-map cancellation leak, orphan template
+  sentences, DjAnnouncer volume-restore race, sleep-fade conflict, stranded
+  preview duck on screen dispose, weather fetch on Default dispatcher, DJ
+  cache eviction gap, and vendor-URL User-Agent policy violations.
