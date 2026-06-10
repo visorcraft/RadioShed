@@ -2382,8 +2382,15 @@ private fun ListenBrainzRow(settings: SettingsStore) {
     var token by remember { mutableStateOf(settings.getListenBrainzToken()) }
     var dialogOpen by remember { mutableStateOf(false) }
     val client: com.visorcraft.radioshed.source.ListenBrainzClient = koinInject()
+    val scrobbleQueue: com.visorcraft.radioshed.data.ScrobbleQueueRepository = koinInject()
+    val scrobbleSync: com.visorcraft.radioshed.source.ScrobbleSync = koinInject()
     val scope = rememberCoroutineScope()
     var validation by remember { mutableStateOf<String?>(null) }
+    var queuedCount by remember { mutableStateOf(0L) }
+    var retrying by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        queuedCount = scrobbleQueue.countAll()
+    }
 
     Column {
         SettingsToggleRow(
@@ -2410,6 +2417,30 @@ private fun ListenBrainzRow(settings: SettingsStore) {
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             )
+        }
+        if (queuedCount > 0) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "$queuedCount queued",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                )
+                TextButton(
+                    enabled = !retrying,
+                    onClick = {
+                        retrying = true
+                        scope.launch {
+                            runCatching { scrobbleSync.drain() }
+                            queuedCount = scrobbleQueue.countAll()
+                            retrying = false
+                        }
+                    },
+                ) { Text(if (retrying) "Retrying..." else "Retry now") }
+            }
         }
     }
 
