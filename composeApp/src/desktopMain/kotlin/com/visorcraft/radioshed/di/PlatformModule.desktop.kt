@@ -56,9 +56,11 @@ import com.visorcraft.radioshed.source.RingtoneSetter
 import com.visorcraft.radioshed.source.StorageVolumes
 import com.visorcraft.radioshed.source.SubsonicClient
 import com.visorcraft.radioshed.source.SyncthingDetector
+import com.visorcraft.radioshed.source.NullWeatherFetcher
 import com.visorcraft.radioshed.source.TagReader
 import com.visorcraft.radioshed.source.TagWriter
 import com.visorcraft.radioshed.source.TrackSharer
+import com.visorcraft.radioshed.source.WeatherFetcher
 import com.visorcraft.radioshed.source.WikipediaBioFetcher
 import org.koin.core.module.Module
 import org.koin.dsl.module
@@ -96,6 +98,7 @@ actual val platformModule: Module = module {
     single<ConnectivityChecker> { DesktopConnectivityChecker() }
     single<LyricsFetcher> { DesktopLyricsFetcher() }
     single<LocalLyricsLoader> { DesktopLocalLyricsLoader() }
+    single<WeatherFetcher> { NullWeatherFetcher() }
     single<BackupStorage> { DesktopBackupStorage() }
     single<BackupSharer> { DesktopBackupSharer() }
     single<FileBrowser> { DesktopFileBrowser() }

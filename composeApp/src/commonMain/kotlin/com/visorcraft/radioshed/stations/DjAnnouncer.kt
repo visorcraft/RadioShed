@@ -11,6 +11,8 @@ import com.visorcraft.radioshed.data.SettingsStore
 import com.visorcraft.radioshed.data.formatClockTime
 import com.visorcraft.radioshed.data.localMinutesOfDay
 import com.visorcraft.radioshed.data.nowMillis
+import com.visorcraft.radioshed.source.WeatherFetcher
+import com.visorcraft.radioshed.source.formatWeather
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.builtins.MapSerializer
@@ -42,6 +44,7 @@ class DjAnnouncer(
     private val clipPlayer: ClipPlayer,
     private val audioEngine: AudioEngine,
     private val sleepTimer: SleepTimer,
+    private val weather: WeatherFetcher,
 ) {
 
     private val mutex = Mutex()
@@ -246,7 +249,23 @@ class DjAnnouncer(
             seed = variantSeedFor(transition.startingTrack.trackId, slot),
             avoid = lastRenderedTemplate,
         )
-        val rendered = DjTemplate.render(template, transition.toVars(timeText))
+        // Only pay the location + network round-trip when the variant we just
+        // picked actually uses {weather}; the vast majority don't, so fetching
+        // unconditionally would add latency + an API call to every announcement.
+        // The variant is chosen BEFORE the fetch (pick → contains-check → fetch
+        // → render) and the same check applies on the precache path (which runs
+        // ALL transitions through this helper). A null snapshot leaves the token
+        // null, and DjTemplate.render drops the weather sentence as before.
+        // NOTE: weather-bearing clips have low cache-hit value — the rendered
+        // text varies with temperature/condition so the key (over rendered text)
+        // differs run to run. Acceptable: weather copy is rare and cheap to
+        // re-synthesize.
+        val weatherText = if (template.contains(WEATHER_TOKEN)) {
+            weather.current()?.let { formatWeather(it) }
+        } else {
+            null
+        }
+        val rendered = DjTemplate.render(template, transition.toVars(timeText, weatherText))
         if (rendered.isBlank()) return null
         // Key the clip by the rendered text + voice so identical copy re-uses the
         // existing synthesized file. "system" is the only voice id today (custom
@@ -314,6 +333,13 @@ class DjAnnouncer(
          * audible step yet comfortably above float rounding.
          */
         private const val VOLUME_EPSILON = 0.001f
+
+        /**
+         * The literal `{weather}` placeholder. A picked template is checked for
+         * this substring before any weather fetch so the location + network
+         * round-trip is skipped for the common weather-free announcement.
+         */
+        private const val WEATHER_TOKEN = "{weather}"
 
         /**
          * A DJ clip not played for this long is evicted by
@@ -452,12 +478,14 @@ data class TrackTransition(
 )
 
 /** Maps the transition into the template variable bag. [time] is the
- *  already-formatted wall-clock string for the `{time}` token. */
-private fun TrackTransition.toVars(time: String): DjTemplateVars = DjTemplateVars(
+ *  already-formatted wall-clock string for the `{time}` token; [weather] is the
+ *  pre-formatted weather string (e.g. "12 degrees and clear") or null when the
+ *  picked template doesn't use {weather} or no snapshot was available. */
+private fun TrackTransition.toVars(time: String, weather: String?): DjTemplateVars = DjTemplateVars(
     station = stationName,
     track = startingTrack.title,
     artist = startingTrack.artist,
     nextTrack = nextTrack?.title,
     time = time,
-    weather = null, // Open-Meteo weather variable lands with the weather client (SPEC §10).
+    weather = weather,
 )

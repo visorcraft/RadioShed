@@ -29,6 +29,7 @@ import com.visorcraft.radioshed.source.AndroidLocalLyricsLoader
 import com.visorcraft.radioshed.source.AndroidLyricsFetcher
 import com.visorcraft.radioshed.source.AndroidTagReader
 import com.visorcraft.radioshed.source.AndroidTagWriter
+import com.visorcraft.radioshed.source.AndroidWeatherFetcher
 import com.visorcraft.radioshed.source.AndroidBackupPackager
 import com.visorcraft.radioshed.source.BackupPackager
 import com.visorcraft.radioshed.source.AndroidMusicBrainzClient
@@ -60,6 +61,7 @@ import com.visorcraft.radioshed.source.LyricsFetcher
 import com.visorcraft.radioshed.source.StorageVolumes
 import com.visorcraft.radioshed.source.TagReader
 import com.visorcraft.radioshed.source.TagWriter
+import com.visorcraft.radioshed.source.WeatherFetcher
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.module.Module
 import org.koin.dsl.module
@@ -86,6 +88,9 @@ actual val platformModule: Module = module {
     single<ConnectivityChecker> { AndroidConnectivityChecker(androidContext()) }
     single<LyricsFetcher> { AndroidLyricsFetcher() }
     single<LocalLyricsLoader> { AndroidLocalLyricsLoader() }
+    // DJ {weather} token: Open-Meteo via HttpURLConnection. Takes the network
+    // gate so the fetch honours the user's connectivity preference.
+    single<WeatherFetcher> { AndroidWeatherFetcher(androidContext(), get()) }
     single<BackupStorage> { AndroidBackupStorage(androidContext()) }
     single<BackupSharer> { AndroidBackupSharer(androidContext()) }
     single<FileBrowser> { AndroidFileBrowser() }

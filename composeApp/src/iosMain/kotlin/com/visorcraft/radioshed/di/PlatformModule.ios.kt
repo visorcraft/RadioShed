@@ -56,9 +56,11 @@ import com.visorcraft.radioshed.source.NullBackupStorage
 import com.visorcraft.radioshed.source.NullCoverArtFetcher
 import com.visorcraft.radioshed.source.NullLocalLyricsLoader
 import com.visorcraft.radioshed.source.NullLyricsFetcher
+import com.visorcraft.radioshed.source.NullWeatherFetcher
 import com.visorcraft.radioshed.source.StorageVolumes
 import com.visorcraft.radioshed.source.TagReader
 import com.visorcraft.radioshed.source.TagWriter
+import com.visorcraft.radioshed.source.WeatherFetcher
 import org.koin.core.module.Module
 import org.koin.dsl.module
 import platform.Foundation.NSUserDefaults
@@ -81,6 +83,7 @@ actual val platformModule: Module = module {
     single<ConnectivityChecker> { IosConnectivityChecker() }
     single<LyricsFetcher> { NullLyricsFetcher() }
     single<LocalLyricsLoader> { NullLocalLyricsLoader() }
+    single<WeatherFetcher> { NullWeatherFetcher() }
     single<BackupStorage> { NullBackupStorage() }
     single<BackupSharer> { NullBackupSharer() }
     single<FileBrowser> { IosFileBrowser() }

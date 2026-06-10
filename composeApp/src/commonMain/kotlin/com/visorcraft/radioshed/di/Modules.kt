@@ -109,10 +109,10 @@ val sharedModule: Module = module {
     single { SourceRuleEvaluator(get(), get(), get(), get()) }
     // Phase DJ: announcer orchestrates TTS announcements between tracks.
     // Constructor order: (settings, djCache, tts, clipPlayer, audioEngine,
-    // sleepTimer). TtsEngine + ClipPlayer come from platformModule (Null on
-    // desktop/iOS). SleepTimer lets the DJ stand down during a sleep fade so the
-    // two volume drivers don't fight (registered above).
-    single { DjAnnouncer(get(), get(), get(), get(), get(), get()) }
+    // sleepTimer, weather). TtsEngine + ClipPlayer + WeatherFetcher come from
+    // platformModule (Null on desktop/iOS). SleepTimer lets the DJ stand down
+    // during a sleep fade so the two volume drivers don't fight (registered above).
+    single { DjAnnouncer(get(), get(), get(), get(), get(), get(), get()) }
     single { StationPlayback(get(), get(), get(), get(), get(), get(), get(), get(), get(), get()) }
     single { PresetSeeder(get(), get()) }
 }
