@@ -1860,6 +1860,27 @@ private fun TransportRow(
     var dislikeMenuOpen by remember { mutableStateOf(false) }
     val playing = state == PlayerState.Playing
 
+    // Drive Mode swaps the whole transport row for the configurable
+    // big-button bar (Task 2.4). The configured set + ordering + the
+    // station-picker / voice-search / mute actions all live in
+    // DriveTransportRow; the three transport-core gestures pass straight
+    // through. Returning early here keeps the non-drive layout below
+    // 100% untouched.
+    if (driveMode) {
+        com.visorcraft.radioshed.ui.car.DriveTransportRow(
+            state = state,
+            onPrev = onPrev,
+            onLongPressPrev = onLongPressPrev,
+            onTogglePlayPause = onTogglePlayPause,
+            onLongPressTogglePlayPause = onLongPressTogglePlayPause,
+            onNext = onNext,
+            // Long-press Next mirrors the dropdown's "don't play on this
+            // station again" so the dislike affordance survives the re-skin.
+            onLongPressNext = onDislikeOnStation,
+        )
+        return
+    }
+
     // Drive Mode bumps every transport hit-target by 25% so they're
     // unambiguous to hit while glancing at the screen at speed. Non-
     // drive sizes match the original Material recommendation.

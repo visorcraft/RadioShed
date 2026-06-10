@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.VerticalAlignBottom
 import androidx.compose.material.icons.filled.VerticalAlignTop
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.LibraryMusic
@@ -103,6 +104,11 @@ import com.visorcraft.radioshed.domain.Track
 import com.visorcraft.radioshed.stations.StationPlayback
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
+
+/** Drive Mode quick-list cap, matching [SettingsStore.setDriveQuickList]'s
+ *  `take(6)`. The action-sheet "Add to Drive Mode quick-list" row greys out
+ *  once the list holds this many. */
+private const val DRIVE_QUICK_LIST_MAX = 6
 
 /**
  * Stations Home — responsive grid of stations with tap-to-play.
@@ -247,6 +253,15 @@ fun StationsHomeScreen(
     // play_count / skip_rate / history rows. Useful when the user
     // wants a clean slate on a preset that's accumulated bad data.
     var resetStatsStationId by remember { mutableStateOf<Long?>(null) }
+    // Drive Mode quick-list (comma-joined station ids, ≤6) held in compose
+    // state so the action-sheet "Add to Drive Mode quick-list" row reflects
+    // an add immediately without a settings re-read. Mirrors the editor's
+    // parse-on-read of the same key.
+    var driveQuickList by remember {
+        mutableStateOf(
+            settings.getDriveQuickList().split(',').map { it.trim() }.filter { it.isNotEmpty() },
+        )
+    }
     // Pull-to-refresh-rescan: lets the user trigger a fresh library
     // scan from Stations Home without navigating to Library Settings.
     // Useful when the user just dropped new files into a folder and
@@ -832,6 +847,14 @@ fun StationsHomeScreen(
                     actionsForStationId = null
                     resetStatsStationId = id
                 },
+                inDriveQuickList = id.toString() in driveQuickList,
+                driveQuickListFull = driveQuickList.size >= DRIVE_QUICK_LIST_MAX,
+                onAddToDriveQuickList = {
+                    actionsForStationId = null
+                    val next = driveQuickList + id.toString()
+                    driveQuickList = next
+                    settings.setDriveQuickList(next)
+                },
                 onDelete = {
                     actionsForStationId = null
                     deleteConfirmStationId = id
@@ -927,6 +950,9 @@ private fun StationActionSheet(
     canMoveUp: Boolean,
     canMoveDown: Boolean,
     onResetStats: () -> Unit,
+    inDriveQuickList: Boolean,
+    driveQuickListFull: Boolean,
+    onAddToDriveQuickList: () -> Unit,
     onDelete: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -990,6 +1016,22 @@ private fun StationActionSheet(
                 label = "Move to bottom",
                 onClick = onMoveToBottom,
                 enabled = canMoveDown,
+            )
+            // Add to the Drive Mode big-button quick-list (Task 2.4).
+            // Disabled-with-explanatory-label idiom (same as Move up /
+            // down at a boundary): already-present and list-full both
+            // surface a disabled row stating why rather than a no-op tap.
+            // Already-present takes precedence over full so the user
+            // sees the more specific reason.
+            ActionRow(
+                icon = Icons.Filled.DirectionsCar,
+                label = when {
+                    inDriveQuickList -> "In Drive Mode quick-list"
+                    driveQuickListFull -> "Drive Mode quick-list full ($DRIVE_QUICK_LIST_MAX)"
+                    else -> "Add to Drive Mode quick-list"
+                },
+                onClick = onAddToDriveQuickList,
+                enabled = !inDriveQuickList && !driveQuickListFull,
             )
             // Reset stats: zero play_count / last_played_at / skip_rate
             // and wipe this station's `station_history` rows. Survives
