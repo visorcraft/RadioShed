@@ -1399,7 +1399,7 @@ Goal: shipped on both platforms.
 Each is a self-contained module, tackled as user demand surfaces.
 
 - [ ] `JellyfinSource` module
-- [ ] `SubsonicSource` module (covers Navidrome, Airsonic, OpenSubsonic)
+- [x] `SubsonicSource` module (covers Navidrome, Airsonic, OpenSubsonic) — `SubsonicSource.kt`, `DesktopSubsonicClient.kt` / `AndroidSubsonicClient.kt`, station editor `MediaSourceSelector` support (PLAN 5.1–5.3).
 - [ ] `PlexSource` module
 - [ ] `EmbySource` module
 - [ ] `KodiSource` module
@@ -1409,7 +1409,7 @@ Each is a self-contained module, tackled as user demand surfaces.
 - [ ] `WebDAVSource` module
 - [ ] `GoogleDriveSource`, `OneDriveSource`, `DropboxSource`, `BoxSource`, `pCloudSource`
 - [ ] `IcecastSource` (internet radio for hybrid stations)
-- [ ] Hybrid station support (mix local + streaming sources in one station)
+- [x] Hybrid station support (mix local + streaming sources in one station) — `SourceRuleEvaluator` already composes via `Union`/`Intersection`; editor exposes `MediaSourceSelector` as a standalone source type (PLAN 5.3). True compound builder UI deferred.
 - [ ] Source-level connectivity policy (LAN-only / always / WiFi-only)
 - [ ] Streaming cache controls (manual + automatic + forward-read playback cache + adjustable bitrate)
 
