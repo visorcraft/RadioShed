@@ -29,8 +29,9 @@ class SmartQueryRefresh(
     /**
      * Re-evaluate every station whose source rule tree contains a
      * [SourceRule.SmartQuery] if the last refresh was more than
-     * [REFRESH_INTERVAL_MS] ago (or never). After the pass succeeds,
-     * bump [SettingsStore.KEY_SMARTQUERY_REFRESH_LAST] to [nowMs].
+     * [REFRESH_INTERVAL_MS] ago (or never). After the pass completes
+     * (including any swallowed per-station failures), bump
+     * [SettingsStore.KEY_SMARTQUERY_REFRESH_LAST] to [nowMs].
      *
      * This is a no-op when there are no SmartQuery stations, and it's
      * safe to call on every app launch — the interval gate keeps it

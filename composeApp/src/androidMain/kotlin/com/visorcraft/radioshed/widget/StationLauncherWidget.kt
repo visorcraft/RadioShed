@@ -121,6 +121,7 @@ class StationLauncherWidget : AppWidgetProvider() {
             // Populate each slot. Slots without a configured station are hidden
             // rather than showing an empty placeholder, which looks cleaner on
             // a partially-configured widget.
+            val decodedBitmaps = mutableListOf<android.graphics.Bitmap>()
             for (slot in 0 until MAX_SLOTS) {
                 val stationId = config.stationIds.getOrNull(slot)
                 val station = stationId?.let { stationById[it] }
@@ -132,6 +133,7 @@ class StationLauncherWidget : AppWidgetProvider() {
                     val artwork = decodeArtworkBitmap(station.artworkUri)
                     if (artwork != null) {
                         views.setImageViewBitmap(SLOT_ARTWORK_IDS[slot], artwork)
+                        decodedBitmaps += artwork
                     } else {
                         views.setImageViewResource(
                             SLOT_ARTWORK_IDS[slot],
@@ -152,6 +154,9 @@ class StationLauncherWidget : AppWidgetProvider() {
             }
 
             mgr.updateAppWidget(widgetId, views)
+            // Now safe to recycle — updateAppWidget parcels the bitmap pixels
+            // inline before returning, so the host already has its own copy.
+            decodedBitmaps.forEach { it.recycle() }
         }
     }
 }
