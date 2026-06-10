@@ -411,22 +411,24 @@ data class TrackTransition(
 - Modify: `composeApp/src/commonMain/kotlin/com/visorcraft/radioshed/ui/settings/AppSettingsScreen.kt`
   (add the "AI DJ" section entry), `App.kt` (route)
 
-- [ ] **Step 1:** Build `DjSettingsScreen` following the hoisted-state +
+- [x] **Step 1:** Build `DjSettingsScreen` following the hoisted-state +
   `koinInject()` defaults pattern of `AppSettingsScreen.kt:97-99`: master
   toggle, frequency selector (segmented/dropdown for the 5 modes + N /
   minutes steppers), quiet-hours start/end pickers, duck-level slider,
   "Preview voice" button (synthesizes a fixed sentence and plays it via the
   Task 1.5 plumbing).
-- [ ] **Step 2:** Template editor inside the screen: one card per slot
+- [x] **Step 2:** Template editor inside the screen: one card per slot
   (station ID / up-next / recap / time), each listing its variants with
   edit/delete + add; chips inserting `{station}` `{track}` `{artist}`
   `{next_track}` `{time}` `{weather}` at the cursor; "Reset to defaults"
   restores `DEFAULT_DJ_TEMPLATES`. Persist via `KEY_DJ_TEMPLATES` JSON.
 - [ ] **Step 3:** `./gradlew :composeApp:run` → navigate Settings → AI DJ,
   exercise every control; values survive app restart.
+  *(Deferred to Phase Exit Gate G2 desktop smoke.)*
 - [ ] **Step 4:** On the Android device: enable DJ, frequency `every`, play a
   station, confirm an announcement ducks music, speaks, restores volume.
-- [ ] **Step 5:** Commit: `Add AI DJ settings screen and template editor (PLAN 1.6)`
+  *(Deferred to Phase 1 device pass — needs the physical Android device.)*
+- [x] **Step 5:** Commit: `Add AI DJ settings screen and template editor (PLAN 1.6)`
 
 ### Task 1.7: TTS pre-cache ahead of playback
 
