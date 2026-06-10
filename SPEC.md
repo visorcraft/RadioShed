@@ -1300,8 +1300,8 @@ Goal: power users with connectivity get richer art, lyrics, scrobbling, recs.
 - [ ] **fanart.tv client** (HQ artist images) *(deferred)*
 - [ ] MusicBrainz client (track ID + metadata fix) *(deferred — Cover Art Archive uses cached MBIDs only)*
 - [x] LRCLib client (synced + plain lyrics) — `AndroidLyricsFetcher` resolves via title/artist with multiple query candidates (`LyricsQueryCandidates`), persists to `lyrics_cache` with TTL, falls back to local `.lrc` sidecar (`LocalLyricsLoader`) and embedded USLT/SYLT (`Scanner` extracts at scan), and accepts manual artist/title overrides for stubborn matches.
-- [ ] Last.fm OAuth flow + scrobbling client *(deferred)*
-- [ ] ListenBrainz token-based scrobbling client *(deferred)*
+- [ ] Last.fm OAuth flow + scrobbling client *(deferred pending a registered API key — PLAN Phase 4 decision gate)*
+- [x] ListenBrainz token-based scrobbling client — offline queue (`db/Scrobbles.sq`, `ScrobbleQueueRepository`, 500-cap), queue-then-drain (`source/ScrobbleSync`, max 10 attempts, full-flush on launch + after live submits), desktop client (`DesktopListenBrainzClient`), settings status row; pre-plan Android submit completed in Phase 4.
 - [ ] AcoustID + Chromaprint fingerprinting *(deferred)*
 - [x] Open-Meteo client (weather variable for DJ templates) — `source/WeatherFetcher.kt` + `AndroidWeatherFetcher` (15-min cache, connectivity-gated)
 - [ ] Wikipedia/Wikidata client (artist bio) *(deferred)*
