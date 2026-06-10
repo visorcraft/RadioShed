@@ -63,8 +63,11 @@ class ScrobbleQueueRepository(private val db: RadioShedDatabase) {
         db.scrobblesQueries.countAll().executeAsOne()
     }
 
-    private companion object {
-        /** Maximum rows retained; older overflow is pruned on enqueue. */
+    internal companion object {
+        /**
+         * Maximum rows retained; older overflow is pruned on enqueue.
+         * SQL counterpart (pruneOverCap in Scrobbles.sq) hard-codes this value — update both together.
+         */
         const val CAP = 500
     }
 }

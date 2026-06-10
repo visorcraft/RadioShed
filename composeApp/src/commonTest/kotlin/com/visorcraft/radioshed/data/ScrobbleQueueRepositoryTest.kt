@@ -73,12 +73,16 @@ class ScrobbleQueueRepositoryTest {
     fun capPrunesOldest() = runTest {
         // 502 rows: ids 1..502. The enqueue-time pruneOverCap keeps the
         // queue at the 500 cap, dropping the two oldest (ids 1 and 2).
+        // listenedAtSeconds == i, so the third enqueue (i=2) has listenedAtSeconds=2.
         repeat(502) { i ->
             repo.enqueue("A", "T$i", null, i.toLong())
         }
 
         assertEquals(500L, repo.countAll())
+        val oldest = repo.oldestBatch(1).first()
         // Smallest surviving id is 3 — the two oldest rows are gone.
-        assertEquals(3L, repo.oldestBatch(1).first().id)
+        assertEquals(3L, oldest.id)
+        // Data-driven: the third enqueue was encoded with listenedAtSeconds=2.
+        assertEquals(2L, oldest.listenedAtSeconds)
     }
 }

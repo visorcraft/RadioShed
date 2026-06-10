@@ -34,6 +34,7 @@ countAll:
 SELECT COUNT(*) FROM scrobble_queue;
 
 -- Keep only the newest 500 rows by id, dropping the oldest overflow.
+-- Keep only the newest 500 rows (= ScrobbleQueueRepository.CAP — update both together).
 -- Run inside the same transaction as enqueue so the queue never
 -- exceeds the cap between writes.
 pruneOverCap:
