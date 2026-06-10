@@ -337,6 +337,10 @@ class RadioShedMediaSessionService : MediaLibraryService() {
         // detaches the session reference so any in-flight refresh
         // tasks no-op rather than touch released resources.
         libraryCallback.detach()
+        // Cancel the coroutine scope BEFORE releasing the players so that any
+        // crossfade ramp suspended at delay() cannot resume its finally block
+        // against already-released ExoPlayer instances.
+        scope.cancel()
         // Release the session first (detaches it from the player), then release
         // BOTH ExoPlayers via the pair. We don't call session.player.release()
         // separately — that wrapper's underlying ExoPlayer is one of the two
@@ -346,7 +350,6 @@ class RadioShedMediaSessionService : MediaLibraryService() {
         playerPair?.release()
         playerPair = null
         librarySession = null
-        scope.cancel()
         super.onDestroy()
     }
 

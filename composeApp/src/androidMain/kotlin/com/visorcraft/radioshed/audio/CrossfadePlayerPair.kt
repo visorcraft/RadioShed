@@ -168,7 +168,9 @@ class CrossfadePlayerPair(
                 // were cancelled: incoming is the new active at its effective
                 // volume (user × ReplayGain), outgoing is stopped/cleared and
                 // reset so a later promote of it starts clean.
-                incoming.volume = incomingTarget
+                runCatching {
+                    incoming.volume = incomingTarget
+                }
                 runCatching {
                     incoming.playWhenReady = true
                 }
