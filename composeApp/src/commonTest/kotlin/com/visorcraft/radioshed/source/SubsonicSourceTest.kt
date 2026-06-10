@@ -64,10 +64,10 @@ class SubsonicSourceTest {
     }
 
     @Test
-    fun idStripsSchemeAndTrailingSlash() {
+    fun idIsStableAndDisplayNameReflectsHost() {
         val source = SubsonicSource(FakeSubsonicClient(), settings, allowNetwork = { true })
         // setUp() configured "https://music.example.com/".
-        assertEquals("subsonic:music.example.com", source.id)
+        assertEquals("subsonic", source.id, "id is fixed so registry key survives credential edits")
         assertEquals("Subsonic (music.example.com)", source.displayName)
     }
 

@@ -26,10 +26,10 @@ package com.visorcraft.radioshed.source
  *    server, podcasts, internet radio entries, share endpoints.
  *  - Per-user transcoding bitrate cap.
  *  - Smart query integration: cloud tracks don't get persisted to
- *    the local SQLDelight library, so they can't seed stations or
- *    playlists yet. That's a real follow-up — needs a remote-track
- *    schema with a `source: 'subsonic'` discriminator and
- *    URL-rewriting at playback time.
+ *    the local SQLDelight library, but they CAN seed stations via
+ *    [SourceRule.MediaSourceSelector] + [SubsonicSource]. Full
+ *    remote-track schema with a `source: 'subsonic'` discriminator
+ *    and local caching is still deferred.
  */
 interface SubsonicClient {
 

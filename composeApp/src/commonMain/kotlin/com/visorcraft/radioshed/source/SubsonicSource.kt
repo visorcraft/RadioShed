@@ -1,6 +1,7 @@
 package com.visorcraft.radioshed.source
 
 import com.visorcraft.radioshed.data.SettingsStore
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 
@@ -36,11 +37,10 @@ class SubsonicSource(
 ) : MediaSource {
 
     /**
-     * Stable id derived from the configured host (scheme + trailing
-     * slash stripped) so the registry key survives credential edits
-     * that don't change the server. Empty url → `"subsonic:"`.
+     * Fixed id so the registry key is stable across credential edits.
+     * The [displayName] still reflects the current host for UI labels.
      */
-    override val id: String get() = "subsonic:${hostOf(settings.getSubsonicUrl())}"
+    override val id: String = "subsonic"
 
     override val displayName: String get() = "Subsonic (${hostOf(settings.getSubsonicUrl())})"
 
@@ -68,16 +68,14 @@ class SubsonicSource(
         val server = serverOrNull() ?: return@flow
 
         // A failure listing artists leaves nothing to walk — empty flow.
-        val artists = runCatching { client.getArtists(server) }.getOrNull() ?: return@flow
+        val artists = catching { client.getArtists(server) } ?: return@flow
 
         for (artist in artists) {
-            // Per-artist runCatching: one unreachable artist's albums
+            // Per-artist catching: one unreachable artist's albums
             // can't abort the whole walk (partial-results contract).
-            val albums = runCatching { client.getAlbumsForArtist(server, artist.id) }
-                .getOrNull() ?: continue
+            val albums = catching { client.getAlbumsForArtist(server, artist.id) } ?: continue
             for (album in albums) {
-                val songs = runCatching { client.getSongs(server, album.id) }
-                    .getOrNull() ?: continue
+                val songs = catching { client.getSongs(server, album.id) } ?: continue
                 for (song in songs) {
                     val suffix = song.suffix.orEmpty().lowercase()
                     if (filter.formats.isNotEmpty() && suffix !in filter.formats) continue
@@ -123,10 +121,24 @@ class SubsonicSource(
     }
 
     private companion object {
-        /** Strip scheme + trailing slash to a stable host token for [id] / [displayName]. */
+        /** Strip scheme + trailing slash to a stable host token for [displayName]. */
         fun hostOf(url: String): String =
             url.trim()
                 .substringAfter("://")
                 .trimEnd('/')
+    }
+}
+
+/**
+ * Like [runCatching] but rethrows [CancellationException] so structured
+ * concurrency is not broken inside a [flow] collector.
+ */
+private inline fun <T> catching(block: () -> T): T? {
+    return try {
+        block()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (_: Throwable) {
+        null
     }
 }
