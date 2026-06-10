@@ -553,3 +553,19 @@ VLC-equipped OS).
   nonexistent APIs. iOS stays a no-op stub until Mac access.
 - **Do not** re-bind a platform-bound interface in `sharedModule`
   (Koin last-definition-wins; see DI).
+
+## Prompt-file hygiene for subagents & peer reviewers (MANDATORY)
+
+NEVER write prompts for subagents or peer code reviewers (e.g. `opencode run "$(cat ...)"`)
+to the shared generic path `/tmp/prompt.txt`. Multiple agent sessions run concurrently on
+this machine and follow the same conventions; a shared path WILL be clobbered between
+writing the prompt and the consumer reading it at launch, silently running the review or
+task against another project's brief (this has actually happened).
+
+Required: use a collision-proof path —
+- per-repo: `/tmp/RadioShed-prompt.txt`, or
+- better, a unique random path so multiple subagents can work on this repo concurrently
+  with varying prompts: `PROMPT_FILE=$(mktemp /tmp/RadioShed-prompt-XXXXXXXX.txt)`
+
+The same rule applies to any scratch file consumed via `$(cat ...)` or read by the
+subagent at launch time (review diffs, briefs, fixture lists).
