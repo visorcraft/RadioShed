@@ -5,6 +5,8 @@ import com.russhwolf.settings.Settings
 import com.visorcraft.radioshed.audio.AudioEngine
 import com.visorcraft.radioshed.audio.AudioEngineDesktop
 import com.visorcraft.radioshed.audio.EqualizerController
+import com.visorcraft.radioshed.audio.ClipPlayer
+import com.visorcraft.radioshed.audio.NullClipPlayer
 import com.visorcraft.radioshed.audio.NullEqualizerController
 import com.visorcraft.radioshed.audio.NullTtsEngine
 import com.visorcraft.radioshed.audio.TtsEngine
@@ -112,6 +114,7 @@ actual val platformModule: Module = module {
     single<AudioEngine> { AudioEngineDesktop() }
     single<EqualizerController> { NullEqualizerController() }
     single<TtsEngine> { NullTtsEngine() }
+    single<ClipPlayer> { NullClipPlayer() }
 
     single<CrashLogReader> { DesktopCrashLogReader() }
     single<CrashLogSharer> { DesktopCrashLogSharer() }

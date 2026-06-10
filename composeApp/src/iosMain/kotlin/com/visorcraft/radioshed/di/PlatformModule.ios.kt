@@ -5,6 +5,8 @@ import com.russhwolf.settings.Settings
 import com.visorcraft.radioshed.audio.AudioEngine
 import com.visorcraft.radioshed.audio.AudioEngineIos
 import com.visorcraft.radioshed.audio.EqualizerController
+import com.visorcraft.radioshed.audio.ClipPlayer
+import com.visorcraft.radioshed.audio.NullClipPlayer
 import com.visorcraft.radioshed.audio.NullEqualizerController
 import com.visorcraft.radioshed.audio.NullTtsEngine
 import com.visorcraft.radioshed.audio.TtsEngine
@@ -94,6 +96,7 @@ actual val platformModule: Module = module {
     single<AudioEngine> { AudioEngineIos() }
     single<EqualizerController> { NullEqualizerController() }
     single<TtsEngine> { NullTtsEngine() }
+    single<ClipPlayer> { NullClipPlayer() }
 
     // Crash log reader — iOS surfaces crashes via Xcode/TestFlight, not
     // an in-app feed. Stub returns empty.

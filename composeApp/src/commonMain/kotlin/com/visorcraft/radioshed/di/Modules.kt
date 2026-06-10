@@ -26,6 +26,7 @@ import com.visorcraft.radioshed.source.MediaSourceRegistry
 import com.visorcraft.radioshed.source.MissingArtworkSync
 import com.visorcraft.radioshed.source.MissingLyricsSync
 import com.visorcraft.radioshed.source.NetworkPolicyGate
+import com.visorcraft.radioshed.stations.DjAnnouncer
 import com.visorcraft.radioshed.stations.PresetSeeder
 import com.visorcraft.radioshed.stations.SourceRuleEvaluator
 import com.visorcraft.radioshed.stations.StationPlayback
@@ -106,7 +107,11 @@ val sharedModule: Module = module {
     // register themselves when the user configures one.
     single { MediaSourceRegistry() }
     single { SourceRuleEvaluator(get(), get(), get(), get()) }
-    single { StationPlayback(get(), get(), get(), get(), get(), get(), get(), get(), get()) }
+    // Phase DJ: announcer orchestrates TTS announcements between tracks.
+    // Constructor order: (settings, djCache, tts, clipPlayer, audioEngine).
+    // TtsEngine + ClipPlayer come from platformModule (Null on desktop/iOS).
+    single { DjAnnouncer(get(), get(), get(), get(), get()) }
+    single { StationPlayback(get(), get(), get(), get(), get(), get(), get(), get(), get(), get()) }
     single { PresetSeeder(get(), get()) }
 }
 

@@ -19,3 +19,17 @@ internal expect fun formatShortDate(epochMs: Long): String
  * spreadsheet apps reliably sniff this format as a date.
  */
 internal expect fun formatIsoUtc(epochMs: Long): String
+
+/**
+ * Local wall-clock minutes-of-day (0..1439) for [epochMs]. Implemented
+ * per-platform because the conversion is timezone-dependent — the DJ
+ * quiet-hours window is configured in the user's local zone, so a UTC
+ * derivation would shift the window. Used by the DJ announcer to test the
+ * current time against the quiet window. */
+internal expect fun localMinutesOfDay(epochMs: Long): Int
+
+/**
+ * Locale-friendly clock time like "7:45 AM" / "23:14" for [epochMs] — the
+ * `{time}` DJ template variable. Format follows the device's 12/24-hour
+ * preference (platform short-time style). */
+internal expect fun formatClockTime(epochMs: Long): String

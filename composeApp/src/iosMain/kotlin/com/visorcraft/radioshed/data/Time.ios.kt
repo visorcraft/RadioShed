@@ -1,8 +1,11 @@
 package com.visorcraft.radioshed.data
 
 import platform.Foundation.NSCalendar
+import platform.Foundation.NSCalendarUnitHour
+import platform.Foundation.NSCalendarUnitMinute
 import platform.Foundation.NSCalendarUnitYear
 import platform.Foundation.NSDate
+import platform.Foundation.NSDateFormatterShortStyle
 import platform.Foundation.timeIntervalSince1970
 
 internal actual fun nowMillis(): Long =
@@ -24,5 +27,22 @@ internal actual fun formatIsoUtc(epochMs: Long): String {
     fmt.dateFormat = "yyyy-MM-dd'T'HH:mm:ss'Z'"
     fmt.timeZone = platform.Foundation.NSTimeZone.timeZoneWithAbbreviation("UTC")
         ?: platform.Foundation.NSTimeZone.systemTimeZone
+    return fmt.stringFromDate(date)
+}
+
+internal actual fun localMinutesOfDay(epochMs: Long): Int {
+    val date = NSDate.dateWithTimeIntervalSince1970(epochMs / 1000.0)
+    val cal = NSCalendar.currentCalendar
+    val hour = cal.component(NSCalendarUnitHour, date).toInt()
+    val minute = cal.component(NSCalendarUnitMinute, date).toInt()
+    return hour * 60 + minute
+}
+
+internal actual fun formatClockTime(epochMs: Long): String {
+    val date = NSDate.dateWithTimeIntervalSince1970(epochMs / 1000.0)
+    val fmt = platform.Foundation.NSDateFormatter()
+    // Short time style follows the device 12/24-hour locale preference.
+    fmt.timeStyle = NSDateFormatterShortStyle
+    fmt.dateStyle = platform.Foundation.NSDateFormatterNoStyle
     return fmt.stringFromDate(date)
 }

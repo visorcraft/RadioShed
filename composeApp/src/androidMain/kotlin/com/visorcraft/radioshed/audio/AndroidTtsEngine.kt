@@ -51,6 +51,14 @@ class AndroidTtsEngine(private val context: Context) : TtsEngine {
         return initSucceeded ?: true
     }
 
+    // filesDir (not cacheDir): like the artwork cache, we don't want the OS
+    // evicting a clip mid-announcement under storage pressure. The dj_cache
+    // table's blob_path rows point here, and the Settings "Clear DJ cache"
+    // action walks these blobs before wiping the table.
+    override fun cacheDir(): String? = runCatching {
+        File(context.filesDir, "dj").also { it.mkdirs() }.absolutePath
+    }.getOrNull()
+
     /**
      * Synthesize [text] to an audio file at [outPath].
      *

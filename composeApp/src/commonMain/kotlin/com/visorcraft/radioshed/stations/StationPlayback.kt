@@ -50,6 +50,7 @@ class StationPlayback(
     private val sleepTimer: com.visorcraft.radioshed.audio.SleepTimer,
     private val listenBrainz: com.visorcraft.radioshed.source.ListenBrainzClient,
     private val networkPolicy: com.visorcraft.radioshed.source.NetworkPolicyGate,
+    private val djAnnouncer: DjAnnouncer,
 ) {
     /**
      * Last error caught by the scope exception handler — exposed so the
@@ -110,6 +111,14 @@ class StationPlayback(
      * past the new station's first track immediately.
      */
     @Volatile private var suppressAutoAdvance: Boolean = false
+
+    /**
+     * Station id the DJ announcer last saw a track start under. Lets the
+     * [playTrack] DJ hook tell a same-station advance from a station switch
+     * (the station-id slot vs the up-next slot) without diffing flows. Null
+     * until the first DJ-eligible track starts.
+     */
+    @Volatile private var lastDjStationId: Long? = null
 
     private val _currentStation = MutableStateFlow<Station?>(null)
     val currentStation: StateFlow<Station?> = _currentStation.asStateFlow()
@@ -967,6 +976,9 @@ class StationPlayback(
                 while (history.size > HISTORY_CAP) history.removeFirst()
             }
         }
+        // Snapshot the just-ended track BEFORE recordPreviousIfAny nulls it
+        // out — the DJ "recap"/transition copy may reference it.
+        val endedTrack = currentTrack
         // Persist the previous track's listening session before swapping
         // it out. We record a row even on skip-previous (recordHistory =
         // false) — the user did listen to those seconds. Only ad-hoc
@@ -975,6 +987,12 @@ class StationPlayback(
         recordPreviousIfAny()
         currentTrack = track
         trackStartedAtMs = nowMillis()
+        // DJ announcement hook. Fire-and-forget on [scope] so a slow TTS
+        // synthesis or clip never blocks the queue advance; the announcer
+        // swallows every failure internally (decorative, never fatal) and
+        // self-gates on the user's enable/frequency/quiet-hours settings, so
+        // the unconditional launch here stays cheap when the DJ is off.
+        maybeAnnounce(endedTrack = endedTrack, startingTrack = track)
         // Recompute finite-queue progress against the position
         // cursor (NOT a track-id lookup, since the same track can
         // appear multiple times in a list). The cursor advances
@@ -1005,6 +1023,46 @@ class StationPlayback(
         scope.launch {
             val artworkUri = track.albumId?.let { libraryRepo.getAlbumById(it)?.artworkUri }
             audioEngine.play(track.toPlayable(artworkUri = artworkUri))
+        }
+    }
+
+    /**
+     * Build a [TrackTransition] from what's in scope and hand it to the DJ
+     * announcer on [scope]. Resolving artist names + the up-next track is a
+     * couple of indexed reads, kept off the advance path by launching. The
+     * announcer self-gates (disabled / not-due / quiet hours) so this is a
+     * near-free no-op when the DJ is off — the common case.
+     */
+    private fun maybeAnnounce(endedTrack: Track?, startingTrack: Track) {
+        val station = _currentStation.value
+        // Station switch = the track starts under a different station id than
+        // the DJ last saw. First-ever start (null) is NOT a switch — it's the
+        // initial tune-in, handled by the same up-next/station-id slot logic.
+        val stationChanged = station != null &&
+            lastDjStationId != null &&
+            lastDjStationId != station.id
+        lastDjStationId = station?.id
+        scope.launch {
+            runCatching {
+                val startingArtist = libraryRepo.artistsForTrack(startingTrack.id)
+                    .firstOrNull()?.name
+                val nextTrack = upcoming(1).firstOrNull()
+                val nextArtist = nextTrack?.let {
+                    libraryRepo.artistsForTrack(it.id).firstOrNull()?.name
+                }
+                val endedArtist = endedTrack?.let {
+                    libraryRepo.artistsForTrack(it.id).firstOrNull()?.name
+                }
+                djAnnouncer.announceIfDue(
+                    TrackTransition(
+                        stationName = station?.name,
+                        endedTrack = endedTrack?.toPlayable(artistName = endedArtist),
+                        startingTrack = startingTrack.toPlayable(artistName = startingArtist),
+                        nextTrack = nextTrack?.toPlayable(artistName = nextArtist),
+                        stationChanged = stationChanged,
+                    ),
+                )
+            }
         }
     }
 

@@ -1,0 +1,111 @@
+package com.visorcraft.radioshed.stations
+
+import kotlin.test.Test
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
+
+/**
+ * Tests for the PURE decision core [DjAnnouncer.shouldAnnounce]. The function is
+ * deterministic — plain params only, no clock reads, no DI — so every case below
+ * fixes all inputs explicitly.
+ */
+class DjAnnouncerTest {
+
+    /** Calls [DjAnnouncer.shouldAnnounce] with sensible non-suppressing defaults so
+     *  each test only sets the fields it cares about. Defaults: outside any quiet
+     *  window (quiet 0..0 is an empty window), never announced, no station change. */
+    private fun decide(
+        frequency: String,
+        frequencyN: Int = 4,
+        frequencyMinutes: Int = 15,
+        tracksSinceAnnounce: Int = 1,
+        lastAnnounceAtMs: Long? = null,
+        nowMs: Long = 1_000_000L,
+        nowMinutesOfDay: Int = 720, // 12:00
+        quietStartMin: Int = 0,
+        quietEndMin: Int = 0,
+        stationChanged: Boolean = false,
+    ): Boolean = DjAnnouncer.shouldAnnounce(
+        frequency = frequency,
+        frequencyN = frequencyN,
+        frequencyMinutes = frequencyMinutes,
+        tracksSinceAnnounce = tracksSinceAnnounce,
+        lastAnnounceAtMs = lastAnnounceAtMs,
+        nowMs = nowMs,
+        nowMinutesOfDay = nowMinutesOfDay,
+        quietStartMin = quietStartMin,
+        quietEndMin = quietEndMin,
+        stationChanged = stationChanged,
+    )
+
+    @Test
+    fun offFrequencyNeverAnnounces() {
+        // Everything else favours announcing — still false because freq is "off".
+        assertFalse(
+            decide(
+                frequency = "off",
+                tracksSinceAnnounce = 99,
+                lastAnnounceAtMs = null,
+                stationChanged = true,
+            ),
+        )
+    }
+
+    @Test
+    fun everyFiresOnEachTransition() {
+        assertTrue(decide(frequency = "every"))
+    }
+
+    @Test
+    fun everyNFiresOnNthTransition() {
+        assertFalse(decide(frequency = "every_n", frequencyN = 3, tracksSinceAnnounce = 1))
+        assertFalse(decide(frequency = "every_n", frequencyN = 3, tracksSinceAnnounce = 2))
+        assertTrue(decide(frequency = "every_n", frequencyN = 3, tracksSinceAnnounce = 3))
+    }
+
+    @Test
+    fun minutesModeRespectsElapsed() {
+        val now = 1_000_000_000L
+        val tenMinAgo = now - 10 * 60_000L
+        val sixteenMinAgo = now - 16 * 60_000L
+        assertFalse(
+            decide(frequency = "minutes", frequencyMinutes = 15, lastAnnounceAtMs = tenMinAgo, nowMs = now),
+        )
+        assertTrue(
+            decide(frequency = "minutes", frequencyMinutes = 15, lastAnnounceAtMs = sixteenMinAgo, nowMs = now),
+        )
+        // Never announced → due immediately.
+        assertTrue(decide(frequency = "minutes", frequencyMinutes = 15, lastAnnounceAtMs = null, nowMs = now))
+    }
+
+    @Test
+    fun stationChangeModeFiresOnlyOnStationSwitch() {
+        assertFalse(decide(frequency = "station_change", stationChanged = false))
+        assertTrue(decide(frequency = "station_change", stationChanged = true))
+    }
+
+    @Test
+    fun quietHoursSuppressAcrossMidnight() {
+        // Quiet 22:00 (1320) → 07:00 (420), crossing midnight.
+        assertFalse(
+            decide(frequency = "every", nowMinutesOfDay = 1410, quietStartMin = 1320, quietEndMin = 420),
+        )
+        assertFalse(
+            decide(frequency = "every", nowMinutesOfDay = 360, quietStartMin = 1320, quietEndMin = 420),
+        )
+        assertTrue(
+            decide(frequency = "every", nowMinutesOfDay = 720, quietStartMin = 1320, quietEndMin = 420),
+        )
+    }
+
+    @Test
+    fun quietWindowNotCrossingMidnight() {
+        // Quiet 09:00 (540) → 17:00 (1020), same day.
+        assertFalse(
+            decide(frequency = "every", nowMinutesOfDay = 600, quietStartMin = 540, quietEndMin = 1020),
+        )
+        assertTrue(
+            decide(frequency = "every", nowMinutesOfDay = 1380, quietStartMin = 540, quietEndMin = 1020),
+        )
+    }
+}

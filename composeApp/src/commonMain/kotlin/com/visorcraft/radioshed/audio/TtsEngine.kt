@@ -19,6 +19,16 @@ interface TtsEngine {
      * cache dir); the caller guarantees the parent exists.
      */
     suspend fun synthesizeToFile(text: String, voice: DjVoice?, outPath: String): Boolean
+
+    /**
+     * Absolute path of an app-writable directory the DJ pipeline may write
+     * synthesized clips into, or null when no writable location exists (the
+     * Null impl). Implementations create the directory on first call so the
+     * synthesize caller can rely on the parent existing. Lives here because
+     * the engine already owns the only platform handle (Android `Context`)
+     * needed to resolve private storage — keeping the announcer platform-free.
+     */
+    fun cacheDir(): String?
 }
 
 class NullTtsEngine : TtsEngine {
@@ -28,4 +38,15 @@ class NullTtsEngine : TtsEngine {
         voice: DjVoice?,
         outPath: String,
     ): Boolean = false
+
+    override fun cacheDir(): String? = null
+}
+
+/** Plays a short synthesized clip (DJ announcement). Suspends until playback completes. */
+interface ClipPlayer {
+    suspend fun playFile(path: String)
+}
+
+class NullClipPlayer : ClipPlayer {
+    override suspend fun playFile(path: String) {}
 }
