@@ -200,7 +200,9 @@ class DjAnnouncer(
             // at announce time (still correct, just not pre-warmed), so we
             // accept it. No ducking, no playback, no counter mutation —
             // precache only warms the cache.
-            runCatching { renderAndEnsureCached(transition, slotFor(transition), templates, formatClockTime(nowMillis())) }
+            runCatching {
+                renderAndEnsureCached(transition, slotFor(transition), templates, formatClockTime(nowMillis()))
+            }
         }
         // Piggy-back stale-cache eviction onto the precache pass: it already
         // runs off the hot path, and gating by [lastTrimMs] keeps it to at most

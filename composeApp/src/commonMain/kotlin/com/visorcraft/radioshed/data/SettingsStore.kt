@@ -423,9 +423,7 @@ class SettingsStore(private val settings: Settings) {
      */
     fun getDjFrequency(): String {
         val raw = settings.getStringOrNull(KEY_DJ_FREQUENCY) ?: return "off"
-        return runCatching {
-            if (raw in DJ_FREQUENCY_VALUES) raw else "off"
-        }.getOrDefault("off")
+        return if (raw in DJ_FREQUENCY_VALUES) raw else "off"
     }
 
     fun setDjFrequency(value: String) {
