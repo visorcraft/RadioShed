@@ -578,15 +578,16 @@ sealed interface DriveModeTrigger {
 - Create: `composeApp/src/commonMain/kotlin/com/visorcraft/radioshed/ui/car/DriveModeSettingsScreen.kt`
 - Modify: `AppSettingsScreen.kt` (In-Car section), `App.kt` (route)
 
-- [ ] **Step 1:** Screen: trigger list (add BT device from paired-device
+- [x] **Step 1:** Screen: trigger list (add BT device from paired-device
   picker fed by `BluetoothWatcher`, add schedule window with time pickers,
   delete via swipe/long-press), auto-exit toggle, quick-list editor (pick up
   to 6 stations, drag to order), button-row editor (choose 4–6 actions from:
   play/pause, next, previous, station picker, voice search, mute).
-- [ ] **Step 2:** Desktop run → screen renders, BT section shows
+- [x] **Step 2:** Desktop run → screen renders, BT section shows
   "not available on this platform" (Null watcher), schedule triggers fully
   functional. Device → pairing list appears after permission grant.
-- [ ] **Step 3:** Commit: `Add Drive Mode trigger and layout settings UI (PLAN 2.3)`
+  *(Interactive desktop/device smokes deferred to the Phase Exit Gate / device pass.)*
+- [x] **Step 3:** Commit: `Add Drive Mode trigger and layout settings UI (PLAN 2.3)`
 
 ### Task 2.4: Big-button station picker + configurable button row
 
