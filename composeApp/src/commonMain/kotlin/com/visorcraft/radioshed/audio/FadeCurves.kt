@@ -13,7 +13,7 @@ import kotlin.math.sin
  * - Android `CrossfadePlayerPair`: drives the dual-ExoPlayer volume ramp via
  *   `ExoPlayer.setVolume()` on each tick of the crossfade coroutine.
  * - Desktop `AudioEngineDesktop`: drives the dual-libvlc volume ramp via
- *   `libvlc_media_player_set_volume()` polled at ~250 ms intervals.
+ *   `libvlc_audio_set_volume(player, Int 0..100)` stepped at ~100 ms intervals.
  *
  * Why curve math must not live in platform code:
  * Gain curves must be identical on every platform so fade behaviour is
