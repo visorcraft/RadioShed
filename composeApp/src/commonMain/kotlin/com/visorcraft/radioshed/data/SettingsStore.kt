@@ -732,14 +732,6 @@ class SettingsStore(private val settings: Settings) {
         settings.putBoolean(KEY_AUTO_RESCAN_ON_LAUNCH, enabled)
 
     /**
-     * Length (seconds) of the volume ramp at the end of each track.
-     * 0 disables the feature entirely (default). Range 0..10.
-     * This is a track-end fade-out, not crossfade — no overlap with
-     * the next track. It applies only when a station's crossfade rule
-     * is Off. Per-station crossfade (with true overlap) is configured
-     * in PlaybackRule.crossfade and handled by the audio engine.
-     */
-    /**
      * Lyrics font-size multiplier. 1.0 is the Material baseline; the
      * UI lets the user step it between 0.7 and 1.6 in 0.1 increments.
      * Persisted so the user's chosen size carries across sessions —
@@ -754,6 +746,14 @@ class SettingsStore(private val settings: Settings) {
         settings.putFloat(KEY_LYRICS_SCALE, value.coerceIn(0.7f, 1.6f))
     }
 
+    /**
+     * Length (seconds) of the volume ramp at the end of each track.
+     * 0 disables the feature entirely (default). Range 0..10.
+     * This is a track-end fade-out, not crossfade — no overlap with
+     * the next track. It applies only when a station's crossfade rule
+     * is Off. Per-station crossfade (with true overlap) is configured
+     * in PlaybackRule.crossfade and handled by the audio engine.
+     */
     fun getEndFadeSec(): Int =
         settings.getInt(KEY_END_FADE_SEC, 0).coerceIn(0, 10)
     fun setEndFadeSec(seconds: Int) {

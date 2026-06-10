@@ -384,7 +384,7 @@ fun StationEditorScreen(
             // regardless so the user always sees the configured
             // values (debuggable / discoverable).
             Spacer(Modifier.height(12.dp))
-            ShufflePolicySlider(
+            LabelledIntSlider(
                 label = "No-repeat memory",
                 description = "Don't replay the last N picked tracks. " +
                     "Higher = more variety but smaller libraries can " +
@@ -395,7 +395,7 @@ fun StationEditorScreen(
                 enabled = !isBuiltIn,
             )
             Spacer(Modifier.height(8.dp))
-            ShufflePolicySlider(
+            LabelledIntSlider(
                 label = "Album spacing",
                 description = "Skip same-album picks for this many tracks. " +
                     "Larger spacing avoids album-stuffing on small libraries.",
@@ -405,7 +405,7 @@ fun StationEditorScreen(
                 enabled = !isBuiltIn,
             )
             Spacer(Modifier.height(8.dp))
-            ShufflePolicySlider(
+            LabelledIntSlider(
                 label = "Artist spacing",
                 description = "Skip same-artist picks for this many tracks. " +
                     "Smaller window than album spacing because users " +
@@ -1180,12 +1180,12 @@ private fun PathPatternConfig(
 }
 
 /**
- * Slim labelled slider for the smart-shuffle spacing knobs. Range
- * supplied by the caller; the slider snaps to integers via the
- * `steps` parameter so values are always whole numbers.
+ * Slim labelled integer slider. Range supplied by the caller; the slider
+ * snaps to integers via the `steps` parameter so values are always whole
+ * numbers. Used for shuffle-spacing knobs and crossfade duration alike.
  */
 @Composable
-private fun ShufflePolicySlider(
+private fun LabelledIntSlider(
     label: String,
     description: String,
     value: Int,
@@ -1280,7 +1280,7 @@ private fun CrossfadeControl(
             CrossfadeMode.Off -> Unit
             CrossfadeMode.Timed -> {
                 Spacer(Modifier.height(10.dp))
-                ShufflePolicySlider(
+                LabelledIntSlider(
                     label = "Crossfade duration",
                     description = "Overlap the outgoing and incoming tracks for this many seconds.",
                     value = seconds,
