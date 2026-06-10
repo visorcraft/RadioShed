@@ -58,6 +58,7 @@ import com.visorcraft.radioshed.domain.Weighting
 import com.visorcraft.radioshed.scanner.ScanProgress
 import com.visorcraft.radioshed.scanner.Scanner
 import com.visorcraft.radioshed.source.ArtworkPersister
+import com.visorcraft.radioshed.source.MediaSourceRegistry
 import com.visorcraft.radioshed.ui.library.FolderBrowserDialog
 import com.visorcraft.radioshed.ui.util.rememberImagePicker
 import com.visorcraft.radioshed.ui.util.supportsImagePicker
@@ -65,7 +66,7 @@ import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
 /**
- * Station Editor — create or edit a station. Now supports four source-rule
+ * Station Editor — create or edit a station. Supports five source-rule
  * types via an in-form type picker:
  *
  *  - Folders: multi-select of registered library folders →
@@ -81,6 +82,9 @@ import org.koin.compose.koinInject
  *    glob lists. Useful when files are organized but not at folder
  *    boundaries — e.g. matching FLAC files anywhere under a "Live"
  *    subdirectory regardless of which library folder it lives in.
+ *  - Media Source: [SourceRule.MediaSourceSelector] choosing a registered
+ *    remote/cloud source (e.g. Subsonic). Hidden when no sources are
+ *    configured.
  *
  * One source type per station for now. Compound rules
  * ([SourceRule.Union] / [SourceRule.Intersection] / [SourceRule.Difference]
@@ -97,9 +101,11 @@ fun StationEditorScreen(
     stationRepo: StationRepository = koinInject(),
     artworkPersister: ArtworkPersister = koinInject(),
     scanner: Scanner = koinInject(),
+    mediaSourceRegistry: MediaSourceRegistry = koinInject(),
 ) {
     val scope = rememberCoroutineScope()
     val folders by folderRepo.observeAll().collectAsState(initial = emptyList())
+    val mediaSources by mediaSourceRegistry.sources.collectAsState()
 
     var existing by remember { mutableStateOf<Station?>(null) }
     var name by remember { mutableStateOf("") }
@@ -121,6 +127,9 @@ fun StationEditorScreen(
     // types just changes which set is read on save. The other slots
     // preserve their values so toggling back doesn't lose them.
     var sourceType by remember { mutableStateOf(SourceType.Folders) }
+
+    // Media source
+    var mediaSourceId by remember { mutableStateOf<String?>(null) }
 
     // Folders
     val selectedFolderIds = remember { mutableStateListOf<Long>() }
@@ -206,6 +215,10 @@ fun StationEditorScreen(
                 pathIncludesText = src.include.joinToString(", ")
                 pathExcludesText = src.exclude.joinToString(", ")
             }
+            is SourceRule.MediaSourceSelector -> {
+                sourceType = SourceType.MediaSource
+                mediaSourceId = src.mediaSourceId
+            }
             else -> {
                 // Compound rules + selectors we don't expose (Playlist,
                 // Artist, Album, Duration, FileFormat) round-trip unchanged.
@@ -224,6 +237,7 @@ fun StationEditorScreen(
         sourceType == SourceType.SmartQuery -> smartLimitText.toIntOrNull()?.let { it > 0 } == true
         sourceType == SourceType.TagFilter -> tagKey.isNotBlank() && tagValuesText.isNotBlank()
         sourceType == SourceType.PathPattern -> pathIncludesText.isNotBlank()
+        sourceType == SourceType.MediaSource -> !mediaSourceId.isNullOrBlank()
         else -> true
     }
 
@@ -320,7 +334,13 @@ fun StationEditorScreen(
                         "save without changing the rule.",
                 )
             } else {
+                val availableTypes = remember(mediaSources) {
+                    SourceType.entries.filter {
+                        it != SourceType.MediaSource || mediaSources.isNotEmpty()
+                    }
+                }
                 SourceTypeTabs(
+                    types = availableTypes,
                     selected = sourceType,
                     onSelect = { sourceType = it },
                     enabled = sourceEditable,
@@ -354,6 +374,12 @@ fun StationEditorScreen(
                         onIncludesText = { pathIncludesText = it },
                         excludesText = pathExcludesText,
                         onExcludesText = { pathExcludesText = it },
+                        enabled = sourceEditable,
+                    )
+                    SourceType.MediaSource -> MediaSourceConfig(
+                        sources = mediaSources,
+                        selectedId = mediaSourceId,
+                        onSelect = { mediaSourceId = it },
                         enabled = sourceEditable,
                     )
                 }
@@ -510,6 +536,7 @@ fun StationEditorScreen(
                                     tagMatchAll = tagMatchAll,
                                     pathIncludes = pathIncludesText.toCsvList(),
                                     pathExcludes = pathExcludesText.toCsvList(),
+                                    mediaSourceId = mediaSourceId,
                                     playOrder = playOrder,
                                     weighting = weighting,
                                     noRepeatDepth = noRepeatDepth,
@@ -633,6 +660,7 @@ private enum class SourceType(val label: String) {
     SmartQuery("Smart Query"),
     TagFilter("Tag Filter"),
     PathPattern("Path Pattern"),
+    MediaSource("Media Source"),
 }
 
 /** Three-way UI sentinel for the crossfade picker. Maps to [Crossfade] sealed subtypes on save. */
@@ -659,6 +687,7 @@ private suspend fun saveStation(
     tagMatchAll: Boolean,
     pathIncludes: List<String>,
     pathExcludes: List<String>,
+    mediaSourceId: String?,
     playOrder: PlayOrder,
     weighting: Weighting,
     noRepeatDepth: Int,
@@ -675,6 +704,9 @@ private suspend fun saveStation(
             SourceType.SmartQuery -> SourceRule.SmartQuery(smartKind, smartLimit.coerceAtLeast(1))
             SourceType.TagFilter -> SourceRule.TagFilter(tagKey, tagValues, tagMatchAll)
             SourceType.PathPattern -> SourceRule.PathPattern(pathIncludes, pathExcludes)
+            SourceType.MediaSource -> SourceRule.MediaSourceSelector(
+                mediaSourceId = mediaSourceId.orEmpty(),
+            )
         }
     }
     val crossfade: Crossfade = when (crossfadeMode) {
@@ -722,6 +754,7 @@ private suspend fun saveStation(
 
 @Composable
 private fun SourceTypeTabs(
+    types: List<SourceType>,
     selected: SourceType,
     onSelect: (SourceType) -> Unit,
     enabled: Boolean,
@@ -730,7 +763,7 @@ private fun SourceTypeTabs(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        SourceType.entries.forEach { type ->
+        types.forEach { type ->
             val isSelected = type == selected
             Surface(
                 modifier = Modifier
@@ -1177,6 +1210,52 @@ private fun PathPatternConfig(
         enabled = enabled,
         modifier = Modifier.fillMaxWidth(),
     )
+}
+
+@Composable
+private fun MediaSourceConfig(
+    sources: Map<String, com.visorcraft.radioshed.source.MediaSource>,
+    selectedId: String?,
+    onSelect: (String?) -> Unit,
+    enabled: Boolean,
+) {
+    if (sources.isEmpty()) {
+        EmptyHint(
+            "No media sources are configured. Add a Subsonic server in Settings to enable cloud tracks.",
+        )
+        return
+    }
+    val selectedEntry = sources[selectedId]
+    val displayLabel = when {
+        selectedId == null -> "Choose a source…"
+        selectedEntry != null -> selectedEntry.displayName
+        else -> "$selectedId (unavailable)"
+    }
+    Text(
+        "Play tracks from a registered cloud or remote source.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+    )
+    Spacer(Modifier.height(6.dp))
+    var open by remember { mutableStateOf(false) }
+    OutlinedButton(
+        onClick = { if (enabled) open = true },
+        enabled = enabled,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Text(displayLabel)
+    }
+    DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+        sources.values.forEach { source ->
+            DropdownMenuItem(
+                text = { Text(source.displayName) },
+                onClick = {
+                    onSelect(source.id)
+                    open = false
+                },
+            )
+        }
+    }
 }
 
 /**
