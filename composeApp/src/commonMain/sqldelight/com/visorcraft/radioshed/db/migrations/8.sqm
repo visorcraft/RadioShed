@@ -1,0 +1,25 @@
+-- Migration v7 → v8: offline scrobble queue.
+--
+-- Backs the offline scrobble feature (PLAN 4.1): "track finished"
+-- events are persisted locally so a Last.fm / ListenBrainz submission
+-- survives an app restart or a network outage and is flushed later by
+-- the scrobble sender. Without this table any play that completes
+-- while offline (or while the scrobble endpoint is down) is lost the
+-- moment the process dies. attempts lets the sender back off on a row
+-- that keeps failing; the queue is capped at 500 rows by the
+-- repository's pruneOverCap so a long offline stretch can't grow the
+-- DB unbounded.
+--
+-- IF NOT EXISTS so the baseline-creation path on a brand-new install
+-- (which already gets the table from Scrobbles.sq's CREATE statement)
+-- doesn't double-fail when this migration runs.
+
+CREATE TABLE IF NOT EXISTS scrobble_queue (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    artist TEXT NOT NULL,
+    track TEXT NOT NULL,
+    album TEXT,
+    listened_at_seconds INTEGER NOT NULL,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL
+);

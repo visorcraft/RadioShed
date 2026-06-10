@@ -13,6 +13,7 @@ import com.visorcraft.radioshed.data.LibraryRepository
 import com.visorcraft.radioshed.data.LyricsCacheRepository
 import com.visorcraft.radioshed.data.PlaylistRepository
 import com.visorcraft.radioshed.data.RatingRepository
+import com.visorcraft.radioshed.data.ScrobbleQueueRepository
 import com.visorcraft.radioshed.data.SearchRepository
 import com.visorcraft.radioshed.data.SettingsStore
 import com.visorcraft.radioshed.data.StationRepository
@@ -50,6 +51,7 @@ val sharedModule: Module = module {
     single { PlaylistRepository(get()) }
     single { RatingRepository(get()) }
     single { SearchRepository(get()) }
+    single { ScrobbleQueueRepository(get()) }
 
     single { ArtworkCacheRepository(get()) }
     single { LyricsCacheRepository(get()) }
