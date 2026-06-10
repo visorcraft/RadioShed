@@ -409,6 +409,102 @@ class SettingsStore(private val settings: Settings) {
         settings.putBoolean(KEY_SLEEP_STOP_ON_EXPIRE, value)
     }
 
+    // ---- DJ (automated station-voice) ----
+
+    /** Whether the DJ feature is active at all. Off by default. */
+    fun getDjEnabled(): Boolean = settings.getBoolean(KEY_DJ_ENABLED, false)
+    fun setDjEnabled(value: Boolean) = settings.putBoolean(KEY_DJ_ENABLED, value)
+
+    /**
+     * Cadence at which the DJ speaks. Allowed values: `off`, `every`,
+     * `every_n`, `minutes`, `station_change`. Unknown stored values are
+     * coerced back to `off` so a future rename can never leave the UI in
+     * an undefined state.
+     */
+    fun getDjFrequency(): String {
+        val raw = settings.getStringOrNull(KEY_DJ_FREQUENCY) ?: return "off"
+        return runCatching {
+            if (raw in DJ_FREQUENCY_VALUES) raw else "off"
+        }.getOrDefault("off")
+    }
+
+    fun setDjFrequency(value: String) {
+        settings.putString(KEY_DJ_FREQUENCY, if (value in DJ_FREQUENCY_VALUES) value else "off")
+    }
+
+    /**
+     * When [getDjFrequency] is `every_n`, the DJ speaks every N tracks.
+     * Coerced to 2..20 on read and write so invalid stored data can't
+     * break the scheduling logic.
+     */
+    fun getDjFrequencyN(): Int =
+        settings.getInt(KEY_DJ_FREQUENCY_N, 4).coerceIn(2, 20)
+
+    fun setDjFrequencyN(value: Int) {
+        settings.putInt(KEY_DJ_FREQUENCY_N, value.coerceIn(2, 20))
+    }
+
+    /**
+     * When [getDjFrequency] is `minutes`, the DJ speaks every N minutes.
+     * Coerced to 5..120.
+     */
+    fun getDjFrequencyMinutes(): Int =
+        settings.getInt(KEY_DJ_FREQUENCY_MINUTES, 15).coerceIn(5, 120)
+
+    fun setDjFrequencyMinutes(value: Int) {
+        settings.putInt(KEY_DJ_FREQUENCY_MINUTES, value.coerceIn(5, 120))
+    }
+
+    /**
+     * Start of the DJ quiet window, in minutes since midnight (0..1439).
+     * Default 1320 = 22:00. The DJ will not speak between
+     * [getDjQuietStartMin] and [getDjQuietEndMin].
+     */
+    fun getDjQuietStartMin(): Int =
+        settings.getInt(KEY_DJ_QUIET_START_MIN, 1320).coerceIn(0, 1439)
+
+    fun setDjQuietStartMin(value: Int) {
+        settings.putInt(KEY_DJ_QUIET_START_MIN, value.coerceIn(0, 1439))
+    }
+
+    /**
+     * End of the DJ quiet window, in minutes since midnight (0..1439).
+     * Default 420 = 07:00.
+     */
+    fun getDjQuietEndMin(): Int =
+        settings.getInt(KEY_DJ_QUIET_END_MIN, 420).coerceIn(0, 1439)
+
+    fun setDjQuietEndMin(value: Int) {
+        settings.putInt(KEY_DJ_QUIET_END_MIN, value.coerceIn(0, 1439))
+    }
+
+    /**
+     * Volume fraction (0.0..0.6) the music is ducked to while the DJ
+     * is speaking. 0.2 = music at 20 % volume during TTS. Coerced on
+     * read and write.
+     */
+    fun getDjDuckFraction(): Float =
+        settings.getFloat(KEY_DJ_DUCK_FRACTION, 0.2f).coerceIn(0.0f, 0.6f)
+
+    fun setDjDuckFraction(value: Float) {
+        settings.putFloat(KEY_DJ_DUCK_FRACTION, value.coerceIn(0.0f, 0.6f))
+    }
+
+    /**
+     * Raw DJ template blob. Empty string (the default) means "use
+     * `DEFAULT_DJ_TEMPLATES` from `stations/DjTemplate.kt`". The
+     * empty-string ↔ use-defaults contract is intentional — DjTemplate
+     * is not imported here to keep the data layer independent of the
+     * stations layer.
+     */
+    fun getDjTemplates(): String =
+        settings.getStringOrNull(KEY_DJ_TEMPLATES).orEmpty()
+
+    fun setDjTemplates(value: String) {
+        if (value.isEmpty()) settings.remove(KEY_DJ_TEMPLATES)
+        else settings.putString(KEY_DJ_TEMPLATES, value)
+    }
+
     /**
      * Wipe every user-portable preference key — used by the Settings
      * → "Reset settings to defaults" action. Library, ratings,
@@ -446,6 +542,9 @@ class SettingsStore(private val settings: Settings) {
             // touched here — those are managed via the per-source
             // sign-out affordances in their respective settings rows.
             KEY_SUBSONIC_URL, KEY_SUBSONIC_USERNAME,
+            KEY_DJ_ENABLED, KEY_DJ_FREQUENCY, KEY_DJ_FREQUENCY_N,
+            KEY_DJ_FREQUENCY_MINUTES, KEY_DJ_QUIET_START_MIN, KEY_DJ_QUIET_END_MIN,
+            KEY_DJ_DUCK_FRACTION, KEY_DJ_TEMPLATES,
         ).forEach { settings.remove(it) }
         // Reset wipes the underlying entries; mirror flows must
         // republish so live consumers (NowPlaying for driveMode /
@@ -867,6 +966,11 @@ class SettingsStore(private val settings: Settings) {
             // restore and the rest of the connection works.
             // Same rationale for KEY_LISTENBRAINZ_TOKEN — excluded.
             KEY_SUBSONIC_URL, KEY_SUBSONIC_USERNAME,
+            // DJ feature — frequency mode + templates blob. Empty
+            // KEY_DJ_TEMPLATES means "use DjTemplate defaults"; the
+            // absence of the row in the dump conveys the same thing,
+            // so we only persist when the user has stored something.
+            KEY_DJ_FREQUENCY, KEY_DJ_TEMPLATES,
         ).forEach { key ->
             settings.getStringOrNull(key)?.let {
                 out[key] = com.visorcraft.radioshed.source.BackupSettingValue.Str(it)
@@ -883,6 +987,7 @@ class SettingsStore(private val settings: Settings) {
             KEY_STATIONS_HIDE_BUILTINS, KEY_SLEEP_STOP_ON_EXPIRE,
             KEY_KEEP_SCREEN_ON, KEY_AUTO_FETCH_LYRICS, KEY_HAPTICS_ENABLED,
             KEY_LISTENBRAINZ_ENABLED,
+            KEY_DJ_ENABLED,
         ).forEach { key ->
             if (settings.hasKey(key)) {
                 out[key] = com.visorcraft.radioshed.source.BackupSettingValue.Bool(
@@ -895,6 +1000,7 @@ class SettingsStore(private val settings: Settings) {
             KEY_USER_VOLUME, KEY_REPLAY_GAIN_PREAMP,
             KEY_FONT_SCALE, KEY_LYRICS_SCALE,
             KEY_PLAYBACK_SPEED,
+            KEY_DJ_DUCK_FRACTION,
         ).forEach { key ->
             if (settings.hasKey(key)) {
                 out[key] = com.visorcraft.radioshed.source.BackupSettingValue.FloatValue(
@@ -911,6 +1017,8 @@ class SettingsStore(private val settings: Settings) {
             // round-trips identically through Settings on both
             // platforms (no float-rounding on the alpha byte).
             KEY_THEME_SEED, KEY_ACCENT_SEED,
+            KEY_DJ_FREQUENCY_N, KEY_DJ_FREQUENCY_MINUTES,
+            KEY_DJ_QUIET_START_MIN, KEY_DJ_QUIET_END_MIN,
         ).forEach { key ->
             if (settings.hasKey(key)) {
                 out[key] = com.visorcraft.radioshed.source.BackupSettingValue.IntValue(
@@ -1009,19 +1117,24 @@ class SettingsStore(private val settings: Settings) {
         KEY_THEME_COLOR_SOURCE,
         KEY_NETPOLICY_OVERRIDE_COVERART, KEY_NETPOLICY_OVERRIDE_LYRICS,
         KEY_STATIONS_SORT,
-        KEY_SUBSONIC_URL, KEY_SUBSONIC_USERNAME -> SettingType.STR
+        KEY_SUBSONIC_URL, KEY_SUBSONIC_USERNAME,
+        KEY_DJ_FREQUENCY, KEY_DJ_TEMPLATES -> SettingType.STR
         KEY_MATERIAL_YOU, KEY_REDUCE_MOTION, KEY_DRIVE_MODE,
         KEY_REPLAY_GAIN, KEY_AUTO_RESUME_STATION, KEY_AUTO_BACKUP,
         KEY_AUTO_RESCAN_ON_LAUNCH, KEY_EQ_ENABLED,
         KEY_STATIONS_HIDE_BUILTINS, KEY_SLEEP_STOP_ON_EXPIRE,
         KEY_KEEP_SCREEN_ON, KEY_AUTO_FETCH_LYRICS, KEY_HAPTICS_ENABLED,
-        KEY_LISTENBRAINZ_ENABLED -> SettingType.BOOL
+        KEY_LISTENBRAINZ_ENABLED,
+        KEY_DJ_ENABLED -> SettingType.BOOL
         KEY_USER_VOLUME, KEY_REPLAY_GAIN_PREAMP,
-        KEY_FONT_SCALE, KEY_LYRICS_SCALE, KEY_PLAYBACK_SPEED -> SettingType.FLOAT
+        KEY_FONT_SCALE, KEY_LYRICS_SCALE, KEY_PLAYBACK_SPEED,
+        KEY_DJ_DUCK_FRACTION -> SettingType.FLOAT
         KEY_END_FADE_SEC, KEY_STATIONS_TILE_SIZE,
         KEY_LYRICS_SYNC_OFFSET, KEY_STATS_WINDOW_DAYS,
         KEY_BACKUP_RETENTION,
-        KEY_THEME_SEED, KEY_ACCENT_SEED -> SettingType.INT
+        KEY_THEME_SEED, KEY_ACCENT_SEED,
+        KEY_DJ_FREQUENCY_N, KEY_DJ_FREQUENCY_MINUTES,
+        KEY_DJ_QUIET_START_MIN, KEY_DJ_QUIET_END_MIN -> SettingType.INT
         else -> null
     }
 
@@ -1093,6 +1206,17 @@ class SettingsStore(private val settings: Settings) {
         const val KEY_END_FADE_SEC = "audio.endFadeSec"
         const val KEY_LYRICS_SCALE = "ui.lyricsScale"
         const val KEY_DRIVE_MODE = "ui.driveMode"
+        const val KEY_DJ_ENABLED = "dj.enabled"
+        const val KEY_DJ_FREQUENCY = "dj.frequency"
+        const val KEY_DJ_FREQUENCY_N = "dj.frequencyN"
+        const val KEY_DJ_FREQUENCY_MINUTES = "dj.frequencyMinutes"
+        const val KEY_DJ_QUIET_START_MIN = "dj.quietStartMin"
+        const val KEY_DJ_QUIET_END_MIN = "dj.quietEndMin"
+        const val KEY_DJ_DUCK_FRACTION = "dj.duckFraction"
+        /** Empty string = use DEFAULT_DJ_TEMPLATES from stations/DjTemplate.kt. */
+        const val KEY_DJ_TEMPLATES = "dj.templates"
+        /** Valid stored values for KEY_DJ_FREQUENCY. */
+        val DJ_FREQUENCY_VALUES = setOf("off", "every", "every_n", "minutes", "station_change")
         /** Cadence for the auto-backup background export. 7 days = once
          *  per week, which matches typical user back-up cadence
          *  expectations (Google's auto-backup, Time Machine, etc.). */

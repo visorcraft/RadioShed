@@ -204,6 +204,33 @@ class SettingsStoreBackupTest {
     }
 
     @Test
+    fun djSettings_roundTrip() {
+        // Sets every DJ key to a non-default value, dumps, restores into
+        // a fresh store, and verifies every value survives intact.
+        val src = newStore()
+        src.setDjEnabled(true)
+        src.setDjFrequency("every_n")
+        src.setDjFrequencyN(7)
+        src.setDjFrequencyMinutes(30)
+        src.setDjQuietStartMin(1200)
+        src.setDjQuietEndMin(360)
+        src.setDjDuckFraction(0.4f)
+        src.setDjTemplates("Hello {{track}} on {{station}}!")
+
+        val dst = newStore()
+        dst.restoreFromBackup(src.dumpForBackup())
+
+        assertEquals(true, dst.getDjEnabled())
+        assertEquals("every_n", dst.getDjFrequency())
+        assertEquals(7, dst.getDjFrequencyN())
+        assertEquals(30, dst.getDjFrequencyMinutes())
+        assertEquals(1200, dst.getDjQuietStartMin())
+        assertEquals(360, dst.getDjQuietEndMin())
+        assertEquals(0.4f, dst.getDjDuckFraction())
+        assertEquals("Hello {{track}} on {{station}}!", dst.getDjTemplates())
+    }
+
+    @Test
     fun unknownTypeInBundle_isIgnored() {
         // A bundle from a different/older app version may carry a
         // key whose type doesn't match what dumpForBackup writes
