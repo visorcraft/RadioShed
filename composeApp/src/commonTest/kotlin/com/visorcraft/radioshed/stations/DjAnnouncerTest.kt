@@ -108,4 +108,23 @@ class DjAnnouncerTest {
             decide(frequency = "every", nowMinutesOfDay = 1380, quietStartMin = 540, quietEndMin = 1020),
         )
     }
+
+    @Test
+    fun everyNCounterResetSuppressesImmediateRepeat() {
+        // Documented semantic: any announcement resets the every_n counter to 0,
+        // so the *very next* transition (tracksSinceAnnounce == 1) must NOT fire
+        // again. We pin this at the pure-decision level: announceIfDue's stateful
+        // path resets tracksSinceAnnounce to 0 right after a successful clip, and
+        // the following transition bumps it to 1. With n=3, shouldAnnounce must
+        // be false for tracksSinceAnnounce 1 and 2, and only true again at 3.
+        //
+        // (A pure-level regression rather than a stateful-DjAnnouncer test: the
+        // reset is consumed exclusively through shouldAnnounce, and the stateful
+        // path would need disproportionate fakes for the 14-member AudioEngine
+        // plus SettingsStore/DjCacheRepository/TtsEngine/ClipPlayer/SleepTimer
+        // and coroutine-timed clip playback to exercise the same invariant.)
+        assertFalse(decide(frequency = "every_n", frequencyN = 3, tracksSinceAnnounce = 1))
+        assertFalse(decide(frequency = "every_n", frequencyN = 3, tracksSinceAnnounce = 2))
+        assertTrue(decide(frequency = "every_n", frequencyN = 3, tracksSinceAnnounce = 3))
+    }
 }

@@ -3,6 +3,7 @@ package com.visorcraft.radioshed.stations
 import com.visorcraft.radioshed.audio.AudioEngine
 import com.visorcraft.radioshed.audio.ClipPlayer
 import com.visorcraft.radioshed.audio.Playable
+import com.visorcraft.radioshed.audio.SleepTimer
 import com.visorcraft.radioshed.audio.TtsEngine
 import com.visorcraft.radioshed.data.DjCacheRepository
 import com.visorcraft.radioshed.data.RadioShedJson
@@ -31,9 +32,9 @@ import kotlinx.serialization.builtins.serializer
  *  4. cache lookup keyed by (rendered text + voice); synthesize on miss.
  *  5. duck music → play clip → restore volume in a `finally`.
  *
- * Counters ([tracksSinceAnnounce], [lastAnnounceAtMs], last-station id) are
- * mutated under [mutex] because StationPlayback may launch announceIfDue on its
- * background scope where rapid transitions could otherwise interleave.
+ * Counters ([tracksSinceAnnounce], [lastAnnounceAtMs]) are mutated under [mutex]
+ * because StationPlayback may launch announceIfDue on its background scope where
+ * rapid transitions could otherwise interleave.
  */
 class DjAnnouncer(
     private val settings: SettingsStore,
@@ -41,6 +42,7 @@ class DjAnnouncer(
     private val tts: TtsEngine,
     private val clipPlayer: ClipPlayer,
     private val audioEngine: AudioEngine,
+    private val sleepTimer: SleepTimer,
 ) {
 
     private val mutex = Mutex()
@@ -61,11 +63,6 @@ class DjAnnouncer(
     // the "minutes" frequency mode.
     private var lastAnnounceAtMs: Long? = null
 
-    // The previous transition's station name, so "station_change" can detect a
-    // switch without StationPlayback having to diff ids for us. Null until the
-    // first transition is observed.
-    private var lastStationName: String? = null
-
     // Last rendered copy, fed to DjTemplate.pickVariant as the avoid value so
     // back-to-back announcements don't pick the identical phrasing.
     private var lastRenderedTemplate: String? = null
@@ -85,13 +82,20 @@ class DjAnnouncer(
         //    can't lose an increment or double-fire.
         if (!settings.getDjEnabled()) return
         if (!tts.isAvailable()) return
+        // Don't talk over a winding-down sleep timer. A user drifting off does
+        // not want a DJ voice, and — more concretely — the timer's fade ticker
+        // and final pause+restore drive engine volume on their own schedule. If
+        // we ducked/restored across the timer's expiry our finally could repaint
+        // the volume the timer just reset, leaving the next resume near-silent.
+        // Stepping aside entirely keeps the two volume drivers from fighting.
+        if (sleepTimer.state.value is SleepTimer.State.Running) return
 
         val now = nowMillis()
         val due = mutex.withLock {
             tracksSinceAnnounce += 1
-            val stationChanged = transition.stationChanged ||
-                (lastStationName != null && lastStationName != transition.stationName)
-            lastStationName = transition.stationName
+            // Single source of truth for "station changed": StationPlayback
+            // already computes this by station-id diff, so trust it rather than
+            // re-deriving from a name comparison here.
             shouldAnnounce(
                 frequency = settings.getDjFrequency(),
                 frequencyN = settings.getDjFrequencyN(),
@@ -102,7 +106,7 @@ class DjAnnouncer(
                 nowMinutesOfDay = localMinutesOfDay(now),
                 quietStartMin = settings.getDjQuietStartMin(),
                 quietEndMin = settings.getDjQuietEndMin(),
-                stationChanged = stationChanged,
+                stationChanged = transition.stationChanged,
             )
         }
         if (!due) return
@@ -176,7 +180,17 @@ class DjAnnouncer(
                 }
                 clipPlayer.playFile(clipPath)
             } finally {
-                audioEngine.setVolume(priorVolume)
+                // Defensive restore: only return to priorVolume if the engine is
+                // still sitting at the duck level WE set. If the sleep timer's
+                // fade ticker or its expiry pause+restore repainted the volume
+                // mid-clip (the Running guard above closes the common case, but
+                // the timer can be armed while a clip is already in flight), the
+                // value we'd "restore" is stale — blindly writing priorVolume
+                // would clobber the timer's own baseline. Leaving it alone lets
+                // whoever last touched the volume own it.
+                if (kotlin.math.abs(audioEngine.volume.value - duck) <= VOLUME_EPSILON) {
+                    audioEngine.setVolume(priorVolume)
+                }
             }
         }
     }
@@ -204,6 +218,14 @@ class DjAnnouncer(
     }.getOrDefault("{}")
 
     companion object {
+
+        /**
+         * Tolerance for "is the engine still at the level we ducked to?" in the
+         * finally restore. setVolume round-trips through platform mixers that may
+         * quantise, so an exact compare is unreliable; this is well below any
+         * audible step yet comfortably above float rounding.
+         */
+        private const val VOLUME_EPSILON = 0.001f
 
         /**
          * Pure, deterministic scheduling decision — no clock reads, no DI, all
