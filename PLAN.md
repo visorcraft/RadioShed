@@ -797,7 +797,7 @@ SPEC).
 - Modify: `di/Modules.kt`
 - Test: `composeApp/src/commonTest/kotlin/com/visorcraft/radioshed/data/ScrobbleQueueRepositoryTest.kt`
 
-- [ ] **Step 1:** Schema — `Scrobbles.sq` baseline **and** identical
+- [x] **Step 1:** Schema — `Scrobbles.sq` baseline **and** identical
   statements in `8.sqm` (shipped migrations are immutable; this is a new one):
 
 ```sql
@@ -814,15 +814,15 @@ CREATE TABLE scrobble_queue (
 
   Queries: `enqueue`, `oldestBatch(limit)`, `deleteById`, `bumpAttempts`,
   `countAll`, `pruneOverCap` (keep newest 500).
-- [ ] **Step 2:** Regenerate:
+- [x] **Step 2:** Regenerate:
   `./gradlew :composeApp:generateCommonMainRadioShedDatabaseInterface --rerun-tasks`
   → BUILD SUCCESSFUL.
-- [ ] **Step 3:** Failing repository tests on an in-memory DB
+- [x] **Step 3:** Failing repository tests on an in-memory DB
   (`StationRoundTripCrashTest` pattern): enqueue→drain order is FIFO,
   `deleteById` removes, attempts bump, cap prunes oldest beyond 500.
-- [ ] **Step 4:** Implement `ScrobbleQueueRepository(db)` (all I/O via
+- [x] **Step 4:** Implement `ScrobbleQueueRepository(db)` (all I/O via
   `withContext(IODispatcher)`); bind in `sharedModule`. Tests PASS.
-- [ ] **Step 5:** Commit: `Add offline scrobble queue table and repository (PLAN 4.1)`
+- [x] **Step 5:** Commit: `Add offline scrobble queue table and repository (PLAN 4.1)`
 
 ### Task 4.2: Queue-then-drain submission flow
 
