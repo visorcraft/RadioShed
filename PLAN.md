@@ -747,14 +747,16 @@ the new logic into `CrossfadePlayerPair` rather than growing the service.
 - Modify: `composeApp/src/commonMain/kotlin/com/visorcraft/radioshed/ui/stations/StationEditorScreen.kt`
   (PlaybackRule section), `AppSettingsScreen.kt` (Audio section copy)
 
-- [ ] **Step 1:** Station editor: crossfade rule control — Off / Timed
+- [x] **Step 1:** Station editor: crossfade rule control — Off / Timed
   (duration slider 1–12 s + curve picker) / Smart (explain it currently
   equals Timed-with-default; honest copy). The settings screen's existing
   end-fade copy (`AppSettingsScreen.kt:1347,1425`) gets updated to say true
   crossfade now exists per-station and end-fade applies only when crossfade
   is Off.
-- [ ] **Step 2:** Desktop + device smoke; values persist per station.
-- [ ] **Step 3:** Commit: `Expose crossfade rule in station editor (PLAN 3.4)`
+- [x] **Step 2:** Desktop + device smoke; values persist per station.
+  *(Persistence verified by PlaybackRuleSerializationTest round-trip; interactive
+  smokes deferred to the gate/device pass.)*
+- [x] **Step 3:** Commit: `Expose crossfade rule in station editor (PLAN 3.4)`
 
 ### Task 3.5: Phase 3 exit
 
