@@ -54,4 +54,28 @@ class DjTemplateTest {
         val next = DjTemplate.pickVariant(variants, seed = 2L, avoid = first)
         assertTrue(next != first)
     }
+
+    @Test
+    fun allSentencesDroppedRendersEmpty() {
+        // Every sentence references {weather}, which is null in the fixture.
+        val template = "Outside it's {weather}. Forecast: {weather}."
+        val out = DjTemplate.render(template, vars)
+        assertEquals("", out)
+    }
+
+    @Test
+    fun singleVariantWithAvoidReturnsIt() {
+        // When only one variant exists, avoid cannot be honoured — return it anyway.
+        val result = DjTemplate.pickVariant(listOf("only"), seed = 1L, avoid = "only")
+        assertEquals("only", result)
+    }
+
+    @Test
+    fun valueContainingPeriodDoesNotSplitSentences() {
+        // A substituted value like "Mr. Brightside" must not be mistaken for a
+        // sentence boundary during sentence splitting.
+        val localVars = vars.copy(track = "Mr. Brightside")
+        val out = DjTemplate.render("That was {track}. Up next, {next_track}.", localVars)
+        assertEquals("That was Mr. Brightside. Up next, Age of Consent.", out)
+    }
 }

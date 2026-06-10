@@ -17,6 +17,19 @@ data class DjTemplateVars(
 )
 
 /**
+ * Canonical slot-key constants for [DEFAULT_DJ_TEMPLATES].
+ *
+ * Use these instead of raw strings wherever code refers to a named slot, so
+ * that renaming a slot is a single-point change.
+ */
+object DjSlots {
+    const val STATION_ID = "station_id"
+    const val UP_NEXT = "up_next"
+    const val RECAP = "recap"
+    const val TIME = "time"
+}
+
+/**
  * Lightweight template engine for on-air DJ copy.
  *
  * Templates are plain strings that may contain placeholder tokens in curly
@@ -61,7 +74,7 @@ object DjTemplate {
         val kept = sentences.filter { sentence ->
             // Drop sentence if it contains a known token whose value is null.
             val tokens = TOKEN_REGEX.findAll(sentence).map { it.groupValues[1] }.toList()
-            tokens.none { name -> KNOWN_VARS.containsKey(name) && KNOWN_VARS[name]!!.invoke(vars) == null }
+            tokens.none { name -> KNOWN_VARS[name]?.let { it(vars) == null } == true }
         }.map { sentence ->
             // Substitute all known tokens that have non-null values.
             TOKEN_REGEX.replace(sentence) { match ->
@@ -79,7 +92,9 @@ object DjTemplate {
      *
      * If the chosen variant equals [avoid] and there is more than one variant,
      * the next index (wrapping around) is returned instead, ensuring no
-     * immediate repeat.
+     * immediate repeat. The fallback deterministically picks the immediate
+     * successor index (mod list size), not a random element among the remaining
+     * variants.
      *
      * @param variants  Non-empty list of template strings to choose from.
      * @param seed      Seed for the random number generator.
@@ -89,6 +104,7 @@ object DjTemplate {
      *                  possible.
      */
     fun pickVariant(variants: List<String>, seed: Long, avoid: String? = null): String {
+        require(variants.isNotEmpty()) { "variants must not be empty" }
         val rng = Random(seed)
         val index = rng.nextInt(variants.size)
         val pick = variants[index]
@@ -115,25 +131,25 @@ object DjTemplate {
  * shorter but still coherent line.
  */
 val DEFAULT_DJ_TEMPLATES: Map<String, List<String>> = mapOf(
-    "station_id" to listOf(
+    DjSlots.STATION_ID to listOf(
         "You're locked in to {station}.",
         "This is {station}, your soundtrack for the day.",
         "Stay tuned — you're listening to {station}.",
         "It's {time}, and you're with {station}.",
     ),
-    "up_next" to listOf(
+    DjSlots.UP_NEXT to listOf(
         "Coming up: {next_track}.",
         "Up next on {station}: {next_track}.",
-        "Don't go anywhere. Outside it's {weather}. Next up is {next_track}.",
+        "Don't go anywhere — next up is {next_track}. Outside it's {weather}.",
         "Stay with us — {next_track} is coming right up.",
     ),
-    "recap" to listOf(
+    DjSlots.RECAP to listOf(
         "That was {track} by {artist}.",
         "You just heard {track} — {artist}, right here on {station}.",
         "That was {track} by {artist}. It's {weather} out there, so keep it warm in here.",
-        "{artist} with {track}. Classic.",
+        "{artist} with {track} — classic.",
     ),
-    "time" to listOf(
+    DjSlots.TIME to listOf(
         "It's {time}.",
         "The time is {time} — you're on {station}.",
         "Just gone {time} here on {station}.",
