@@ -4,6 +4,8 @@ import com.visorcraft.radioshed.data.SettingsStore
 import com.visorcraft.radioshed.data.StationRepository
 import com.visorcraft.radioshed.domain.SourceRule
 import com.visorcraft.radioshed.domain.Track
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * Periodic refresher for SmartQuery-backed stations. Because
@@ -22,6 +24,8 @@ class SmartQueryRefresh(
     private val evaluate: suspend (SourceRule) -> List<Track>,
 ) {
 
+    private val mutex = Mutex()
+
     /**
      * Re-evaluate every station whose source rule tree contains a
      * [SourceRule.SmartQuery] if the last refresh was more than
@@ -30,11 +34,13 @@ class SmartQueryRefresh(
      *
      * This is a no-op when there are no SmartQuery stations, and it's
      * safe to call on every app launch — the interval gate keeps it
-     * cheap.
+     * cheap. Concurrent callers serialize through an internal [Mutex]
+     * so overlapping launches (e.g. app launch + a daily tick) don't
+     * double-evaluate.
      */
-    suspend fun refreshIfDue(nowMs: Long) {
+    suspend fun refreshIfDue(nowMs: Long) = mutex.withLock {
         val lastRefresh = settings.getSmartQueryRefreshLast()
-        if (lastRefresh > 0 && nowMs - lastRefresh < REFRESH_INTERVAL_MS) return
+        if (lastRefresh > 0 && nowMs - lastRefresh < REFRESH_INTERVAL_MS) return@withLock
 
         val stations = stationRepo.list()
         val smartStations = stations.filter { it.source.containsSmartQuery() }
@@ -45,7 +51,7 @@ class SmartQueryRefresh(
             }.onFailure {
                 // Swallow per-station failures — a single bad rule must
                 // not break the refresh pass for every other station.
-                // Log at info level; this is not a crash-worthy event.
+                println("SmartQueryRefresh: failed for station ${station.id} — ${it.message}")
             }
         }
 
@@ -62,12 +68,24 @@ class SmartQueryRefresh(
  * Walk a [SourceRule] tree and return true if any node is a
  * [SourceRule.SmartQuery]. Used by [SmartQueryRefresh] to decide
  * which stations need periodic re-evaluation.
+ *
+ * All branches are listed explicitly so that adding a new [SourceRule]
+ * subtype produces an exhaustiveness warning rather than silently
+ * falling through to false.
  */
 internal fun SourceRule.containsSmartQuery(): Boolean = when (this) {
     is SourceRule.SmartQuery -> true
+    is SourceRule.FolderSelector -> false
+    is SourceRule.TagFilter -> false
+    is SourceRule.PlaylistSelector -> false
+    is SourceRule.ArtistSelector -> false
+    is SourceRule.AlbumSelector -> false
+    is SourceRule.DurationFilter -> false
+    is SourceRule.FileFormatFilter -> false
+    is SourceRule.PathPattern -> false
+    is SourceRule.MediaSourceSelector -> false
     is SourceRule.Union -> children.any { it.containsSmartQuery() }
     is SourceRule.Intersection -> children.any { it.containsSmartQuery() }
     is SourceRule.Difference -> left.containsSmartQuery() || right.containsSmartQuery()
     is SourceRule.TopN -> source.containsSmartQuery()
-    else -> false
 }
