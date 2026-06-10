@@ -510,9 +510,9 @@ flagged out of scope; leave their SPEC boxes open).
 - Modify: `SettingsStore.kt`
 - Test: `composeApp/src/commonTest/kotlin/com/visorcraft/radioshed/domain/DriveModeTriggerTest.kt`
 
-- [ ] **Step 1:** Failing test: serialize/deserialize a mixed trigger list
+- [x] **Step 1:** Failing test: serialize/deserialize a mixed trigger list
   via `kotlinx.serialization` JSON; assert round-trip equality.
-- [ ] **Step 2:** Implement:
+- [x] **Step 2:** Implement:
 
 ```kotlin
 package com.visorcraft.radioshed.domain
@@ -530,11 +530,11 @@ sealed interface DriveModeTrigger {
 }
 ```
 
-- [ ] **Step 3:** Settings keys (three-place rule + round-trip test):
+- [x] **Step 3:** Settings keys (three-place rule + round-trip test):
   `KEY_DRIVE_TRIGGERS` (String JSON list), `KEY_DRIVE_QUICKLIST` (String,
   comma-joined station ids, ordered, max 6), `KEY_DRIVE_BUTTONS` (String,
   comma-joined action ids), `KEY_DRIVE_AUTO_EXIT` (Boolean, default true).
-- [ ] **Step 4:** Tests PASS. Commit:
+- [x] **Step 4:** Tests PASS. Commit:
   `Add Drive Mode trigger domain and settings (PLAN 2.1)`
 
 ### Task 2.2: `BluetoothWatcher` platform peer + `DriveModeController`
