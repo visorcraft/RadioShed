@@ -430,6 +430,13 @@ private fun QuietHoursSection(
     endMin: Int,
     onEndChange: (Int) -> Unit,
 ) {
+    // Unlike the Drive Mode schedule dialog (which gates its confirm button on
+    // start == end), quiet hours are two independent sliders persisted straight
+    // through on every change — there's no confirm to disable. A start == end
+    // quiet window is benign here: per the MinuteWindow contract it's never
+    // active, so isInMinuteWindow → false → the DJ is never suppressed (always
+    // allowed), the opposite of the "trigger that can never fire" footgun.
+    // Nothing to gate, so left as-is by design.
     Surface(
         shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),

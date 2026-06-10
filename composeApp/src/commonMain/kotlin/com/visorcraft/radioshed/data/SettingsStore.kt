@@ -1213,7 +1213,7 @@ class SettingsStore(private val settings: Settings) {
         else -> null
     }
 
-    private companion object {
+    companion object {
         const val KEY_THEME_MODE = "ui.themeMode"
         const val KEY_MATERIAL_YOU = "ui.materialYou"
         const val KEY_THEME_COLOR_SOURCE = "ui.themeColorSource"
@@ -1305,10 +1305,19 @@ class SettingsStore(private val settings: Settings) {
         const val KEY_DRIVE_AUTO_EXIT = "drive.autoExit"
         /** Default Drive Mode button bar ids when none are configured. */
         const val DRIVE_BUTTONS_DEFAULT = "previous,play_pause,next,station_picker"
-        /** Allowed action ids for the Drive Mode button bar. */
-        val DRIVE_BUTTON_IDS = setOf(
+        /**
+         * Canonical ordered list of the Drive Mode transport action ids — the
+         * single source of truth for both the allowed-id set (below) and the
+         * UI's render order. The Drive Mode settings screen maps these ids onto
+         * its own (id → label) lookup, failing fast if any id lacks a label, so
+         * adding an id here without a matching label breaks visibly.
+         */
+        val DRIVE_BUTTON_ID_ORDER: List<String> = listOf(
             "previous", "play_pause", "next", "station_picker", "voice_search", "mute",
         )
+        /** Allowed action ids for the Drive Mode button bar. Derived from
+         *  [DRIVE_BUTTON_ID_ORDER] so the order list stays the one place ids live. */
+        val DRIVE_BUTTON_IDS = DRIVE_BUTTON_ID_ORDER.toSet()
         /** Cadence for the auto-backup background export. 7 days = once
          *  per week, which matches typical user back-up cadence
          *  expectations (Google's auto-backup, Time Machine, etc.). */

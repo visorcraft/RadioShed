@@ -44,6 +44,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.visorcraft.radioshed.car.BluetoothWatcher
 import com.visorcraft.radioshed.car.BtPeer
+import com.visorcraft.radioshed.car.NullBluetoothWatcher
 import com.visorcraft.radioshed.data.RadioShedJson
 import com.visorcraft.radioshed.data.SettingsStore
 import com.visorcraft.radioshed.data.StationRepository
@@ -58,10 +59,12 @@ import com.visorcraft.radioshed.ui.util.rememberHapticTick
 import kotlinx.serialization.builtins.ListSerializer
 import org.koin.compose.koinInject
 
-/** Fixed canonical order for the Drive Mode button-bar action ids. Selected
- *  ids persist in this order so the rendered bar (Task 2.4) is deterministic
- *  regardless of the order the user toggled them. */
-private val DRIVE_BUTTON_ORDER = listOf(
+/** Human labels for the Drive Mode button-bar action ids. The id ORDER (and
+ *  the set of valid ids) is owned by [SettingsStore.DRIVE_BUTTON_ID_ORDER];
+ *  this map only supplies display strings. Keeping the two apart means adding
+ *  an id in SettingsStore without a label here trips [DRIVE_BUTTON_ORDER]'s
+ *  fail-fast check rather than silently rendering a blank row. */
+private val DRIVE_BUTTON_LABELS = mapOf(
     "previous" to "Previous",
     "play_pause" to "Play / Pause",
     "next" to "Next",
@@ -69,6 +72,16 @@ private val DRIVE_BUTTON_ORDER = listOf(
     "voice_search" to "Voice search",
     "mute" to "Mute",
 )
+
+/** Canonical (id → label) order for the button-bar editor, built from
+ *  [SettingsStore.DRIVE_BUTTON_ID_ORDER] mapped through [DRIVE_BUTTON_LABELS].
+ *  Selected ids persist in this order so the rendered bar (Task 2.4) is
+ *  deterministic regardless of the order the user toggled them. Fails fast if
+ *  an id has no label so the two lists can't silently drift apart. */
+private val DRIVE_BUTTON_ORDER: List<Pair<String, String>> =
+    SettingsStore.DRIVE_BUTTON_ID_ORDER.map { id ->
+        id to (DRIVE_BUTTON_LABELS[id] ?: error("missing label for Drive Mode button id '$id'"))
+    }
 
 private const val QUICK_LIST_MAX = 6
 private const val MIN_BUTTONS = 4
@@ -95,6 +108,12 @@ fun DriveModeSettingsScreen(
     bluetoothWatcher: BluetoothWatcher = koinInject(),
     stationRepo: StationRepository = koinInject(),
 ) {
+    // Bluetooth triggers only exist on platforms with a real watcher; desktop /
+    // iOS get the [NullBluetoothWatcher] no-op, where there's nothing to pair
+    // against. Computed once (the injected instance doesn't change) and used to
+    // gate the "Add Bluetooth device" affordance + vary the empty-state copy.
+    val btSupported = remember(bluetoothWatcher) { bluetoothWatcher !is NullBluetoothWatcher }
+
     var driveMode by remember { mutableStateOf(settings.getDriveMode()) }
     var autoExit by remember { mutableStateOf(settings.getDriveAutoExit()) }
 
@@ -127,6 +146,19 @@ fun DriveModeSettingsScreen(
     var btDialogOpen by remember { mutableStateOf(false) }
     var scheduleDialogOpen by remember { mutableStateOf(false) }
     var addStationDialogOpen by remember { mutableStateOf(false) }
+
+    // True only while we're waiting for the OS permission dialog the user just
+    // triggered via "Add Bluetooth device". It lets the grant LaunchedEffect
+    // auto-open the picker the instant permission is granted — without it, the
+    // effect would also fire on every screen entry where permission is already
+    // granted and pop the dialog unbidden.
+    var btRequestInFlight by remember { mutableStateOf(false) }
+    LaunchedEffect(btGate.granted) {
+        if (btGate.granted && btRequestInFlight) {
+            btRequestInFlight = false
+            btDialogOpen = true
+        }
+    }
 
     val haptic = rememberHapticTick()
 
@@ -186,11 +218,19 @@ fun DriveModeSettingsScreen(
             Spacer(Modifier.height(8.dp))
             TriggersSection(
                 triggers = triggers,
+                btSupported = btSupported,
                 onDelete = { index ->
                     persistTriggers(triggers.toMutableList().apply { removeAt(index) })
                 },
                 onAddBluetooth = {
-                    if (!btGate.granted) btGate.request() else btDialogOpen = true
+                    if (!btGate.granted) {
+                        // Remember we kicked off the request so the grant
+                        // LaunchedEffect opens the picker for us once it resolves.
+                        btRequestInFlight = true
+                        btGate.request()
+                    } else {
+                        btDialogOpen = true
+                    }
                 },
                 onAddSchedule = { scheduleDialogOpen = true },
             )
@@ -261,6 +301,7 @@ fun DriveModeSettingsScreen(
 
     if (btDialogOpen) {
         BluetoothDeviceDialog(
+            btSupported = btSupported,
             // Filter out devices already configured as triggers.
             candidates = bluetoothWatcher.bondedDevices().filterNot { peer ->
                 triggers.any { it is DriveModeTrigger.BtDevice && it.mac == peer.mac }
@@ -305,6 +346,7 @@ fun DriveModeSettingsScreen(
 @Composable
 private fun TriggersSection(
     triggers: List<DriveModeTrigger>,
+    btSupported: Boolean,
     onDelete: (Int) -> Unit,
     onAddBluetooth: () -> Unit,
     onAddSchedule: () -> Unit,
@@ -328,8 +370,21 @@ private fun TriggersSection(
             }
             Spacer(Modifier.height(4.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = onAddBluetooth) { Text("Add Bluetooth device") }
+                // On platforms without a real Bluetooth watcher (desktop / iOS)
+                // there's nothing to pair against, so disable the row rather than
+                // open an always-empty dialog. Schedule triggers still work.
+                OutlinedButton(onClick = onAddBluetooth, enabled = btSupported) {
+                    Text("Add Bluetooth device")
+                }
                 OutlinedButton(onClick = onAddSchedule) { Text("Add schedule") }
+            }
+            if (!btSupported) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "Bluetooth triggers aren't available on this platform.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                )
             }
         }
     }
@@ -417,6 +472,9 @@ private fun QuickListSection(
                         Text(
                             // Stale id (station deleted) degrades to the raw id
                             // rather than vanishing, so the user can still remove it.
+                            // This fallback also doubles as the loading placeholder
+                            // before allStations resolves; the brief "Unknown
+                            // station" flash on entry is imperceptible (one frame).
                             stationsById[id]?.name ?: "Unknown station ($id)",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurface,
@@ -510,6 +568,7 @@ private fun ButtonsSection(
 
 @Composable
 private fun BluetoothDeviceDialog(
+    btSupported: Boolean,
     candidates: List<BtPeer>,
     onPick: (BtPeer) -> Unit,
     onDismiss: () -> Unit,
@@ -523,8 +582,15 @@ private fun BluetoothDeviceDialog(
             Column {
                 if (candidates.isEmpty()) {
                     Text(
-                        "No paired devices available. Pair a device in your phone's " +
-                            "Bluetooth settings, or grant the nearby-devices permission.",
+                        // The Android-specific "pair / grant permission" hint
+                        // makes no sense where the platform has no Bluetooth
+                        // watcher at all (desktop / iOS).
+                        if (btSupported) {
+                            "No paired devices available. Pair a device in your phone's " +
+                                "Bluetooth settings, or grant the nearby-devices permission."
+                        } else {
+                            "Bluetooth triggers aren't available on this platform."
+                        },
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                     )
@@ -562,10 +628,15 @@ private fun ScheduleDialog(
 ) {
     var startMin by remember { mutableStateOf(8 * 60) }
     var endMin by remember { mutableStateOf(17 * 60) }
+    // A zero-width window (start == end) is never active per the MinuteWindow
+    // contract, so it'd save a trigger that can never fire — block the confirm.
+    val zeroWidth = startMin == endMin
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
-            TextButton(onClick = { onConfirm(startMin, endMin) }) { Text("Add") }
+            TextButton(onClick = { onConfirm(startMin, endMin) }, enabled = !zeroWidth) {
+                Text("Add")
+            }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
         title = { Text("Schedule window") },
@@ -576,8 +647,13 @@ private fun ScheduleDialog(
                 MinutesOfDaySlider(label = "End", minutes = endMin, onChange = { endMin = it })
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "If the start is later than the end, the window wraps across midnight " +
-                        "(e.g. 23:00 → 01:00).",
+                    if (zeroWidth) {
+                        "Start and end are the same — that window is never active. " +
+                            "Pick different times."
+                    } else {
+                        "If the start is later than the end, the window wraps across midnight " +
+                            "(e.g. 23:00 → 01:00)."
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                 )
