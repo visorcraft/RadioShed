@@ -44,6 +44,9 @@ keystore.properties
 *.iml
 *.ipr
 *.iws
+PLAN.md
+docs/superpowers/
+docs/decisions/
 
 # ---- Xcode / iOS ----
 xcuserdata/
