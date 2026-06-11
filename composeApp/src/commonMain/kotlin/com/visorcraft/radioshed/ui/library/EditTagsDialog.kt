@@ -24,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.visorcraft.radioshed.data.FolderRepository
 import com.visorcraft.radioshed.data.LibraryRepository
+import com.visorcraft.radioshed.domain.Folder
 import com.visorcraft.radioshed.domain.Track
 import com.visorcraft.radioshed.scanner.Scanner
 import com.visorcraft.radioshed.source.TagPatch
@@ -84,22 +85,17 @@ fun EditTagsDialog(
     var initialised by remember { mutableStateOf(false) }
 
     androidx.compose.runtime.LaunchedEffect(track.id) {
-        // First-load population. Uses the resolved-to-domain tracks
-        // helpers; runs on a coroutine so the dialog renders the
-        // disabled fields immediately and then fills in.
+        // First-load population. Runs on a coroutine so the dialog
+        // renders the disabled fields immediately and then fills in.
+        // Title / track # / disc # are already seeded from the Track
+        // domain object above, so only the joined-row fields load here.
         runCatching {
-            val artistRow = libraryRepo.artistsForTrack(track.id).firstOrNull()
-            artist = artistRow?.name ?: ""
-            val albumRow = track.albumId?.let { libraryRepo.getAlbumById(it) }
-            album = albumRow?.title ?: ""
-            year = albumRow?.year?.toString() ?: ""
-            val albumArtistId = albumRow?.artistId
-            if (albumArtistId != null && albumArtistId != artistRow?.id) {
-                albumArtist = libraryRepo.getArtistById(albumArtistId)?.name ?: ""
-            }
-            genre = libraryRepo.tagsForTrack(track.id)
-                .firstOrNull { it.key.equals("GENRE", ignoreCase = true) }
-                ?.value ?: ""
+            val snapshot = loadTagSnapshot(track, libraryRepo)
+            artist = snapshot.artist
+            album = snapshot.album
+            albumArtist = snapshot.albumArtist
+            genre = snapshot.genre
+            year = snapshot.year
         }
         initialised = true
     }
@@ -135,14 +131,8 @@ fun EditTagsDialog(
                             return@launch
                         }
                         // Find the folder this file belongs to so we
-                        // can fire a rescan to refresh the library
-                        // DB. Path-prefix match against registered
-                        // folders; pick the longest prefix to handle
-                        // nested registrations (e.g. /storage/Music
-                        // and /storage/Music/Albums both registered).
-                        val folder = folderRepo.list()
-                            .filter { track.path.startsWith(it.uri) }
-                            .maxByOrNull { it.uri.length }
+                        // can fire a rescan to refresh the library DB.
+                        val folder = folderContaining(track.path, folderRepo.list())
                         if (folder != null) {
                             status = "Rescanning folder…"
                             scanner.scanFolder(folder.id).collect { /* drain */ }
@@ -284,30 +274,7 @@ fun BatchEditTagsDialog(
 
     LaunchedEffect(Unit) {
         runCatching {
-            val snapshots = tracks.map { track ->
-                val artistRow = libraryRepo.artistsForTrack(track.id).firstOrNull()
-                val albumRow = track.albumId?.let { libraryRepo.getAlbumById(it) }
-                val albumArtistId = albumRow?.artistId
-                val albumArtistName = if (albumArtistId != null && albumArtistId != artistRow?.id) {
-                    libraryRepo.getArtistById(albumArtistId)?.name ?: ""
-                } else {
-                    artistRow?.name ?: ""
-                }
-                val genreTag = libraryRepo.tagsForTrack(track.id)
-                    .firstOrNull { it.key.equals("GENRE", ignoreCase = true) }
-                    ?.value ?: ""
-
-                TrackTagSnapshot(
-                    title = track.title,
-                    artist = artistRow?.name ?: "",
-                    album = albumRow?.title ?: "",
-                    albumArtist = albumArtistName,
-                    genre = genreTag,
-                    year = albumRow?.year?.toString() ?: "",
-                    trackNumber = track.trackNumber?.toString() ?: "",
-                    discNumber = track.discNumber?.toString() ?: "",
-                )
-            }
+            val snapshots = tracks.map { loadTagSnapshot(it, libraryRepo) }
             val m = BatchTagMerge.merge(snapshots)
             merged = m
 
@@ -336,18 +303,20 @@ fun BatchEditTagsDialog(
                     saving = true
                     status = "Writing tags…"
                     scope.launch {
-                        val m = merged ?: return@launch
-                        val edits = buildList {
-                            if (TagField.Title in touchedFields) add(BatchTagEdit(TagField.Title, title))
-                            if (TagField.Artist in touchedFields) add(BatchTagEdit(TagField.Artist, artist))
-                            if (TagField.Album in touchedFields) add(BatchTagEdit(TagField.Album, album))
-                            if (TagField.AlbumArtist in touchedFields) add(BatchTagEdit(TagField.AlbumArtist, albumArtist))
-                            if (TagField.Genre in touchedFields) add(BatchTagEdit(TagField.Genre, genre))
-                            if (TagField.Year in touchedFields) add(BatchTagEdit(TagField.Year, year))
-                            if (TagField.TrackNumber in touchedFields) add(BatchTagEdit(TagField.TrackNumber, trackNumber))
-                            if (TagField.DiscNumber in touchedFields) add(BatchTagEdit(TagField.DiscNumber, discNumber))
+                        // merged == null means snapshot loading failed;
+                        // don't write against state the user never saw.
+                        if (merged == null) return@launch
+                        val edits = buildMap {
+                            if (TagField.Title in touchedFields) put(TagField.Title, title)
+                            if (TagField.Artist in touchedFields) put(TagField.Artist, artist)
+                            if (TagField.Album in touchedFields) put(TagField.Album, album)
+                            if (TagField.AlbumArtist in touchedFields) put(TagField.AlbumArtist, albumArtist)
+                            if (TagField.Genre in touchedFields) put(TagField.Genre, genre)
+                            if (TagField.Year in touchedFields) put(TagField.Year, year)
+                            if (TagField.TrackNumber in touchedFields) put(TagField.TrackNumber, trackNumber)
+                            if (TagField.DiscNumber in touchedFields) put(TagField.DiscNumber, discNumber)
                         }
-                        val patch = BatchTagMerge.buildPatch(edits, m)
+                        val patch = BatchTagMerge.buildPatch(edits)
                         var successes = 0
                         var failures = 0
                         tracks.forEach { track ->
@@ -366,12 +335,9 @@ fun BatchEditTagsDialog(
                         }
 
                         val allFolders = folderRepo.list()
-                        val affectedFolderIds = tracks.mapNotNull { track ->
-                            allFolders
-                                .filter { track.path.startsWith(it.uri) }
-                                .maxByOrNull { it.uri.length }
-                                ?.id
-                        }.distinct()
+                        val affectedFolderIds = tracks
+                            .mapNotNull { folderContaining(it.path, allFolders)?.id }
+                            .distinct()
                         affectedFolderIds.forEach { folderId ->
                             runCatching { scanner.scanFolder(folderId).collect { } }
                         }
@@ -527,8 +493,6 @@ enum class TagField {
     DiscNumber,
 }
 
-data class BatchTagEdit(val field: TagField, val newValue: String)
-
 data class TrackTagSnapshot(
     val title: String,
     val artist: String,
@@ -581,37 +545,77 @@ object BatchTagMerge {
         }
     }
 
-    fun buildPatch(edits: List<BatchTagEdit>, merged: MergedTagView): TagPatch {
-        val editMap = edits.associate { it.field to it.newValue }
-        return TagPatch(
-            title = patchFor(TagField.Title, merged.title, editMap),
-            artist = patchFor(TagField.Artist, merged.artist, editMap),
-            album = patchFor(TagField.Album, merged.album, editMap),
-            albumArtist = patchFor(TagField.AlbumArtist, merged.albumArtist, editMap),
-            genre = patchFor(TagField.Genre, merged.genre, editMap),
-            year = patchForInt(TagField.Year, merged.year, editMap),
-            trackNumber = patchForInt(TagField.TrackNumber, merged.trackNumber, editMap),
-            discNumber = patchForInt(TagField.DiscNumber, merged.discNumber, editMap),
-        )
-    }
+    /**
+     * Builds the [TagPatch] written to every selected file. Only fields
+     * the user actually edited appear in [edits]; everything else is
+     * absent from the patch and stays untouched on disk.
+     */
+    fun buildPatch(edits: Map<TagField, String>): TagPatch = TagPatch(
+        title = patchFor(TagField.Title, edits),
+        artist = patchFor(TagField.Artist, edits),
+        album = patchFor(TagField.Album, edits),
+        albumArtist = patchFor(TagField.AlbumArtist, edits),
+        genre = patchFor(TagField.Genre, edits),
+        year = patchForInt(TagField.Year, edits),
+        trackNumber = patchForInt(TagField.TrackNumber, edits),
+        discNumber = patchForInt(TagField.DiscNumber, edits),
+    )
 
     private fun patchFor(
         field: TagField,
-        merged: MergedValue,
         edits: Map<TagField, String>,
-    ): TagPatch.Update<String>? {
-        val edited = edits[field] ?: return null
-        if (edited.isBlank()) return null
-        return TagPatch.Update(edited)
-    }
+    ): TagPatch.Update<String>? =
+        edits[field]?.takeIf { it.isNotBlank() }?.let { TagPatch.Update(it) }
 
     private fun patchForInt(
         field: TagField,
-        merged: MergedValue,
         edits: Map<TagField, String>,
-    ): TagPatch.Update<Int>? {
-        val edited = edits[field] ?: return null
-        if (edited.isBlank()) return null
-        return edited.toIntOrNull()?.let { TagPatch.Update(it) }
-    }
+    ): TagPatch.Update<Int>? =
+        edits[field]?.takeIf { it.isNotBlank() }?.toIntOrNull()?.let { TagPatch.Update(it) }
 }
+
+/**
+ * Loads the editable tag fields for one track from the library DB.
+ * Shared by [EditTagsDialog] and [BatchEditTagsDialog] so both show
+ * identical values for the same track.
+ *
+ * Album artist is deliberately left blank when it matches the track
+ * artist — that is how the single-track editor has always presented
+ * its "Album artist (optional)" field, and the batch merge treats
+ * blanks as [MergedValue.Empty], so an everywhere-implicit album
+ * artist shows the "Empty" placeholder instead of a fake uniform value.
+ */
+private suspend fun loadTagSnapshot(
+    track: Track,
+    libraryRepo: LibraryRepository,
+): TrackTagSnapshot {
+    val artistRow = libraryRepo.artistsForTrack(track.id).firstOrNull()
+    val albumRow = track.albumId?.let { libraryRepo.getAlbumById(it) }
+    val albumArtistId = albumRow?.artistId
+    val albumArtist = if (albumArtistId != null && albumArtistId != artistRow?.id) {
+        libraryRepo.getArtistById(albumArtistId)?.name ?: ""
+    } else {
+        ""
+    }
+    val genre = libraryRepo.tagsForTrack(track.id)
+        .firstOrNull { it.key.equals("GENRE", ignoreCase = true) }
+        ?.value ?: ""
+    return TrackTagSnapshot(
+        title = track.title,
+        artist = artistRow?.name ?: "",
+        album = albumRow?.title ?: "",
+        albumArtist = albumArtist,
+        genre = genre,
+        year = albumRow?.year?.toString() ?: "",
+        trackNumber = track.trackNumber?.toString() ?: "",
+        discNumber = track.discNumber?.toString() ?: "",
+    )
+}
+
+// Path-prefix match against registered folders; pick the longest prefix
+// so nested registrations (e.g. /storage/Music and /storage/Music/Albums
+// both registered) resolve to the most specific folder for the rescan.
+private fun folderContaining(path: String, folders: List<Folder>): Folder? =
+    folders
+        .filter { path.startsWith(it.uri) }
+        .maxByOrNull { it.uri.length }

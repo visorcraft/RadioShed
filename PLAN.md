@@ -1073,6 +1073,8 @@ Existing: `NowPlayingWidget.kt` (classic RemoteViews `AppWidgetProvider`) and
 - [x] **Step 3:** Wire to app launch in `App.kt`. Tests + builds green.
 - [x] **Step 4:** Commit: `Daily SmartQuery station refresh (PLAN 6.3)`
 
+*Removed post-review 2026-06-10: the pass was a no-op — `SourceRuleEvaluator` keeps no cache and the evaluation results were discarded, so its only durable effect was bumping the settings marker. Feature deleted; SPEC Phase 5 box reverted to `[ ]`.*
+
 ### Task 6.4: Phase 6 exit
 
 - [x] Run the **Phase Exit Gate**. Phase-specific dedup checks:

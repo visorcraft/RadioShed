@@ -2514,6 +2514,7 @@ private fun SubsonicConfigRow(
     var username by remember { mutableStateOf(settings.getSubsonicUsername()) }
     var password by remember { mutableStateOf(settings.getSubsonicPassword()) }
     var dialogOpen by remember { mutableStateOf(false) }
+    var disconnectConfirmOpen by remember { mutableStateOf(false) }
     val client: com.visorcraft.radioshed.source.SubsonicClient = koinInject()
     // Registry + source so a successful save can register the Subsonic
     // MediaSource immediately, without waiting for the next app launch's
@@ -2537,15 +2538,22 @@ private fun SubsonicConfigRow(
             },
         )
         if (configured) {
-            Surface(
-                modifier = Modifier.fillMaxWidth().clickable { dialogOpen = true },
-                color = MaterialTheme.colorScheme.surface,
-            ) {
+            Row(modifier = Modifier.fillMaxWidth()) {
                 Text(
                     text = "Edit server config",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    modifier = Modifier
+                        .clickable { dialogOpen = true }
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                )
+                Text(
+                    text = "Disconnect",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier
+                        .clickable { disconnectConfirmOpen = true }
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
                 )
             }
         }
@@ -2696,6 +2704,45 @@ private fun SubsonicConfigRow(
                         )
                     }
                 }
+            },
+        )
+    }
+
+    if (disconnectConfirmOpen) {
+        AlertDialog(
+            onDismissRequest = { disconnectConfirmOpen = false },
+            title = { Text("Disconnect from server?") },
+            text = {
+                Text(
+                    "Clears the saved Subsonic URL, username, and password from " +
+                        "this device and stops stations from streaming this server. " +
+                        "Your music and the server itself aren't touched.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        // Clear the persisted credentials first so the source's
+                        // live settings read (serverOrNull) yields nothing, then
+                        // pull it out of the registry so MediaSourceSelector
+                        // stations stop enumerating it this session. unregister()
+                        // is suspend, so it rides the row's scope.
+                        settings.setSubsonicUrl("")
+                        settings.setSubsonicUsername("")
+                        settings.setSubsonicPassword("")
+                        url = ""
+                        username = ""
+                        password = ""
+                        scope.launch { mediaSourceRegistry.unregister(subsonicSource.id) }
+                        disconnectConfirmOpen = false
+                    },
+                ) {
+                    Text("Disconnect", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { disconnectConfirmOpen = false }) { Text("Cancel") }
             },
         )
     }

@@ -182,4 +182,55 @@ class DriveModeControllerTest {
         runCurrent()
         assertFalse(settings.getDriveMode())
     }
+
+    @Test
+    fun triggerAddedAtRuntimeActivatesOnNextPass() = runTest {
+        // The controller re-reads the trigger setting on every pass (decoding
+        // only when the raw blob changed), so a trigger added from the settings
+        // screen mid-run takes effect without any restart or invalidation hook.
+        val watcher = FakeWatcher()
+        val settings = store()
+        val ticker = MutableSharedFlow<Unit>()
+        val controller = DriveModeController(watcher, settings, backgroundScope, ticker) { 0 }
+        controller.start()
+        runCurrent()
+
+        // Device connects while no trigger matches it: nothing happens.
+        watcher.devices.value = setOf(BtPeer("AA:BB", "Car"))
+        runCurrent()
+        assertFalse(controller.active.value)
+
+        // User configures that device as a trigger; the next pass sees the new
+        // blob and the still-connected device produces a rising edge.
+        settings.setDriveTriggers(encodeDriveTriggers(listOf(DriveModeTrigger.BtDevice("AA:BB", "Car"))))
+        ticker.emit(Unit)
+        runCurrent()
+        assertTrue(controller.active.value)
+        assertTrue(settings.getDriveMode())
+    }
+
+    @Test
+    fun clearingTriggersWhileActiveFallsOutOnNextPass() = runTest {
+        // Deleting the last trigger while it's holding Drive Mode on must still
+        // produce a falling edge (trigger active -> none) so auto-exit fires —
+        // an empty trigger list is only a no-op when no trigger was active.
+        val watcher = FakeWatcher()
+        val settings = store()
+        settings.setDriveTriggers(encodeDriveTriggers(listOf(DriveModeTrigger.BtDevice("AA:BB", "Car"))))
+        settings.setDriveAutoExit(true)
+        val ticker = MutableSharedFlow<Unit>()
+        val controller = DriveModeController(watcher, settings, backgroundScope, ticker) { 0 }
+        controller.start()
+        runCurrent()
+
+        watcher.devices.value = setOf(BtPeer("AA:BB", "Car"))
+        runCurrent()
+        assertTrue(controller.active.value)
+
+        settings.setDriveTriggers(encodeDriveTriggers(emptyList()))
+        ticker.emit(Unit)
+        runCurrent()
+        assertFalse(controller.active.value)
+        assertFalse(settings.getDriveMode())
+    }
 }

@@ -129,11 +129,14 @@ val sharedModule: Module = module {
 
     // Subsonic-protocol MediaSource over the platform SubsonicClient.
     // Reads server credentials live from SettingsStore on every walk, so
-    // a single instance bound here always reflects the current config.
+    // a single instance bound here always reflects the current config;
+    // the singleton also owns the 10-minute in-memory walk cache, which
+    // is why this MUST stay a single (a factory would re-walk per inject).
     // The network gate is a lambda over NetworkPolicyGate.allowAutomaticFetch()
     // — same seam ScrobbleSync uses. NOT registered into the
     // MediaSourceRegistry from here; App.kt registers it at launch when a
     // server is configured and re-registers after a successful save.
+    // nowMs is left at its nowMillis() default — only tests pin the clock.
     single {
         SubsonicSource(
             client = get(),
@@ -142,13 +145,6 @@ val sharedModule: Module = module {
         )
     }
     single { SourceRuleEvaluator(get(), get(), get(), get()) }
-    single {
-        com.visorcraft.radioshed.stations.SmartQueryRefresh(
-            settings = get(),
-            stationRepo = get(),
-            evaluate = { get<SourceRuleEvaluator>().evaluate(it) },
-        )
-    }
     // Phase DJ: announcer orchestrates TTS announcements between tracks.
     // Constructor order: (settings, djCache, tts, clipPlayer, audioEngine,
     // sleepTimer, weather). TtsEngine + ClipPlayer + WeatherFetcher come from

@@ -1,6 +1,5 @@
 package com.visorcraft.radioshed.ui.car
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,7 +18,6 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -34,7 +32,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -43,6 +40,7 @@ import com.visorcraft.radioshed.data.StationRepository
 import com.visorcraft.radioshed.domain.Station
 import com.visorcraft.radioshed.nav.PlatformBackHandler
 import com.visorcraft.radioshed.stations.StationPlayback
+import com.visorcraft.radioshed.ui.stations.StationArtwork
 import com.visorcraft.radioshed.ui.stations.stationColor
 import com.visorcraft.radioshed.ui.stations.stationGradient
 import com.visorcraft.radioshed.ui.util.rememberHapticTick
@@ -203,29 +201,15 @@ private fun DriveStationTile(
             .clickable(onClick = onTap),
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
-            Box(
+            StationArtwork(
+                station = station,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .aspectRatio(1.5f)
-                    .background(stationGradient(accent)),
-                contentAlignment = Alignment.Center,
-            ) {
-                if (station.artworkUri != null) {
-                    coil3.compose.AsyncImage(
-                        model = station.artworkUri,
-                        contentDescription = null,
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop,
-                    )
-                } else {
-                    Icon(
-                        imageVector = Icons.Filled.MusicNote,
-                        contentDescription = null,
-                        modifier = Modifier.size(72.dp),
-                        tint = Color.White.copy(alpha = 0.92f),
-                    )
-                }
-            }
+                    .aspectRatio(1.5f),
+                background = stationGradient(accent),
+                fallbackIconTint = Color.White.copy(alpha = 0.92f),
+                fallbackIconSize = 72.dp,
+            )
             Text(
                 text = station.name,
                 style = MaterialTheme.typography.headlineMedium,

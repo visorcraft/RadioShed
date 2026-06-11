@@ -111,7 +111,7 @@ fun DriveModeSettingsScreen(
     // Bluetooth triggers only exist on platforms with a real watcher; desktop /
     // iOS get the [NullBluetoothWatcher] no-op, where there's nothing to pair
     // against. Computed once (the injected instance doesn't change) and used to
-    // gate the "Add Bluetooth device" affordance + vary the empty-state copy.
+    // gate the "Add Bluetooth device" affordance + show the platform note.
     val btSupported = remember(bluetoothWatcher) { bluetoothWatcher !is NullBluetoothWatcher }
 
     var driveMode by remember { mutableStateOf(settings.getDriveMode()) }
@@ -301,7 +301,6 @@ fun DriveModeSettingsScreen(
 
     if (btDialogOpen) {
         BluetoothDeviceDialog(
-            btSupported = btSupported,
             // Filter out devices already configured as triggers.
             candidates = bluetoothWatcher.bondedDevices().filterNot { peer ->
                 triggers.any { it is DriveModeTrigger.BtDevice && it.mac == peer.mac }
@@ -566,9 +565,11 @@ private fun ButtonsSection(
     }
 }
 
+// Only reachable on Bluetooth-capable platforms: the sole entry point is the
+// "Add Bluetooth device" button, which is disabled when there's no real
+// watcher — so the empty state can assume the Android pair/permission story.
 @Composable
 private fun BluetoothDeviceDialog(
-    btSupported: Boolean,
     candidates: List<BtPeer>,
     onPick: (BtPeer) -> Unit,
     onDismiss: () -> Unit,
@@ -582,15 +583,8 @@ private fun BluetoothDeviceDialog(
             Column {
                 if (candidates.isEmpty()) {
                     Text(
-                        // The Android-specific "pair / grant permission" hint
-                        // makes no sense where the platform has no Bluetooth
-                        // watcher at all (desktop / iOS).
-                        if (btSupported) {
-                            "No paired devices available. Pair a device in your phone's " +
-                                "Bluetooth settings, or grant the nearby-devices permission."
-                        } else {
-                            "Bluetooth triggers aren't available on this platform."
-                        },
+                        "No paired devices available. Pair a device in your phone's " +
+                            "Bluetooth settings, or grant the nearby-devices permission.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                     )

@@ -763,11 +763,6 @@ class SettingsStore(private val settings: Settings) {
     fun getLastAutoBackupAt(): Long = settings.getLong(KEY_AUTO_BACKUP_LAST, 0L)
     fun setLastAutoBackupAt(ts: Long) = settings.putLong(KEY_AUTO_BACKUP_LAST, ts)
 
-    fun getSmartQueryRefreshLast(): Long =
-        settings.getLong(KEY_SMARTQUERY_REFRESH_LAST, 0L)
-    fun setSmartQueryRefreshLast(ts: Long) =
-        settings.putLong(KEY_SMARTQUERY_REFRESH_LAST, ts)
-
     // ---- One-shot migrations (set on first run, never re-run) ----
 
     /**
@@ -1059,7 +1054,9 @@ class SettingsStore(private val settings: Settings) {
         // produces a small bundle. We can't tell "default vs explicit"
         // without a marker; check `hasKey` to detect any write.
         listOf(
-            KEY_MATERIAL_YOU, KEY_REDUCE_MOTION, KEY_DRIVE_MODE,
+            // KEY_DRIVE_MODE is deliberately NOT dumped — it's per-session
+            // runtime state, not a preference (see BLOCKED_RESTORE_KEYS).
+            KEY_MATERIAL_YOU, KEY_REDUCE_MOTION,
             KEY_REPLAY_GAIN, KEY_AUTO_RESUME_STATION, KEY_AUTO_BACKUP,
             KEY_AUTO_RESCAN_ON_LAUNCH, KEY_EQ_ENABLED,
             KEY_STATIONS_HIDE_BUILTINS, KEY_SLEEP_STOP_ON_EXPIRE,
@@ -1102,16 +1099,6 @@ class SettingsStore(private val settings: Settings) {
             if (settings.hasKey(key)) {
                 out[key] = com.visorcraft.radioshed.source.BackupSettingValue.IntValue(
                     settings.getInt(key, 0),
-                )
-            }
-        }
-        // Longs
-        listOf(
-            KEY_SMARTQUERY_REFRESH_LAST,
-        ).forEach { key ->
-            if (settings.hasKey(key)) {
-                out[key] = com.visorcraft.radioshed.source.BackupSettingValue.LongValue(
-                    settings.getLong(key, 0L),
                 )
             }
         }
@@ -1209,7 +1196,7 @@ class SettingsStore(private val settings: Settings) {
         KEY_SUBSONIC_URL, KEY_SUBSONIC_USERNAME,
         KEY_DJ_FREQUENCY, KEY_DJ_TEMPLATES,
         KEY_DRIVE_TRIGGERS, KEY_DRIVE_QUICKLIST, KEY_DRIVE_BUTTONS -> SettingType.STR
-        KEY_MATERIAL_YOU, KEY_REDUCE_MOTION, KEY_DRIVE_MODE,
+        KEY_MATERIAL_YOU, KEY_REDUCE_MOTION,
         KEY_REPLAY_GAIN, KEY_AUTO_RESUME_STATION, KEY_AUTO_BACKUP,
         KEY_AUTO_RESCAN_ON_LAUNCH, KEY_EQ_ENABLED,
         KEY_STATIONS_HIDE_BUILTINS, KEY_SLEEP_STOP_ON_EXPIRE,
@@ -1226,7 +1213,6 @@ class SettingsStore(private val settings: Settings) {
         KEY_THEME_SEED, KEY_ACCENT_SEED,
         KEY_DJ_FREQUENCY_N, KEY_DJ_FREQUENCY_MINUTES,
         KEY_DJ_QUIET_START_MIN, KEY_DJ_QUIET_END_MIN -> SettingType.INT
-        KEY_SMARTQUERY_REFRESH_LAST -> SettingType.LONG
         else -> null
     }
 
@@ -1295,7 +1281,6 @@ class SettingsStore(private val settings: Settings) {
         const val KEY_AUTO_BACKUP = "backup.autoEnabled"
         const val KEY_AUTO_BACKUP_LAST = "backup.autoLastAt"
         const val KEY_AUTO_RESCAN_ON_LAUNCH = "library.autoRescanOnLaunch"
-        const val KEY_SMARTQUERY_REFRESH_LAST = "smartquery.refreshLastAt"
         const val KEY_END_FADE_SEC = "audio.endFadeSec"
         const val KEY_LYRICS_SCALE = "ui.lyricsScale"
         const val KEY_DRIVE_MODE = "ui.driveMode"
@@ -1352,6 +1337,13 @@ class SettingsStore(private val settings: Settings) {
          *  malformed import tries. Per-device state + one-shot
          *  migration flags belong here. */
         val BLOCKED_RESTORE_KEYS = setOf(
+            // Drive Mode's active flag is per-session runtime state — set by
+            // the BT/schedule triggers or the manual toggle — not a durable
+            // preference. Restoring a bundle captured mid-drive must never
+            // flip a desk-bound device into Drive Mode. (The trigger CONFIG
+            // keys DRIVE_TRIGGERS / QUICKLIST / BUTTONS / AUTO_EXIT ARE
+            // preferences and stay in the dump.)
+            KEY_DRIVE_MODE,
             KEY_LAST_STATION_ID,
             KEY_AUTO_BACKUP_LAST,
             KEY_GENRES_CANON,

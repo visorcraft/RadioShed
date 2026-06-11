@@ -8,10 +8,8 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -26,7 +24,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -45,14 +42,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import coil3.compose.AsyncImage
 import com.visorcraft.radioshed.data.StationRepository
 import com.visorcraft.radioshed.data.WidgetConfigRepository
 import com.visorcraft.radioshed.domain.Station
-import com.visorcraft.radioshed.ui.stations.stationColor
+import com.visorcraft.radioshed.ui.stations.StationArtwork
 import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -245,31 +240,12 @@ private fun SlotRow(
                 .fillMaxWidth()
                 .padding(12.dp),
         ) {
-            Box(
+            StationArtwork(
+                station = station,
                 modifier = Modifier
                     .size(48.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(
-                        if (station != null) stationColor(station)
-                        else MaterialTheme.colorScheme.surfaceVariant,
-                    ),
-                contentAlignment = Alignment.Center,
-            ) {
-                if (station?.artworkUri != null) {
-                    AsyncImage(
-                        model = station.artworkUri,
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                } else {
-                    Icon(
-                        imageVector = Icons.Filled.MusicNote,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
+                    .clip(RoundedCornerShape(8.dp)),
+            )
 
             Column(
                 modifier = Modifier
@@ -350,28 +326,12 @@ private fun StationPickerSheet(
                                 .fillMaxWidth()
                                 .padding(12.dp),
                         ) {
-                            Box(
+                            StationArtwork(
+                                station = station,
                                 modifier = Modifier
                                     .size(48.dp)
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(stationColor(station)),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                if (station.artworkUri != null) {
-                                    AsyncImage(
-                                        model = station.artworkUri,
-                                        contentDescription = null,
-                                        contentScale = ContentScale.Crop,
-                                        modifier = Modifier.fillMaxSize(),
-                                    )
-                                } else {
-                                    Icon(
-                                        imageVector = Icons.Filled.MusicNote,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                            }
+                                    .clip(RoundedCornerShape(8.dp)),
+                            )
 
                             Text(
                                 text = station.name,

@@ -80,6 +80,17 @@ class DjAnnouncer(
     // background scope where two passes could otherwise both read 0 and trim.
     @Volatile private var lastTrimMs: Long = 0L
 
+    // (rawJson, decodedMap) of the last-decoded DJ templates blob, or null
+    // before the first decode. The blob only changes when the user edits
+    // templates in settings, yet announceIfDue AND precacheUpcoming both used
+    // to re-decode it on every track transition; keying the decoded map by
+    // the EXACT raw string skips the JSON decode on the unchanged common
+    // case. A single @Volatile pair swapped atomically instead of a lock:
+    // neither call path holds a mutex at the read site, and the worst a race
+    // can do is decode the same string twice (benign — both produce the same
+    // map), which is simpler than locking.
+    @Volatile private var decodedTemplates: Pair<String, Map<String, List<String>>>? = null
+
     /**
      * Decide whether to announce on this transition, then (if due) render,
      * synthesize-or-cache, duck, play, and restore. Safe to call on every
@@ -142,7 +153,7 @@ class DjAnnouncer(
         //    aborts silently — no duck, no announcement. The helper hands back the
         //    EXACT variant it picked so we record precisely the line we'll play as
         //    [lastRenderedTemplate] — no second pick to drift from it.
-        val templates = parseTemplatesJson(settings.getDjTemplates()) ?: DEFAULT_DJ_TEMPLATES
+        val templates = currentTemplates()
         val clip = renderAndEnsureCached(transition, slot, templates, formatClockTime(now)) ?: return
         val clipPath = clip.blobPath
         val template = clip.template
@@ -202,7 +213,7 @@ class DjAnnouncer(
         if (!settings.getDjEnabled()) return
         if (!tts.isAvailable()) return
         if (sleepTimer.state.value is SleepTimer.State.Running) return
-        val templates = parseTemplatesJson(settings.getDjTemplates()) ?: DEFAULT_DJ_TEMPLATES
+        val templates = currentTemplates()
         for (transition in transitions) {
             // The TIME slot's copy is dominated by the {time} token, which
             // renders the CURRENT clock. The cache key is the rendered text, so
@@ -233,6 +244,26 @@ class DjAnnouncer(
         // cancellation still propagates.
         runCatching { maybeTrimStaleCache() }
             .onFailure { if (it is CancellationException) throw it }
+    }
+
+    /**
+     * The user's DJ templates, decoded at most once per distinct settings blob.
+     * The raw string is still read from settings on EVERY call — that read is
+     * cheap and is what makes a settings edit take effect on the very next
+     * announcement (no stale window beyond a call that already read the old
+     * string). Only the JSON decode is skipped when the string matches the
+     * cached key. The blank/malformed → [DEFAULT_DJ_TEMPLATES] fallback is
+     * cached under the same key: re-parsing an unchanged broken blob would
+     * fail identically, and the key changes the moment the user fixes it.
+     */
+    private fun currentTemplates(): Map<String, List<String>> {
+        val raw = settings.getDjTemplates()
+        decodedTemplates?.let { (cachedRaw, decoded) ->
+            if (cachedRaw == raw) return decoded
+        }
+        val decoded = parseTemplatesJson(raw) ?: DEFAULT_DJ_TEMPLATES
+        decodedTemplates = raw to decoded
+        return decoded
     }
 
     /** A playable clip plus the variant that produced it. [renderAndEnsureCached]

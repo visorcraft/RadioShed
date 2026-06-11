@@ -71,6 +71,17 @@ class DriveModeController(
     // rising edge on its first evaluation and turns Drive Mode on.
     private var lastTriggerActive = false
 
+    // Decoded triggers cached against the raw JSON blob they came from. The
+    // raw settings read stays in every evaluate() pass — it's cheap, and it's
+    // what makes edits from the Drive Mode settings screen take effect on the
+    // next pass with no invalidation plumbing — but the kotlinx-serialization
+    // decode would otherwise run once a minute for the process lifetime, so it
+    // only reruns when the blob actually changed. Guarded by [mutex] like the
+    // rest of the mutable state. Seeded null so the first pass always decodes
+    // (a stored blob is never null).
+    private var cachedTriggersJson: String? = null
+    private var cachedTriggers: List<DriveModeTrigger> = emptyList()
+
     private var started = false
 
     // Collector jobs, tracked so stop() can cancel them and a later start()
@@ -111,7 +122,23 @@ class DriveModeController(
      */
     private suspend fun evaluate() {
         mutex.withLock {
-            val triggers = decodeDriveTriggers(settings.getDriveTriggers())
+            val json = settings.getDriveTriggers()
+            if (json != cachedTriggersJson) {
+                cachedTriggers = decodeDriveTriggers(json)
+                cachedTriggersJson = json
+            }
+            val triggers = cachedTriggers
+
+            // No triggers configured and no prior trigger active: the combined
+            // signal is constant false, so no edge can fire and the rest of
+            // the body is a guaranteed no-op — skip it. The !lastTriggerActive
+            // guard matters: when the user deletes the last trigger while one
+            // was active, the falling edge below must still run so auto-exit
+            // works. Manual toggles are unaffected either way — they never
+            // pass through evaluate(); edge-only writes are what keep them
+            // sticky (see the class KDoc).
+            if (triggers.isEmpty() && !lastTriggerActive) return
+
             val connectedMacs = watcher.connectedDevices.value.map { it.mac }.toSet()
             val nowMin = nowMinutesOfDay()
             val triggerActive = triggers.any { trigger ->

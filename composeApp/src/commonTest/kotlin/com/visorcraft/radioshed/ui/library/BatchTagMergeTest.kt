@@ -63,18 +63,8 @@ class BatchTagMergeTest {
 
     @Test
     fun buildPatchIncludesOnlyEditedFields() {
-        val merged = BatchTagMerge.merge(
-            listOf(
-                snapshot(title = "A", artist = "X", genre = "Rock"),
-                snapshot(title = "B", artist = "Y", genre = "Rock"),
-            ),
-        )
-
         // User only changed genre to "Jazz"
-        val patch = BatchTagMerge.buildPatch(
-            edits = listOf(BatchTagEdit(TagField.Genre, "Jazz")),
-            merged = merged,
-        )
+        val patch = BatchTagMerge.buildPatch(mapOf(TagField.Genre to "Jazz"))
 
         assertEquals(TagPatch.Update("Jazz"), patch.genre)
         assertNull(patch.title)
@@ -84,14 +74,11 @@ class BatchTagMergeTest {
 
     @Test
     fun buildPatchParsesYearAndTrackNumberToInt() {
-        val merged = BatchTagMerge.merge(listOf(snapshot(year = "2020", trackNumber = "5")))
-
         val patch = BatchTagMerge.buildPatch(
-            edits = listOf(
-                BatchTagEdit(TagField.Year, "2021"),
-                BatchTagEdit(TagField.TrackNumber, "7"),
+            mapOf(
+                TagField.Year to "2021",
+                TagField.TrackNumber to "7",
             ),
-            merged = merged,
         )
 
         assertEquals(TagPatch.Update(2021), patch.year)
@@ -100,12 +87,7 @@ class BatchTagMergeTest {
 
     @Test
     fun buildPatchIgnoresBlankIntFields() {
-        val merged = BatchTagMerge.merge(listOf(snapshot(year = "2020")))
-
-        val patch = BatchTagMerge.buildPatch(
-            edits = listOf(BatchTagEdit(TagField.Year, "")),
-            merged = merged,
-        )
+        val patch = BatchTagMerge.buildPatch(mapOf(TagField.Year to ""))
 
         assertNull(patch.year)
     }
