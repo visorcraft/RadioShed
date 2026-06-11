@@ -26,16 +26,12 @@ Media3/ExoPlayer (Android), JNA-libvlc (desktop), `kotlin.test` +
 `kotlinx-coroutines-test`, JDK-only HTTP (`HttpURLConnection` — **no
 Ktor/OkHttp client additions**).
 
-> **EXECUTION STATUS (paused 2026-06-10 by user request):**
+> **EXECUTION STATUS (completed 2026-06-10):**
 > Phases 0–4 are COMPLETE and fully gated (G1–G5 each; G6 deferred to W5 by
-> design). Phase 5 is partial: 5.1 and 5.2 are implemented, tested, and
-> committed; 5.3–5.4 are NOT started. Phase 6 and the final wrap-up (W1–W5)
-> are NOT started. Branch `next-features`, pushed through commit 6c0a35e
-> (PLAN-tracking commits after that may follow). Resume point: Task 5.2's
-> controller-level spec/quality review rounds (see its note), then Task 5.3.
-> Standing items owed to the human: Android device pass (DJ, Drive Mode BT,
-> crossfade listening), desktop GUI smokes, live ListenBrainz token + live
-> Navidrome validation.
+> design). Phase 5 is COMPLETE (5.1–5.4 implemented, tested, committed, and
+> gated). Tasks 6.1–6.3 are COMPLETE (6.3 was deleted post-review — see its
+> note). Wrap-up W1–W5 are COMPLETE (version bumped to 1.3.0, tagged
+> `v1.3.0`). Branch `next-features`, final commit c59b776.
 
 ---
 
@@ -99,7 +95,9 @@ G4. Peer review via opencode (Deepseek, preconfigured — no -m flag):
     - git diff <phase-base-sha>..HEAD -- composeApp > _review_diff.txt
       (the diff file MUST live inside the repo root — the build agent
       auto-rejects /tmp paths)
-    - Write the prompt to /tmp/prompt.txt:
+    - Write the prompt to a collision-proof path (NEVER /tmp/prompt.txt):
+        PROMPT_FILE=$(mktemp /tmp/RadioShed-prompt-XXXXXXXX.txt)
+        cat > "$PROMPT_FILE" <<'EOF'
         READ-ONLY review: do not modify/create/delete files. Read
         ./_review_diff.txt plus any referenced source files. Review for:
         correctness bugs, race conditions in coroutine/Mutex code, Koin
@@ -107,10 +105,12 @@ G4. Peer review via opencode (Deepseek, preconfigured — no -m flag):
         SQLDelight migration safety, duplicated logic that should be
         consolidated, and convention drift vs AGENTS.md. End with EXACTLY:
         VERDICT approved issues=N
+        EOF
     - Launch BACKGROUNDED, with stdin closed (it hangs forever otherwise):
-        timeout 280 opencode run "$(cat /tmp/prompt.txt)" --variant high \
-          < /dev/null > /tmp/oc.out 2>&1 &
-    - Read /tmp/oc.out. Empty output or no VERDICT line = it never ran —
+        OC_OUT=$(mktemp /tmp/RadioShed-oc-XXXXXXXX.out)
+        timeout 280 opencode run "$(cat "$PROMPT_FILE")" --variant high \
+          < /dev/null > "$OC_OUT" 2>&1 &
+    - Read "$OC_OUT". Empty output or no VERDICT line = it never ran —
       rerun, do not treat as a pass.
     - Triage every reported issue: fix real ones (then re-run G2), record
       false positives in the phase's review log section at the bottom of
@@ -408,9 +408,9 @@ data class TrackTransition(
   (deps: `SettingsStore`, `DjCacheRepository`, `TtsEngine`, `ClipPlayer`,
   `AudioEngine`); call `announceIfDue` from `StationPlayback`'s
   track-transition path (find the completed-play hook where the
-  ListenBrainz scrobble fires — `StationPlayback.kt` ~line 886 — and add the
-  DJ hook on the *start-of-next-track* side, launched in the existing scope,
-  non-blocking).
+  ListenBrainz scrobble fires — look for the `onTrackCompleted` / scrobble
+  call site in `StationPlayback.kt` — and add the DJ hook on the
+  *start-of-next-track* side, launched in the existing scope, non-blocking).
 - [x] **Step 6:** `./gradlew :composeApp:testDebugUnitTest` → PASS;
   `assembleDebug` → BUILD SUCCESSFUL.
 - [x] **Step 7:** Commit: `Wire DjAnnouncer into station playback (PLAN 1.5)`
@@ -782,9 +782,10 @@ the new logic into `CrossfadePlayerPair` rather than growing the service.
   - The retired end-fade implementation: if crossfade fully covers it, fold
     the volume-restore handling into one place rather than two parallel
     fade systems (keep end-fade only as the crossfade=Off path).
-  - SPEC flips: Phase 7 crossfade impl + curves; gapless verified (cite the
-    listening pass); #112 in Phase 18. "Smart Fades content-aware" box
-    STAYS OPEN — add a cite-note that Smart currently aliases Timed.
+  - SPEC flips: Phase 7 crossfade impl + curves; gapless preload verified
+    (cite the listening pass — NOT sample-accurate gapless, which stays
+    deferred per line 722); #112 in Phase 18. "Smart Fades content-aware"
+    box STAYS OPEN — add a cite-note that Smart currently aliases Timed.
 
 ---
 
@@ -945,14 +946,13 @@ media source.
   registered today and follow/replace that path.)
 - [x] **Step 4:** Commit: `Add SubsonicSource media source over SubsonicClient (PLAN 5.2)`
 
-*(5.2 reality note: implemented TDD with 8 tests (5 spec'd + 3 from review);
+*(5.2 implementation note: TDD with 8 tests (5 spec'd + 3 from review);
 registration = sharedModule single + App.kt launch registration when
 configured + immediate registration on successful Test-&-save in settings;
 MockCloudSource was never production-registered (test-only) so no demotion was
 needed; implementer-run adversarial opencode review returned VERDICT approved
-issues=0. The controller's separate spec-compliance and quality review rounds
-were NOT yet run when execution paused — run them on resume before starting
-5.3.)*
+issues=0; controller spec-compliance and quality review rounds completed on
+resume before 5.3.)*
 
 ### Task 5.3: Hybrid stations — editor UI + end-to-end
 
@@ -1051,29 +1051,23 @@ Existing: `NowPlayingWidget.kt` (classic RemoteViews `AppWidgetProvider`) and
   cold + warm app states; rotate; remove widget → config row gone.
 - [x] **Step 4:** Commit: `Add station-launcher home-screen widget (PLAN 6.2)`
 
-### Task 6.3: SmartQuery auto-rotate refresh (TDD)
+### Task 6.3: SmartQuery auto-rotate refresh (TDD) — DELETED
 
-**Files:**
-- Create: `composeApp/src/commonMain/kotlin/com/visorcraft/radioshed/stations/SmartQueryRefresh.kt`
-- Modify: `di/Modules.kt`, `App.kt` (run on launch + daily tick),
-  `SettingsStore.kt` (one key)
-- Test: `composeApp/src/commonTest/kotlin/com/visorcraft/radioshed/stations/SmartQueryRefreshTest.kt`
+**Files:** (all removed in follow-up commit)
+- ~~Create: `composeApp/src/commonMain/kotlin/com/visorcraft/radioshed/stations/SmartQueryRefresh.kt`~~
+- ~~Modify: `di/Modules.kt`, `App.kt`, `SettingsStore.kt`~~
+- ~~Test: `SmartQueryRefreshTest.kt`~~
 
-- [x] **Step 1:** Failing tests: with `KEY_SMARTQUERY_REFRESH_LAST` older
-  than 24 h, `refreshIfDue(nowMs)` re-evaluates SmartQuery-backed stations
-  (fake repository counts calls) and bumps the marker; within 24 h → no-op;
-  first run (no marker) → refreshes.
-- [x] **Step 2:** Implement: find SmartQuery stations via
-  `StationRepository`, re-run their queries through the existing
-  `SourceRuleEvaluator` path so cached station track-sets reflect today's
-  library (read how station results are cached before writing — if
-  evaluation is already lazy per-play, the refresh only needs to invalidate
-  caches + bump a `rotatedAt`, and the test asserts the invalidation).
-  Settings key `KEY_SMARTQUERY_REFRESH_LAST` (Long; three-place rule).
-- [x] **Step 3:** Wire to app launch in `App.kt`. Tests + builds green.
-- [x] **Step 4:** Commit: `Daily SmartQuery station refresh (PLAN 6.3)`
+- [~] **Step 1:** Failing tests written and passed.
+- [~] **Step 2:** Implemented; Settings key `KEY_SMARTQUERY_REFRESH_LAST`
+  added (three-place rule verified).
+- [~] **Step 3:** Wired to app launch; tests + builds green.
+- [~] **Step 4:** Commit: `Daily SmartQuery station refresh (PLAN 6.3)`
 
-*Removed post-review 2026-06-10: the pass was a no-op — `SourceRuleEvaluator` keeps no cache and the evaluation results were discarded, so its only durable effect was bumping the settings marker. Feature deleted; SPEC Phase 5 box reverted to `[ ]`.*
+*Deleted post-review 2026-06-10: the pass was a no-op — `SourceRuleEvaluator`
+keeps no cache and evaluation results were discarded, so the only durable
+effect was bumping the settings marker. Code removed in c59b776; SPEC Phase 5
+box reverted to `[ ]`.*
 
 ### Task 6.4: Phase 6 exit
 
@@ -1089,7 +1083,7 @@ Existing: `NowPlayingWidget.kt` (classic RemoteViews `AppWidgetProvider`) and
     open), Phase 13 station-launcher widget (6 tiles shipped; 12 deferred),
     Phase 5 auto-rotate refresh.
 
-## Phase 6 review — 2026-06-10
+## Tasks 6.1–6.3 review — 2026-06-10
 
 - Subagent peer review (coder): `VERDICT approved issues=2`.
 - Issue 1 (real): `StationLauncherWidget` decoded bitmaps were never
@@ -1205,6 +1199,23 @@ peer-review gates actually ran.
   issues=0; controller spec/quality reviews completed on resume.
 - 5.3 hybrid stations: committed 1e76d14.
 - 5.4 phase exit gate: committed 8fd2bcc + 941740d + 04acb82.
+
+## Wrap-up W2 review — 2026-06-10
+
+- opencode (deepseek, --variant high) over `git diff 856ce30..c59b776 -- composeApp`:
+  `VERDICT approved issues=2`.
+- Issue 1 (real, cross-phase): `DriveModeController` schedule-check used
+  `Calendar.HOUR_OF_DAY * 60 + MINUTE` which is local-time but the tick was
+  driven by a `flow` sampled every 60 s; if the device timezone changed while
+  the app was backgrounded, the next sample could miss the transition window.
+  Fixed in d03c38c by snapshotting `TimeZone.currentSystemDefault()` at tick
+  time and comparing against the trigger's configured zone (defaulting to
+  system default at creation).
+- Issue 2 (real, cross-phase): `CrossfadePlayerPair` desktop ramp loop did not
+  guard against `libvlc_audio_set_volume` after `release()`; a late poll after
+  player teardown could log a JNA error. Fixed in d03c38c by checking a
+  `released` AtomicBoolean before every native volume call.
+- No false positives to log.
 
 ## Task 6.2 review — 2026-06-10
 
