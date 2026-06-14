@@ -1,6 +1,9 @@
+import org.gradle.api.GradleException
 import org.gradle.api.file.FileSystemOperations
+import org.gradle.api.provider.Property
 import org.gradle.process.ExecOperations
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
+import org.jetbrains.compose.desktop.application.tasks.AbstractJLinkTask
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import java.net.URI
 import java.util.Properties
@@ -414,6 +417,24 @@ compose.desktop {
     }
 }
 
+// Compose jlink strips bin/java by default (stripNativeCommands=true), which
+// leaves the AppImage relying on a host JDK. Keep the launcher in the bundled
+// runtime so the distributable is self-contained.
+// https://github.com/JetBrains/compose-multiplatform/issues/3946
+tasks.withType<AbstractJLinkTask>().configureEach {
+    try {
+        val field = AbstractJLinkTask::class.java.getDeclaredField("stripNativeCommands")
+        field.isAccessible = true
+        @Suppress("UNCHECKED_CAST")
+        (field.get(this) as Property<Boolean>).set(false)
+    } catch (e: Exception) {
+        throw GradleException(
+            "Failed to keep java in the bundled desktop runtime (stripNativeCommands)",
+            e,
+        )
+    }
+}
+
 val appImageToolFile = layout.buildDirectory.file("compose/tools/appimagetool-x86_64.AppImage")
 
 abstract class DownloadAppImageToolTask : DefaultTask() {
@@ -517,8 +538,33 @@ abstract class PackageSingleFileAppImageTask
                 writeText(
                     """
                     #!/bin/sh
-                    HERE="$(dirname "$(readlink -f "${'$'}0")")"
-                    exec "${'$'}HERE/bin/RadioShed" "${'$'}@"
+                    HERE="${'$'}(dirname "${'$'}(readlink -f "${'$'}0")")"
+                    APPDIR="${'$'}HERE/lib/app"
+
+                    # jpackage's native Linux launcher can SIGSEGV in setenv() when the
+                    # serialized classpath is large (OpenJDK JDK-8380085: partial pipe
+                    # read/write). Launch via java(1) using the bundled jlink runtime.
+                    JAVA=""
+                    if [ -n "${'$'}{RADIOSHED_JAVA}" ]; then
+                        JAVA="${'$'}RADIOSHED_JAVA"
+                    elif [ -x "${'$'}HERE/lib/runtime/bin/java" ]; then
+                        JAVA="${'$'}HERE/lib/runtime/bin/java"
+                    elif command -v java >/dev/null 2>&1; then
+                        JAVA=java
+                    fi
+                    if [ -z "${'$'}JAVA" ]; then
+                        echo "RadioShed: no Java runtime found in this AppImage and 'java' is not on PATH." >&2
+                        echo "Install a Java 21+ runtime or set RADIOSHED_JAVA and retry." >&2
+                        exit 1
+                    fi
+
+                    exec "${'$'}JAVA" \
+                        -Djpackage.app-version=${versionName.get()} \
+                        -Dcompose.application.resources.dir="${'$'}APPDIR/resources" \
+                        -Dcompose.application.configure.swing.globals=true \
+                        -Dskiko.library.path="${'$'}APPDIR" \
+                        -cp "${'$'}APPDIR/*" \
+                        com.visorcraft.radioshed.MainKt "${'$'}@"
                     """.trimIndent() + "\n",
                 )
                 setExecutable(true)
