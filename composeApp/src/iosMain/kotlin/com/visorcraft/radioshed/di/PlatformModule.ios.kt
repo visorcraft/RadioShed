@@ -8,7 +8,9 @@ import com.visorcraft.radioshed.audio.ClipPlayer
 import com.visorcraft.radioshed.audio.EqualizerController
 import com.visorcraft.radioshed.audio.NullClipPlayer
 import com.visorcraft.radioshed.audio.NullEqualizerController
+import com.visorcraft.radioshed.audio.NullTailSilenceAnalyzer
 import com.visorcraft.radioshed.audio.NullTtsEngine
+import com.visorcraft.radioshed.audio.TailSilenceAnalyzer
 import com.visorcraft.radioshed.audio.TtsEngine
 import com.visorcraft.radioshed.car.BluetoothWatcher
 import com.visorcraft.radioshed.car.NullBluetoothWatcher
@@ -109,6 +111,7 @@ actual val platformModule: Module =
         single<EqualizerController> { NullEqualizerController() }
         single<TtsEngine> { NullTtsEngine() }
         single<ClipPlayer> { NullClipPlayer() }
+        single<TailSilenceAnalyzer> { NullTailSilenceAnalyzer() }
 
         // Crash log reader — iOS surfaces crashes via Xcode/TestFlight, not
         // an in-app feed. Stub returns empty.

@@ -9,10 +9,10 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 
 /**
- * Library search. v1 uses LIKE because SQLDelight 2.1's parser doesn't
- * handle FTS5 MATCH cleanly; revisit when the parser catches up. Acceptable
- * for libraries up to ~10k tracks; above that we'd want FTS5 or a custom
- * inverted index.
+ * Library search. Free-text track queries prefer FTS5 via [FtsSearch]
+ * (raw SqlDriver MATCH — SQLDelight's parser still can't express MATCH).
+ * Falls back to multi-column LIKE when the FTS index is empty or returns
+ * no hits. Artist/album free-text paths still use LIKE.
  *
  * Supports a small DSL via [SearchDsl]:
  * `artist:Hendrix year:>1968 genre:rock`. When the query contains any
@@ -22,7 +22,10 @@ import kotlinx.coroutines.withContext
  * intersection for fields that don't have a dedicated index path
  * (year — pulled off `album.year`, applied post-fetch).
  */
-class SearchRepository(private val db: RadioShedDatabase) {
+class SearchRepository(
+    private val db: RadioShedDatabase,
+    private val ftsSearch: FtsSearch,
+) {
     suspend fun searchTracks(
         query: String,
         limit: Long = 50,
@@ -33,6 +36,13 @@ class SearchRepository(private val db: RadioShedDatabase) {
         } else {
             withContext(IODispatcher) {
                 val pattern = query.toLikePattern() ?: return@withContext emptyList()
+                // FTS title hits merge with LIKE title/artist/album so free-text
+                // search still honors all three columns when track_fts only
+                // indexes titles.
+                val ftsIds = ftsSearch.searchTrackIds(query, limit)
+                val titleLikeIds =
+                    db.libraryQueries.searchTracksByTitleLike(pattern, limit)
+                        .executeAsList().map { it.id }
                 // Free text matches against title OR primary-artist name
                 // OR album title — the three columns the filter chip
                 // hint ("Title, artist, or album") promises. Title-only
@@ -43,8 +53,10 @@ class SearchRepository(private val db: RadioShedDatabase) {
                 // LIKE queries deduped by track id; cheap up to the
                 // ~10k-track LIKE ceiling already documented for v1.
                 val titleIds =
-                    db.libraryQueries.searchTracksByTitleLike(pattern, limit)
-                        .executeAsList().map { it.id }
+                    buildList {
+                        addAll(ftsIds)
+                        addAll(titleLikeIds)
+                    }
                 val artistIds =
                     db.libraryQueries.searchArtistsByNameLike(pattern, limit)
                         .executeAsList()
@@ -68,7 +80,7 @@ class SearchRepository(private val db: RadioShedDatabase) {
                 db.libraryQueries.selectTracksByIds(capped)
                     .executeAsList()
                     .map { it.toDomain() }
-                    // Re-apply the merge order (LIKE on title first,
+                    // Re-apply the merge order (FTS + LIKE title first,
                     // then artist matches, then album matches) so
                     // "best-match" results bubble to the top — the
                     // selectTracksByIds query returns rows in id order,

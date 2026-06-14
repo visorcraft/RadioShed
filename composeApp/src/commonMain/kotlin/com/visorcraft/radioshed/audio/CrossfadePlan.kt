@@ -71,6 +71,7 @@ fun resolveCrossfadePlan(crossfade: Crossfade): CrossfadePlan? =
 fun computeSmartFadeDurationMs(
     outgoingDurationMs: Long,
     incomingDurationMs: Long,
+    outgoingTrailingSilenceMs: Long? = null,
 ): Long {
     if (outgoingDurationMs <= 0L || incomingDurationMs <= 0L) {
         return SMART_CROSSFADE_DEFAULT_SEC * 1_000L
@@ -82,7 +83,15 @@ fun computeSmartFadeDurationMs(
             shorterSec < 120 -> (shorterSec * 0.08).coerceIn(2.0, 6.0)
             else -> (shorterSec * 0.10).coerceIn(3.0, CROSSFADE_MAX_SEC.toDouble())
         }
-    return (targetSec * 1_000).toLong()
+    var fadeMs = (targetSec * 1_000).toLong()
+    if (outgoingTrailingSilenceMs != null && outgoingTrailingSilenceMs >= 400L) {
+        fadeMs =
+            minOf(
+                fadeMs,
+                outgoingTrailingSilenceMs.coerceIn(2_000L, CROSSFADE_MAX_SEC * 1_000L),
+            )
+    }
+    return fadeMs
 }
 
 /** Resolves the duration to use for arming or executing a crossfade. */
@@ -90,9 +99,14 @@ fun effectiveCrossfadeDurationMs(
     plan: CrossfadePlan,
     outgoingDurationMs: Long,
     incomingDurationMs: Long,
+    outgoingTrailingSilenceMs: Long? = null,
 ): Long =
     if (plan.smart) {
-        computeSmartFadeDurationMs(outgoingDurationMs, incomingDurationMs)
+        computeSmartFadeDurationMs(
+            outgoingDurationMs = outgoingDurationMs,
+            incomingDurationMs = incomingDurationMs,
+            outgoingTrailingSilenceMs = outgoingTrailingSilenceMs,
+        )
     } else {
         plan.durationMs
     }
@@ -101,16 +115,18 @@ fun effectiveCrossfadeDurationMs(
  * True when playback has entered the crossfade arming window: the track is the
  * right length to overlap (longer than the fade itself, so we don't fade the
  * whole thing), there's a known duration, and the remaining time has dropped to
- * at or below [durationMs].
+ * at or below [crossfadeMs] (optionally extended by detected trailing silence).
  *
  * @param positionMs current playhead position.
  * @param durationMs total track duration; non-positive means "unknown" → never arm.
  * @param crossfadeMs resolved crossfade length; non-positive → never arm.
+ * @param trailingSilenceMs natural silence at the track tail, if analyzed.
  */
 fun shouldArmCrossfade(
     positionMs: Long,
     durationMs: Long,
     crossfadeMs: Long,
+    trailingSilenceMs: Long? = null,
 ): Boolean {
     if (durationMs <= 0L || crossfadeMs <= 0L) return false
     // Refuse to crossfade a track shorter than (or barely longer than) the fade
@@ -119,5 +135,11 @@ fun shouldArmCrossfade(
     // overlap still plays the bulk of its own track unattenuated.
     if (durationMs < crossfadeMs * 2L) return false
     val remaining = durationMs - positionMs
-    return remaining in 1L..crossfadeMs
+    val armWindowMs =
+        if (trailingSilenceMs != null && trailingSilenceMs > 0L) {
+            (crossfadeMs + trailingSilenceMs).coerceAtMost(durationMs / 2L)
+        } else {
+            crossfadeMs
+        }
+    return remaining in 1L..armWindowMs
 }

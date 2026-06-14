@@ -26,10 +26,19 @@ fun VlcRequiredDialog(
         onDismissRequest = onDismiss,
         title = { Text("VLC required") },
         text = {
+            val hint = vlcInstallHint()
             Text(
-                "Media cannot be played until VLC is installed.\n\n" +
-                    "RadioShed uses VLC's libvlc engine for desktop playback. " +
-                    "Install VLC, then restart RadioShed.",
+                buildString {
+                    append(
+                        "Media cannot be played until VLC is installed.\n\n" +
+                            "RadioShed uses VLC's libvlc engine for desktop playback. " +
+                            "Install VLC, then restart RadioShed.",
+                    )
+                    if (hint.isNotBlank()) {
+                        append("\n\n")
+                        append(hint)
+                    }
+                },
             )
         },
         confirmButton = {

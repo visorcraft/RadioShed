@@ -21,6 +21,7 @@ import com.visorcraft.radioshed.audio.AudioEngine
 import com.visorcraft.radioshed.audio.PlayerState
 import com.visorcraft.radioshed.audio.isMediaPlaybackAvailable
 import com.visorcraft.radioshed.car.DriveModeController
+import com.visorcraft.radioshed.data.FtsSearch
 import com.visorcraft.radioshed.data.LibraryRepository
 import com.visorcraft.radioshed.data.SettingsStore
 import com.visorcraft.radioshed.data.nowMillis
@@ -226,6 +227,11 @@ fun App(
                     runCatching { libraryRepo.canonicalizeGenreTags() }
                     settings.setGenresCanonicalized(true)
                 }
+            }
+
+            val ftsSearch: FtsSearch = koinInject()
+            LaunchedEffect(Unit) {
+                runCatching { ftsSearch.rebuildTrackIndex() }
             }
 
             // Auto-rescan-on-launch safety net. Opt-in; for users who

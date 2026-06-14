@@ -1,6 +1,7 @@
 package com.visorcraft.radioshed.scanner
 
 import com.visorcraft.radioshed.data.FolderRepository
+import com.visorcraft.radioshed.data.FtsSearch
 import com.visorcraft.radioshed.data.LibraryRepository
 import com.visorcraft.radioshed.data.LyricsCacheRepository
 import com.visorcraft.radioshed.data.nowMillis
@@ -34,6 +35,7 @@ class Scanner(
     private val tagReader: TagReader,
     private val artworkPersister: ArtworkPersister,
     private val lyricsCache: LyricsCacheRepository,
+    private val ftsSearch: FtsSearch,
 ) {
     fun scanFolder(folderId: Long): Flow<ScanProgress> =
         flow {
@@ -98,6 +100,15 @@ class Scanner(
                 lastScannedAt = nowMillis(),
                 trackCount = processed.toLong(),
             )
+
+            runCatching { ftsSearch.rebuildTrackIndex() }.onFailure {
+                emit(
+                    ScanProgress.Warning(
+                        folderId = folderId,
+                        message = "Couldn't refresh search index: ${it.message ?: "unknown"}",
+                    ),
+                )
+            }
 
             emit(
                 ScanProgress.Completed(

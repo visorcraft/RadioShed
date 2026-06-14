@@ -24,6 +24,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -39,6 +40,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import com.visorcraft.radioshed.audio.PlayerState
+import com.visorcraft.radioshed.car.DriveKeyDispatcher
 import com.visorcraft.radioshed.data.SettingsStore
 import com.visorcraft.radioshed.data.StationRepository
 import com.visorcraft.radioshed.stations.StationPlayback
@@ -96,6 +98,7 @@ fun DriveTransportRow(
     settings: SettingsStore = koinInject(),
     stationPlayback: StationPlayback = koinInject(),
     stationRepo: StationRepository = koinInject(),
+    driveKeyDispatcher: DriveKeyDispatcher = koinInject(),
 ) {
     val playing = state == PlayerState.Playing
     val haptic = rememberHapticTick()
@@ -121,6 +124,22 @@ fun DriveTransportRow(
                 if (match != null) stationPlayback.playStation(match) else rejectHaptic()
             }
         }
+
+    LaunchedEffect(driveKeyDispatcher) {
+        driveKeyDispatcher.uiActions.collect { actionId ->
+            when (actionId) {
+                "station_picker" -> {
+                    haptic()
+                    pickerOpen = true
+                }
+                "voice_search" ->
+                    if (supportsVoiceInput()) {
+                        haptic()
+                        voicePicker()
+                    }
+            }
+        }
+    }
 
     // Stored order is already canonical (SettingsStore filters + the editor
     // re-orders before persist), so render ids straight through.

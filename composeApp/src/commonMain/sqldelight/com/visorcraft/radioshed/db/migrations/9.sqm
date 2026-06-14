@@ -1,0 +1,16 @@
+-- Migration v8 → v9: FTS5 full-text search for tracks.
+--
+-- Standalone FTS table (no external content) rebuilt by [FtsSearch] on startup
+-- and after library scans. Verifier stub:
+CREATE TABLE IF NOT EXISTS track (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL
+);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS track_fts USING fts5(
+    track_id UNINDEXED,
+    title,
+    tokenize='unicode61'
+);
+
+INSERT INTO track_fts(track_id, title) SELECT id, title FROM track;

@@ -48,6 +48,7 @@ import com.visorcraft.radioshed.car.BluetoothWatcher
 import com.visorcraft.radioshed.car.BtPeer
 import com.visorcraft.radioshed.car.COMMON_DRIVE_KEY_CODES
 import com.visorcraft.radioshed.car.HARDWARE_DRIVE_KEY_ACTIONS
+import com.visorcraft.radioshed.car.UI_DRIVE_KEY_ACTIONS
 import com.visorcraft.radioshed.car.NullBluetoothWatcher
 import com.visorcraft.radioshed.car.NullSpeedWatcher
 import com.visorcraft.radioshed.car.SpeedWatcher
@@ -95,9 +96,9 @@ private val DRIVE_BUTTON_ORDER: List<Pair<String, String>> =
         id to (DRIVE_BUTTON_LABELS[id] ?: error("missing label for Drive Mode button id '$id'"))
     }
 
-/** Hardware-key bindings: transport actions MainActivity can dispatch. */
-private val HARDWARE_KEY_ACTION_ORDER: List<Pair<String, String>> =
-    HARDWARE_DRIVE_KEY_ACTIONS.map { id ->
+/** Hardware-key bindings: all Drive Mode transport actions. */
+private val KEY_BINDING_ACTION_ORDER: List<Pair<String, String>> =
+    (HARDWARE_DRIVE_KEY_ACTIONS + UI_DRIVE_KEY_ACTIONS).map { id ->
         id to (DRIVE_BUTTON_LABELS[id] ?: error("missing label for hardware key action '$id'"))
     }
 
@@ -961,7 +962,7 @@ private fun AddKeyBindingDialog(
                     }
                     Spacer(Modifier.height(8.dp))
                     Text("Action", style = MaterialTheme.typography.labelMedium)
-                    HARDWARE_KEY_ACTION_ORDER.forEach { (id, label) ->
+                    KEY_BINDING_ACTION_ORDER.forEach { (id, label) ->
                         Row(
                             modifier = Modifier.fillMaxWidth().clickable { selectedAction = id },
                             verticalAlignment = Alignment.CenterVertically,

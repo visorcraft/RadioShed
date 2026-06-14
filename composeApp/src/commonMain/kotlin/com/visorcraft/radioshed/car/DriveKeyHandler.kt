@@ -33,7 +33,10 @@ val COMMON_DRIVE_KEY_CODES: List<Int> = listOf(85, 87, 88, 86, 164, 24, 25)
 
 /**
  * Drive Mode actions that [com.visorcraft.radioshed.MainActivity] can dispatch
- * from hardware keys. UI-only actions (station picker, voice search) stay on
- * the on-screen button bar.
+ * from hardware keys. Transport actions run in the Activity; UI actions route
+ * through [DriveKeyDispatcher] into [com.visorcraft.radioshed.ui.car.DriveTransportRow].
  */
 val HARDWARE_DRIVE_KEY_ACTIONS: List<String> = listOf("previous", "play_pause", "next", "mute")
+
+/** UI actions dispatched via [DriveKeyDispatcher] from hardware key bindings. */
+val UI_DRIVE_KEY_ACTIONS: List<String> = listOf("station_picker", "voice_search")

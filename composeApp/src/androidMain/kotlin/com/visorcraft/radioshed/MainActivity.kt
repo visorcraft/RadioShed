@@ -18,6 +18,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.core.content.ContextCompat
 import com.visorcraft.radioshed.audio.AudioEngine
 import com.visorcraft.radioshed.audio.Playable
+import com.visorcraft.radioshed.car.DriveKeyDispatcher
 import com.visorcraft.radioshed.car.resolveDriveKeyAction
 import com.visorcraft.radioshed.data.LibraryRepository
 import com.visorcraft.radioshed.data.SearchRepository
@@ -37,6 +38,7 @@ class MainActivity : ComponentActivity() {
     private val libraryRepo: LibraryRepository by inject()
     private val stationPlayback: StationPlayback by inject()
     private val settingsStore: SettingsStore by inject()
+    private val driveKeyDispatcher: DriveKeyDispatcher by inject()
 
     // Search-intent dispatch runs DB queries; do them off the main
     // thread. Tied to a SupervisorJob so a single search failure
@@ -137,6 +139,10 @@ class MainActivity : ComponentActivity() {
                         stationPlayback.commitUserVolume(0f)
                     }
                 }
+                true
+            }
+            "station_picker", "voice_search" -> {
+                driveKeyDispatcher.dispatchUiAction(actionId)
                 true
             }
             else -> false

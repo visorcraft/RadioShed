@@ -60,6 +60,46 @@ class CrossfadePlanTest {
     }
 
     @Test
+    fun smartFadeShortensWhenTrailingSilenceDetected() {
+        val withSilence =
+            computeSmartFadeDurationMs(
+                outgoingDurationMs = 240_000L,
+                incomingDurationMs = 240_000L,
+                outgoingTrailingSilenceMs = 8_000L,
+            )
+        val withoutSilence =
+            computeSmartFadeDurationMs(
+                outgoingDurationMs = 240_000L,
+                incomingDurationMs = 240_000L,
+            )
+        assertTrue(withSilence <= withoutSilence)
+        assertEquals(8_000L, withSilence)
+    }
+
+    @Test
+    fun trailingSilenceExtendsArmWindow() {
+        val dur = 200_000L
+        val xfade = 6_000L
+        val silence = 4_000L
+        assertFalse(
+            shouldArmCrossfade(
+                positionMs = 188_000L,
+                durationMs = dur,
+                crossfadeMs = xfade,
+                trailingSilenceMs = silence,
+            ),
+        )
+        assertTrue(
+            shouldArmCrossfade(
+                positionMs = 192_000L,
+                durationMs = dur,
+                crossfadeMs = xfade,
+                trailingSilenceMs = silence,
+            ),
+        )
+    }
+
+    @Test
     fun armsWhenRemainingWithinWindow() {
         // 200s track, 6s fade: arm once we're at or past 194s.
         val dur = 200_000L

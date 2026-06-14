@@ -3,6 +3,7 @@ package com.visorcraft.radioshed.stations
 import com.visorcraft.radioshed.audio.AudioEngine
 import com.visorcraft.radioshed.audio.CrossfadePlan
 import com.visorcraft.radioshed.audio.PlayerState
+import com.visorcraft.radioshed.audio.TailSilenceAnalyzer
 import com.visorcraft.radioshed.audio.effectiveCrossfadeDurationMs
 import com.visorcraft.radioshed.audio.resolveCrossfadePlan
 import com.visorcraft.radioshed.audio.shouldArmCrossfade
@@ -56,6 +57,7 @@ class StationPlayback(
     private val sleepTimer: com.visorcraft.radioshed.audio.SleepTimer,
     private val scrobbleSync: com.visorcraft.radioshed.source.ScrobbleSync,
     private val djAnnouncer: DjAnnouncer,
+    private val tailSilenceAnalyzer: TailSilenceAnalyzer,
 ) {
     /**
      * Last error caught by the scope exception handler — exposed so the
@@ -338,6 +340,12 @@ class StationPlayback(
      */
     @Volatile private var crossfadeArmed: Boolean = false
 
+    /** Trailing silence on the outgoing track, when Smart Fades analysis completes. */
+    @Volatile private var trailingSilenceMs: Long? = null
+
+    /** In-flight tail analysis; cancelled when the track changes. */
+    private var tailSilenceJob: Job? = null
+
     /**
      * Raised across a crossfade transition so the auto-advance `Ended`
      * collector ignores the OUTGOING track's natural end — the crossfade has
@@ -444,8 +452,15 @@ class StationPlayback(
                                 plan = plan,
                                 outgoingDurationMs = pos.durationMs,
                                 incomingDurationMs = nextTrack?.durationMs ?: 0L,
+                                outgoingTrailingSilenceMs = trailingSilenceMs,
                             )
-                        if (shouldArmCrossfade(pos.currentMs, pos.durationMs, fadeMs)) {
+                        if (shouldArmCrossfade(
+                                pos.currentMs,
+                                pos.durationMs,
+                                fadeMs,
+                                trailingSilenceMs,
+                            )
+                        ) {
                             crossfadeArmed = true
                             suppressEndedForCrossfade = true
                             maybeStartCrossfade(plan, fadeMs)
@@ -1279,6 +1294,20 @@ class StationPlayback(
         recordPreviousIfAny()
         currentTrack = track
         trackStartedAtMs = nowMillis()
+        trailingSilenceMs = null
+        tailSilenceJob?.cancel()
+        if (crossfadePlan?.smart == true && track.path.isNotBlank()) {
+            val trackId = track.id
+            val trackPath = track.path
+            val durationMs = track.durationMs
+            tailSilenceJob =
+                scope.launch {
+                    val result = tailSilenceAnalyzer.trailingSilenceMs(trackPath, durationMs)
+                    if (currentTrack?.id == trackId && currentTrack?.path == trackPath) {
+                        trailingSilenceMs = result
+                    }
+                }
+        }
         // DJ announcement hook. Fire-and-forget on [scope] so a slow TTS
         // synthesis or clip never blocks the queue advance; the announcer
         // swallows every failure internally (decorative, never fatal) and

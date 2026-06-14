@@ -2,6 +2,7 @@ package com.visorcraft.radioshed.di
 
 import app.cash.sqldelight.db.SqlDriver
 import com.visorcraft.radioshed.audio.SleepTimer
+import com.visorcraft.radioshed.car.DriveKeyDispatcher
 import com.visorcraft.radioshed.car.DriveModeController
 import com.visorcraft.radioshed.data.ArtworkCacheRepository
 import com.visorcraft.radioshed.data.AudioSettingsRepository
@@ -11,6 +12,7 @@ import com.visorcraft.radioshed.data.DatabaseDriverFactory
 import com.visorcraft.radioshed.data.DatabaseMaintenanceRepository
 import com.visorcraft.radioshed.data.DjCacheRepository
 import com.visorcraft.radioshed.data.FolderRepository
+import com.visorcraft.radioshed.data.FtsSearch
 import com.visorcraft.radioshed.data.LibraryRepository
 import com.visorcraft.radioshed.data.LyricsCacheRepository
 import com.visorcraft.radioshed.data.PlaylistRepository
@@ -53,7 +55,9 @@ val sharedModule: Module =
         single { StationRepository(get()) }
         single { PlaylistRepository(get()) }
         single { RatingRepository(get()) }
-        single { SearchRepository(get()) }
+        single { FtsSearch(get(), get()) }
+        single { SearchRepository(get(), get()) }
+        single { DriveKeyDispatcher() }
         single { ScrobbleQueueRepository(get()) }
 
         single { ArtworkCacheRepository(get()) }
@@ -67,7 +71,7 @@ val sharedModule: Module =
         single { BackupRepository(get()) }
 
         // Phase 3: scanner. FileEnumerator + TagReader come from platformModule.
-        single { Scanner(get(), get(), get(), get(), get(), get()) }
+        single { Scanner(get(), get(), get(), get(), get(), get(), get()) }
 
         // Connectivity policy gate — read by every online fetcher to honour
         // the user's Always / Wi-Fi only / Never / Manual preference.
@@ -159,7 +163,7 @@ val sharedModule: Module =
         // platformModule (Null on desktop/iOS). SleepTimer lets the DJ stand down
         // during a sleep fade so the two volume drivers don't fight (registered above).
         single { DjAnnouncer(get(), get(), get(), get(), get(), get(), get()) }
-        single { StationPlayback(get(), get(), get(), get(), get(), get(), get(), get(), get()) }
+        single { StationPlayback(get(), get(), get(), get(), get(), get(), get(), get(), get(), get()) }
         single { PresetSeeder(get(), get()) }
 
         // Auto Drive Mode: activates Drive Mode from BluetoothWatcher matches +

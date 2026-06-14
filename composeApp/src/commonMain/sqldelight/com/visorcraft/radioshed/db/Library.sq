@@ -682,3 +682,4 @@ SELECT * FROM track_personnel WHERE track_id = ? ORDER BY role, position;
 
 deleteAllPersonnelForTrack:
 DELETE FROM track_personnel WHERE track_id = ?;
+

@@ -4,12 +4,14 @@ import android.content.Context
 import com.russhwolf.settings.Settings
 import com.russhwolf.settings.SharedPreferencesSettings
 import com.visorcraft.radioshed.audio.AndroidClipPlayer
+import com.visorcraft.radioshed.audio.AndroidTailSilenceAnalyzer
 import com.visorcraft.radioshed.audio.AndroidEqualizerController
 import com.visorcraft.radioshed.audio.AndroidTtsEngine
 import com.visorcraft.radioshed.audio.AudioEngine
 import com.visorcraft.radioshed.audio.AudioEngineAndroid
 import com.visorcraft.radioshed.audio.ClipPlayer
 import com.visorcraft.radioshed.audio.EqualizerController
+import com.visorcraft.radioshed.audio.TailSilenceAnalyzer
 import com.visorcraft.radioshed.audio.TtsEngine
 import com.visorcraft.radioshed.car.AndroidBluetoothWatcher
 import com.visorcraft.radioshed.car.AndroidSpeedWatcher
@@ -118,6 +120,7 @@ actual val platformModule: Module =
         single<EqualizerController> { AndroidEqualizerController(get()) }
         single<TtsEngine> { AndroidTtsEngine(androidContext()) } // Phase DJ: Android TTS
         single<ClipPlayer> { AndroidClipPlayer() } // Phase DJ: plays synthesized clips
+        single<TailSilenceAnalyzer> { AndroidTailSilenceAnalyzer() }
 
         // Crash log reader — backed by ApplicationExitInfo (API 30+).
         single<CrashLogReader> { AndroidCrashLogReader(androidContext()) }
