@@ -24,7 +24,6 @@ import kotlin.coroutines.resume
  * helper would couple two different lifetimes for no real reuse.
  */
 class AndroidClipPlayer : ClipPlayer {
-
     override suspend fun playFile(path: String) {
         runCatching {
             suspendCancellableCoroutine { continuation ->
@@ -32,6 +31,7 @@ class AndroidClipPlayer : ClipPlayer {
 
                 // Release exactly once even if completion and an error race.
                 var released = false
+
                 fun release() {
                     if (released) return
                     released = true

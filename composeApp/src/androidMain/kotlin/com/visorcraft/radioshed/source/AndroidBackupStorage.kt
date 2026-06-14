@@ -18,33 +18,36 @@ import java.io.File
  * which only does on-device save / restore.
  */
 class AndroidBackupStorage(private val context: Context) : BackupStorage {
-
     private val backupDir: File by lazy {
         File(context.filesDir, "backups").also { it.mkdirs() }
     }
 
-    override suspend fun list(): List<BackupFile> = withContext(IODispatcher) {
-        backupDir.listFiles { f ->
-            // `.rsbak` is the new zip-bundled format (manifest.json +
-            // artwork blobs). `.json` is the legacy plain-bundle format
-            // we still produce when the platform packager is null.
-            // Keep both so a user with mixed backups in their dir sees
-            // them all in the Restore picker.
-            f.isFile && (f.extension == "json" || f.extension == "rsbak")
-        }
-            ?.map { f ->
-                BackupFile(
-                    uri = "file://${f.absolutePath}",
-                    displayName = f.name,
-                    sizeBytes = f.length(),
-                    createdAt = f.lastModified(),
-                )
+    override suspend fun list(): List<BackupFile> =
+        withContext(IODispatcher) {
+            backupDir.listFiles { f ->
+                // `.rsbak` is the new zip-bundled format (manifest.json +
+                // artwork blobs). `.json` is the legacy plain-bundle format
+                // we still produce when the platform packager is null.
+                // Keep both so a user with mixed backups in their dir sees
+                // them all in the Restore picker.
+                f.isFile && (f.extension == "json" || f.extension == "rsbak")
             }
-            ?.sortedByDescending { it.createdAt }
-            .orEmpty()
-    }
+                ?.map { f ->
+                    BackupFile(
+                        uri = "file://${f.absolutePath}",
+                        displayName = f.name,
+                        sizeBytes = f.length(),
+                        createdAt = f.lastModified(),
+                    )
+                }
+                ?.sortedByDescending { it.createdAt }
+                .orEmpty()
+        }
 
-    override suspend fun write(name: String, bytes: ByteArray): BackupFile? =
+    override suspend fun write(
+        name: String,
+        bytes: ByteArray,
+    ): BackupFile? =
         withContext(IODispatcher) {
             runCatching {
                 val safe = sanitizeFilename(name)
@@ -70,19 +73,21 @@ class AndroidBackupStorage(private val context: Context) : BackupStorage {
             }.getOrNull()
         }
 
-    override suspend fun read(fileUri: String): ByteArray? = withContext(IODispatcher) {
-        runCatching {
-            val path = android.net.Uri.parse(fileUri).path ?: return@runCatching null
-            File(path).takeIf { it.exists() && it.canRead() }?.readBytes()
-        }.getOrNull()
-    }
+    override suspend fun read(fileUri: String): ByteArray? =
+        withContext(IODispatcher) {
+            runCatching {
+                val path = android.net.Uri.parse(fileUri).path ?: return@runCatching null
+                File(path).takeIf { it.exists() && it.canRead() }?.readBytes()
+            }.getOrNull()
+        }
 
-    override suspend fun delete(fileUri: String): Boolean = withContext(IODispatcher) {
-        runCatching {
-            val path = android.net.Uri.parse(fileUri).path ?: return@runCatching false
-            File(path).delete()
-        }.getOrDefault(false)
-    }
+    override suspend fun delete(fileUri: String): Boolean =
+        withContext(IODispatcher) {
+            runCatching {
+                val path = android.net.Uri.parse(fileUri).path ?: return@runCatching false
+                File(path).delete()
+            }.getOrDefault(false)
+        }
 
     /** Strip path separators and weird control chars from user-supplied names. */
     private fun sanitizeFilename(name: String): String =

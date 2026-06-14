@@ -6,7 +6,6 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class FadeCurvesTest {
-
     @Test
     fun equalPowerSumsToUnityAtMidpoint() {
         val out = FadeCurves.gain(CrossfadeCurve.EqualPower, fraction = 0.5f)
@@ -70,10 +69,12 @@ class FadeCurvesTest {
     fun sCurveFadeInStartsSlowEndsSlow() {
         // Mirror of sCurveStartsSlowEndsSlow for the fade-in direction: the
         // smoothstep rise is shallow at the edges and steepest at the midpoint.
-        val early = FadeCurves.gain(CrossfadeCurve.SCurve, 0.05f, fadeIn = true) -
-            FadeCurves.gain(CrossfadeCurve.SCurve, 0f, fadeIn = true)
-        val mid = FadeCurves.gain(CrossfadeCurve.SCurve, 0.525f, fadeIn = true) -
-            FadeCurves.gain(CrossfadeCurve.SCurve, 0.475f, fadeIn = true)
+        val early =
+            FadeCurves.gain(CrossfadeCurve.SCurve, 0.05f, fadeIn = true) -
+                FadeCurves.gain(CrossfadeCurve.SCurve, 0f, fadeIn = true)
+        val mid =
+            FadeCurves.gain(CrossfadeCurve.SCurve, 0.525f, fadeIn = true) -
+                FadeCurves.gain(CrossfadeCurve.SCurve, 0.475f, fadeIn = true)
         assertTrue(early < mid, "s-curve fade-in derivative must be smaller near the edges than at the midpoint")
     }
 

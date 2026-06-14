@@ -23,40 +23,47 @@ import java.io.File
 actual class StorageVolumes {
     actual fun discover(): List<DiscoveredVolume> {
         val home = System.getProperty("user.home")
-        val isWindows = System.getProperty("os.name").orEmpty().lowercase()
-            .contains("win")
-        val systemDrive = if (isWindows) {
-            (System.getenv("SystemDrive") ?: "C:").uppercase() + "\\"
-        } else {
-            "/"
-        }
-        val roots = File.listRoots().orEmpty()
-        val volumeFromRoots = roots.map { root ->
-            val path = root.absolutePath
-            val label = if (isWindows) {
-                "Drive ${path.removeSuffix("\\").uppercase()}"
+        val isWindows =
+            System.getProperty("os.name").orEmpty().lowercase()
+                .contains("win")
+        val systemDrive =
+            if (isWindows) {
+                (System.getenv("SystemDrive") ?: "C:").uppercase() + "\\"
             } else {
-                "Root ($path)"
+                "/"
             }
-            DiscoveredVolume(
-                path = path,
-                label = label,
-                isPrimary = path.equals(systemDrive, ignoreCase = true),
-                isRemovable = isWindows && !path.equals(
-                    systemDrive,
-                    ignoreCase = true,
-                ),
-            )
-        }
+        val roots = File.listRoots().orEmpty()
+        val volumeFromRoots =
+            roots.map { root ->
+                val path = root.absolutePath
+                val label =
+                    if (isWindows) {
+                        "Drive ${path.removeSuffix("\\").uppercase()}"
+                    } else {
+                        "Root ($path)"
+                    }
+                DiscoveredVolume(
+                    path = path,
+                    label = label,
+                    isPrimary = path.equals(systemDrive, ignoreCase = true),
+                    isRemovable =
+                        isWindows &&
+                            !path.equals(
+                                systemDrive,
+                                ignoreCase = true,
+                            ),
+                )
+            }
         // Always include "Home" as a first-class entry — it's the
         // overwhelmingly common library root and isn't a listRoots()
         // result on macOS / Linux.
-        val homeVolume = DiscoveredVolume(
-            path = home,
-            label = "Home",
-            isPrimary = !isWindows,
-            isRemovable = false,
-        )
+        val homeVolume =
+            DiscoveredVolume(
+                path = home,
+                label = "Home",
+                isPrimary = !isWindows,
+                isRemovable = false,
+            )
         return listOf(homeVolume) + volumeFromRoots
     }
 }

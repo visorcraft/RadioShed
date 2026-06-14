@@ -3,7 +3,6 @@ package com.visorcraft.radioshed.ui.playlists
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -17,42 +16,40 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.DriveFileRenameOutline
-import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material3.SmallFloatingActionButton
-import androidx.compose.material3.ListItem
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.rememberModalBottomSheetState
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.material.icons.automirrored.filled.QueueMusic
+import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DriveFileRenameOutline
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.IconButton
-import com.visorcraft.radioshed.ui.util.TooltipIconButton
-import androidx.compose.material.icons.automirrored.filled.OpenInNew
-import androidx.compose.material.icons.automirrored.filled.QueueMusic
-import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -68,6 +65,7 @@ import androidx.compose.ui.unit.dp
 import com.visorcraft.radioshed.data.PlaylistRepository
 import com.visorcraft.radioshed.data.RatingRepository
 import com.visorcraft.radioshed.domain.Playlist
+import com.visorcraft.radioshed.ui.util.TooltipIconButton
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
@@ -125,40 +123,42 @@ fun PlaylistsScreen(
     // (so a relative path or suffix-match works the same way as the
     // backup restore flow), and the resulting tracks land in a fresh
     // playlist named after the file.
-    val importPicker = com.visorcraft.radioshed.ui.util.rememberFilePicker { bytes ->
-        scope.launch {
-            val text = bytes.decodeToString()
-            val paths = text.lineSequence()
-                .map { it.trim() }
-                .filter { it.isNotEmpty() && !it.startsWith("#") }
-                .toList()
-            if (paths.isEmpty()) {
-                importStatus = "No track entries found in the selected file."
-                return@launch
-            }
-            var added = 0
-            var missing = 0
-            // Default name is the timestamp; the user can rename
-            // after import via long-press on the playlist row.
-            val name = "Imported m3u (${com.visorcraft.radioshed.data.formatShortDate(
-                com.visorcraft.radioshed.data.nowMillis(),
-            )})"
-            val playlistId = repo.insert(name = name, description = null)
-            paths.forEachIndexed { idx, path ->
-                val track = libraryRepo.getTrackByPathOrSuffix(path)
-                if (track != null) {
-                    runCatching { repo.addTrack(playlistId, track.id, position = idx) }
-                        .onSuccess { added += 1 }
-                        .onFailure { missing += 1 }
-                } else {
-                    missing += 1
+    val importPicker =
+        com.visorcraft.radioshed.ui.util.rememberFilePicker { bytes ->
+            scope.launch {
+                val text = bytes.decodeToString()
+                val paths =
+                    text.lineSequence()
+                        .map { it.trim() }
+                        .filter { it.isNotEmpty() && !it.startsWith("#") }
+                        .toList()
+                if (paths.isEmpty()) {
+                    importStatus = "No track entries found in the selected file."
+                    return@launch
                 }
+                var added = 0
+                var missing = 0
+                // Default name is the timestamp; the user can rename
+                // after import via long-press on the playlist row.
+                val name = "Imported m3u (${com.visorcraft.radioshed.data.formatShortDate(
+                    com.visorcraft.radioshed.data.nowMillis(),
+                )})"
+                val playlistId = repo.insert(name = name, description = null)
+                paths.forEachIndexed { idx, path ->
+                    val track = libraryRepo.getTrackByPathOrSuffix(path)
+                    if (track != null) {
+                        runCatching { repo.addTrack(playlistId, track.id, position = idx) }
+                            .onSuccess { added += 1 }
+                            .onFailure { missing += 1 }
+                    } else {
+                        missing += 1
+                    }
+                }
+                importStatus = "Imported $added track" +
+                    (if (added == 1) "" else "s") +
+                    (if (missing > 0) " · $missing not in library" else "") + "."
             }
-            importStatus = "Imported $added track" +
-                (if (added == 1) "" else "s") +
-                (if (missing > 0) " · $missing not in library" else "") + "."
         }
-    }
 
     // Resolve cover art per playlist whenever the list changes. The
     // queries are LIMIT 1 + indexed, so this is cheap even with dozens
@@ -174,26 +174,33 @@ fun PlaylistsScreen(
     // whenever the per-playlist counts map changes (which already
     // re-runs when the playlist list mutates), so this stays in sync
     // without an extra Flow / DB query.
-    val totalTrackCount = remember(trackCountByPlaylistId) {
-        trackCountByPlaylistId.values.sum()
-    }
+    val totalTrackCount =
+        remember(trackCountByPlaylistId) {
+            trackCountByPlaylistId.values.sum()
+        }
     // Apply filter, then sort. Filter first so the visible-count
     // math stays consistent. RecentlyCreated falls back to the
     // natural Flow order (createdAt desc); the explicit sort still
     // renders the same order — keeping the lambda symmetric reads
     // better than a `when` skipping the sort branch entirely.
-    val filteredPlaylists = remember(playlists, listFilter, sortOrder, trackCountByPlaylistId) {
-        val base = if (listFilter.isBlank()) playlists
-                   else playlists.filter { it.name.contains(listFilter, ignoreCase = true) }
-        when (sortOrder) {
-            PlaylistsSort.RecentlyCreated -> base.sortedByDescending { it.createdAt }
-            PlaylistsSort.NameAsc -> base.sortedBy { it.name.lowercase() }
-            PlaylistsSort.NameDesc -> base.sortedByDescending { it.name.lowercase() }
-            PlaylistsSort.TrackCountDesc -> base.sortedByDescending {
-                trackCountByPlaylistId[it.id] ?: 0L
+    val filteredPlaylists =
+        remember(playlists, listFilter, sortOrder, trackCountByPlaylistId) {
+            val base =
+                if (listFilter.isBlank()) {
+                    playlists
+                } else {
+                    playlists.filter { it.name.contains(listFilter, ignoreCase = true) }
+                }
+            when (sortOrder) {
+                PlaylistsSort.RecentlyCreated -> base.sortedByDescending { it.createdAt }
+                PlaylistsSort.NameAsc -> base.sortedBy { it.name.lowercase() }
+                PlaylistsSort.NameDesc -> base.sortedByDescending { it.name.lowercase() }
+                PlaylistsSort.TrackCountDesc ->
+                    base.sortedByDescending {
+                        trackCountByPlaylistId[it.id] ?: 0L
+                    }
             }
         }
-    }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -206,20 +213,22 @@ fun PlaylistsScreen(
                             // matters more to the user mid-search than
                             // the lifetime track total. Empty filter
                             // falls back to the standard summary.
-                            val subtitle = if (listFilter.isNotBlank()) {
-                                "${filteredPlaylists.size} of ${playlists.size} " +
-                                    (if (playlists.size == 1) "playlist" else "playlists")
-                            } else {
-                                "${playlists.size} playlist" +
-                                    (if (playlists.size == 1) "" else "s") +
-                                    " · $totalTrackCount track" +
-                                    (if (totalTrackCount == 1L) "" else "s")
-                            }
+                            val subtitle =
+                                if (listFilter.isNotBlank()) {
+                                    "${filteredPlaylists.size} of ${playlists.size} " +
+                                        (if (playlists.size == 1) "playlist" else "playlists")
+                                } else {
+                                    "${playlists.size} playlist" +
+                                        (if (playlists.size == 1) "" else "s") +
+                                        " · $totalTrackCount track" +
+                                        (if (totalTrackCount == 1L) "" else "s")
+                                }
                             Text(
                                 text = subtitle,
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurface
-                                    .copy(alpha = 0.6f),
+                                color =
+                                    MaterialTheme.colorScheme.onSurface
+                                        .copy(alpha = 0.6f),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                             )
@@ -268,9 +277,10 @@ fun PlaylistsScreen(
                         Text("Import")
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                ),
+                colors =
+                    TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                    ),
             )
         },
         floatingActionButton = {
@@ -294,124 +304,129 @@ fun PlaylistsScreen(
             derivedStateOf { listState.firstVisibleItemIndex > 8 }
         }
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            state = listState,
-            contentPadding = PaddingValues(vertical = 8.dp),
-        ) {
-            importStatus?.let { msg ->
-                item(key = "import-status") {
-                    Text(
-                        text = msg,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
-                    )
-                }
-            }
-            item(key = "liked-songs") {
-                LikedSongsRow(count = likedCount, onTap = onOpenLikedSongs)
-            }
-            if (playlists.size >= 6) {
-                item(key = "filter") {
-                    androidx.compose.material3.OutlinedTextField(
-                        value = listFilter,
-                        onValueChange = { listFilter = it },
-                        placeholder = { Text("Filter playlists…") },
-                        singleLine = true,
-                        leadingIcon = {
-                            Icon(Icons.Filled.Search, contentDescription = null)
-                        },
-                        trailingIcon = if (listFilter.isNotEmpty()) {
-                            {
-                                TooltipIconButton(
-                                    tooltip = "Clear",
-                                    onClick = { listFilter = "" },
-                                ) {
-                                    Icon(Icons.Filled.Close, contentDescription = "Clear")
-                                }
-                            }
-                        } else null,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 4.dp),
-                    )
-                }
-            }
-            if (playlists.isEmpty()) {
-                item(key = "empty") {
-                    Box(
-                        modifier = Modifier.fillMaxWidth().padding(top = 32.dp, start = 24.dp, end = 24.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                state = listState,
+                contentPadding = PaddingValues(vertical = 8.dp),
+            ) {
+                importStatus?.let { msg ->
+                    item(key = "import-status") {
                         Text(
-                            "No playlists yet — tap + to create one, then long-press any track to add it.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                            text = msg,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
                         )
                     }
                 }
-            } else {
-                items(filteredPlaylists, key = { it.id }) { playlist ->
-                    PlaylistRow(
-                        playlist = playlist,
-                        coverUri = coverByPlaylistId[playlist.id],
-                        trackCount = trackCountByPlaylistId[playlist.id] ?: 0L,
-                        onTap = { onOpenPlaylist(playlist.id) },
-                        onLongPress = { actionPlaylist = playlist },
-                    )
+                item(key = "liked-songs") {
+                    LikedSongsRow(count = likedCount, onTap = onOpenLikedSongs)
                 }
-                if (filteredPlaylists.isEmpty() && listFilter.isNotBlank()) {
-                    item(key = "no-match") {
-                        Column(
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
+                if (playlists.size >= 6) {
+                    item(key = "filter") {
+                        androidx.compose.material3.OutlinedTextField(
+                            value = listFilter,
+                            onValueChange = { listFilter = it },
+                            placeholder = { Text("Filter playlists…") },
+                            singleLine = true,
+                            leadingIcon = {
+                                Icon(Icons.Filled.Search, contentDescription = null)
+                            },
+                            trailingIcon =
+                                if (listFilter.isNotEmpty()) {
+                                    {
+                                        TooltipIconButton(
+                                            tooltip = "Clear",
+                                            onClick = { listFilter = "" },
+                                        ) {
+                                            Icon(Icons.Filled.Close, contentDescription = "Clear")
+                                        }
+                                    }
+                                } else {
+                                    null
+                                },
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                        )
+                    }
+                }
+                if (playlists.isEmpty()) {
+                    item(key = "empty") {
+                        Box(
+                            modifier = Modifier.fillMaxWidth().padding(top = 32.dp, start = 24.dp, end = 24.dp),
+                            contentAlignment = Alignment.Center,
                         ) {
                             Text(
-                                "No playlists match \"$listFilter\".",
+                                "No playlists yet — tap + to create one, then long-press any track to add it.",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
                             )
-                            Spacer(Modifier.height(8.dp))
-                            // CTA to create a playlist with the
-                            // user's filter text as the name. Removes
-                            // friction in the "couldn't find what I
-                            // wanted, want to start a new one named
-                            // for this idea" flow without needing to
-                            // tap the FAB then re-type.
-                            TextButton(onClick = {
-                                val name = listFilter.trim()
-                                listFilter = ""
-                                scope.launch {
-                                    if (name.isNotBlank()) repo.insert(name = name)
+                        }
+                    }
+                } else {
+                    items(filteredPlaylists, key = { it.id }) { playlist ->
+                        PlaylistRow(
+                            playlist = playlist,
+                            coverUri = coverByPlaylistId[playlist.id],
+                            trackCount = trackCountByPlaylistId[playlist.id] ?: 0L,
+                            onTap = { onOpenPlaylist(playlist.id) },
+                            onLongPress = { actionPlaylist = playlist },
+                        )
+                    }
+                    if (filteredPlaylists.isEmpty() && listFilter.isNotBlank()) {
+                        item(key = "no-match") {
+                            Column(
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
+                            ) {
+                                Text(
+                                    "No playlists match \"$listFilter\".",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                                )
+                                Spacer(Modifier.height(8.dp))
+                                // CTA to create a playlist with the
+                                // user's filter text as the name. Removes
+                                // friction in the "couldn't find what I
+                                // wanted, want to start a new one named
+                                // for this idea" flow without needing to
+                                // tap the FAB then re-type.
+                                TextButton(onClick = {
+                                    val name = listFilter.trim()
+                                    listFilter = ""
+                                    scope.launch {
+                                        if (name.isNotBlank()) repo.insert(name = name)
+                                    }
+                                }) {
+                                    Text("Create \"${listFilter.trim()}\"")
                                 }
-                            }) {
-                                Text("Create \"${listFilter.trim()}\"")
                             }
                         }
                     }
                 }
             }
-        }
-        if (showScrollTop) {
-            // BottomStart so we don't overlap with the primary "New
-            // playlist" FAB at BottomEnd. SmallFloatingActionButton
-            // matches the size used on PlaylistDetailScreen and
-            // StationDetailScreen so the gesture target is consistent.
-            SmallFloatingActionButton(
-                onClick = {
-                    scope.launch { listState.animateScrollToItem(0) }
-                },
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(start = 16.dp, bottom = 16.dp),
-                containerColor = MaterialTheme.colorScheme.primaryContainer,
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.KeyboardArrowUp,
-                    contentDescription = "Scroll to top",
-                )
+            if (showScrollTop) {
+                // BottomStart so we don't overlap with the primary "New
+                // playlist" FAB at BottomEnd. SmallFloatingActionButton
+                // matches the size used on PlaylistDetailScreen and
+                // StationDetailScreen so the gesture target is consistent.
+                SmallFloatingActionButton(
+                    onClick = {
+                        scope.launch { listState.animateScrollToItem(0) }
+                    },
+                    modifier =
+                        Modifier
+                            .align(Alignment.BottomStart)
+                            .padding(start = 16.dp, bottom = 16.dp),
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.KeyboardArrowUp,
+                        contentDescription = "Scroll to top",
+                    )
+                }
             }
-        }
         }
     }
 
@@ -458,16 +473,18 @@ fun PlaylistsScreen(
                         // Without this batched lookup the export
                         // would block on N artistsForTrack
                         // round-trips per the #268 fix.
-                        val artistByTrack = libraryRepo
-                            .primaryArtistNameMap(tracks.map { it.id })
-                        val entries = tracks.map { t ->
-                            com.visorcraft.radioshed.source.M3uEntry(
-                                absolutePath = t.path,
-                                durationSec = (t.durationMs / 1000L).toInt(),
-                                artist = artistByTrack[t.id],
-                                title = t.title.ifBlank { t.fileName },
-                            )
-                        }
+                        val artistByTrack =
+                            libraryRepo
+                                .primaryArtistNameMap(tracks.map { it.id })
+                        val entries =
+                            tracks.map { t ->
+                                com.visorcraft.radioshed.source.M3uEntry(
+                                    absolutePath = t.path,
+                                    durationSec = (t.durationMs / 1000L).toInt(),
+                                    artist = artistByTrack[t.id],
+                                    title = t.title.ifBlank { t.fileName },
+                                )
+                            }
                         m3uExporter.exportM3u(target.name, entries)
                     }
                 }
@@ -547,9 +564,13 @@ private fun PlaylistActionsSheet(
                 text = playlist.name,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(
-                    start = 24.dp, end = 24.dp, top = 8.dp, bottom = 0.dp,
-                ),
+                modifier =
+                    Modifier.padding(
+                        start = 24.dp,
+                        end = 24.dp,
+                        top = 8.dp,
+                        bottom = 0.dp,
+                    ),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -558,8 +579,10 @@ private fun PlaylistActionsSheet(
             // "Workout" mixes accumulated over time, etc.). Quiet
             // styling so it doesn't compete with the title.
             Text(
-                text = "Created " + com.visorcraft.radioshed.data
-                    .formatShortDate(playlist.createdAt),
+                text =
+                    "Created " +
+                        com.visorcraft.radioshed.data
+                            .formatShortDate(playlist.createdAt),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                 modifier = Modifier.padding(horizontal = 24.dp, vertical = 0.dp),
@@ -645,14 +668,16 @@ private fun RenamePlaylistDialog(
                 onValueChange = { text = it },
                 singleLine = true,
                 placeholder = { Text("Playlist name") },
-                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                    imeAction = androidx.compose.ui.text.input.ImeAction.Done,
-                ),
-                keyboardActions = androidx.compose.foundation.text.KeyboardActions(
-                    onDone = {
-                        if (text.trim().isNotBlank()) onConfirm(text.trim())
-                    },
-                ),
+                keyboardOptions =
+                    androidx.compose.foundation.text.KeyboardOptions(
+                        imeAction = androidx.compose.ui.text.input.ImeAction.Done,
+                    ),
+                keyboardActions =
+                    androidx.compose.foundation.text.KeyboardActions(
+                        onDone = {
+                            if (text.trim().isNotBlank()) onConfirm(text.trim())
+                        },
+                    ),
                 modifier = Modifier.fillMaxWidth(),
             )
         },
@@ -675,7 +700,10 @@ private fun RenamePlaylistDialog(
  * collection rather than another user playlist.
  */
 @Composable
-private fun LikedSongsRow(count: Long, onTap: () -> Unit) {
+private fun LikedSongsRow(
+    count: Long,
+    onTap: () -> Unit,
+) {
     Surface(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onTap),
         color = Color.Transparent,
@@ -685,10 +713,11 @@ private fun LikedSongsRow(count: Long, onTap: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(MaterialTheme.colorScheme.primaryContainer),
+                modifier =
+                    Modifier
+                        .size(48.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(MaterialTheme.colorScheme.primaryContainer),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
@@ -707,8 +736,12 @@ private fun LikedSongsRow(count: Long, onTap: () -> Unit) {
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    text = if (count == 0L) "Tap the heart on any track to start"
-                           else "$count track${if (count == 1L) "" else "s"} you love",
+                    text =
+                        if (count == 0L) {
+                            "Tap the heart on any track to start"
+                        } else {
+                            "$count track${if (count == 1L) "" else "s"} you love"
+                        },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
                     maxLines = 1,
@@ -729,9 +762,10 @@ private fun PlaylistRow(
     onLongPress: () -> Unit = {},
 ) {
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .combinedClickable(onClick = onTap, onLongClick = onLongPress),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .combinedClickable(onClick = onTap, onLongClick = onLongPress),
         color = Color.Transparent,
     ) {
         Row(
@@ -739,13 +773,17 @@ private fun PlaylistRow(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(
-                        if (coverUri != null) MaterialTheme.colorScheme.surfaceVariant
-                        else MaterialTheme.colorScheme.primaryContainer,
-                    ),
+                modifier =
+                    Modifier
+                        .size(48.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(
+                            if (coverUri != null) {
+                                MaterialTheme.colorScheme.surfaceVariant
+                            } else {
+                                MaterialTheme.colorScheme.primaryContainer
+                            },
+                        ),
                 contentAlignment = Alignment.Center,
             ) {
                 if (coverUri != null) {
@@ -772,12 +810,13 @@ private fun PlaylistRow(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                val subtitle = buildString {
-                    append(trackCount).append(if (trackCount == 1L) " track" else " tracks")
-                    playlist.description?.takeIf { it.isNotBlank() }?.let {
-                        append(" · ").append(it)
+                val subtitle =
+                    buildString {
+                        append(trackCount).append(if (trackCount == 1L) " track" else " tracks")
+                        playlist.description?.takeIf { it.isNotBlank() }?.let {
+                            append(" · ").append(it)
+                        }
                     }
-                }
                 Text(
                     text = subtitle,
                     style = MaterialTheme.typography.bodySmall,
@@ -805,12 +844,14 @@ private fun CreatePlaylistDialog(
                 onValueChange = { name = it },
                 label = { Text("Name") },
                 singleLine = true,
-                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                    imeAction = androidx.compose.ui.text.input.ImeAction.Done,
-                ),
-                keyboardActions = androidx.compose.foundation.text.KeyboardActions(
-                    onDone = { if (name.isNotBlank()) onCreate(name) },
-                ),
+                keyboardOptions =
+                    androidx.compose.foundation.text.KeyboardOptions(
+                        imeAction = androidx.compose.ui.text.input.ImeAction.Done,
+                    ),
+                keyboardActions =
+                    androidx.compose.foundation.text.KeyboardActions(
+                        onDone = { if (name.isNotBlank()) onCreate(name) },
+                    ),
             )
         },
         confirmButton = {

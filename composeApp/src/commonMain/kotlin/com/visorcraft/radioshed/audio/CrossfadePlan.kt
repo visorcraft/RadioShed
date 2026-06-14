@@ -16,15 +16,14 @@ import com.visorcraft.radioshed.domain.CrossfadeCurve
 data class CrossfadePlan(
     val durationMs: Long,
     val curve: CrossfadeCurve,
+    /** When true, [effectiveCrossfadeDurationMs] adjusts duration per transition. */
+    val smart: Boolean = false,
 )
 
 /**
  * Default crossfade duration (seconds) used when the station rule is
- * [Crossfade.Smart]. SPEC §7 "Smart Fades" is content-aware (it inspects the
- * tail/head of each track); that analysis is a later phase. For PLAN 3.2 Smart
- * behaves as a fixed crossfade of this length so users who pick Smart still get
- * an audible overlap rather than a silent no-op. Documented as a known
- * simplification.
+ * [Crossfade.Smart]. Content-aware duration is derived from outgoing/incoming
+ * track lengths via [computeSmartFadeDurationMs] at arm time.
  */
 const val SMART_CROSSFADE_DEFAULT_SEC = 6
 
@@ -42,21 +41,61 @@ const val CROSSFADE_MAX_SEC = 12
  * - [Crossfade.Smart] → [SMART_CROSSFADE_DEFAULT_SEC] with the equal-power
  *   curve (the musically-neutral default) — see [SMART_CROSSFADE_DEFAULT_SEC].
  */
-fun resolveCrossfadePlan(crossfade: Crossfade): CrossfadePlan? = when (crossfade) {
-    is Crossfade.Off -> null
-    is Crossfade.Fixed -> {
-        val sec = crossfade.seconds
-        if (sec <= 0) null
-        else CrossfadePlan(
-            durationMs = sec.coerceIn(1, CROSSFADE_MAX_SEC) * 1_000L,
-            curve = crossfade.curve,
-        )
+fun resolveCrossfadePlan(crossfade: Crossfade): CrossfadePlan? =
+    when (crossfade) {
+        is Crossfade.Off -> null
+        is Crossfade.Fixed -> {
+            val sec = crossfade.seconds
+            if (sec <= 0) {
+                null
+            } else {
+                CrossfadePlan(
+                    durationMs = sec.coerceIn(1, CROSSFADE_MAX_SEC) * 1_000L,
+                    curve = crossfade.curve,
+                )
+            }
+        }
+        is Crossfade.Smart ->
+            CrossfadePlan(
+                durationMs = SMART_CROSSFADE_DEFAULT_SEC * 1_000L,
+                curve = CrossfadeCurve.EqualPower,
+                smart = true,
+            )
     }
-    is Crossfade.Smart -> CrossfadePlan(
-        durationMs = SMART_CROSSFADE_DEFAULT_SEC * 1_000L,
-        curve = CrossfadeCurve.EqualPower,
-    )
+
+/**
+ * Derives a crossfade length from track durations. Shorter tracks get tighter
+ * overlaps; longer tracks allow up to [CROSSFADE_MAX_SEC]. Falls back to
+ * [SMART_CROSSFADE_DEFAULT_SEC] when either duration is unknown.
+ */
+fun computeSmartFadeDurationMs(
+    outgoingDurationMs: Long,
+    incomingDurationMs: Long,
+): Long {
+    if (outgoingDurationMs <= 0L || incomingDurationMs <= 0L) {
+        return SMART_CROSSFADE_DEFAULT_SEC * 1_000L
+    }
+    val shorterSec = minOf(outgoingDurationMs, incomingDurationMs) / 1_000.0
+    val targetSec =
+        when {
+            shorterSec < 30 -> 2.0
+            shorterSec < 120 -> (shorterSec * 0.08).coerceIn(2.0, 6.0)
+            else -> (shorterSec * 0.10).coerceIn(3.0, CROSSFADE_MAX_SEC.toDouble())
+        }
+    return (targetSec * 1_000).toLong()
 }
+
+/** Resolves the duration to use for arming or executing a crossfade. */
+fun effectiveCrossfadeDurationMs(
+    plan: CrossfadePlan,
+    outgoingDurationMs: Long,
+    incomingDurationMs: Long,
+): Long =
+    if (plan.smart) {
+        computeSmartFadeDurationMs(outgoingDurationMs, incomingDurationMs)
+    } else {
+        plan.durationMs
+    }
 
 /**
  * True when playback has entered the crossfade arming window: the track is the
@@ -68,7 +107,11 @@ fun resolveCrossfadePlan(crossfade: Crossfade): CrossfadePlan? = when (crossfade
  * @param durationMs total track duration; non-positive means "unknown" → never arm.
  * @param crossfadeMs resolved crossfade length; non-positive → never arm.
  */
-fun shouldArmCrossfade(positionMs: Long, durationMs: Long, crossfadeMs: Long): Boolean {
+fun shouldArmCrossfade(
+    positionMs: Long,
+    durationMs: Long,
+    crossfadeMs: Long,
+): Boolean {
     if (durationMs <= 0L || crossfadeMs <= 0L) return false
     // Refuse to crossfade a track shorter than (or barely longer than) the fade
     // window — fading the entire body of a 5-second jingle is worse than a cut.

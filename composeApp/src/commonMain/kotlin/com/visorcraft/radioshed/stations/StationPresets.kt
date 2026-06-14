@@ -27,56 +27,57 @@ internal data class StationPreset(
     val customSubtitle: String? = null,
 )
 
-internal val DefaultPresets: List<StationPreset> = listOf(
-    StationPreset(
-        name = "Latest Hits",
-        color = 0xFFFF7F1A.toInt(),    // RadioShed brand amber
-        source = SourceRule.SmartQuery(SmartQueryKind.NewestN, limit = 100),
-        playback = PlaybackRule(order = PlayOrder.SmartShuffle),
-        sortPosition = 0,
-        customSubtitle = "Newest 100 tracks · smart shuffle",
-    ),
-    StationPreset(
-        name = "All Music",
-        color = 0xFF607D8B.toInt(),
-        source = SourceRule.SmartQuery(SmartQueryKind.NewestN, limit = 100_000),
-        playback = PlaybackRule(order = PlayOrder.SmartShuffle),
-        sortPosition = 1,
-        customSubtitle = "Everything, smart shuffle",
-    ),
-    StationPreset(
-        name = "Discover",
-        color = 0xFF7B68EE.toInt(),
-        source = SourceRule.SmartQuery(SmartQueryKind.LeastPlayed, limit = 100),
-        playback = PlaybackRule(order = PlayOrder.SmartShuffle),
-        sortPosition = 2,
-        customSubtitle = "Tracks you've barely heard",
-    ),
-    StationPreset(
-        name = "Top Rated",
-        color = 0xFFFFC107.toInt(),
-        source = SourceRule.SmartQuery(SmartQueryKind.HighestRated, limit = 100),
-        playback = PlaybackRule(order = PlayOrder.SmartShuffle),
-        sortPosition = 3,
-        customSubtitle = "4★ and up",
-    ),
-    StationPreset(
-        name = "Recently Added",
-        color = 0xFF4ECDC4.toInt(),
-        source = SourceRule.SmartQuery(SmartQueryKind.RecentlyAdded, limit = 50),
-        playback = PlaybackRule(order = PlayOrder.SmartShuffle),
-        sortPosition = 4,
-        customSubtitle = "Newest 50 by file ctime",
-    ),
-    StationPreset(
-        name = "Forgotten Gems",
-        color = 0xFFFF6B6B.toInt(),
-        source = SourceRule.SmartQuery(SmartQueryKind.ForgottenGems, limit = 100),
-        playback = PlaybackRule(order = PlayOrder.SmartShuffle),
-        sortPosition = 5,
-        customSubtitle = "4★+ tracks you haven't heard in months",
-    ),
-)
+internal val DefaultPresets: List<StationPreset> =
+    listOf(
+        StationPreset(
+            name = "Latest Hits",
+            color = 0xFFFF7F1A.toInt(), // RadioShed brand amber
+            source = SourceRule.SmartQuery(SmartQueryKind.NewestN, limit = 100),
+            playback = PlaybackRule(order = PlayOrder.SmartShuffle),
+            sortPosition = 0,
+            customSubtitle = "Newest 100 tracks · smart shuffle",
+        ),
+        StationPreset(
+            name = "All Music",
+            color = 0xFF607D8B.toInt(),
+            source = SourceRule.SmartQuery(SmartQueryKind.NewestN, limit = 100_000),
+            playback = PlaybackRule(order = PlayOrder.SmartShuffle),
+            sortPosition = 1,
+            customSubtitle = "Everything, smart shuffle",
+        ),
+        StationPreset(
+            name = "Discover",
+            color = 0xFF7B68EE.toInt(),
+            source = SourceRule.SmartQuery(SmartQueryKind.LeastPlayed, limit = 100),
+            playback = PlaybackRule(order = PlayOrder.SmartShuffle),
+            sortPosition = 2,
+            customSubtitle = "Tracks you've barely heard",
+        ),
+        StationPreset(
+            name = "Top Rated",
+            color = 0xFFFFC107.toInt(),
+            source = SourceRule.SmartQuery(SmartQueryKind.HighestRated, limit = 100),
+            playback = PlaybackRule(order = PlayOrder.SmartShuffle),
+            sortPosition = 3,
+            customSubtitle = "4★ and up",
+        ),
+        StationPreset(
+            name = "Recently Added",
+            color = 0xFF4ECDC4.toInt(),
+            source = SourceRule.SmartQuery(SmartQueryKind.RecentlyAdded, limit = 50),
+            playback = PlaybackRule(order = PlayOrder.SmartShuffle),
+            sortPosition = 4,
+            customSubtitle = "Newest 50 by file ctime",
+        ),
+        StationPreset(
+            name = "Forgotten Gems",
+            color = 0xFFFF6B6B.toInt(),
+            source = SourceRule.SmartQuery(SmartQueryKind.ForgottenGems, limit = 100),
+            playback = PlaybackRule(order = PlayOrder.SmartShuffle),
+            sortPosition = 5,
+            customSubtitle = "4★+ tracks you haven't heard in months",
+        ),
+    )
 
 /**
  * Idempotently seeds the built-in presets.
@@ -108,32 +109,35 @@ class PresetSeeder(
      */
     private val seedMutex = kotlinx.coroutines.sync.Mutex()
 
-    suspend fun seedIfEmpty(): SeedResult = seedMutex.withLock {
-        if (folderRepo.count() == 0L) return@withLock SeedResult.NoLibraryYet
+    suspend fun seedIfEmpty(): SeedResult =
+        seedMutex.withLock {
+            if (folderRepo.count() == 0L) return@withLock SeedResult.NoLibraryYet
 
-        val existingNames = stationRepo.list().map { it.name }.toSet()
-        val missing = DefaultPresets.filter { it.name !in existingNames }
-        if (missing.isEmpty()) return@withLock SeedResult.AlreadyHasStations
+            val existingNames = stationRepo.list().map { it.name }.toSet()
+            val missing = DefaultPresets.filter { it.name !in existingNames }
+            if (missing.isEmpty()) return@withLock SeedResult.AlreadyHasStations
 
-        var inserted = 0
-        for (preset in missing) {
-            stationRepo.insert(
-                name = preset.name,
-                source = preset.source,
-                playback = preset.playback,
-                color = preset.color,
-                sortPosition = preset.sortPosition,
-                customSubtitle = preset.customSubtitle,
-                isBuiltIn = true,
-            )
-            inserted += 1
+            var inserted = 0
+            for (preset in missing) {
+                stationRepo.insert(
+                    name = preset.name,
+                    source = preset.source,
+                    playback = preset.playback,
+                    color = preset.color,
+                    sortPosition = preset.sortPosition,
+                    customSubtitle = preset.customSubtitle,
+                    isBuiltIn = true,
+                )
+                inserted += 1
+            }
+            SeedResult.Seeded(inserted)
         }
-        SeedResult.Seeded(inserted)
-    }
 
     sealed interface SeedResult {
         data object AlreadyHasStations : SeedResult
+
         data object NoLibraryYet : SeedResult
+
         data class Seeded(val count: Int) : SeedResult
     }
 }

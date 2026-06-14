@@ -20,31 +20,33 @@ fun main(args: Array<String>) {
     args.drop(1).forEach { File(it).apply { parentFile.mkdirs() }.writeText(rendered) }
 }
 
-internal fun render(licensesDir: File): String = buildString {
-    appendLine("RadioShed — Third-Party Licenses")
-    appendLine("Generated from LicenseCatalog.kt. Do not edit by hand.")
-    appendLine("=".repeat(78))
-    appendLine()
-    (listOf(RADIOSHED_PROPRIETARY) + THIRD_PARTY_COMPONENTS).forEach { c ->
-        appendLine(c.name)
-        appendLine("  Coordinate: ${c.coordinate}")
-        if (c.version.isNotBlank()) appendLine("  Version:    ${c.version}")
-        appendLine("  License:    ${c.license.displayName} (${c.license.spdx})")
-        appendLine("  Copyright:  ${c.copyright}")
-        appendLine("  Homepage:   ${c.homepage}")
-        appendLine("  Platforms:  ${c.platforms.joinToString(", ")}")
-        c.notes?.let { appendLine("  Notes:      $it") }
+internal fun render(licensesDir: File): String =
+    buildString {
+        appendLine("RadioShed — Third-Party Licenses")
+        appendLine("Generated from LicenseCatalog.kt. Do not edit by hand.")
+        appendLine("=".repeat(78))
         appendLine()
-        // Render the primary license body, then any secondary bodies layered
-        // components must reproduce (e.g. sqlite-jdbc -> BSD-2-Clause, Skiko ->
-        // BSD-3-Clause), so the in-app screen and this file disclose them inline.
-        (listOf(c.license) + c.additionalLicenses).forEach { license ->
-            val body = File(licensesDir, license.textResource.substringAfterLast('/'))
-                .takeIf { it.exists() }?.readText().orEmpty()
-            appendLine(body.trimEnd())
+        (listOf(RADIOSHED_PROPRIETARY) + THIRD_PARTY_COMPONENTS).forEach { c ->
+            appendLine(c.name)
+            appendLine("  Coordinate: ${c.coordinate}")
+            if (c.version.isNotBlank()) appendLine("  Version:    ${c.version}")
+            appendLine("  License:    ${c.license.displayName} (${c.license.spdx})")
+            appendLine("  Copyright:  ${c.copyright}")
+            appendLine("  Homepage:   ${c.homepage}")
+            appendLine("  Platforms:  ${c.platforms.joinToString(", ")}")
+            c.notes?.let { appendLine("  Notes:      $it") }
+            appendLine()
+            // Render the primary license body, then any secondary bodies layered
+            // components must reproduce (e.g. sqlite-jdbc -> BSD-2-Clause, Skiko ->
+            // BSD-3-Clause), so the in-app screen and this file disclose them inline.
+            (listOf(c.license) + c.additionalLicenses).forEach { license ->
+                val body =
+                    File(licensesDir, license.textResource.substringAfterLast('/'))
+                        .takeIf { it.exists() }?.readText().orEmpty()
+                appendLine(body.trimEnd())
+                appendLine()
+            }
+            appendLine("-".repeat(78))
             appendLine()
         }
-        appendLine("-".repeat(78))
-        appendLine()
     }
-}

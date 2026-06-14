@@ -6,10 +6,10 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 
 class CueParserTest {
-
     @Test
     fun parses_basic_album_cue() {
-        val cue = """
+        val cue =
+            """
             PERFORMER "Pink Floyd"
             TITLE "The Dark Side of the Moon"
             FILE "DSOTM.flac" WAVE
@@ -23,7 +23,7 @@ class CueParserTest {
               TRACK 03 AUDIO
                 TITLE "On the Run"
                 INDEX 01 03:54:64
-        """.trimIndent()
+            """.trimIndent()
 
         val sheet = CueParser.parse(cue)
         assertEquals("Pink Floyd", sheet.performer)
@@ -50,12 +50,13 @@ class CueParserTest {
         assertEquals(expectedT2Start, t2.startMs)
 
         val t3 = file.tracks[2]
-        assertNull(t3.endMs)  // last track has no successor
+        assertNull(t3.endMs) // last track has no successor
     }
 
     @Test
     fun handles_rem_comments_and_isrc() {
-        val cue = """
+        val cue =
+            """
             REM GENRE Rock
             REM DATE 1973
             PERFORMER "Pink Floyd"
@@ -65,7 +66,7 @@ class CueParserTest {
                 ISRC US00000001
                 TITLE "Track One"
                 INDEX 01 00:00:00
-        """.trimIndent()
+            """.trimIndent()
 
         val sheet = CueParser.parse(cue)
         val track = sheet.files.single().tracks.single()
@@ -75,14 +76,15 @@ class CueParserTest {
 
     @Test
     fun handles_unquoted_strings() {
-        val cue = """
+        val cue =
+            """
             PERFORMER Beatles
             TITLE Revolver
             FILE Revolver.flac WAVE
               TRACK 01 AUDIO
                 TITLE Taxman
                 INDEX 01 00:00:00
-        """.trimIndent()
+            """.trimIndent()
 
         val sheet = CueParser.parse(cue)
         assertEquals("Beatles", sheet.performer)
@@ -92,12 +94,13 @@ class CueParserTest {
 
     @Test
     fun ignores_index_00_pregap() {
-        val cue = """
+        val cue =
+            """
             FILE "x.flac" WAVE
               TRACK 01 AUDIO
                 INDEX 00 00:00:00
                 INDEX 01 00:02:00
-        """.trimIndent()
+            """.trimIndent()
 
         val track = CueParser.parse(cue).files.single().tracks.single()
         // INDEX 01 wins over INDEX 00
@@ -106,7 +109,8 @@ class CueParserTest {
 
     @Test
     fun parses_multi_file_cue_concatenated() {
-        val cue = """
+        val cue =
+            """
             FILE "side-a.flac" WAVE
               TRACK 01 AUDIO
                 TITLE "A1"
@@ -118,7 +122,7 @@ class CueParserTest {
               TRACK 03 AUDIO
                 TITLE "B1"
                 INDEX 01 00:00:00
-        """.trimIndent()
+            """.trimIndent()
 
         val sheet = CueParser.parse(cue)
         assertEquals(2, sheet.files.size)
@@ -130,14 +134,15 @@ class CueParserTest {
 
     @Test
     fun malformed_lines_are_skipped() {
-        val cue = """
+        val cue =
+            """
             PERFORMER
             TITLE "Album"
             INDEX 01 invalid:format:here
             FILE "x.flac" WAVE
               TRACK 01 AUDIO
                 INDEX 01 00:00:00
-        """.trimIndent()
+            """.trimIndent()
 
         // Should not throw; should still parse what it can
         val sheet = CueParser.parse(cue)

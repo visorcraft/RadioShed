@@ -16,7 +16,6 @@ data class BtPeer(val mac: String, val name: String)
  * current set of connected peers and updates as devices connect/disconnect.
  */
 interface BluetoothWatcher {
-
     /** The currently-connected Bluetooth peers. Empty until [start]. */
     val connectedDevices: StateFlow<Set<BtPeer>>
 

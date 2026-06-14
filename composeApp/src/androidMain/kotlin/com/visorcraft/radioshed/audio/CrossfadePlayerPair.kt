@@ -57,7 +57,6 @@ class CrossfadePlayerPair(
      */
     private val onActivePlayerChanged: (ExoPlayer) -> Unit,
 ) {
-
     private var primaryIsActive = true
 
     /** The audible, session-backing player in steady state. */
@@ -107,8 +106,9 @@ class CrossfadePlayerPair(
     fun preloadUpNext(item: MediaItem) {
         if (crossfadeInFlight) return
         val sb = standby
-        val alreadyLoaded = sb.currentMediaItem?.mediaId == item.mediaId &&
-            sb.mediaItemCount > 0
+        val alreadyLoaded =
+            sb.currentMediaItem?.mediaId == item.mediaId &&
+                sb.mediaItemCount > 0
         if (alreadyLoaded) return
         runCatching {
             sb.volume = 0f
@@ -154,8 +154,9 @@ class CrossfadePlayerPair(
             val outgoingStart = outgoing.volume.coerceIn(0f, 1f)
             try {
                 // Prepare incoming at silence unless preloadUpNext already did.
-                val preloaded = incoming.currentMediaItem?.mediaId == item.mediaId &&
-                    incoming.mediaItemCount > 0
+                val preloaded =
+                    incoming.currentMediaItem?.mediaId == item.mediaId &&
+                        incoming.mediaItemCount > 0
                 incoming.volume = 0f
                 if (!preloaded) {
                     incoming.setMediaItem(item)
@@ -163,9 +164,10 @@ class CrossfadePlayerPair(
                 }
                 // Carry the outgoing player's playback rate onto the incoming
                 // one so a non-1.0 speed survives the swap.
-                incoming.playbackParameters = PlaybackParameters(
-                    outgoing.playbackParameters.speed.coerceAtLeast(0.01f),
-                )
+                incoming.playbackParameters =
+                    PlaybackParameters(
+                        outgoing.playbackParameters.speed.coerceAtLeast(0.01f),
+                    )
                 incoming.playWhenReady = true
                 incoming.play()
 

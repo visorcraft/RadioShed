@@ -13,16 +13,22 @@ package com.visorcraft.radioshed.source
  * the GarageBand workflow. Returns [Result.NotSupported] there.
  */
 interface RingtoneSetter {
-    suspend fun setAsRingtone(absolutePath: String, displayName: String): Result
+    suspend fun setAsRingtone(
+        absolutePath: String,
+        displayName: String,
+    ): Result
 
     sealed interface Result {
         /** Ringtone successfully set as the system default. */
         data object Ok : Result
+
         /** WRITE_SETTINGS not granted; the impl launched the system
          *  permission screen so the user can grant it manually. */
         data object NeedsPermission : Result
+
         /** Platform doesn't support programmatic ringtone setting. */
         data object NotSupported : Result
+
         /** Anything else (file gone, MediaStore insert failed). */
         data class Failed(val reason: String) : Result
     }

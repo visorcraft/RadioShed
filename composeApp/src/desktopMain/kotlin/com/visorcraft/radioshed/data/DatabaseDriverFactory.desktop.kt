@@ -87,7 +87,10 @@ actual class DatabaseDriverFactory {
      * we inline the literal — `version` is an internal Long we
      * control, never user input, so no injection surface.
      */
-    private fun setVersion(driver: SqlDriver, version: Long) {
+    private fun setVersion(
+        driver: SqlDriver,
+        version: Long,
+    ) {
         driver.execute(null, "PRAGMA user_version = $version", 0)
     }
 

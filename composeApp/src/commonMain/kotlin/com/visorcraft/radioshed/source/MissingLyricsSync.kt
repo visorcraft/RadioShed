@@ -25,14 +25,19 @@ class MissingLyricsSync(
     private val lyricsService: LyricsService,
     private val networkGate: NetworkPolicyGate,
 ) {
-
     sealed interface Progress {
         data class Started(val total: Int) : Progress
+
         data class Fetching(val trackId: Long, val index: Int, val total: Int) : Progress
+
         data class Found(val trackId: Long) : Progress
+
         data class Missing(val trackId: Long) : Progress
+
         data class Failed(val trackId: Long, val reason: String) : Progress
+
         data class Completed(val found: Int, val missing: Int, val failed: Int) : Progress
+
         /**
          * The connectivity policy doesn't permit a sweep right now
          * (Never, or WiFi-only on a metered network). Mirrors the
@@ -54,56 +59,59 @@ class MissingLyricsSync(
         const val MISS_TTL_MS: Long = 30L * 24L * 60L * 60L * 1_000L
     }
 
-    fun sweep(): Flow<Progress> = flow {
-        // Honour connectivity policy. The user explicitly tapped
-        // "Start sweep", so this counts as user-initiated — Manual
-        // policy permits it; Never and WiFi-only-on-metered still
-        // block. Same gate as the artwork sweep, with a per-service
-        // Lyrics override consulted before the global policy.
-        if (!networkGate.allowUserInitiatedFetch(NetworkService.Lyrics)) {
-            emit(Progress.PolicyBlocked)
-            return@flow
-        }
-        val threshold = nowMillis() - MISS_TTL_MS
-        val targets = lyricsCache.trackIdsMissingLyrics(threshold)
-        emit(Progress.Started(total = targets.size))
-        if (targets.isEmpty()) {
-            emit(Progress.Completed(found = 0, missing = 0, failed = 0))
-            return@flow
-        }
+    fun sweep(): Flow<Progress> =
+        flow {
+            // Honour connectivity policy. The user explicitly tapped
+            // "Start sweep", so this counts as user-initiated — Manual
+            // policy permits it; Never and WiFi-only-on-metered still
+            // block. Same gate as the artwork sweep, with a per-service
+            // Lyrics override consulted before the global policy.
+            if (!networkGate.allowUserInitiatedFetch(NetworkService.Lyrics)) {
+                emit(Progress.PolicyBlocked)
+                return@flow
+            }
+            val threshold = nowMillis() - MISS_TTL_MS
+            val targets = lyricsCache.trackIdsMissingLyrics(threshold)
+            emit(Progress.Started(total = targets.size))
+            if (targets.isEmpty()) {
+                emit(Progress.Completed(found = 0, missing = 0, failed = 0))
+                return@flow
+            }
 
-        var found = 0
-        var missing = 0
-        var failed = 0
-        targets.forEachIndexed { index, trackId ->
-            // Same 200ms gap as the artwork sweep — LRClib doesn't
-            // publish a hard rate limit but bursting hundreds of
-            // GETs in a few seconds invites 429s.
-            if (index > 0) kotlinx.coroutines.delay(REQUEST_DELAY_MS)
-            emit(Progress.Fetching(trackId = trackId, index = index, total = targets.size))
-            val outcome = runCatching { lyricsService.resolve(trackId) }
-            when {
-                outcome.isFailure -> {
-                    failed += 1
-                    emit(Progress.Failed(
-                        trackId = trackId,
-                        reason = outcome.exceptionOrNull()?.message ?: "error",
-                    ))
-                }
-                outcome.getOrNull() == null -> {
-                    // Either no metadata to query with, or LRClib
-                    // returned a clean miss. The service has already
-                    // stamped the cache appropriately.
-                    missing += 1
-                    emit(Progress.Missing(trackId = trackId))
-                }
-                else -> {
-                    found += 1
-                    emit(Progress.Found(trackId = trackId))
+            var found = 0
+            var missing = 0
+            var failed = 0
+            targets.forEachIndexed { index, trackId ->
+                // Same 200ms gap as the artwork sweep — LRClib doesn't
+                // publish a hard rate limit but bursting hundreds of
+                // GETs in a few seconds invites 429s.
+                if (index > 0) kotlinx.coroutines.delay(REQUEST_DELAY_MS)
+                emit(Progress.Fetching(trackId = trackId, index = index, total = targets.size))
+                val outcome = runCatching { lyricsService.resolve(trackId) }
+                when {
+                    outcome.isFailure -> {
+                        failed += 1
+                        emit(
+                            Progress.Failed(
+                                trackId = trackId,
+                                reason = outcome.exceptionOrNull()?.message ?: "error",
+                            ),
+                        )
+                    }
+                    outcome.getOrNull() == null -> {
+                        // Either no metadata to query with, or LRClib
+                        // returned a clean miss. The service has already
+                        // stamped the cache appropriately.
+                        missing += 1
+                        emit(Progress.Missing(trackId = trackId))
+                    }
+                    else -> {
+                        found += 1
+                        emit(Progress.Found(trackId = trackId))
+                    }
                 }
             }
-        }
 
-        emit(Progress.Completed(found = found, missing = missing, failed = failed))
-    }
+            emit(Progress.Completed(found = found, missing = missing, failed = failed))
+        }
 }

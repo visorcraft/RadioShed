@@ -65,7 +65,6 @@ import org.koin.android.ext.android.inject
  * with [RESULT_OK] so the widget host finalises the placement.
  */
 class StationLauncherWidgetConfigActivity : ComponentActivity() {
-
     private val widgetConfigRepo: WidgetConfigRepository by inject()
     private val stationRepo: StationRepository by inject()
 
@@ -73,10 +72,11 @@ class StationLauncherWidgetConfigActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        val appWidgetId = intent?.extras?.getInt(
-            AppWidgetManager.EXTRA_APPWIDGET_ID,
-            AppWidgetManager.INVALID_APPWIDGET_ID,
-        ) ?: AppWidgetManager.INVALID_APPWIDGET_ID
+        val appWidgetId =
+            intent?.extras?.getInt(
+                AppWidgetManager.EXTRA_APPWIDGET_ID,
+                AppWidgetManager.INVALID_APPWIDGET_ID,
+            ) ?: AppWidgetManager.INVALID_APPWIDGET_ID
 
         // If the intent carries no valid widget id we can't save anything;
         // finish immediately so the host doesn't leave a stale placeholder.
@@ -129,15 +129,17 @@ private fun StationLauncherConfigScreen(
 
     LaunchedEffect(Unit) {
         allStations = stationRepo.list()
-        val existing = runCatching {
-            widgetConfigRepo.get(StationLauncherWidget.widgetKey(appWidgetId))
-                ?.configJson
-                ?.let { Json.decodeFromString<LauncherConfig>(it) }
-        }.getOrNull()
+        val existing =
+            runCatching {
+                widgetConfigRepo.get(StationLauncherWidget.widgetKey(appWidgetId))
+                    ?.configJson
+                    ?.let { Json.decodeFromString<LauncherConfig>(it) }
+            }.getOrNull()
         if (existing != null) {
-            assignedIds = List(StationLauncherWidget.MAX_SLOTS) { index ->
-                existing.stationIds.getOrNull(index) ?: -1L
-            }
+            assignedIds =
+                List(StationLauncherWidget.MAX_SLOTS) { index ->
+                    existing.stationIds.getOrNull(index) ?: -1L
+                }
         }
     }
 
@@ -170,10 +172,11 @@ private fun StationLauncherConfigScreen(
         },
     ) { padding ->
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(horizontal = 16.dp),
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .padding(horizontal = 16.dp),
         ) {
             Text(
                 text = "Tap a slot to pick a station. Up to ${StationLauncherWidget.MAX_SLOTS} stations.",
@@ -194,9 +197,10 @@ private fun StationLauncherConfigScreen(
                         station = station,
                         onClick = { pickerSlot = slot },
                         onClear = {
-                            assignedIds = assignedIds.toMutableList().apply {
-                                set(slot, -1L)
-                            }
+                            assignedIds =
+                                assignedIds.toMutableList().apply {
+                                    set(slot, -1L)
+                                }
                         },
                     )
                 }
@@ -209,9 +213,10 @@ private fun StationLauncherConfigScreen(
             stations = allStations,
             onSelect = { station ->
                 pickerSlot?.let { slot ->
-                    assignedIds = assignedIds.toMutableList().apply {
-                        set(slot, station.id)
-                    }
+                    assignedIds =
+                        assignedIds.toMutableList().apply {
+                            set(slot, station.id)
+                        }
                 }
                 pickerSlot = null
             },
@@ -230,27 +235,31 @@ private fun SlotRow(
     Surface(
         shape = RoundedCornerShape(12.dp),
         tonalElevation = 2.dp,
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onClick),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp),
         ) {
             StationArtwork(
                 station = station,
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(RoundedCornerShape(8.dp)),
+                modifier =
+                    Modifier
+                        .size(48.dp)
+                        .clip(RoundedCornerShape(8.dp)),
             )
 
             Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(horizontal = 12.dp),
+                modifier =
+                    Modifier
+                        .weight(1f)
+                        .padding(horizontal = 12.dp),
             ) {
                 Text(
                     text = "Slot $slot",
@@ -294,9 +303,10 @@ private fun StationPickerSheet(
         Column(modifier = Modifier.fillMaxSize()) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
             ) {
                 Text(
                     text = "Pick a station",
@@ -316,21 +326,24 @@ private fun StationPickerSheet(
                     Surface(
                         shape = RoundedCornerShape(12.dp),
                         tonalElevation = 1.dp,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onSelect(station) },
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .clickable { onSelect(station) },
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(12.dp),
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
                         ) {
                             StationArtwork(
                                 station = station,
-                                modifier = Modifier
-                                    .size(48.dp)
-                                    .clip(RoundedCornerShape(8.dp)),
+                                modifier =
+                                    Modifier
+                                        .size(48.dp)
+                                        .clip(RoundedCornerShape(8.dp)),
                             )
 
                             Text(

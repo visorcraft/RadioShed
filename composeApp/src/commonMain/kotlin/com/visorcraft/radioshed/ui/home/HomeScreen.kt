@@ -19,8 +19,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -58,16 +58,18 @@ fun HomeScreen(
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
             val isCompact = maxWidth < 600.dp
             val isExpanded = maxWidth >= 840.dp
-            val horizontalPadding = when {
-                isExpanded -> 96.dp
-                isCompact -> 24.dp
-                else -> 48.dp
-            }
+            val horizontalPadding =
+                when {
+                    isExpanded -> 96.dp
+                    isCompact -> 24.dp
+                    else -> 48.dp
+                }
 
             Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = horizontalPadding, vertical = 24.dp),
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = horizontalPadding, vertical = 24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 // Top breathing room — compressed from the pre-icon
@@ -86,11 +88,12 @@ fun HomeScreen(
                 // so the same .png at composeApp/src/commonMain/
                 // composeResources/drawable/radioshed.png feeds every
                 // target without a per-platform fork.
-                val iconSize = when {
-                    isExpanded -> 128.dp
-                    isCompact -> 96.dp
-                    else -> 112.dp
-                }
+                val iconSize =
+                    when {
+                        isExpanded -> 128.dp
+                        isCompact -> 96.dp
+                        else -> 112.dp
+                    }
                 Image(
                     painter = painterResource(Res.drawable.radioshed),
                     contentDescription = "RadioShed",
@@ -105,8 +108,12 @@ fun HomeScreen(
                     // /displayMedium) so the title doesn't tower over
                     // the mark above it. Bold weight preserves the
                     // strong wordmark feel.
-                    style = if (isCompact) MaterialTheme.typography.headlineLarge
-                    else MaterialTheme.typography.displayMedium,
+                    style =
+                        if (isCompact) {
+                            MaterialTheme.typography.headlineLarge
+                        } else {
+                            MaterialTheme.typography.displayMedium
+                        },
                     color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.Bold,
                     textAlign = TextAlign.Center,
@@ -179,16 +186,21 @@ private fun NavCard(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(
-            // `surface` is barely distinguishable from `background` on
-            // the dark theme — non-primary cards rendered as nearly
-            // invisible rectangles on the new Home layout. Switched to
-            // `surfaceContainerHigh` (one tonal step up from surface)
-            // so the tap targets read clearly without competing with
-            // the primary Stations card's container colour.
-            containerColor = if (primary) MaterialTheme.colorScheme.primaryContainer
-                             else MaterialTheme.colorScheme.surfaceContainerHigh,
-        ),
+        colors =
+            CardDefaults.cardColors(
+                // `surface` is barely distinguishable from `background` on
+                // the dark theme — non-primary cards rendered as nearly
+                // invisible rectangles on the new Home layout. Switched to
+                // `surfaceContainerHigh` (one tonal step up from surface)
+                // so the tap targets read clearly without competing with
+                // the primary Stations card's container colour.
+                containerColor =
+                    if (primary) {
+                        MaterialTheme.colorScheme.primaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.surfaceContainerHigh
+                    },
+            ),
         shape = RoundedCornerShape(16.dp),
     ) {
         // Inner padding reduced from 20dp -> 14dp/16dp pair to
@@ -205,23 +217,35 @@ private fun NavCard(
                 // new icon needs above.
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
-                color = if (primary) MaterialTheme.colorScheme.onPrimaryContainer
-                        else MaterialTheme.colorScheme.onSurface,
+                color =
+                    if (primary) {
+                        MaterialTheme.colorScheme.onPrimaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.onSurface
+                    },
             )
             Spacer(Modifier.height(2.dp))
             Text(
                 subtitle,
                 style = MaterialTheme.typography.bodySmall,
-                color = if (primary) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
-                        else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                color =
+                    if (primary) {
+                        MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                    } else {
+                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    },
             )
             badge?.let {
                 Spacer(Modifier.height(8.dp))
                 Text(
                     it,
                     style = MaterialTheme.typography.labelSmall,
-                    color = if (primary) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f)
-                            else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                    color =
+                        if (primary) {
+                            MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f)
+                        } else {
+                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                        },
                 )
             }
         }

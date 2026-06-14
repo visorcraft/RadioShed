@@ -28,8 +28,14 @@ import androidx.compose.ui.Modifier
  *     }
  */
 @Composable
-expect fun ListScrollbar(state: LazyListState, modifier: Modifier = Modifier)
+expect fun ListScrollbar(
+    state: LazyListState,
+    modifier: Modifier = Modifier,
+)
 
 /** Grid-state variant of [ListScrollbar]. See its kdoc for the call site pattern. */
 @Composable
-expect fun GridScrollbar(state: LazyGridState, modifier: Modifier = Modifier)
+expect fun GridScrollbar(
+    state: LazyGridState,
+    modifier: Modifier = Modifier,
+)

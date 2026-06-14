@@ -17,7 +17,10 @@ import androidx.compose.ui.Modifier
  * padding / interaction source if a future surface needs to.
  */
 @Composable
-actual fun ListScrollbar(state: LazyListState, modifier: Modifier) {
+actual fun ListScrollbar(
+    state: LazyListState,
+    modifier: Modifier,
+) {
     VerticalScrollbar(
         adapter = rememberScrollbarAdapter(state),
         modifier = modifier,
@@ -25,7 +28,10 @@ actual fun ListScrollbar(state: LazyListState, modifier: Modifier) {
 }
 
 @Composable
-actual fun GridScrollbar(state: LazyGridState, modifier: Modifier) {
+actual fun GridScrollbar(
+    state: LazyGridState,
+    modifier: Modifier,
+) {
     VerticalScrollbar(
         adapter = rememberScrollbarAdapter(state),
         modifier = modifier,

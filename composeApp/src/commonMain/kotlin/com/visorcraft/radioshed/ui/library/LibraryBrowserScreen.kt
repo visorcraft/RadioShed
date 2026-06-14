@@ -10,17 +10,16 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -29,19 +28,17 @@ import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.Casino
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.AssistChip
-import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SecondaryTabRow
@@ -67,10 +64,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.visorcraft.radioshed.audio.AudioEngine
-import com.visorcraft.radioshed.audio.toPlayable
-import com.visorcraft.radioshed.ui.util.TooltipIconButton
-import com.visorcraft.radioshed.ui.util.NowPlayingIndicator
-import com.visorcraft.radioshed.ui.util.onRightClick
 import com.visorcraft.radioshed.data.LibraryRepository
 import com.visorcraft.radioshed.data.SettingsStore
 import com.visorcraft.radioshed.domain.Album
@@ -79,8 +72,12 @@ import com.visorcraft.radioshed.domain.Track
 import com.visorcraft.radioshed.nav.PlatformBackHandler
 import com.visorcraft.radioshed.stations.StationPlayback
 import com.visorcraft.radioshed.ui.playlists.TrackContextSheet
+import com.visorcraft.radioshed.ui.util.NowPlayingIndicator
+import com.visorcraft.radioshed.ui.util.TooltipIconButton
+import com.visorcraft.radioshed.ui.util.onRightClick
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
+import androidx.compose.foundation.lazy.grid.items as gridItems
 
 /**
  * Library Browser — three tabs (Songs / Artists / Albums) for navigating
@@ -159,8 +156,9 @@ fun LibraryBrowserScreen(
         allTracks = libraryRepo.listAvailableTracks(limit = 100_000L, offset = 0L)
         // Distinct genre tag values. Index already exists on track_tag(key,
         // value) so this is a fast index scan even on large libraries.
-        genres = libraryRepo.distinctTagValues("GENRE")
-            .filter { it.isNotBlank() }
+        genres =
+            libraryRepo.distinctTagValues("GENRE")
+                .filter { it.isNotBlank() }
         val ids = allTracks.map { it.id }
         playCounts = stationRepo.playCountForTracks(ids)
         ratings = ratingRepo.ratingsForTracks(ids)
@@ -196,8 +194,9 @@ fun LibraryBrowserScreen(
     var artistPlayCounts by remember { mutableStateOf<Map<Long, Long>>(emptyMap()) }
     LaunchedEffect(artistSort) {
         if (artistSort == ArtistSort.MostPlayed) {
-            artistPlayCounts = stationRepo.topPlayedArtists(Long.MAX_VALUE)
-                .associate { it.id to it.plays }
+            artistPlayCounts =
+                stationRepo.topPlayedArtists(Long.MAX_VALUE)
+                    .associate { it.id to it.plays }
         }
     }
     var albumSort by remember {
@@ -218,8 +217,9 @@ fun LibraryBrowserScreen(
     var albumPlayCounts by remember { mutableStateOf<Map<Long, Long>>(emptyMap()) }
     LaunchedEffect(albumSort) {
         if (albumSort == AlbumSort.MostPlayed) {
-            albumPlayCounts = stationRepo.topPlayedAlbums(Long.MAX_VALUE)
-                .associate { it.id to it.plays }
+            albumPlayCounts =
+                stationRepo.topPlayedAlbums(Long.MAX_VALUE)
+                    .associate { it.id to it.plays }
         }
     }
     // Songs tab quick filter — hoisted to function scope so the value
@@ -253,11 +253,12 @@ fun LibraryBrowserScreen(
                         // scan picked things up.
                         Column {
                             Text("Library", style = MaterialTheme.typography.titleSmall)
-                            val countLabel = buildString {
-                                append("${allTracks.size} tracks")
-                                if (artists.isNotEmpty()) append(" · ${artists.size} artists")
-                                if (albums.isNotEmpty()) append(" · ${albums.size} albums")
-                            }
+                            val countLabel =
+                                buildString {
+                                    append("${allTracks.size} tracks")
+                                    if (artists.isNotEmpty()) append(" · ${artists.size} artists")
+                                    if (albums.isNotEmpty()) append(" · ${albums.size} albums")
+                                }
                             Text(
                                 text = countLabel,
                                 style = MaterialTheme.typography.labelSmall,
@@ -273,196 +274,199 @@ fun LibraryBrowserScreen(
                             Text("Clear")
                         }
                     } else {
-                    if (selectedTab == LibraryTab.Albums && albums.isNotEmpty()) {
-                        // Random-album entry point on the Albums view: picks
-                        // one album from the visible grid at random and
-                        // queues all of its tracks in album order. Sister
-                        // action to the Songs tab's Shuffle-all — same idea
-                        // ("surprise me, no station setup needed") but at
-                        // album granularity, which is how plenty of users
-                        // think about their music.
-                        TooltipIconButton(
-                            tooltip = "Random album",
-                            onClick = {
-                                val pick = albums.random()
-                                scope.launch {
-                                    val tracks = libraryRepo.tracksForAlbum(pick.id)
-                                    if (tracks.isNotEmpty()) {
-                                        stationPlayback.playTracks(tracks, startIndex = 0)
+                        if (selectedTab == LibraryTab.Albums && albums.isNotEmpty()) {
+                            // Random-album entry point on the Albums view: picks
+                            // one album from the visible grid at random and
+                            // queues all of its tracks in album order. Sister
+                            // action to the Songs tab's Shuffle-all — same idea
+                            // ("surprise me, no station setup needed") but at
+                            // album granularity, which is how plenty of users
+                            // think about their music.
+                            TooltipIconButton(
+                                tooltip = "Random album",
+                                onClick = {
+                                    val pick = albums.random()
+                                    scope.launch {
+                                        val tracks = libraryRepo.tracksForAlbum(pick.id)
+                                        if (tracks.isNotEmpty()) {
+                                            stationPlayback.playTracks(tracks, startIndex = 0)
+                                        }
+                                    }
+                                },
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Casino,
+                                    contentDescription = "Random album",
+                                )
+                            }
+                        }
+                        if (selectedTab == LibraryTab.Artists && artists.isNotEmpty()) {
+                            // Mirror the Songs-tab sort dropdown for the
+                            // Artists list. Same chevron-style icon so
+                            // the affordance reads as "sort" without
+                            // having to add a label that competes with
+                            // the title row.
+                            Box {
+                                TooltipIconButton(
+                                    tooltip = "Sort",
+                                    onClick = { sortMenuOpen = true },
+                                ) {
+                                    Text(
+                                        text = "↕",
+                                        style = MaterialTheme.typography.titleMedium,
+                                    )
+                                }
+                                DropdownMenu(
+                                    expanded = sortMenuOpen,
+                                    onDismissRequest = { sortMenuOpen = false },
+                                ) {
+                                    ArtistSort.entries.forEach { option ->
+                                        DropdownMenuItem(
+                                            text = { Text(option.label) },
+                                            onClick = {
+                                                artistSort = option
+                                                sortMenuOpen = false
+                                            },
+                                        )
                                     }
                                 }
-                            },
+                            }
+                        }
+                        if (selectedTab == LibraryTab.Albums && albums.isNotEmpty()) {
+                            Box {
+                                TooltipIconButton(
+                                    tooltip = "Sort",
+                                    onClick = { sortMenuOpen = true },
+                                ) {
+                                    Text(
+                                        text = "↕",
+                                        style = MaterialTheme.typography.titleMedium,
+                                    )
+                                }
+                                DropdownMenu(
+                                    expanded = sortMenuOpen,
+                                    onDismissRequest = { sortMenuOpen = false },
+                                ) {
+                                    AlbumSort.entries.forEach { option ->
+                                        DropdownMenuItem(
+                                            text = { Text(option.label) },
+                                            onClick = {
+                                                albumSort = option
+                                                sortMenuOpen = false
+                                            },
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        if (selectedTab == LibraryTab.Genres && genres.isNotEmpty()) {
+                            Box {
+                                TooltipIconButton(
+                                    tooltip = "Sort",
+                                    onClick = { sortMenuOpen = true },
+                                ) {
+                                    Text(
+                                        text = "↕",
+                                        style = MaterialTheme.typography.titleMedium,
+                                    )
+                                }
+                                DropdownMenu(
+                                    expanded = sortMenuOpen,
+                                    onDismissRequest = { sortMenuOpen = false },
+                                ) {
+                                    GenreSort.entries.forEach { option ->
+                                        DropdownMenuItem(
+                                            text = { Text(option.label) },
+                                            onClick = {
+                                                genreSort = option
+                                                sortMenuOpen = false
+                                            },
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        if (selectedTab == LibraryTab.Songs && allTracks.isNotEmpty()) {
+                            // Shuffle-all on the visible Songs view: kicks
+                            // off an ad-hoc queue from the entire current
+                            // (filtered + sorted) track list, randomized.
+                            // Distinct from the per-station SmartShuffle —
+                            // this is the "play everything I own, surprise
+                            // me" entry point that doesn't require building
+                            // a station first.
+                            // Long-press: "Random song" — picks a single
+                            // track instead of seeding the whole library.
+                            // Faster surprise without committing to a
+                            // session-length queue.
+                            Box(
+                                modifier =
+                                    Modifier.combinedClickable(
+                                        onClick = {
+                                            val pool = allTracks.shuffled()
+                                            stationPlayback.playTracks(pool, startIndex = 0)
+                                        },
+                                        onLongClick = {
+                                            val pick = allTracks.randomOrNull()
+                                            if (pick != null) {
+                                                stationPlayback.playTracks(
+                                                    listOf(pick),
+                                                    startIndex = 0,
+                                                )
+                                            }
+                                        },
+                                    ),
+                            ) {
+                                TooltipIconButton(
+                                    tooltip = "Shuffle all (long-press for one random)",
+                                    onClick = {},
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Shuffle,
+                                        contentDescription = "Shuffle all (long-press for one random)",
+                                    )
+                                }
+                            }
+                            Box {
+                                TooltipIconButton(
+                                    tooltip = "Sort",
+                                    onClick = { sortMenuOpen = true },
+                                ) {
+                                    Text(
+                                        text = "↕",
+                                        style = MaterialTheme.typography.titleMedium,
+                                    )
+                                }
+                                DropdownMenu(
+                                    expanded = sortMenuOpen,
+                                    onDismissRequest = { sortMenuOpen = false },
+                                ) {
+                                    SongSort.entries.forEach { option ->
+                                        DropdownMenuItem(
+                                            text = { Text(option.label) },
+                                            onClick = {
+                                                sortOrder = option
+                                                sortMenuOpen = false
+                                            },
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        TooltipIconButton(
+                            tooltip = "Manage folders",
+                            onClick = onManage,
                         ) {
                             Icon(
-                                imageVector = Icons.Filled.Casino,
-                                contentDescription = "Random album",
+                                imageVector = Icons.Filled.Settings,
+                                contentDescription = "Manage folders",
                             )
                         }
                     }
-                    if (selectedTab == LibraryTab.Artists && artists.isNotEmpty()) {
-                        // Mirror the Songs-tab sort dropdown for the
-                        // Artists list. Same chevron-style icon so
-                        // the affordance reads as "sort" without
-                        // having to add a label that competes with
-                        // the title row.
-                        Box {
-                            TooltipIconButton(
-                                tooltip = "Sort",
-                                onClick = { sortMenuOpen = true },
-                            ) {
-                                Text(
-                                    text = "↕",
-                                    style = MaterialTheme.typography.titleMedium,
-                                )
-                            }
-                            DropdownMenu(
-                                expanded = sortMenuOpen,
-                                onDismissRequest = { sortMenuOpen = false },
-                            ) {
-                                ArtistSort.entries.forEach { option ->
-                                    DropdownMenuItem(
-                                        text = { Text(option.label) },
-                                        onClick = {
-                                            artistSort = option
-                                            sortMenuOpen = false
-                                        },
-                                    )
-                                }
-                            }
-                        }
-                    }
-                    if (selectedTab == LibraryTab.Albums && albums.isNotEmpty()) {
-                        Box {
-                            TooltipIconButton(
-                                tooltip = "Sort",
-                                onClick = { sortMenuOpen = true },
-                            ) {
-                                Text(
-                                    text = "↕",
-                                    style = MaterialTheme.typography.titleMedium,
-                                )
-                            }
-                            DropdownMenu(
-                                expanded = sortMenuOpen,
-                                onDismissRequest = { sortMenuOpen = false },
-                            ) {
-                                AlbumSort.entries.forEach { option ->
-                                    DropdownMenuItem(
-                                        text = { Text(option.label) },
-                                        onClick = {
-                                            albumSort = option
-                                            sortMenuOpen = false
-                                        },
-                                    )
-                                }
-                            }
-                        }
-                    }
-                    if (selectedTab == LibraryTab.Genres && genres.isNotEmpty()) {
-                        Box {
-                            TooltipIconButton(
-                                tooltip = "Sort",
-                                onClick = { sortMenuOpen = true },
-                            ) {
-                                Text(
-                                    text = "↕",
-                                    style = MaterialTheme.typography.titleMedium,
-                                )
-                            }
-                            DropdownMenu(
-                                expanded = sortMenuOpen,
-                                onDismissRequest = { sortMenuOpen = false },
-                            ) {
-                                GenreSort.entries.forEach { option ->
-                                    DropdownMenuItem(
-                                        text = { Text(option.label) },
-                                        onClick = {
-                                            genreSort = option
-                                            sortMenuOpen = false
-                                        },
-                                    )
-                                }
-                            }
-                        }
-                    }
-                    if (selectedTab == LibraryTab.Songs && allTracks.isNotEmpty()) {
-                        // Shuffle-all on the visible Songs view: kicks
-                        // off an ad-hoc queue from the entire current
-                        // (filtered + sorted) track list, randomized.
-                        // Distinct from the per-station SmartShuffle —
-                        // this is the "play everything I own, surprise
-                        // me" entry point that doesn't require building
-                        // a station first.
-                        // Long-press: "Random song" — picks a single
-                        // track instead of seeding the whole library.
-                        // Faster surprise without committing to a
-                        // session-length queue.
-                        Box(
-                            modifier = Modifier.combinedClickable(
-                                onClick = {
-                                    val pool = allTracks.shuffled()
-                                    stationPlayback.playTracks(pool, startIndex = 0)
-                                },
-                                onLongClick = {
-                                    val pick = allTracks.randomOrNull()
-                                    if (pick != null) {
-                                        stationPlayback.playTracks(
-                                            listOf(pick), startIndex = 0,
-                                        )
-                                    }
-                                },
-                            ),
-                        ) {
-                            TooltipIconButton(
-                                tooltip = "Shuffle all (long-press for one random)",
-                                onClick = {},
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.Shuffle,
-                                    contentDescription = "Shuffle all (long-press for one random)",
-                                )
-                            }
-                        }
-                        Box {
-                            TooltipIconButton(
-                                tooltip = "Sort",
-                                onClick = { sortMenuOpen = true },
-                            ) {
-                                Text(
-                                    text = "↕",
-                                    style = MaterialTheme.typography.titleMedium,
-                                )
-                            }
-                            DropdownMenu(
-                                expanded = sortMenuOpen,
-                                onDismissRequest = { sortMenuOpen = false },
-                            ) {
-                                SongSort.entries.forEach { option ->
-                                    DropdownMenuItem(
-                                        text = { Text(option.label) },
-                                        onClick = {
-                                            sortOrder = option
-                                            sortMenuOpen = false
-                                        },
-                                    )
-                                }
-                            }
-                        }
-                    }
-                    TooltipIconButton(
-                        tooltip = "Manage folders",
-                        onClick = onManage,
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Settings,
-                            contentDescription = "Manage folders",
-                        )
-                    }
-                    }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                ),
+                colors =
+                    TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                    ),
             )
         },
         bottomBar = {
@@ -472,9 +476,10 @@ fun LibraryBrowserScreen(
                     tonalElevation = 3.dp,
                 ) {
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
@@ -506,12 +511,13 @@ fun LibraryBrowserScreen(
                 // because the badge clips at the tab's right edge on
                 // narrow phones.
                 LibraryTab.entries.forEach { tab ->
-                    val count = when (tab) {
-                        LibraryTab.Songs -> allTracks.size
-                        LibraryTab.Artists -> artists.size
-                        LibraryTab.Albums -> albums.size
-                        LibraryTab.Genres -> genres.size
-                    }
+                    val count =
+                        when (tab) {
+                            LibraryTab.Songs -> allTracks.size
+                            LibraryTab.Artists -> artists.size
+                            LibraryTab.Albums -> albums.size
+                            LibraryTab.Genres -> genres.size
+                        }
                     val label = if (count > 0) "${tab.label} · $count" else tab.label
                     Tab(
                         selected = selectedTab == tab,
@@ -524,9 +530,10 @@ fun LibraryBrowserScreen(
             // Active filter chips (only shown when something's filtered)
             if (artistFilter != null || albumFilter != null) {
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     artistFilter?.let { a ->
@@ -578,56 +585,67 @@ fun LibraryBrowserScreen(
                                 contentDescription = null,
                             )
                         },
-                        trailingIcon = if (songsFilter.isNotEmpty()) {
-                            {
-                                TooltipIconButton(
-                                    tooltip = "Clear filter",
-                                    onClick = { songsFilter = "" },
-                                ) {
-                                    Icon(
-                                        imageVector = androidx.compose.material.icons.Icons.Filled.Clear,
-                                        contentDescription = "Clear filter",
-                                    )
+                        trailingIcon =
+                            if (songsFilter.isNotEmpty()) {
+                                {
+                                    TooltipIconButton(
+                                        tooltip = "Clear filter",
+                                        onClick = { songsFilter = "" },
+                                    ) {
+                                        Icon(
+                                            imageVector = androidx.compose.material.icons.Icons.Filled.Clear,
+                                            contentDescription = "Clear filter",
+                                        )
+                                    }
+                                }
+                            } else {
+                                null
+                            },
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 4.dp),
+                    )
+                    val filtered =
+                        allTracks
+                            .let { tracks ->
+                                albumFilter?.let { al -> tracks.filter { it.albumId == al.id } } ?: tracks
+                            }
+                            .let { tracks ->
+                                // Artist filter requires a join; we don't have artist
+                                // info on Track domain. We DO have the artist's tracks
+                                // via libraryRepo.tracksForArtist — but that's another
+                                // query. For MVP: when artist filter is active, fetch
+                                // their tracks separately. Simpler than passing the
+                                // pre-fetched list around.
+                                tracks
+                            }
+                            .let { tracks ->
+                                val q = songsFilter.trim()
+                                if (q.isBlank()) {
+                                    tracks
+                                } else {
+                                    tracks.filter {
+                                        it.title.contains(q, ignoreCase = true) ||
+                                            it.fileName.contains(q, ignoreCase = true)
+                                    }
                                 }
                             }
-                        } else null,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 4.dp),
-                    )
-                    val filtered = allTracks
-                        .let { tracks ->
-                            albumFilter?.let { al -> tracks.filter { it.albumId == al.id } } ?: tracks
+                    val sorted =
+                        when (sortOrder) {
+                            SongSort.TitleAsc -> filtered.sortedBy { it.title.lowercase() }
+                            SongSort.TitleDesc -> filtered.sortedByDescending { it.title.lowercase() }
+                            SongSort.RecentlyAdded -> filtered.sortedByDescending { it.fileCtime }
+                            SongSort.Duration -> filtered.sortedBy { it.durationMs }
+                            SongSort.MostPlayed ->
+                                filtered.sortedByDescending {
+                                    playCounts[it.id] ?: 0L
+                                }
+                            SongSort.TopRated ->
+                                filtered.sortedByDescending {
+                                    ratings[it.id] ?: -1.0
+                                }
                         }
-                        .let { tracks ->
-                            // Artist filter requires a join; we don't have artist
-                            // info on Track domain. We DO have the artist's tracks
-                            // via libraryRepo.tracksForArtist — but that's another
-                            // query. For MVP: when artist filter is active, fetch
-                            // their tracks separately. Simpler than passing the
-                            // pre-fetched list around.
-                            tracks
-                        }
-                        .let { tracks ->
-                            val q = songsFilter.trim()
-                            if (q.isBlank()) tracks
-                            else tracks.filter {
-                                it.title.contains(q, ignoreCase = true) ||
-                                    it.fileName.contains(q, ignoreCase = true)
-                            }
-                        }
-                    val sorted = when (sortOrder) {
-                        SongSort.TitleAsc -> filtered.sortedBy { it.title.lowercase() }
-                        SongSort.TitleDesc -> filtered.sortedByDescending { it.title.lowercase() }
-                        SongSort.RecentlyAdded -> filtered.sortedByDescending { it.fileCtime }
-                        SongSort.Duration -> filtered.sortedBy { it.durationMs }
-                        SongSort.MostPlayed -> filtered.sortedByDescending {
-                            playCounts[it.id] ?: 0L
-                        }
-                        SongSort.TopRated -> filtered.sortedByDescending {
-                            ratings[it.id] ?: -1.0
-                        }
-                    }
 
                     // Tap-to-play seeds an ad-hoc queue from the visible list,
                     // so skip-next walks forward through the same view the
@@ -640,26 +658,29 @@ fun LibraryBrowserScreen(
                     // DB. derivedStateOf would re-run on every album
                     // emission; remember(albums) is enough since the
                     // observe flow only re-emits when the set changes.
-                    val albumNameById = remember(albums) {
-                        albums.associate { it.id to it.title }
-                    }
+                    val albumNameById =
+                        remember(albums) {
+                            albums.associate { it.id to it.title }
+                        }
                     val onSongLongPress: (Track) -> Unit = { track ->
                         if (!inSelectionMode) {
                             contextTrackId = track.id
                         } else {
-                            selectedTrackIds = if (track.id in selectedTrackIds) {
-                                selectedTrackIds - track.id
-                            } else {
-                                selectedTrackIds + track.id
-                            }
+                            selectedTrackIds =
+                                if (track.id in selectedTrackIds) {
+                                    selectedTrackIds - track.id
+                                } else {
+                                    selectedTrackIds + track.id
+                                }
                         }
                     }
                     val onToggleSelection: (Long) -> Unit = { id ->
-                        selectedTrackIds = if (id in selectedTrackIds) {
-                            selectedTrackIds - id
-                        } else {
-                            selectedTrackIds + id
-                        }
+                        selectedTrackIds =
+                            if (id in selectedTrackIds) {
+                                selectedTrackIds - id
+                            } else {
+                                selectedTrackIds + id
+                            }
                     }
                     if (artistFilter != null) {
                         var artistTracks by remember(artistFilter) { mutableStateOf<List<Track>>(emptyList()) }
@@ -671,20 +692,25 @@ fun LibraryBrowserScreen(
                         // filter text remains visible and looks active
                         // while the artist-filtered list ignores it
                         // entirely. Empty filter is a passthrough.
-                        val filteredArtistTracks = remember(artistTracks, songsFilter) {
-                            val q = songsFilter.trim()
-                            if (q.isBlank()) artistTracks
-                            else artistTracks.filter {
-                                it.title.contains(q, true) ||
-                                    it.fileName.contains(q, true)
+                        val filteredArtistTracks =
+                            remember(artistTracks, songsFilter) {
+                                val q = songsFilter.trim()
+                                if (q.isBlank()) {
+                                    artistTracks
+                                } else {
+                                    artistTracks.filter {
+                                        it.title.contains(q, true) ||
+                                            it.fileName.contains(q, true)
+                                    }
+                                }
                             }
-                        }
                         SongList(
                             tracks = filteredArtistTracks,
                             currentTrackId = currentTrackId,
                             onPlay = { track ->
-                                val idx = filteredArtistTracks
-                                    .indexOf(track).coerceAtLeast(0)
+                                val idx =
+                                    filteredArtistTracks
+                                        .indexOf(track).coerceAtLeast(0)
                                 stationPlayback.playTracks(
                                     filteredArtistTracks,
                                     startIndex = idx,
@@ -718,18 +744,19 @@ fun LibraryBrowserScreen(
                     // shows their albums + tracks with play / shuffle, which
                     // is what the user actually wants when they pick an
                     // artist's name from a list.
-                    val sortedArtists = remember(artists, artistSort, artistPlayCounts) {
-                        when (artistSort) {
-                            ArtistSort.NameAsc ->
-                                artists.sortedBy { it.name.lowercase() }
-                            ArtistSort.NameDesc ->
-                                artists.sortedByDescending { it.name.lowercase() }
-                            ArtistSort.MostPlayed ->
-                                artists.sortedByDescending {
-                                    artistPlayCounts[it.id] ?: 0L
-                                }
+                    val sortedArtists =
+                        remember(artists, artistSort, artistPlayCounts) {
+                            when (artistSort) {
+                                ArtistSort.NameAsc ->
+                                    artists.sortedBy { it.name.lowercase() }
+                                ArtistSort.NameDesc ->
+                                    artists.sortedByDescending { it.name.lowercase() }
+                                ArtistSort.MostPlayed ->
+                                    artists.sortedByDescending {
+                                        artistPlayCounts[it.id] ?: 0L
+                                    }
+                            }
                         }
-                    }
                     ArtistList(
                         artists = sortedArtists,
                         onPick = { a -> onArtistTap(a.id) },
@@ -737,22 +764,23 @@ fun LibraryBrowserScreen(
                     )
                 }
                 LibraryTab.Albums -> {
-                    val sortedAlbums = remember(albums, albumSort, albumPlayCounts) {
-                        when (albumSort) {
-                            AlbumSort.TitleAsc ->
-                                albums.sortedBy { it.title.lowercase() }
-                            AlbumSort.TitleDesc ->
-                                albums.sortedByDescending { it.title.lowercase() }
-                            AlbumSort.YearAsc ->
-                                albums.sortedBy { it.year ?: Int.MAX_VALUE }
-                            AlbumSort.YearDesc ->
-                                albums.sortedByDescending { it.year ?: Int.MIN_VALUE }
-                            AlbumSort.MostPlayed ->
-                                albums.sortedByDescending {
-                                    albumPlayCounts[it.id] ?: 0L
-                                }
+                    val sortedAlbums =
+                        remember(albums, albumSort, albumPlayCounts) {
+                            when (albumSort) {
+                                AlbumSort.TitleAsc ->
+                                    albums.sortedBy { it.title.lowercase() }
+                                AlbumSort.TitleDesc ->
+                                    albums.sortedByDescending { it.title.lowercase() }
+                                AlbumSort.YearAsc ->
+                                    albums.sortedBy { it.year ?: Int.MAX_VALUE }
+                                AlbumSort.YearDesc ->
+                                    albums.sortedByDescending { it.year ?: Int.MIN_VALUE }
+                                AlbumSort.MostPlayed ->
+                                    albums.sortedByDescending {
+                                        albumPlayCounts[it.id] ?: 0L
+                                    }
+                            }
                         }
-                    }
                     AlbumList(
                         albums = sortedAlbums,
                         onPick = { al -> onAlbumTap(al.id) },
@@ -760,14 +788,15 @@ fun LibraryBrowserScreen(
                     )
                 }
                 LibraryTab.Genres -> {
-                    val sortedGenres = remember(genres, genreSort, allTracks) {
-                        when (genreSort) {
-                            GenreSort.NameAsc ->
-                                genres.sortedBy { it.lowercase() }
-                            GenreSort.NameDesc ->
-                                genres.sortedByDescending { it.lowercase() }
+                    val sortedGenres =
+                        remember(genres, genreSort, allTracks) {
+                            when (genreSort) {
+                                GenreSort.NameAsc ->
+                                    genres.sortedBy { it.lowercase() }
+                                GenreSort.NameDesc ->
+                                    genres.sortedByDescending { it.lowercase() }
+                            }
                         }
-                    }
                     GenreList(
                         genres = sortedGenres,
                         onPick = { g -> onGenreTap(g) },
@@ -804,16 +833,19 @@ fun LibraryBrowserScreen(
                     // created station is appended at the bottom of
                     // sort order.
                     val maxSort = stationRepo.list().maxOfOrNull { it.sortPosition } ?: 0
-                    val newId = stationRepo.insert(
-                        name = album.title,
-                        source = com.visorcraft.radioshed.domain.SourceRule.AlbumSelector(
-                            albumIds = listOf(album.id),
-                        ),
-                        playback = com.visorcraft.radioshed.domain.PlaybackRule(
-                            order = com.visorcraft.radioshed.domain.PlayOrder.Sequential,
-                        ),
-                        sortPosition = maxSort + 1,
-                    )
+                    val newId =
+                        stationRepo.insert(
+                            name = album.title,
+                            source =
+                                com.visorcraft.radioshed.domain.SourceRule.AlbumSelector(
+                                    albumIds = listOf(album.id),
+                                ),
+                            playback =
+                                com.visorcraft.radioshed.domain.PlaybackRule(
+                                    order = com.visorcraft.radioshed.domain.PlayOrder.Sequential,
+                                ),
+                            sortPosition = maxSort + 1,
+                        )
                     onEditStation(newId)
                 }
             },
@@ -846,13 +878,15 @@ fun LibraryBrowserScreen(
                 contextArtist = null
                 scope.launch {
                     val maxSort = stationRepo.list().maxOfOrNull { it.sortPosition } ?: 0
-                    val newId = stationRepo.insert(
-                        name = artist.name,
-                        source = com.visorcraft.radioshed.domain.SourceRule.ArtistSelector(
-                            artistIds = listOf(artist.id),
-                        ),
-                        sortPosition = maxSort + 1,
-                    )
+                    val newId =
+                        stationRepo.insert(
+                            name = artist.name,
+                            source =
+                                com.visorcraft.radioshed.domain.SourceRule.ArtistSelector(
+                                    artistIds = listOf(artist.id),
+                                ),
+                            sortPosition = maxSort + 1,
+                        )
                     onEditStation(newId)
                 }
             },
@@ -973,18 +1007,20 @@ private fun SongList(
         // Android via the PlatformScrollbar android actual.
         com.visorcraft.radioshed.ui.util.ListScrollbar(
             state = listState,
-            modifier = Modifier
-                .align(Alignment.CenterEnd)
-                .fillMaxHeight(),
+            modifier =
+                Modifier
+                    .align(Alignment.CenterEnd)
+                    .fillMaxHeight(),
         )
         if (showFab) {
             androidx.compose.material3.SmallFloatingActionButton(
                 onClick = {
                     scope.launch { listState.animateScrollToItem(0) }
                 },
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(end = 16.dp, bottom = 16.dp),
+                modifier =
+                    Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = 16.dp, bottom = 16.dp),
                 containerColor = MaterialTheme.colorScheme.primaryContainer,
             ) {
                 Icon(
@@ -1009,27 +1045,30 @@ private fun SongRow(
     albumName: String? = null,
 ) {
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .combinedClickable(
-                onClick = if (selectionMode) onToggleSelection else onTap,
-                onLongClick = onLongPress,
-            ),
-        color = if (isSelected) {
-            MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
-        } else {
-            Color.Transparent
-        },
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .combinedClickable(
+                    onClick = if (selectionMode) onToggleSelection else onTap,
+                    onLongClick = onLongPress,
+                ),
+        color =
+            if (isSelected) {
+                MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+            } else {
+                Color.Transparent
+            },
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                modifier =
+                    Modifier
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
@@ -1046,8 +1085,12 @@ private fun SongRow(
                         text = track.title.ifBlank { track.fileName },
                         style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.Medium,
-                        color = if (isCurrent) MaterialTheme.colorScheme.primary
-                                else MaterialTheme.colorScheme.onBackground,
+                        color =
+                            if (isCurrent) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onBackground
+                            },
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f, fill = false),
@@ -1061,8 +1104,9 @@ private fun SongRow(
                 // alone. Artist isn't included here because Track
                 // doesn't carry it directly — it'd require a per-row
                 // artistsForTrack call.
-                val subtitle = listOfNotNull(albumName, formatDuration(track.durationMs))
-                    .joinToString(" · ")
+                val subtitle =
+                    listOfNotNull(albumName, formatDuration(track.durationMs))
+                        .joinToString(" · ")
                 Text(
                     text = subtitle,
                     style = MaterialTheme.typography.bodySmall,
@@ -1157,16 +1201,18 @@ private fun AlbumTile(
     onLongPress: () -> Unit = {},
 ) {
     Column(
-        modifier = Modifier.combinedClickable(
-            onClick = onTap,
-            onLongClick = onLongPress,
-        ),
+        modifier =
+            Modifier.combinedClickable(
+                onClick = onTap,
+                onLongClick = onLongPress,
+            ),
     ) {
         Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(1f)
-                .clip(RoundedCornerShape(8.dp)),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(1f)
+                    .clip(RoundedCornerShape(8.dp)),
             color = MaterialTheme.colorScheme.surfaceVariant,
         ) {
             if (album.artworkUri != null) {
@@ -1206,7 +1252,10 @@ private fun AlbumTile(
 }
 
 @Composable
-private fun GenreList(genres: List<String>, onPick: (String) -> Unit) {
+private fun GenreList(
+    genres: List<String>,
+    onPick: (String) -> Unit,
+) {
     if (genres.isEmpty()) {
         EmptyHint("No genre tags found — files need a GENRE / TCON ID3 frame.")
         return
@@ -1253,16 +1302,18 @@ private fun GridWithBackToTopFab(
         // empty); touch users still get the system fling indicator.
         com.visorcraft.radioshed.ui.util.GridScrollbar(
             state = state,
-            modifier = Modifier
-                .align(Alignment.CenterEnd)
-                .fillMaxHeight(),
+            modifier =
+                Modifier
+                    .align(Alignment.CenterEnd)
+                    .fillMaxHeight(),
         )
         if (showFab) {
             androidx.compose.material3.SmallFloatingActionButton(
                 onClick = { scope.launch { state.animateScrollToItem(0) } },
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(end = 16.dp, bottom = 16.dp),
+                modifier =
+                    Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = 16.dp, bottom = 16.dp),
                 containerColor = MaterialTheme.colorScheme.primaryContainer,
             ) {
                 Icon(
@@ -1275,23 +1326,28 @@ private fun GridWithBackToTopFab(
 }
 
 @Composable
-private fun GenreTile(genre: String, onTap: () -> Unit) {
+private fun GenreTile(
+    genre: String,
+    onTap: () -> Unit,
+) {
     // Stable colored chip per genre. Same hash-to-hue trick as ArtistTile,
     // but the tile is a wide rounded rectangle (no avatar) so the genre
     // name reads horizontally.
     val hue = (genre.hashCode().rem(360) + 360).rem(360).toFloat()
     val tint = Color.hsv(hue, 0.5f, 0.85f)
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onTap),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onTap),
         shape = RoundedCornerShape(12.dp),
         color = tint,
     ) {
         Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 24.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 24.dp),
             contentAlignment = Alignment.CenterStart,
         ) {
             Text(
@@ -1319,20 +1375,22 @@ private fun ArtistTile(
         // Right-click reaches the same context sheet as long-press
         // so Windows / Linux mouse users have a non-touch path to
         // Edit / Merge / Create-station-from-artist.
-        modifier = Modifier
-            .combinedClickable(
-                onClick = onTap,
-                onLongClick = onLongPress,
-            )
-            .onRightClick(onLongPress),
+        modifier =
+            Modifier
+                .combinedClickable(
+                    onClick = onTap,
+                    onLongClick = onLongPress,
+                )
+                .onRightClick(onLongPress),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(1f)
-                .clip(CircleShape)
-                .background(tint),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(1f)
+                    .clip(CircleShape)
+                    .background(tint),
             contentAlignment = Alignment.Center,
         ) {
             Text(

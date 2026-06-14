@@ -11,7 +11,6 @@ package com.visorcraft.radioshed.data
  * fields they don't understand.
  */
 object EqPresetIO {
-
     fun toJson(presets: List<CustomEqPreset>): String {
         val bundle = EqPresetBundle(presets = presets)
         return RadioShedJson.encodeToString(EqPresetBundle.serializer(), bundle)
@@ -24,9 +23,10 @@ object EqPresetIO {
      * failed" and surfaces a generic error message.
      */
     fun fromJson(json: String): EqPresetBundle? {
-        val bundle = runCatching {
-            RadioShedJson.decodeFromString(EqPresetBundle.serializer(), json)
-        }.getOrNull() ?: return null
+        val bundle =
+            runCatching {
+                RadioShedJson.decodeFromString(EqPresetBundle.serializer(), json)
+            }.getOrNull() ?: return null
         if (bundle.version < 1 || bundle.version > EqPresetBundle.CURRENT_VERSION) return null
         return bundle
     }

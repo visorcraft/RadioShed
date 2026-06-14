@@ -13,5 +13,8 @@ package com.visorcraft.radioshed.source
  */
 interface TrackSharer {
     /** Returns true when the share sheet was successfully launched. */
-    suspend fun share(absolutePath: String, displayName: String): Boolean
+    suspend fun share(
+        absolutePath: String,
+        displayName: String,
+    ): Boolean
 }

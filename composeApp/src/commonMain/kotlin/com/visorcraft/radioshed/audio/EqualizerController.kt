@@ -37,8 +37,13 @@ interface EqualizerController {
     /** Min / max gain the device's Equalizer accepts, in dB. */
     val gainRangeDb: ClosedFloatingPointRange<Float>
 
-    fun setBand(index: Int, gainDb: Float)
+    fun setBand(
+        index: Int,
+        gainDb: Float,
+    )
+
     fun setEnabled(enabled: Boolean)
+
     fun applyPreset(preset: EqPreset)
 
     /**
@@ -78,8 +83,14 @@ class NullEqualizerController : EqualizerController {
     override val isAvailable: StateFlow<Boolean> = flowFalse
     override val gainRangeDb: ClosedFloatingPointRange<Float> = -15f..15f
 
-    override fun setBand(index: Int, gainDb: Float) = Unit
+    override fun setBand(
+        index: Int,
+        gainDb: Float,
+    ) = Unit
+
     override fun setEnabled(enabled: Boolean) = Unit
+
     override fun applyPreset(preset: EqPreset) = Unit
+
     override fun release() = Unit
 }

@@ -31,7 +31,6 @@ import kotlin.random.Random
  * (auth error, missing entity, etc).
  */
 class DesktopSubsonicClient : SubsonicClient {
-
     private val json = Json { ignoreUnknownKeys = true }
 
     override suspend fun ping(server: SubsonicServer): SubsonicPingResult? =
@@ -70,62 +69,69 @@ class DesktopSubsonicClient : SubsonicClient {
     override suspend fun getAlbumsForArtist(
         server: SubsonicServer,
         artistId: String,
-    ): List<SubsonicAlbum> = withContext(IODispatcher) {
-        val raw = httpGetJson(server, "getArtist", "id=${urlEncode(artistId)}")
-            ?: return@withContext emptyList()
-        runCatching {
-            val env = json.decodeFromString(Envelope.serializer(), raw)
-            env.subsonicResponse?.artist?.album.orEmpty().map {
-                SubsonicAlbum(
-                    id = it.id,
-                    name = it.name ?: it.title ?: "(unknown)",
-                    artist = it.artist.orEmpty(),
-                    artistId = it.artistId,
-                    year = it.year,
-                    genre = it.genre,
-                    songCount = it.songCount ?: 0,
-                    durationSec = it.duration ?: 0,
-                    coverArtId = it.coverArt,
-                )
-            }.sortedWith(compareBy({ it.year ?: Int.MAX_VALUE }, { it.name.lowercase() }))
-        }.getOrDefault(emptyList())
-    }
+    ): List<SubsonicAlbum> =
+        withContext(IODispatcher) {
+            val raw =
+                httpGetJson(server, "getArtist", "id=${urlEncode(artistId)}")
+                    ?: return@withContext emptyList()
+            runCatching {
+                val env = json.decodeFromString(Envelope.serializer(), raw)
+                env.subsonicResponse?.artist?.album.orEmpty().map {
+                    SubsonicAlbum(
+                        id = it.id,
+                        name = it.name ?: it.title ?: "(unknown)",
+                        artist = it.artist.orEmpty(),
+                        artistId = it.artistId,
+                        year = it.year,
+                        genre = it.genre,
+                        songCount = it.songCount ?: 0,
+                        durationSec = it.duration ?: 0,
+                        coverArtId = it.coverArt,
+                    )
+                }.sortedWith(compareBy({ it.year ?: Int.MAX_VALUE }, { it.name.lowercase() }))
+            }.getOrDefault(emptyList())
+        }
 
     override suspend fun getSongs(
         server: SubsonicServer,
         albumId: String,
-    ): List<SubsonicSong> = withContext(IODispatcher) {
-        val raw = httpGetJson(server, "getAlbum", "id=${urlEncode(albumId)}")
-            ?: return@withContext emptyList()
-        runCatching {
-            val env = json.decodeFromString(Envelope.serializer(), raw)
-            env.subsonicResponse?.album?.song.orEmpty().map {
-                SubsonicSong(
-                    id = it.id,
-                    title = it.title ?: "(untitled)",
-                    artist = it.artist.orEmpty(),
-                    album = it.album.orEmpty(),
-                    albumId = it.albumId,
-                    track = it.track,
-                    discNumber = it.discNumber,
-                    year = it.year,
-                    genre = it.genre,
-                    durationSec = it.duration ?: 0,
-                    bitRateKbps = it.bitRate,
-                    suffix = it.suffix,
-                    coverArtId = it.coverArt,
+    ): List<SubsonicSong> =
+        withContext(IODispatcher) {
+            val raw =
+                httpGetJson(server, "getAlbum", "id=${urlEncode(albumId)}")
+                    ?: return@withContext emptyList()
+            runCatching {
+                val env = json.decodeFromString(Envelope.serializer(), raw)
+                env.subsonicResponse?.album?.song.orEmpty().map {
+                    SubsonicSong(
+                        id = it.id,
+                        title = it.title ?: "(untitled)",
+                        artist = it.artist.orEmpty(),
+                        album = it.album.orEmpty(),
+                        albumId = it.albumId,
+                        track = it.track,
+                        discNumber = it.discNumber,
+                        year = it.year,
+                        genre = it.genre,
+                        durationSec = it.duration ?: 0,
+                        bitRateKbps = it.bitRate,
+                        suffix = it.suffix,
+                        coverArtId = it.coverArt,
+                    )
+                }.sortedWith(
+                    compareBy(
+                        { it.discNumber ?: 1 },
+                        { it.track ?: Int.MAX_VALUE },
+                        { it.title.lowercase() },
+                    ),
                 )
-            }.sortedWith(
-                compareBy(
-                    { it.discNumber ?: 1 },
-                    { it.track ?: Int.MAX_VALUE },
-                    { it.title.lowercase() },
-                ),
-            )
-        }.getOrDefault(emptyList())
-    }
+            }.getOrDefault(emptyList())
+        }
 
-    override fun streamUrl(server: SubsonicServer, songId: String): String {
+    override fun streamUrl(
+        server: SubsonicServer,
+        songId: String,
+    ): String {
         val (params, _) = authParams(server)
         return "${normalizeBase(server.baseUrl)}/rest/stream?id=${urlEncode(songId)}&$params"
     }
@@ -160,18 +166,22 @@ class DesktopSubsonicClient : SubsonicClient {
         val combined = if (extraParams.isEmpty()) params else "$extraParams&$params"
         val urlString = "$base/rest/$endpoint?$combined"
         return try {
-            val conn = (URI(urlString).toURL().openConnection() as HttpURLConnection).apply {
-                requestMethod = "GET"
-                instanceFollowRedirects = true
-                connectTimeout = CONNECT_TIMEOUT_MS
-                readTimeout = READ_TIMEOUT_MS
-                setRequestProperty("User-Agent", USER_AGENT)
-                setRequestProperty("Accept", "application/json")
-            }
+            val conn =
+                (URI(urlString).toURL().openConnection() as HttpURLConnection).apply {
+                    requestMethod = "GET"
+                    instanceFollowRedirects = true
+                    connectTimeout = CONNECT_TIMEOUT_MS
+                    readTimeout = READ_TIMEOUT_MS
+                    setRequestProperty("User-Agent", USER_AGENT)
+                    setRequestProperty("Accept", "application/json")
+                }
             try {
                 val code = conn.responseCode
-                if (code !in 200..299) null
-                else conn.inputStream.use { it.readBytes() }.decodeToString()
+                if (code !in 200..299) {
+                    null
+                } else {
+                    conn.inputStream.use { it.readBytes() }.decodeToString()
+                }
             } finally {
                 conn.disconnect()
             }
@@ -201,14 +211,15 @@ class DesktopSubsonicClient : SubsonicClient {
     private fun authParams(server: SubsonicServer): Pair<String, String> {
         val salt = randomSalt()
         val token = md5Hex("${server.password}$salt")
-        val params = buildString {
-            append("u=").append(urlEncode(server.username))
-            append("&t=").append(token)
-            append("&s=").append(salt)
-            append("&v=").append(API_VERSION)
-            append("&c=").append(CLIENT_NAME)
-            append("&f=json")
-        }
+        val params =
+            buildString {
+                append("u=").append(urlEncode(server.username))
+                append("&t=").append(token)
+                append("&s=").append(salt)
+                append("&v=").append(API_VERSION)
+                append("&c=").append(CLIENT_NAME)
+                append("&f=json")
+            }
         return params to salt
     }
 
@@ -225,11 +236,9 @@ class DesktopSubsonicClient : SubsonicClient {
         return digest.joinToString("") { "%02x".format(it) }
     }
 
-    private fun urlEncode(s: String): String =
-        URLEncoder.encode(s, "UTF-8").replace("+", "%20")
+    private fun urlEncode(s: String): String = URLEncoder.encode(s, "UTF-8").replace("+", "%20")
 
-    private fun normalizeBase(s: String): String =
-        s.trimEnd('/')
+    private fun normalizeBase(s: String): String = s.trimEnd('/')
 
     @Serializable
     private data class Envelope(

@@ -33,7 +33,6 @@ import kotlinx.coroutines.flow.asStateFlow
 class AndroidEqualizerController(
     private val settings: SettingsStore,
 ) : EqualizerController {
-
     private val _bandGains = MutableStateFlow(loadPersistedGains())
     private val _enabled = MutableStateFlow(settings.getEqEnabled())
     private val _isAvailable = MutableStateFlow(false)
@@ -75,9 +74,10 @@ class AndroidEqualizerController(
             // same numbers (devices don't change EQ topology at runtime).
             val deviceBands = eq.numberOfBands.toInt()
             probedNumBands = deviceBands.coerceIn(1, MAX_BANDS)
-            probedFreqs = (0 until probedNumBands).map { i ->
-                runCatching { eq.getCenterFreq(i.toShort()) / 1000 }.getOrDefault(0)
-            }
+            probedFreqs =
+                (0 until probedNumBands).map { i ->
+                    runCatching { eq.getCenterFreq(i.toShort()) / 1000 }.getOrDefault(0)
+                }
             // Make sure persisted gains array length matches device band count.
             if (_bandGains.value.size != probedNumBands) {
                 _bandGains.value = _bandGains.value.copyOf(probedNumBands)
@@ -89,7 +89,10 @@ class AndroidEqualizerController(
         }
     }
 
-    override fun setBand(index: Int, gainDb: Float) {
+    override fun setBand(
+        index: Int,
+        gainDb: Float,
+    ) {
         if (index < 0 || index >= numBands) return
         val gains = _bandGains.value.copyOf()
         if (index >= gains.size) return
@@ -116,15 +119,19 @@ class AndroidEqualizerController(
         if (preset == EqPreset.Custom) return
         // Pad / truncate the preset's 5 hard-coded gains to match the
         // device's actual band count.
-        val gains = FloatArray(numBands) { i ->
-            preset.gainsDb.getOrElse(i) { 0f }
-        }
+        val gains =
+            FloatArray(numBands) { i ->
+                preset.gainsDb.getOrElse(i) { 0f }
+            }
         _bandGains.value = gains
         equalizer?.let { applyGainsTo(it, gains) }
         persistGains(gains)
     }
 
-    private fun applyGainsTo(eq: Equalizer, gains: FloatArray) {
+    private fun applyGainsTo(
+        eq: Equalizer,
+        gains: FloatArray,
+    ) {
         val range = runCatching { eq.bandLevelRange }.getOrNull() ?: return
         val minMb = range[0].toInt()
         val maxMb = range[1].toInt()
@@ -152,6 +159,7 @@ class AndroidEqualizerController(
         const val EFFECT_PRIORITY = 1
         const val DEFAULT_NUM_BANDS = 5
         const val MAX_BANDS = 10
+
         // Standard Android Equalizer center frequencies as a fallback
         // before we probe an actual device. Devices may report different
         // frequencies; probedFreqs replaces this once attached.

@@ -41,9 +41,10 @@ internal fun SettingsToggleRow(
     enabled: Boolean = true,
 ) {
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(enabled = enabled) { onCheckedChange(!checked) },
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable(enabled = enabled) { onCheckedChange(!checked) },
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
         shape = RoundedCornerShape(12.dp),
     ) {
@@ -110,16 +111,18 @@ internal fun MinutesOfDaySlider(
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.Medium,
             modifier = Modifier.weight(1f),
-            color = MaterialTheme.colorScheme.onSurface.copy(
-                alpha = if (enabledControls) 1f else 0.4f,
-            ),
+            color =
+                MaterialTheme.colorScheme.onSurface.copy(
+                    alpha = if (enabledControls) 1f else 0.4f,
+                ),
         )
         Text(
             formatHhMm(display),
             style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurface.copy(
-                alpha = if (enabledControls) 0.8f else 0.4f,
-            ),
+            color =
+                MaterialTheme.colorScheme.onSurface.copy(
+                    alpha = if (enabledControls) 0.8f else 0.4f,
+                ),
         )
     }
     Slider(

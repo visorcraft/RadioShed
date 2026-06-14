@@ -5,15 +5,15 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class DjTemplateTest {
-
-    private val vars = DjTemplateVars(
-        station = "Morning Drive",
-        track = "Blue Monday",
-        artist = "New Order",
-        nextTrack = "Age of Consent",
-        time = "7:45 am",
-        weather = null,
-    )
+    private val vars =
+        DjTemplateVars(
+            station = "Morning Drive",
+            track = "Blue Monday",
+            artist = "New Order",
+            nextTrack = "Age of Consent",
+            time = "7:45 am",
+            weather = null,
+        )
 
     @Test
     fun substitutesAllKnownVariables() {
@@ -25,10 +25,11 @@ class DjTemplateTest {
     fun nullVariableDropsItsClause() {
         // Sentences containing an unresolved variable are dropped entirely
         // rather than reading "the weather is null".
-        val out = DjTemplate.render(
-            "That was {track}. Outside it's {weather}. Up next, {next_track}.",
-            vars,
-        )
+        val out =
+            DjTemplate.render(
+                "That was {track}. Outside it's {weather}. Up next, {next_track}.",
+                vars,
+            )
         assertEquals("That was Blue Monday. Up next, Age of Consent.", out)
     }
 

@@ -4,7 +4,6 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,14 +18,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Description
@@ -35,11 +33,10 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LibraryAdd
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Shuffle
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SelectAll
+import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.SortByAlpha
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
@@ -52,9 +49,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import com.visorcraft.radioshed.ui.util.TooltipIconButton
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -93,6 +88,7 @@ import com.visorcraft.radioshed.source.FileBrowser
 import com.visorcraft.radioshed.source.TrackSharer
 import com.visorcraft.radioshed.stations.StationPlayback
 import com.visorcraft.radioshed.ui.playlists.AddToPlaylistSheet
+import com.visorcraft.radioshed.ui.util.TooltipIconButton
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
@@ -239,8 +235,11 @@ fun FolderBrowserScreen(
             }
             else -> {
                 val parent = fileBrowser.parentOf(currentPath)
-                if (parent != null) currentPath = parent
-                else onClose()
+                if (parent != null) {
+                    currentPath = parent
+                } else {
+                    onClose()
+                }
             }
         }
     }
@@ -249,8 +248,11 @@ fun FolderBrowserScreen(
     val visibleEntries by remember(entries, sort, searchQuery) {
         derivedStateOf {
             val sorted = applySort(entries, sort)
-            if (searchQuery.isBlank()) sorted
-            else sorted.filter { it.name.contains(searchQuery, ignoreCase = true) }
+            if (searchQuery.isBlank()) {
+                sorted
+            } else {
+                sorted.filter { it.name.contains(searchQuery, ignoreCase = true) }
+            }
         }
     }
 
@@ -295,12 +297,14 @@ fun FolderBrowserScreen(
                                     placeholder = { Text("Filter this folder…") },
                                     singleLine = true,
                                     modifier = Modifier.fillMaxWidth(),
-                                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                                        imeAction = androidx.compose.ui.text.input.ImeAction.Done,
-                                    ),
-                                    keyboardActions = androidx.compose.foundation.text.KeyboardActions(
-                                        onDone = { keyboardController?.hide() },
-                                    ),
+                                    keyboardOptions =
+                                        androidx.compose.foundation.text.KeyboardOptions(
+                                            imeAction = androidx.compose.ui.text.input.ImeAction.Done,
+                                        ),
+                                    keyboardActions =
+                                        androidx.compose.foundation.text.KeyboardActions(
+                                            onDone = { keyboardController?.hide() },
+                                        ),
                                 )
                             }
                             else -> {
@@ -336,9 +340,10 @@ fun FolderBrowserScreen(
                             TooltipIconButton(
                                 tooltip = "Select all audio in this folder",
                                 onClick = {
-                                    val visibleAudio = entries
-                                        .filter { it.isAudio }
-                                        .map { it.path }
+                                    val visibleAudio =
+                                        entries
+                                            .filter { it.isAudio }
+                                            .map { it.path }
                                     selectedPaths = selectedPaths + visibleAudio
                                 },
                             ) {
@@ -409,12 +414,15 @@ fun FolderBrowserScreen(
                             }
                         }
                     },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = if (selectionMode)
-                            MaterialTheme.colorScheme.primaryContainer
-                        else
-                            MaterialTheme.colorScheme.surface,
-                    ),
+                    colors =
+                        TopAppBarDefaults.topAppBarColors(
+                            containerColor =
+                                if (selectionMode) {
+                                    MaterialTheme.colorScheme.primaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.surface
+                                },
+                        ),
                 )
                 // Breadcrumb row — always visible, scrolls horizontally
                 // for deep paths. Each segment is clickable; the trailing
@@ -444,9 +452,10 @@ fun FolderBrowserScreen(
                             // ended up holding (handles the empty
                             // case where the key is removed entirely
                             // by unpin).
-                            pinnedBookmarks = settings.getFileBrowserPinnedFolders().map {
-                                DiscoveredFolder(name = it.first, path = it.second)
-                            }
+                            pinnedBookmarks =
+                                settings.getFileBrowserPinnedFolders().map {
+                                    DiscoveredFolder(name = it.first, path = it.second)
+                                }
                         },
                     )
                 }
@@ -458,9 +467,10 @@ fun FolderBrowserScreen(
                     selectedCount = selectedPaths.size,
                     onPlay = {
                         scope.launch {
-                            val tracks = selectedPaths.mapNotNull {
-                                libraryRepo.getTrackByPath(it)
-                            }
+                            val tracks =
+                                selectedPaths.mapNotNull {
+                                    libraryRepo.getTrackByPath(it)
+                                }
                             if (tracks.isNotEmpty()) {
                                 stationPlayback.playTracks(tracks, startIndex = 0)
                             }
@@ -469,9 +479,10 @@ fun FolderBrowserScreen(
                     },
                     onPlayNext = {
                         scope.launch {
-                            val tracks = selectedPaths.mapNotNull {
-                                libraryRepo.getTrackByPath(it)
-                            }
+                            val tracks =
+                                selectedPaths.mapNotNull {
+                                    libraryRepo.getTrackByPath(it)
+                                }
                             // Reverse so earlier-selected items end
                             // up earlier in the priority queue (each
                             // playNext prepends).
@@ -481,18 +492,20 @@ fun FolderBrowserScreen(
                     },
                     onAddToQueue = {
                         scope.launch {
-                            val tracks = selectedPaths.mapNotNull {
-                                libraryRepo.getTrackByPath(it)
-                            }
+                            val tracks =
+                                selectedPaths.mapNotNull {
+                                    libraryRepo.getTrackByPath(it)
+                                }
                             tracks.forEach { stationPlayback.addToQueue(it) }
                             selectedPaths = emptySet()
                         }
                     },
                     onShuffle = {
                         scope.launch {
-                            val tracks = selectedPaths.mapNotNull {
-                                libraryRepo.getTrackByPath(it)
-                            }
+                            val tracks =
+                                selectedPaths.mapNotNull {
+                                    libraryRepo.getTrackByPath(it)
+                                }
                             if (tracks.isNotEmpty()) {
                                 stationPlayback.playTracks(
                                     tracks.shuffled(),
@@ -582,8 +595,12 @@ fun FolderBrowserScreen(
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
-                        text = if (searchQuery.isNotBlank()) "No matches in this folder."
-                               else "(empty)",
+                        text =
+                            if (searchQuery.isNotBlank()) {
+                                "No matches in this folder."
+                            } else {
+                                "(empty)"
+                            },
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
                     )
@@ -596,9 +613,10 @@ fun FolderBrowserScreen(
             // directory's audio files even if the user has filtered
             // the visible list — feels more useful than narrowing
             // the queue to just what's visible.
-            val audioEntries = remember(entries, sort) {
-                applySort(entries.filter { it.isAudio }, sort)
-            }
+            val audioEntries =
+                remember(entries, sort) {
+                    applySort(entries.filter { it.isAudio }, sort)
+                }
 
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
@@ -618,10 +636,12 @@ fun FolderBrowserScreen(
                                 // a sibling folder while building a
                                 // multi-folder selection.
                                 selectionMode && entry.isAudio -> {
-                                    selectedPaths = if (entry.path in selectedPaths)
-                                        selectedPaths - entry.path
-                                    else
-                                        selectedPaths + entry.path
+                                    selectedPaths =
+                                        if (entry.path in selectedPaths) {
+                                            selectedPaths - entry.path
+                                        } else {
+                                            selectedPaths + entry.path
+                                        }
                                 }
                                 entry.isDirectory -> currentPath = entry.path
                                 entry.isAudio -> {
@@ -653,10 +673,12 @@ fun FolderBrowserScreen(
                                     // Reuse long-press inside selection
                                     // mode as a quick toggle, mirroring
                                     // tap. Predictable for power users.
-                                    selectedPaths = if (entry.path in selectedPaths)
-                                        selectedPaths - entry.path
-                                    else
-                                        selectedPaths + entry.path
+                                    selectedPaths =
+                                        if (entry.path in selectedPaths) {
+                                            selectedPaths - entry.path
+                                        } else {
+                                            selectedPaths + entry.path
+                                        }
                                 }
                                 else -> Unit
                             }
@@ -722,9 +744,10 @@ fun FolderBrowserScreen(
                 // persisted shape (e.g. a pinned folder with a tab
                 // in its name renders one way in the bookmarks row
                 // and another after app restart).
-                pinnedBookmarks = settings.getFileBrowserPinnedFolders().map {
-                    DiscoveredFolder(name = it.first, path = it.second)
-                }
+                pinnedBookmarks =
+                    settings.getFileBrowserPinnedFolders().map {
+                        DiscoveredFolder(name = it.first, path = it.second)
+                    }
                 folderContext = null
             },
         )
@@ -744,17 +767,21 @@ private enum class Sort(val label: String) {
     LargestFirst("Largest first"),
 }
 
-private fun applySort(entries: List<DirectoryEntry>, sort: Sort): List<DirectoryEntry> {
+private fun applySort(
+    entries: List<DirectoryEntry>,
+    sort: Sort,
+): List<DirectoryEntry> {
     // Always group dirs first then files — most file managers do
     // that and it matches user expectation. Sort order applies
     // within each group.
     val (dirs, files) = entries.partition { it.isDirectory }
-    val cmp = when (sort) {
-        Sort.NameAsc -> compareBy<DirectoryEntry> { it.name.lowercase() }
-        Sort.NameDesc -> compareByDescending { it.name.lowercase() }
-        Sort.RecentlyModified -> compareByDescending { it.lastModifiedMs }
-        Sort.LargestFirst -> compareByDescending { it.sizeBytes }
-    }
+    val cmp =
+        when (sort) {
+            Sort.NameAsc -> compareBy<DirectoryEntry> { it.name.lowercase() }
+            Sort.NameDesc -> compareByDescending { it.name.lowercase() }
+            Sort.RecentlyModified -> compareByDescending { it.lastModifiedMs }
+            Sort.LargestFirst -> compareByDescending { it.sizeBytes }
+        }
     return dirs.sortedWith(cmp) + files.sortedWith(cmp)
 }
 
@@ -772,21 +799,23 @@ private fun BreadcrumbBar(
     // Build (label, full-path-up-to-here) pairs. Edge cases:
     //  - "/storage" → segments: ["", "storage"] → render "/" + "storage"
     //  - "/storage/emulated/0/Music" → "/" → "storage" → "emulated" → "0" → "Music"
-    val segments = remember(path) {
-        val parts = path.trim('/').split('/').filter { it.isNotEmpty() }
-        val out = mutableListOf<Pair<String, String>>()
-        out += "/" to "/"
-        var cumulative = ""
-        for (p in parts) {
-            cumulative += "/$p"
-            out += p to cumulative
+    val segments =
+        remember(path) {
+            val parts = path.trim('/').split('/').filter { it.isNotEmpty() }
+            val out = mutableListOf<Pair<String, String>>()
+            out += "/" to "/"
+            var cumulative = ""
+            for (p in parts) {
+                cumulative += "/$p"
+                out += p to cumulative
+            }
+            out
         }
-        out
-    }
     LazyRow(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 4.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         items(segments) { (label, fullPath) ->
@@ -802,8 +831,12 @@ private fun BreadcrumbBar(
                         text = label,
                         style = MaterialTheme.typography.labelLarge,
                         fontFamily = FontFamily.Monospace,
-                        color = if (isLast) MaterialTheme.colorScheme.primary
-                                else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
+                        color =
+                            if (isLast) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f)
+                            },
                         fontWeight = if (isLast) FontWeight.SemiBold else FontWeight.Normal,
                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
                         maxLines = 1,
@@ -837,25 +870,28 @@ private fun BookmarksRow(
     // on tap. Long-press on a pinned chip removes it; long-press on
     // a preset is a no-op since presets are derived from real
     // filesystem locations rather than user state.
-    val items = remember(presets, pinned) {
-        // Bookmark = preset, Star = user-pinned. We piggyback on the
-        // chip's leading icon to communicate the source.
-        presets.map { it to false } + pinned.map { it to true }
-    }
+    val items =
+        remember(presets, pinned) {
+            // Bookmark = preset, Star = user-pinned. We piggyback on the
+            // chip's leading icon to communicate the source.
+            presets.map { it to false } + pinned.map { it to true }
+        }
     LazyRow(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 4.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         items(items) { (bm, isUserPinned) ->
             val active = bm.path == currentPath
             Surface(
                 color = Color.Transparent,
-                modifier = Modifier.combinedClickable(
-                    onClick = { if (!active) onPick(bm.path) },
-                    onLongClick = { if (isUserPinned) onUnpin(bm.path) },
-                ),
+                modifier =
+                    Modifier.combinedClickable(
+                        onClick = { if (!active) onPick(bm.path) },
+                        onLongClick = { if (isUserPinned) onUnpin(bm.path) },
+                    ),
             ) {
                 AssistChip(
                     onClick = { if (!active) onPick(bm.path) },
@@ -863,16 +899,25 @@ private fun BookmarksRow(
                     label = { Text(bm.name) },
                     leadingIcon = {
                         Icon(
-                            imageVector = if (isUserPinned) Icons.Filled.Star
-                                          else Icons.Filled.Bookmark,
+                            imageVector =
+                                if (isUserPinned) {
+                                    Icons.Filled.Star
+                                } else {
+                                    Icons.Filled.Bookmark
+                                },
                             contentDescription = null,
                             modifier = Modifier.size(14.dp),
                         )
                     },
-                    colors = AssistChipDefaults.assistChipColors(
-                        containerColor = if (active) MaterialTheme.colorScheme.primaryContainer
-                                         else MaterialTheme.colorScheme.surface,
-                    ),
+                    colors =
+                        AssistChipDefaults.assistChipColors(
+                            containerColor =
+                                if (active) {
+                                    MaterialTheme.colorScheme.primaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.surface
+                                },
+                        ),
                 )
             }
         }
@@ -898,9 +943,10 @@ private fun SelectionActionBar(
         modifier = Modifier.fillMaxWidth(),
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 8.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -926,21 +972,30 @@ private fun SelectionAction(
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier
-            .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 4.dp),
+        modifier =
+            Modifier
+                .clickable(enabled = enabled, onClick = onClick)
+                .padding(horizontal = 12.dp, vertical = 4.dp),
     ) {
         Icon(
             imageVector = icon,
             contentDescription = label,
-            tint = if (enabled) MaterialTheme.colorScheme.primary
-                   else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
+            tint =
+                if (enabled) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+                },
         )
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall,
-            color = if (enabled) MaterialTheme.colorScheme.onSurface
-                    else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+            color =
+                if (enabled) {
+                    MaterialTheme.colorScheme.onSurface
+                } else {
+                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                },
             maxLines = 1,
         )
     }
@@ -957,15 +1012,16 @@ private fun DirHeader(
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
-            val parts = buildList {
-                if (stats.folderCount > 0) {
-                    add("${stats.folderCount} folder${if (stats.folderCount == 1) "" else "s"}")
+            val parts =
+                buildList {
+                    if (stats.folderCount > 0) {
+                        add("${stats.folderCount} folder${if (stats.folderCount == 1) "" else "s"}")
+                    }
+                    if (stats.audioCount > 0) {
+                        add("${stats.audioCount} audio")
+                        add(formatFileSize(stats.totalAudioBytes))
+                    }
                 }
-                if (stats.audioCount > 0) {
-                    add("${stats.audioCount} audio")
-                    add(formatFileSize(stats.totalAudioBytes))
-                }
-            }
             Text(
                 text = if (parts.isEmpty()) "—" else parts.joinToString(" · "),
                 style = MaterialTheme.typography.labelMedium,
@@ -989,9 +1045,10 @@ private fun DirHeader(
                     OutlinedButton(
                         onClick = onShuffleAll,
                         modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = MaterialTheme.colorScheme.primary,
-                        ),
+                        colors =
+                            ButtonDefaults.outlinedButtonColors(
+                                contentColor = MaterialTheme.colorScheme.primary,
+                            ),
                     ) {
                         Icon(
                             Icons.Filled.Shuffle,
@@ -1016,32 +1073,40 @@ private fun FolderEntryRow(
     onTap: () -> Unit,
     onLongPress: () -> Unit,
 ) {
-    val tint = when {
-        entry.isDirectory -> MaterialTheme.colorScheme.primary
-        entry.isAudio -> MaterialTheme.colorScheme.onSurface
-        else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f)
-    }
-    val icon = when {
-        entry.isDirectory -> Icons.Filled.Folder
-        entry.isAudio -> Icons.Filled.MusicNote
-        else -> Icons.Filled.Description
-    }
+    val tint =
+        when {
+            entry.isDirectory -> MaterialTheme.colorScheme.primary
+            entry.isAudio -> MaterialTheme.colorScheme.onSurface
+            else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f)
+        }
+    val icon =
+        when {
+            entry.isDirectory -> Icons.Filled.Folder
+            entry.isAudio -> Icons.Filled.MusicNote
+            else -> Icons.Filled.Description
+        }
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .combinedClickable(onClick = onTap, onLongClick = onLongPress),
-        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
-                else Color.Transparent,
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .combinedClickable(onClick = onTap, onLongClick = onLongPress),
+        color =
+            if (isSelected) {
+                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
+            } else {
+                Color.Transparent
+            },
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                modifier =
+                    Modifier
+                        .size(36.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
@@ -1062,10 +1127,11 @@ private fun FolderEntryRow(
                     overflow = TextOverflow.Ellipsis,
                 )
                 if (!entry.isDirectory && (entry.sizeBytes > 0L || durationMs != null)) {
-                    val subtitle = buildList {
-                        durationMs?.let { add(formatDuration(it)) }
-                        if (entry.sizeBytes > 0L) add(formatFileSize(entry.sizeBytes))
-                    }.joinToString(" · ")
+                    val subtitle =
+                        buildList {
+                            durationMs?.let { add(formatDuration(it)) }
+                            if (entry.sizeBytes > 0L) add(formatFileSize(entry.sizeBytes))
+                        }.joinToString(" · ")
                     Text(
                         text = subtitle,
                         style = MaterialTheme.typography.bodySmall,
@@ -1079,11 +1145,19 @@ private fun FolderEntryRow(
             when {
                 selectionMode && entry.isAudio -> {
                     Icon(
-                        imageVector = if (isSelected) Icons.Filled.CheckCircle
-                                      else Icons.Filled.RadioButtonUnchecked,
+                        imageVector =
+                            if (isSelected) {
+                                Icons.Filled.CheckCircle
+                            } else {
+                                Icons.Filled.RadioButtonUnchecked
+                            },
                         contentDescription = if (isSelected) "Selected" else "Not selected",
-                        tint = if (isSelected) MaterialTheme.colorScheme.primary
-                               else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f),
+                        tint =
+                            if (isSelected) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f)
+                            },
                     )
                 }
                 entry.isAudio -> {
@@ -1170,8 +1244,11 @@ private fun FileContextSheet(
                 onClick = {
                     scope.launch {
                         val track = libraryRepo.getTrackByPath(entry.path)
-                        if (track != null) onAddToPlaylistTrack(track.id)
-                        else onDismiss()
+                        if (track != null) {
+                            onAddToPlaylistTrack(track.id)
+                        } else {
+                            onDismiss()
+                        }
                     }
                 },
             )
@@ -1306,11 +1383,12 @@ private fun FolderContextSheet(
                         // re-trigger a scan. Same defensive pattern
                         // the Onboarding folder step uses.
                         val existing = folderRepo.getByUri(entry.path)
-                        val id = existing?.id ?: folderRepo.insert(
-                            displayName = entry.name,
-                            uri = entry.path,
-                            recursive = true,
-                        )
+                        val id =
+                            existing?.id ?: folderRepo.insert(
+                                displayName = entry.name,
+                                uri = entry.path,
+                                recursive = true,
+                            )
                         scanner.scanFolder(id).collect { /* fire and forget */ }
                         val verb = if (existing != null) "Re-scanned" else "Added & scanned"
                         onAddedAsLibrary("$verb \"${entry.name}\".")
@@ -1342,10 +1420,11 @@ private fun ContextRow(
     onClick: () -> Unit,
 ) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onClick)
+                .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(16.dp),
     ) {
@@ -1383,11 +1462,12 @@ private suspend fun playAudioPath(
     if (audioEntries.isEmpty()) return
     val tracks = audioEntries.mapNotNull { libraryRepo.getTrackByPath(it.path) }
     if (tracks.isNotEmpty()) {
-        val startIdx = if (tappedEntry != null) {
-            tracks.indexOfFirst { it.path == tappedEntry.path }.coerceAtLeast(0)
-        } else {
-            0
-        }
+        val startIdx =
+            if (tappedEntry != null) {
+                tracks.indexOfFirst { it.path == tappedEntry.path }.coerceAtLeast(0)
+            } else {
+                0
+            }
         stationPlayback.playTracks(tracks, startIndex = startIdx)
         return
     }
@@ -1414,8 +1494,11 @@ private fun formatDuration(ms: Long): String {
     val h = totalSec / 3600
     val m = (totalSec % 3600) / 60
     val s = totalSec % 60
-    return if (h > 0) "%d:%02d:%02d".format(h, m, s)
-    else "%d:%02d".format(m, s)
+    return if (h > 0) {
+        "%d:%02d:%02d".format(h, m, s)
+    } else {
+        "%d:%02d".format(m, s)
+    }
 }
 
 private fun formatFileSize(bytes: Long): String {

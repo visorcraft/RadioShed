@@ -14,25 +14,30 @@ import kotlinx.coroutines.withContext
  * Conceptually all "judgements about a track."
  */
 class RatingRepository(private val db: RadioShedDatabase) {
-
     // ---- Stars ----
 
-    suspend fun setRating(trackId: Long, stars: Double, ratedAt: Long = nowMillis()) =
+    suspend fun setRating(
+        trackId: Long,
+        stars: Double,
+        ratedAt: Long = nowMillis(),
+    ) = withContext(IODispatcher) {
+        db.ratingsQueries.setRating(trackId, stars, ratedAt)
+    }
+
+    suspend fun getRating(trackId: Long): Double? =
         withContext(IODispatcher) {
-            db.ratingsQueries.setRating(trackId, stars, ratedAt)
+            db.ratingsQueries.selectRating(trackId).executeAsOneOrNull()
         }
 
-    suspend fun getRating(trackId: Long): Double? = withContext(IODispatcher) {
-        db.ratingsQueries.selectRating(trackId).executeAsOneOrNull()
-    }
+    suspend fun clearRating(trackId: Long) =
+        withContext(IODispatcher) {
+            db.ratingsQueries.clearRating(trackId)
+        }
 
-    suspend fun clearRating(trackId: Long) = withContext(IODispatcher) {
-        db.ratingsQueries.clearRating(trackId)
-    }
-
-    suspend fun listAll(): List<Rating> = withContext(IODispatcher) {
-        db.ratingsQueries.selectAllRatings().executeAsList().map { it.toDomain() }
-    }
+    suspend fun listAll(): List<Rating> =
+        withContext(IODispatcher) {
+            db.ratingsQueries.selectAllRatings().executeAsList().map { it.toDomain() }
+        }
 
     /**
      * Batched (trackId → stars). Returns absent ids as missing-from-
@@ -45,7 +50,10 @@ class RatingRepository(private val db: RadioShedDatabase) {
                 .associate { it.track_id to it.stars }
         }
 
-    suspend fun topRatedTracks(minStars: Double = 4.0, limit: Long = 100): List<Track> =
+    suspend fun topRatedTracks(
+        minStars: Double = 4.0,
+        limit: Long = 100,
+    ): List<Track> =
         withContext(IODispatcher) {
             db.ratingsQueries.selectTopRatedTracks(minStars, limit).executeAsList()
                 .map { it.toDomain() }
@@ -64,16 +72,18 @@ class RatingRepository(private val db: RadioShedDatabase) {
         olderThanMs: Long,
         limit: Long = 100,
         byRating: Boolean = false,
-    ): List<Track> = withContext(IODispatcher) {
-        val rows = if (byRating) {
-            db.ratingsQueries.selectForgottenGemTracksByRating(minStars, olderThanMs, limit)
-                .executeAsList()
-        } else {
-            db.ratingsQueries.selectForgottenGemTracks(minStars, olderThanMs, limit)
-                .executeAsList()
+    ): List<Track> =
+        withContext(IODispatcher) {
+            val rows =
+                if (byRating) {
+                    db.ratingsQueries.selectForgottenGemTracksByRating(minStars, olderThanMs, limit)
+                        .executeAsList()
+                } else {
+                    db.ratingsQueries.selectForgottenGemTracks(minStars, olderThanMs, limit)
+                        .executeAsList()
+                }
+            rows.map { it.toDomain() }
         }
-        rows.map { it.toDomain() }
-    }
 
     // ---- Skip log ----
 
@@ -86,13 +96,15 @@ class RatingRepository(private val db: RadioShedDatabase) {
         db.ratingsQueries.insertSkip(trackId, stationId, skippedAt, positionMs)
     }
 
-    suspend fun skipCountFor(trackId: Long): Long = withContext(IODispatcher) {
-        db.ratingsQueries.countSkipsForTrack(trackId).executeAsOne()
-    }
+    suspend fun skipCountFor(trackId: Long): Long =
+        withContext(IODispatcher) {
+            db.ratingsQueries.countSkipsForTrack(trackId).executeAsOne()
+        }
 
-    suspend fun trimSkipsOlderThan(threshold: Long) = withContext(IODispatcher) {
-        db.ratingsQueries.trimSkipsOlderThan(threshold)
-    }
+    suspend fun trimSkipsOlderThan(threshold: Long) =
+        withContext(IODispatcher) {
+            db.ratingsQueries.trimSkipsOlderThan(threshold)
+        }
 
     /**
      * Top-N tracks by total skip count across all stations. Pairs the
@@ -135,29 +147,35 @@ class RatingRepository(private val db: RadioShedDatabase) {
 
     // ---- Play counts ----
 
-    suspend fun recordPlay(trackId: Long, listenedMs: Long, playedAt: Long = nowMillis()) =
+    suspend fun recordPlay(
+        trackId: Long,
+        listenedMs: Long,
+        playedAt: Long = nowMillis(),
+    ) = withContext(IODispatcher) {
+        db.ratingsQueries.incrementPlayCount(trackId, playedAt, listenedMs)
+    }
+
+    suspend fun playCountFor(trackId: Long): PlayCountStat? =
         withContext(IODispatcher) {
-            db.ratingsQueries.incrementPlayCount(trackId, playedAt, listenedMs)
+            db.ratingsQueries.selectPlayCount(trackId).executeAsOneOrNull()?.let { row ->
+                PlayCountStat(
+                    trackId = row.track_id,
+                    count = row.count,
+                    lastPlayedAt = row.last_played_at,
+                    totalListenMs = row.total_listen_ms,
+                )
+            }
         }
 
-    suspend fun playCountFor(trackId: Long): PlayCountStat? = withContext(IODispatcher) {
-        db.ratingsQueries.selectPlayCount(trackId).executeAsOneOrNull()?.let { row ->
-            PlayCountStat(
-                trackId = row.track_id,
-                count = row.count,
-                lastPlayedAt = row.last_played_at,
-                totalListenMs = row.total_listen_ms,
-            )
+    suspend fun mostPlayedTracks(limit: Long = 100): List<Track> =
+        withContext(IODispatcher) {
+            db.ratingsQueries.selectMostPlayedTracks(limit).executeAsList().map { it.toDomain() }
         }
-    }
 
-    suspend fun mostPlayedTracks(limit: Long = 100): List<Track> = withContext(IODispatcher) {
-        db.ratingsQueries.selectMostPlayedTracks(limit).executeAsList().map { it.toDomain() }
-    }
-
-    suspend fun leastPlayedTracks(limit: Long = 100): List<Track> = withContext(IODispatcher) {
-        db.ratingsQueries.selectLeastPlayedTracks(limit).executeAsList().map { it.toDomain() }
-    }
+    suspend fun leastPlayedTracks(limit: Long = 100): List<Track> =
+        withContext(IODispatcher) {
+            db.ratingsQueries.selectLeastPlayedTracks(limit).executeAsList().map { it.toDomain() }
+        }
 
     /**
      * Batch fetch `(track_id → (count, last_played_at))` for a
@@ -165,39 +183,46 @@ class RatingRepository(private val db: RadioShedDatabase) {
      * from the map (caller treats absence as zero / never).
      * Used by the AdaptiveMix smart-query scorer.
      */
-    suspend fun playCountsForTracks(
-        trackIds: Collection<Long>,
-    ): Map<Long, PlayCountStats> = withContext(IODispatcher) {
-        if (trackIds.isEmpty()) return@withContext emptyMap()
-        db.ratingsQueries.selectPlayCountsForTracks(trackIds).executeAsList()
-            .associate { it.track_id to PlayCountStats(it.count, it.last_played_at) }
-    }
+    suspend fun playCountsForTracks(trackIds: Collection<Long>): Map<Long, PlayCountStats> =
+        withContext(IODispatcher) {
+            if (trackIds.isEmpty()) return@withContext emptyMap()
+            db.ratingsQueries.selectPlayCountsForTracks(trackIds).executeAsList()
+                .associate { it.track_id to PlayCountStats(it.count, it.last_played_at) }
+        }
 
-    suspend fun neverPlayedTracks(limit: Long = 100): List<Track> = withContext(IODispatcher) {
-        db.ratingsQueries.selectNeverPlayedTracks(limit).executeAsList().map { it.toDomain() }
-    }
+    suspend fun neverPlayedTracks(limit: Long = 100): List<Track> =
+        withContext(IODispatcher) {
+            db.ratingsQueries.selectNeverPlayedTracks(limit).executeAsList().map { it.toDomain() }
+        }
 
     // ---- Liked songs ----
 
-    suspend fun like(trackId: Long, likedAt: Long = nowMillis()) = withContext(IODispatcher) {
+    suspend fun like(
+        trackId: Long,
+        likedAt: Long = nowMillis(),
+    ) = withContext(IODispatcher) {
         db.ratingsQueries.likeTrack(trackId, likedAt)
     }
 
-    suspend fun unlike(trackId: Long) = withContext(IODispatcher) {
-        db.ratingsQueries.unlikeTrack(trackId)
-    }
+    suspend fun unlike(trackId: Long) =
+        withContext(IODispatcher) {
+            db.ratingsQueries.unlikeTrack(trackId)
+        }
 
-    suspend fun isLiked(trackId: Long): Boolean = withContext(IODispatcher) {
-        db.ratingsQueries.isTrackLiked(trackId).executeAsOne() > 0L
-    }
+    suspend fun isLiked(trackId: Long): Boolean =
+        withContext(IODispatcher) {
+            db.ratingsQueries.isTrackLiked(trackId).executeAsOne() > 0L
+        }
 
-    suspend fun likedTracks(): List<Track> = withContext(IODispatcher) {
-        db.ratingsQueries.selectLikedTracks().executeAsList().map { it.toDomain() }
-    }
+    suspend fun likedTracks(): List<Track> =
+        withContext(IODispatcher) {
+            db.ratingsQueries.selectLikedTracks().executeAsList().map { it.toDomain() }
+        }
 
-    suspend fun likedTrackIds(): List<Long> = withContext(IODispatcher) {
-        db.ratingsQueries.selectLikedTrackIds().executeAsList()
-    }
+    suspend fun likedTrackIds(): List<Long> =
+        withContext(IODispatcher) {
+            db.ratingsQueries.selectLikedTrackIds().executeAsList()
+        }
 
     /** (trackId → liked_at) so backups round-trip the original
      *  timestamp instead of overwriting with the export time. */
@@ -207,26 +232,35 @@ class RatingRepository(private val db: RadioShedDatabase) {
                 .map { it.track_id to it.liked_at }
         }
 
-    suspend fun likedCount(): Long = withContext(IODispatcher) {
-        db.ratingsQueries.countLikedTracks().executeAsOne()
-    }
+    suspend fun likedCount(): Long =
+        withContext(IODispatcher) {
+            db.ratingsQueries.countLikedTracks().executeAsOne()
+        }
 
     /** Live count for the Liked Songs entry on the Playlists screen. */
-    fun observeLikedCount(): Flow<Long> =
-        db.ratingsQueries.observeLikedCount().asFlow().mapToOne(IODispatcher)
+    fun observeLikedCount(): Flow<Long> = db.ratingsQueries.observeLikedCount().asFlow().mapToOne(IODispatcher)
 
     // ---- Per-station dislikes ----
 
-    suspend fun dislikeForStation(trackId: Long, stationId: Long, dislikedAt: Long = nowMillis()) =
-        withContext(IODispatcher) {
-            db.ratingsQueries.dislikeForStation(trackId, stationId, dislikedAt)
-        }
+    suspend fun dislikeForStation(
+        trackId: Long,
+        stationId: Long,
+        dislikedAt: Long = nowMillis(),
+    ) = withContext(IODispatcher) {
+        db.ratingsQueries.dislikeForStation(trackId, stationId, dislikedAt)
+    }
 
-    suspend fun undislikeForStation(trackId: Long, stationId: Long) = withContext(IODispatcher) {
+    suspend fun undislikeForStation(
+        trackId: Long,
+        stationId: Long,
+    ) = withContext(IODispatcher) {
         db.ratingsQueries.undislikeForStation(trackId, stationId)
     }
 
-    suspend fun isDislikedForStation(trackId: Long, stationId: Long): Boolean =
+    suspend fun isDislikedForStation(
+        trackId: Long,
+        stationId: Long,
+    ): Boolean =
         withContext(IODispatcher) {
             db.ratingsQueries.isDislikedForStation(trackId, stationId).executeAsOne() > 0L
         }
@@ -244,18 +278,22 @@ class RatingRepository(private val db: RadioShedDatabase) {
      * station dislikes are applied. Idempotent — re-banning just
      * refreshes the timestamp.
      */
-    suspend fun globalDislike(trackId: Long, dislikedAt: Long = nowMillis()) =
+    suspend fun globalDislike(
+        trackId: Long,
+        dislikedAt: Long = nowMillis(),
+    ) = withContext(IODispatcher) {
+        db.ratingsQueries.globalDislikeTrack(trackId, dislikedAt)
+    }
+
+    suspend fun undoGlobalDislike(trackId: Long) =
         withContext(IODispatcher) {
-            db.ratingsQueries.globalDislikeTrack(trackId, dislikedAt)
+            db.ratingsQueries.undoGlobalDislike(trackId)
         }
 
-    suspend fun undoGlobalDislike(trackId: Long) = withContext(IODispatcher) {
-        db.ratingsQueries.undoGlobalDislike(trackId)
-    }
-
-    suspend fun isGloballyDisliked(trackId: Long): Boolean = withContext(IODispatcher) {
-        db.ratingsQueries.isGloballyDisliked(trackId).executeAsOne() > 0L
-    }
+    suspend fun isGloballyDisliked(trackId: Long): Boolean =
+        withContext(IODispatcher) {
+            db.ratingsQueries.isGloballyDisliked(trackId).executeAsOne() > 0L
+        }
 
     /**
      * Full set of globally-disliked track ids. Loaded once per
@@ -263,9 +301,10 @@ class RatingRepository(private val db: RadioShedDatabase) {
      * filter the candidate pool at construction time rather than
      * checking each candidate individually.
      */
-    suspend fun globallyDislikedIds(): Set<Long> = withContext(IODispatcher) {
-        db.ratingsQueries.selectGloballyDislikedIds().executeAsList().toSet()
-    }
+    suspend fun globallyDislikedIds(): Set<Long> =
+        withContext(IODispatcher) {
+            db.ratingsQueries.selectGloballyDislikedIds().executeAsList().toSet()
+        }
 }
 
 data class PlayCountStat(

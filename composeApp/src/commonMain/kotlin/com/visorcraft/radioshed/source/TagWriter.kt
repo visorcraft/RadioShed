@@ -23,7 +23,10 @@ interface TagWriter {
      * Implementations MUST NOT throw on invalid input — bad files
      * surface as a failure result, not a crash.
      */
-    suspend fun write(uri: String, patch: TagPatch): Result<Unit>
+    suspend fun write(
+        uri: String,
+        patch: TagPatch,
+    ): Result<Unit>
 }
 
 /**

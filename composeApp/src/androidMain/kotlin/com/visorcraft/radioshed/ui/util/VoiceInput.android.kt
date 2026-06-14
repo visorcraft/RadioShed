@@ -9,31 +9,34 @@ import androidx.compose.runtime.Composable
 
 @Composable
 actual fun rememberVoiceInput(onResult: (String) -> Unit): () -> Unit {
-    val launcher = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult(),
-    ) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            // RecognizerIntent stuffs the n-best list under
-            // EXTRA_RESULTS; first entry is the highest-confidence
-            // transcription. We use only that — the alternates are
-            // useful for disambiguation UIs but our search treats
-            // any text as a query and re-runs anyway.
-            val matches = result.data
-                ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
-                .orEmpty()
-            val text = matches.firstOrNull()?.takeIf { it.isNotBlank() }
-            if (text != null) onResult(text)
+    val launcher =
+        rememberLauncherForActivityResult(
+            ActivityResultContracts.StartActivityForResult(),
+        ) { result ->
+            if (result.resultCode == Activity.RESULT_OK) {
+                // RecognizerIntent stuffs the n-best list under
+                // EXTRA_RESULTS; first entry is the highest-confidence
+                // transcription. We use only that — the alternates are
+                // useful for disambiguation UIs but our search treats
+                // any text as a query and re-runs anyway.
+                val matches =
+                    result.data
+                        ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+                        .orEmpty()
+                val text = matches.firstOrNull()?.takeIf { it.isNotBlank() }
+                if (text != null) onResult(text)
+            }
         }
-    }
     return {
         runCatching {
-            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                putExtra(
-                    RecognizerIntent.EXTRA_LANGUAGE_MODEL,
-                    RecognizerIntent.LANGUAGE_MODEL_FREE_FORM,
-                )
-                putExtra(RecognizerIntent.EXTRA_PROMPT, "Search RadioShed")
-            }
+            val intent =
+                Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                    putExtra(
+                        RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                        RecognizerIntent.LANGUAGE_MODEL_FREE_FORM,
+                    )
+                    putExtra(RecognizerIntent.EXTRA_PROMPT, "Search RadioShed")
+                }
             launcher.launch(intent)
         }
     }

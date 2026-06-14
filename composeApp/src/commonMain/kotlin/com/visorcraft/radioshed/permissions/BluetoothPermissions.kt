@@ -26,7 +26,6 @@ expect fun rememberBluetoothConnectGate(): BluetoothConnectGate
  */
 @Stable
 interface BluetoothConnectGate {
-
     /** True when `BLUETOOTH_CONNECT` is granted (always true off-Android). */
     val granted: Boolean
 

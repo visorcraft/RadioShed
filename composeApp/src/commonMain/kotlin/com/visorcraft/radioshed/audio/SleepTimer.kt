@@ -1,5 +1,6 @@
 package com.visorcraft.radioshed.audio
 
+import com.visorcraft.radioshed.data.SettingsStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -10,7 +11,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import com.visorcraft.radioshed.data.SettingsStore
 import kotlin.time.TimeSource
 
 /**
@@ -35,13 +35,13 @@ class SleepTimer(
     private val audioEngine: AudioEngine,
     private val settings: SettingsStore,
 ) {
-
     // crashGuard so a clock-skew / engine-call exception in the timer
     // coroutine doesn't surface as the OS-default crash dialog.
-    private val scope = CoroutineScope(
-        SupervisorJob() + Dispatchers.Default +
-            com.visorcraft.radioshed.util.crashGuard("SleepTimer"),
-    )
+    private val scope =
+        CoroutineScope(
+            SupervisorJob() + Dispatchers.Default +
+                com.visorcraft.radioshed.util.crashGuard("SleepTimer"),
+        )
 
     private val _state = MutableStateFlow<State>(State.Idle)
     val state: StateFlow<State> = _state.asStateFlow()
@@ -83,33 +83,34 @@ class SleepTimer(
         val startVolume = audioEngine.volume.value
         capturedVolume = startVolume
         _state.value = State.Running(remainingMs = durationMs)
-        ticker = scope.launch {
-            while (isActive) {
-                val elapsed = started.elapsedNow().inWholeMilliseconds
-                val remaining = durationMs - elapsed
-                if (remaining <= 0L) break
-                _state.value = State.Running(remainingMs = remaining)
-                // Fade ramp: linear from startVolume → 0 over the final
-                // FADE_DURATION_MS. Outside the fade window, leave volume
-                // alone so ReplayGain / pre-amp control the level.
-                if (remaining < FADE_DURATION_MS) {
-                    val fadeFraction = remaining.toFloat() / FADE_DURATION_MS.toFloat()
-                    audioEngine.setVolume((startVolume * fadeFraction).coerceIn(0f, 1f))
+        ticker =
+            scope.launch {
+                while (isActive) {
+                    val elapsed = started.elapsedNow().inWholeMilliseconds
+                    val remaining = durationMs - elapsed
+                    if (remaining <= 0L) break
+                    _state.value = State.Running(remainingMs = remaining)
+                    // Fade ramp: linear from startVolume → 0 over the final
+                    // FADE_DURATION_MS. Outside the fade window, leave volume
+                    // alone so ReplayGain / pre-amp control the level.
+                    if (remaining < FADE_DURATION_MS) {
+                        val fadeFraction = remaining.toFloat() / FADE_DURATION_MS.toFloat()
+                        audioEngine.setVolume((startVolume * fadeFraction).coerceIn(0f, 1f))
+                    }
+                    // 1 Hz tick — finer doesn't help readability and just
+                    // recomposes the UI more often. The final pause fires
+                    // when `remaining <= 0` on the next loop iteration.
+                    delay(TICK_INTERVAL_MS.coerceAtMost(remaining))
                 }
-                // 1 Hz tick — finer doesn't help readability and just
-                // recomposes the UI more often. The final pause fires
-                // when `remaining <= 0` on the next loop iteration.
-                delay(TICK_INTERVAL_MS.coerceAtMost(remaining))
+                if (settings.getSleepStopOnExpire()) audioEngine.stop() else audioEngine.pause()
+                // Restore so a future resume isn't silent, and the next
+                // track's RG re-application starts from a normal baseline.
+                audioEngine.setVolume(startVolume)
+                capturedVolume = null
+                startedMark = null
+                currentDurationMs = 0L
+                _state.value = State.Idle
             }
-            if (settings.getSleepStopOnExpire()) audioEngine.stop() else audioEngine.pause()
-            // Restore so a future resume isn't silent, and the next
-            // track's RG re-application starts from a normal baseline.
-            audioEngine.setVolume(startVolume)
-            capturedVolume = null
-            startedMark = null
-            currentDurationMs = 0L
-            _state.value = State.Idle
-        }
     }
 
     /**
@@ -185,7 +186,9 @@ class SleepTimer(
 
     sealed interface State {
         data object Idle : State
+
         data class Running(val remainingMs: Long) : State
+
         data object EndOfTrack : State
     }
 

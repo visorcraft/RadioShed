@@ -9,7 +9,6 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class CrossfadePlanTest {
-
     @Test
     fun offResolvesToNull() {
         assertNull(resolveCrossfadePlan(Crossfade.Off))
@@ -39,6 +38,25 @@ class CrossfadePlanTest {
         val plan = resolveCrossfadePlan(Crossfade.Smart)
         assertEquals(SMART_CROSSFADE_DEFAULT_SEC * 1_000L, plan?.durationMs)
         assertEquals(CrossfadeCurve.EqualPower, plan?.curve)
+        assertTrue(plan?.smart == true)
+    }
+
+    @Test
+    fun smartFadeDurationScalesWithTrackLength() {
+        assertEquals(2_000L, computeSmartFadeDurationMs(20_000L, 25_000L))
+        assertEquals(12_000L, computeSmartFadeDurationMs(180_000L, 200_000L))
+        assertEquals(
+            SMART_CROSSFADE_DEFAULT_SEC * 1_000L,
+            computeSmartFadeDurationMs(0L, 200_000L),
+        )
+    }
+
+    @Test
+    fun effectiveDurationUsesSmartWhenFlagged() {
+        val plan = CrossfadePlan(durationMs = 6_000L, curve = CrossfadeCurve.EqualPower, smart = true)
+        assertEquals(2_000L, effectiveCrossfadeDurationMs(plan, 20_000L, 30_000L))
+        val fixed = plan.copy(smart = false)
+        assertEquals(6_000L, effectiveCrossfadeDurationMs(fixed, 20_000L, 30_000L))
     }
 
     @Test
@@ -83,11 +101,17 @@ class CrossfadePlanTest {
     // regress: the ramp computes incoming = gain(curve, f, fadeIn=true) ×
     // incomingTarget and outgoing = gain(curve, f) × outgoingStart.
 
-    private fun incomingRamp(curve: CrossfadeCurve, f: Float, target: Float) =
-        FadeCurves.gain(curve, f, fadeIn = true) * target
+    private fun incomingRamp(
+        curve: CrossfadeCurve,
+        f: Float,
+        target: Float,
+    ) = FadeCurves.gain(curve, f, fadeIn = true) * target
 
-    private fun outgoingRamp(curve: CrossfadeCurve, f: Float, start: Float) =
-        FadeCurves.gain(curve, f, fadeIn = false) * start
+    private fun outgoingRamp(
+        curve: CrossfadeCurve,
+        f: Float,
+        start: Float,
+    ) = FadeCurves.gain(curve, f, fadeIn = false) * start
 
     @Test
     fun incomingFadeInLandsAtEffectiveTargetNotUnity() {

@@ -30,8 +30,10 @@ class LyricsService(
     private val networkGate: NetworkPolicyGate,
     private val settings: com.visorcraft.radioshed.data.SettingsStore,
 ) {
-
-    suspend fun resolve(trackId: Long, forceRefresh: Boolean = false): Lyrics? {
+    suspend fun resolve(
+        trackId: Long,
+        forceRefresh: Boolean = false,
+    ): Lyrics? {
         if (!forceRefresh) {
             cache.get(trackId)?.let { entry ->
                 // Negative-cache TTL: a "not found" hit on LRClib that's
@@ -75,8 +77,9 @@ class LyricsService(
             )
         }
 
-        val taggedArtist = libraryRepo.artistsForTrack(trackId)
-            .firstOrNull { it.name.isNotBlank() }?.name
+        val taggedArtist =
+            libraryRepo.artistsForTrack(trackId)
+                .firstOrNull { it.name.isNotBlank() }?.name
         val taggedTitle = track.title.takeIf { it.isNotBlank() }
 
         val albumTitle = track.albumId?.let { libraryRepo.getAlbumById(it)?.title }
@@ -96,16 +99,18 @@ class LyricsService(
         // featured-artist suffixes, and falls back to filename parsing
         // when the metadata is missing entirely. We stop on the first
         // hit to keep network use bounded.
-        val baseCandidates = lyricsQueryCandidates(
-            taggedArtist = taggedArtist,
-            taggedTitle = taggedTitle,
-            fileName = track.fileName,
-        )
-        val candidates = if (override != null) {
-            listOf(LyricsQuery(override.first, override.second)) + baseCandidates
-        } else {
-            baseCandidates
-        }
+        val baseCandidates =
+            lyricsQueryCandidates(
+                taggedArtist = taggedArtist,
+                taggedTitle = taggedTitle,
+                fileName = track.fileName,
+            )
+        val candidates =
+            if (override != null) {
+                listOf(LyricsQuery(override.first, override.second)) + baseCandidates
+            } else {
+                baseCandidates
+            }
 
         // Honour the user's connectivity policy. forceRefresh is the
         // manual retry path (user pressed "search again" in Lyrics
@@ -119,11 +124,13 @@ class LyricsService(
         // we just don't silently dial out for tracks the local files
         // don't cover.
         val autoFetchAllowed = forceRefresh || settings.getAutoFetchLyrics()
-        val networkAllowed = autoFetchAllowed && if (forceRefresh) {
-            networkGate.allowUserInitiatedFetch(NetworkService.Lyrics)
-        } else {
-            networkGate.allowAutomaticFetch(NetworkService.Lyrics)
-        }
+        val networkAllowed =
+            autoFetchAllowed &&
+                if (forceRefresh) {
+                    networkGate.allowUserInitiatedFetch(NetworkService.Lyrics)
+                } else {
+                    networkGate.allowAutomaticFetch(NetworkService.Lyrics)
+                }
         if (!networkAllowed) {
             // Don't poison the cache with a miss — the user might be
             // offline temporarily, or might flip the policy back to
@@ -139,17 +146,18 @@ class LyricsService(
         // 30 days because of a network blip.
         var sawTransientError = false
         for (candidate in candidates) {
-            raw = try {
-                fetcher.fetch(
-                    artist = candidate.artist,
-                    title = candidate.title,
-                    album = albumTitle,
-                    durationSeconds = durationSec,
-                )
-            } catch (e: TransientLyricsFetchException) {
-                sawTransientError = true
-                null
-            }
+            raw =
+                try {
+                    fetcher.fetch(
+                        artist = candidate.artist,
+                        title = candidate.title,
+                        album = albumTitle,
+                        durationSeconds = durationSec,
+                    )
+                } catch (e: TransientLyricsFetchException) {
+                    sawTransientError = true
+                    null
+                }
             if (raw != null) break
         }
 
@@ -231,12 +239,13 @@ class LyricsService(
                 val mins = m.groupValues[2].toLongOrNull() ?: continue
                 val secs = m.groupValues[3].toLongOrNull() ?: continue
                 val frac = m.groupValues[4]
-                val fracMs = when (frac.length) {
-                    1 -> frac.toLong() * 100L
-                    2 -> frac.toLong() * 10L
-                    3 -> frac.toLong()
-                    else -> 0L
-                }
+                val fracMs =
+                    when (frac.length) {
+                        1 -> frac.toLong() * 100L
+                        2 -> frac.toLong() * 10L
+                        3 -> frac.toLong()
+                        else -> 0L
+                    }
                 val timeMs = hours * 3_600_000L + mins * 60_000L + secs * 1_000L + fracMs
                 result += LyricLine(timeMs = timeMs, text = text)
             }

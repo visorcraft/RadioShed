@@ -25,28 +25,29 @@ import androidx.compose.ui.input.pointer.pointerInput
  * Composable that recomposes with a new station id would keep the
  * stale tile-id callback wired.
  */
-fun Modifier.onRightClick(action: () -> Unit): Modifier = pointerInput(action) {
-    awaitEachGesture {
-        val press = awaitPointerEvent()
-        if (press.type == PointerEventType.Press && press.buttons.isSecondaryPressed) {
-            press.changes.forEach { it.consume() }
-            action()
-            // Consume the matching Release too. Compose Desktop's own
-            // ContextMenuArea (and some Skiko platform shims) install
-            // handlers that fire on Release rather than Press; without
-            // this second consume() they'd see the unhandled release
-            // and pop a duplicate context menu over the one our
-            // [action] just opened.
-            while (true) {
-                val next = awaitPointerEvent()
-                if (next.type == PointerEventType.Release) {
-                    next.changes.forEach { it.consume() }
-                    break
+fun Modifier.onRightClick(action: () -> Unit): Modifier =
+    pointerInput(action) {
+        awaitEachGesture {
+            val press = awaitPointerEvent()
+            if (press.type == PointerEventType.Press && press.buttons.isSecondaryPressed) {
+                press.changes.forEach { it.consume() }
+                action()
+                // Consume the matching Release too. Compose Desktop's own
+                // ContextMenuArea (and some Skiko platform shims) install
+                // handlers that fire on Release rather than Press; without
+                // this second consume() they'd see the unhandled release
+                // and pop a duplicate context menu over the one our
+                // [action] just opened.
+                while (true) {
+                    val next = awaitPointerEvent()
+                    if (next.type == PointerEventType.Release) {
+                        next.changes.forEach { it.consume() }
+                        break
+                    }
+                    // Other event types (Move, Enter, Exit) in between
+                    // press and release are ignored; the gesture isn't
+                    // complete until release.
                 }
-                // Other event types (Move, Enter, Exit) in between
-                // press and release are ignored; the gesture isn't
-                // complete until release.
             }
         }
     }
-}

@@ -4,7 +4,6 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 class PathJoinTest {
-
     @Test
     fun joinPath_windowsDriveRoot() {
         assertEquals("D:\\Music", joinPath("D:\\", "Music"))

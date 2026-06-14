@@ -8,10 +8,10 @@ import com.visorcraft.radioshed.domain.decodeDriveTriggers
 import com.visorcraft.radioshed.util.isInMinuteWindow
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -50,12 +50,12 @@ import kotlinx.coroutines.sync.withLock
  */
 class DriveModeController(
     private val watcher: BluetoothWatcher,
+    private val speedWatcher: SpeedWatcher,
     private val settings: SettingsStore,
     private val scope: CoroutineScope,
     private val ticker: Flow<Unit> = oneMinuteTicker(),
     private val nowMinutesOfDay: () -> Int = { localMinutesOfDay(nowMillis()) },
 ) {
-
     /**
      * Mirrors the authoritative [SettingsStore.driveModeFlow], so it reflects
      * BOTH controller edge writes and external toggles (the Settings switch).
@@ -82,27 +82,39 @@ class DriveModeController(
     private var cachedTriggersJson: String? = null
     private var cachedTriggers: List<DriveModeTrigger> = emptyList()
 
+    // Speed trigger uses enter/exit hysteresis separate from the combined edge.
+    private var speedTriggerLatched = false
+
     private var started = false
 
     // Collector jobs, tracked so stop() can cancel them and a later start()
     // doesn't stack a second pair on the injected scope.
     private var btJob: Job? = null
     private var tickerJob: Job? = null
+    private var speedJob: Job? = null
 
     /** Idempotent: starts the watcher and the BT + schedule collectors. */
     fun start() {
         if (started) return
         started = true
         watcher.start()
+        speedWatcher.start()
 
         // Bluetooth: re-evaluate whenever the connected set changes.
-        btJob = scope.launch {
-            watcher.connectedDevices.collect { evaluate() }
-        }
+        btJob =
+            scope.launch {
+                watcher.connectedDevices.collect { evaluate() }
+            }
         // Schedule: re-evaluate on each ticker pass.
-        tickerJob = scope.launch {
-            ticker.collect { evaluate() }
-        }
+        tickerJob =
+            scope.launch {
+                ticker.collect { evaluate() }
+            }
+        // Speed: re-evaluate whenever GPS speed updates.
+        speedJob =
+            scope.launch {
+                speedWatcher.speedKmh.collect { evaluate() }
+            }
     }
 
     /** Idempotent: stops the watcher and cancels the collectors. */
@@ -110,10 +122,13 @@ class DriveModeController(
         if (!started) return
         started = false
         watcher.stop()
+        speedWatcher.stop()
         btJob?.cancel()
         btJob = null
         tickerJob?.cancel()
         tickerJob = null
+        speedJob?.cancel()
+        speedJob = null
     }
 
     /**
@@ -141,12 +156,27 @@ class DriveModeController(
 
             val connectedMacs = watcher.connectedDevices.value.map { it.mac }.toSet()
             val nowMin = nowMinutesOfDay()
-            val triggerActive = triggers.any { trigger ->
-                when (trigger) {
-                    is DriveModeTrigger.BtDevice -> trigger.mac in connectedMacs
-                    is DriveModeTrigger.Schedule -> nowMin.isInMinuteWindow(trigger.startMin, trigger.endMin)
+            val speedKmh = speedWatcher.speedKmh.value
+            val speedTrigger = triggers.filterIsInstance<DriveModeTrigger.Speed>().firstOrNull()
+            if (speedTrigger != null && speedKmh != null) {
+                if (!speedTriggerLatched && speedKmh >= speedTrigger.enterKmh) {
+                    speedTriggerLatched = true
+                } else if (speedTriggerLatched && speedKmh < speedTrigger.exitKmh) {
+                    speedTriggerLatched = false
                 }
+            } else {
+                // No speed trigger configured, or GPS unavailable — don't hold latch.
+                speedTriggerLatched = false
             }
+            val triggerActive =
+                speedTriggerLatched ||
+                    triggers.any { trigger ->
+                        when (trigger) {
+                            is DriveModeTrigger.BtDevice -> trigger.mac in connectedMacs
+                            is DriveModeTrigger.Schedule -> nowMin.isInMinuteWindow(trigger.startMin, trigger.endMin)
+                            is DriveModeTrigger.Speed -> false
+                        }
+                    }
 
             val rising = triggerActive && !lastTriggerActive
             val falling = !triggerActive && lastTriggerActive
@@ -164,11 +194,12 @@ class DriveModeController(
 
     companion object {
         /** Emits Unit once per minute. Injectable so tests pump it manually. */
-        fun oneMinuteTicker(): Flow<Unit> = flow {
-            while (true) {
-                delay(60_000L)
-                emit(Unit)
+        fun oneMinuteTicker(): Flow<Unit> =
+            flow {
+                while (true) {
+                    delay(60_000L)
+                    emit(Unit)
+                }
             }
-        }
     }
 }

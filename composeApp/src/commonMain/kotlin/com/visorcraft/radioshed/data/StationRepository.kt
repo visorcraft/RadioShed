@@ -12,58 +12,62 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import com.visorcraft.radioshed.db.Station as StationRow
-import com.visorcraft.radioshed.db.Station_history as StationHistoryRow
 
 class StationRepository(private val db: RadioShedDatabase) {
-
     fun observeAll(): Flow<List<Station>> =
         db.stationsQueries.selectAllStations()
             .asFlow()
             .mapToList(IODispatcher)
             .map { rows -> rows.map(::toStation) }
 
-    suspend fun list(): List<Station> = withContext(IODispatcher) {
-        db.stationsQueries.selectAllStations().executeAsList().map(::toStation)
-    }
-
-    suspend fun getById(id: Long): Station? = withContext(IODispatcher) {
-        db.stationsQueries.selectStationById(id).executeAsOneOrNull()?.let(::toStation)
-    }
-
-    suspend fun listPinned(): List<Station> = withContext(IODispatcher) {
-        db.stationsQueries.selectPinnedStations().executeAsList().map(::toStation)
-    }
-
-    suspend fun listRecentlyPlayed(limit: Long): List<Station> = withContext(IODispatcher) {
-        db.stationsQueries.selectRecentlyPlayedStations(limit).executeAsList().map { row ->
-            // SelectRecentlyPlayedStations is a generated projection; rebuild manually.
-            Station(
-                id = row.id,
-                name = row.name,
-                color = row.color.toInt(),
-                icon = row.icon,
-                artworkUri = row.artwork_uri,
-                sortPosition = row.sort_position.toInt(),
-                customSubtitle = row.custom_subtitle,
-                source = decodeSource(row.source_json),
-                playback = decodePlayback(row.playback_json),
-                stats = StationStats(
-                    playCount = row.play_count,
-                    lastPlayedAt = row.last_played_at,
-                    totalListenMs = row.total_listen_ms,
-                    skipRate = row.skip_rate,
-                ),
-                isPinned = row.is_pinned == 1L,
-                isBuiltIn = row.is_built_in == 1L,
-                createdAt = row.created_at,
-                updatedAt = row.updated_at,
-            )
+    suspend fun list(): List<Station> =
+        withContext(IODispatcher) {
+            db.stationsQueries.selectAllStations().executeAsList().map(::toStation)
         }
-    }
 
-    suspend fun count(): Long = withContext(IODispatcher) {
-        db.stationsQueries.countStations().executeAsOne()
-    }
+    suspend fun getById(id: Long): Station? =
+        withContext(IODispatcher) {
+            db.stationsQueries.selectStationById(id).executeAsOneOrNull()?.let(::toStation)
+        }
+
+    suspend fun listPinned(): List<Station> =
+        withContext(IODispatcher) {
+            db.stationsQueries.selectPinnedStations().executeAsList().map(::toStation)
+        }
+
+    suspend fun listRecentlyPlayed(limit: Long): List<Station> =
+        withContext(IODispatcher) {
+            db.stationsQueries.selectRecentlyPlayedStations(limit).executeAsList().map { row ->
+                // SelectRecentlyPlayedStations is a generated projection; rebuild manually.
+                Station(
+                    id = row.id,
+                    name = row.name,
+                    color = row.color.toInt(),
+                    icon = row.icon,
+                    artworkUri = row.artwork_uri,
+                    sortPosition = row.sort_position.toInt(),
+                    customSubtitle = row.custom_subtitle,
+                    source = decodeSource(row.source_json),
+                    playback = decodePlayback(row.playback_json),
+                    stats =
+                        StationStats(
+                            playCount = row.play_count,
+                            lastPlayedAt = row.last_played_at,
+                            totalListenMs = row.total_listen_ms,
+                            skipRate = row.skip_rate,
+                        ),
+                    isPinned = row.is_pinned == 1L,
+                    isBuiltIn = row.is_built_in == 1L,
+                    createdAt = row.created_at,
+                    updatedAt = row.updated_at,
+                )
+            }
+        }
+
+    suspend fun count(): Long =
+        withContext(IODispatcher) {
+            db.stationsQueries.countStations().executeAsOne()
+        }
 
     suspend fun insert(
         name: String,
@@ -75,22 +79,23 @@ class StationRepository(private val db: RadioShedDatabase) {
         sortPosition: Int = 0,
         customSubtitle: String? = null,
         isBuiltIn: Boolean = false,
-    ): Long = withContext(IODispatcher) {
-        val now = nowMillis()
-        db.stationsQueries.insertStation(
-            name = name,
-            color = color.toLong(),
-            icon = icon,
-            artwork_uri = artworkUri,
-            sort_position = sortPosition.toLong(),
-            custom_subtitle = customSubtitle,
-            source_json = encodeSource(source),
-            playback_json = encodePlayback(playback),
-            is_built_in = if (isBuiltIn) 1L else 0L,
-            created_at = now,
-            updated_at = now,
-        ).executeAsOne()
-    }
+    ): Long =
+        withContext(IODispatcher) {
+            val now = nowMillis()
+            db.stationsQueries.insertStation(
+                name = name,
+                color = color.toLong(),
+                icon = icon,
+                artwork_uri = artworkUri,
+                sort_position = sortPosition.toLong(),
+                custom_subtitle = customSubtitle,
+                source_json = encodeSource(source),
+                playback_json = encodePlayback(playback),
+                is_built_in = if (isBuiltIn) 1L else 0L,
+                created_at = now,
+                updated_at = now,
+            ).executeAsOne()
+        }
 
     /**
      * Clone an existing station's source / playback / cosmetic fields
@@ -109,26 +114,27 @@ class StationRepository(private val db: RadioShedDatabase) {
      * "Foo (copy)" yields "Foo (copy 2)" rather than the awkward
      * "Foo (copy) (copy)".
      */
-    suspend fun duplicate(stationId: Long): Long? = withContext(IODispatcher) {
-        val src = getById(stationId) ?: return@withContext null
-        val now = nowMillis()
-        db.stationsQueries.transactionWithResult {
-            val maxSort = db.stationsQueries.selectMaxStationSort().executeAsOne()
-            db.stationsQueries.insertStation(
-                name = bumpCopySuffix(src.name),
-                color = src.color.toLong(),
-                icon = src.icon,
-                artwork_uri = src.artworkUri,
-                sort_position = maxSort + 1L,
-                custom_subtitle = src.customSubtitle,
-                source_json = encodeSource(src.source),
-                playback_json = encodePlayback(src.playback),
-                is_built_in = 0L,
-                created_at = now,
-                updated_at = now,
-            ).executeAsOne()
+    suspend fun duplicate(stationId: Long): Long? =
+        withContext(IODispatcher) {
+            val src = getById(stationId) ?: return@withContext null
+            val now = nowMillis()
+            db.stationsQueries.transactionWithResult {
+                val maxSort = db.stationsQueries.selectMaxStationSort().executeAsOne()
+                db.stationsQueries.insertStation(
+                    name = bumpCopySuffix(src.name),
+                    color = src.color.toLong(),
+                    icon = src.icon,
+                    artwork_uri = src.artworkUri,
+                    sort_position = maxSort + 1L,
+                    custom_subtitle = src.customSubtitle,
+                    source_json = encodeSource(src.source),
+                    playback_json = encodePlayback(src.playback),
+                    is_built_in = 0L,
+                    created_at = now,
+                    updated_at = now,
+                ).executeAsOne()
+            }
         }
-    }
 
     /**
      * Atomic-pair reorder: swap two stations' sort positions inside
@@ -137,14 +143,18 @@ class StationRepository(private val db: RadioShedDatabase) {
      * same sort_position. Used by the up/down buttons in the long-
      * press sheet.
      */
-    suspend fun swapSortPositions(idA: Long, posA: Int, idB: Long, posB: Int) =
-        withContext(IODispatcher) {
-            val now = nowMillis()
-            db.stationsQueries.transaction {
-                db.stationsQueries.reorderStation(posB.toLong(), now, idA)
-                db.stationsQueries.reorderStation(posA.toLong(), now, idB)
-            }
+    suspend fun swapSortPositions(
+        idA: Long,
+        posA: Int,
+        idB: Long,
+        posB: Int,
+    ) = withContext(IODispatcher) {
+        val now = nowMillis()
+        db.stationsQueries.transaction {
+            db.stationsQueries.reorderStation(posB.toLong(), now, idA)
+            db.stationsQueries.reorderStation(posA.toLong(), now, idB)
         }
+    }
 
     /**
      * Move [stationId] to the very top or bottom of the station order.
@@ -195,7 +205,10 @@ class StationRepository(private val db: RadioShedDatabase) {
         )
     }
 
-    suspend fun updateStats(id: Long, stats: StationStats) = withContext(IODispatcher) {
+    suspend fun updateStats(
+        id: Long,
+        stats: StationStats,
+    ) = withContext(IODispatcher) {
         db.stationsQueries.updateStationStats(
             play_count = stats.playCount,
             last_played_at = stats.lastPlayedAt,
@@ -207,13 +220,18 @@ class StationRepository(private val db: RadioShedDatabase) {
     }
 
     /** Atomic +1 on play_count + last_played_at. Race-safe vs concurrent starts. */
-    suspend fun bumpStationPlayCount(id: Long, playedAt: Long = nowMillis()) =
-        withContext(IODispatcher) {
-            db.stationsQueries.bumpStationPlayCount(playedAt, nowMillis(), id)
-        }
+    suspend fun bumpStationPlayCount(
+        id: Long,
+        playedAt: Long = nowMillis(),
+    ) = withContext(IODispatcher) {
+        db.stationsQueries.bumpStationPlayCount(playedAt, nowMillis(), id)
+    }
 
     /** Add [deltaMs] to total_listen_ms atomically. */
-    suspend fun bumpStationListenedMs(id: Long, deltaMs: Long) = withContext(IODispatcher) {
+    suspend fun bumpStationListenedMs(
+        id: Long,
+        deltaMs: Long,
+    ) = withContext(IODispatcher) {
         if (deltaMs <= 0L) return@withContext
         db.stationsQueries.bumpStationListenedMs(deltaMs, nowMillis(), id)
     }
@@ -224,9 +242,10 @@ class StationRepository(private val db: RadioShedDatabase) {
      * full history table and the cached counters that the Stats
      * screen reads from `station.play_count`.
      */
-    suspend fun resetAllStationStats() = withContext(IODispatcher) {
-        db.stationsQueries.resetAllStationStats(nowMillis())
-    }
+    suspend fun resetAllStationStats() =
+        withContext(IODispatcher) {
+            db.stationsQueries.resetAllStationStats(nowMillis())
+        }
 
     /**
      * Wipe one station's history rows + reset its cached counters.
@@ -236,12 +255,13 @@ class StationRepository(private val db: RadioShedDatabase) {
      * read station.play_count and the History screen that reads
      * station_history rows both go to zero atomically.
      */
-    suspend fun resetStationStats(stationId: Long) = withContext(IODispatcher) {
-        db.stationsQueries.transaction {
-            db.stationsQueries.deleteHistoryByStation(stationId)
-            db.stationsQueries.resetStationStatsById(nowMillis(), stationId)
+    suspend fun resetStationStats(stationId: Long) =
+        withContext(IODispatcher) {
+            db.stationsQueries.transaction {
+                db.stationsQueries.deleteHistoryByStation(stationId)
+                db.stationsQueries.resetStationStatsById(nowMillis(), stationId)
+            }
         }
-    }
 
     /**
      * Batched (trackId → playCount). Returns 0 for tracks that have
@@ -295,7 +315,10 @@ class StationRepository(private val db: RadioShedDatabase) {
             )
         }
 
-    suspend fun reorder(id: Long, sortPosition: Int) = withContext(IODispatcher) {
+    suspend fun reorder(
+        id: Long,
+        sortPosition: Int,
+    ) = withContext(IODispatcher) {
         db.stationsQueries.reorderStation(sortPosition.toLong(), nowMillis(), id)
     }
 
@@ -303,17 +326,24 @@ class StationRepository(private val db: RadioShedDatabase) {
      * Set or clear the user-uploaded station artwork URI. Pass null
      * to revert to the auto-collage / preset gradient defaults.
      */
-    suspend fun setArtwork(id: Long, artworkUri: String?) = withContext(IODispatcher) {
+    suspend fun setArtwork(
+        id: Long,
+        artworkUri: String?,
+    ) = withContext(IODispatcher) {
         db.stationsQueries.updateStationArtwork(artworkUri, nowMillis(), id)
     }
 
-    suspend fun setPinned(id: Long, pinned: Boolean) = withContext(IODispatcher) {
+    suspend fun setPinned(
+        id: Long,
+        pinned: Boolean,
+    ) = withContext(IODispatcher) {
         db.stationsQueries.setStationPinned(if (pinned) 1L else 0L, nowMillis(), id)
     }
 
-    suspend fun delete(id: Long) = withContext(IODispatcher) {
-        db.stationsQueries.deleteStationById(id)
-    }
+    suspend fun delete(id: Long) =
+        withContext(IODispatcher) {
+            db.stationsQueries.deleteStationById(id)
+        }
 
     /**
      * Up to [limit] album artwork URIs for the station's most recent
@@ -321,7 +351,10 @@ class StationRepository(private val db: RadioShedDatabase) {
      * shown on station tiles that have no custom artwork uploaded.
      * Returns empty when the station has no playable history yet.
      */
-    suspend fun recentAlbumArtwork(stationId: Long, limit: Long = 4L): List<String> =
+    suspend fun recentAlbumArtwork(
+        stationId: Long,
+        limit: Long = 4L,
+    ): List<String> =
         withContext(IODispatcher) {
             // SQLDelight infers artwork_uri as non-null from the WHERE
             // `album.artwork_uri IS NOT NULL`. The blank-trim is the
@@ -335,31 +368,43 @@ class StationRepository(private val db: RadioShedDatabase) {
 
     // ---- Pinned tracks (per-station) ----
 
-    suspend fun pinTrackToStation(stationId: Long, trackId: Long) = withContext(IODispatcher) {
+    suspend fun pinTrackToStation(
+        stationId: Long,
+        trackId: Long,
+    ) = withContext(IODispatcher) {
         db.stationsQueries.pinTrackToStation(stationId, trackId, nowMillis())
     }
 
-    suspend fun unpinTrackFromStation(stationId: Long, trackId: Long) = withContext(IODispatcher) {
+    suspend fun unpinTrackFromStation(
+        stationId: Long,
+        trackId: Long,
+    ) = withContext(IODispatcher) {
         db.stationsQueries.unpinTrackFromStation(stationId, trackId)
     }
 
-    suspend fun isTrackPinned(stationId: Long, trackId: Long): Boolean =
+    suspend fun isTrackPinned(
+        stationId: Long,
+        trackId: Long,
+    ): Boolean =
         withContext(IODispatcher) {
             db.stationsQueries.isTrackPinnedToStation(stationId, trackId).executeAsOne() > 0L
         }
 
-    suspend fun pinnedTracks(stationId: Long): List<Track> = withContext(IODispatcher) {
-        db.stationsQueries.selectPinnedTracksForStation(stationId).executeAsList()
-            .map { it.toDomain() }
-    }
+    suspend fun pinnedTracks(stationId: Long): List<Track> =
+        withContext(IODispatcher) {
+            db.stationsQueries.selectPinnedTracksForStation(stationId).executeAsList()
+                .map { it.toDomain() }
+        }
 
-    suspend fun pinnedTrackIds(stationId: Long): List<Long> = withContext(IODispatcher) {
-        db.stationsQueries.selectPinnedTrackIdsForStation(stationId).executeAsList()
-    }
+    suspend fun pinnedTrackIds(stationId: Long): List<Long> =
+        withContext(IODispatcher) {
+            db.stationsQueries.selectPinnedTrackIdsForStation(stationId).executeAsList()
+        }
 
-    suspend fun pinnedTrackCount(stationId: Long): Long = withContext(IODispatcher) {
-        db.stationsQueries.countPinnedTracksForStation(stationId).executeAsOne()
-    }
+    suspend fun pinnedTrackCount(stationId: Long): Long =
+        withContext(IODispatcher) {
+            db.stationsQueries.countPinnedTracksForStation(stationId).executeAsOne()
+        }
 
     // ---- Station history ----
 
@@ -369,17 +414,21 @@ class StationRepository(private val db: RadioShedDatabase) {
         playedAt: Long = nowMillis(),
         completed: Boolean = false,
         listenedMs: Long = 0,
-    ): Long = withContext(IODispatcher) {
-        db.stationsQueries.recordPlay(
-            station_id = stationId,
-            track_id = trackId,
-            played_at = playedAt,
-            completed = if (completed) 1L else 0L,
-            listened_ms = listenedMs,
-        ).executeAsOne()
-    }
+    ): Long =
+        withContext(IODispatcher) {
+            db.stationsQueries.recordPlay(
+                station_id = stationId,
+                track_id = trackId,
+                played_at = playedAt,
+                completed = if (completed) 1L else 0L,
+                listened_ms = listenedMs,
+            ).executeAsOne()
+        }
 
-    suspend fun historyForStation(stationId: Long, limit: Long = 100): List<HistoryEntry> =
+    suspend fun historyForStation(
+        stationId: Long,
+        limit: Long = 100,
+    ): List<HistoryEntry> =
         withContext(IODispatcher) {
             db.stationsQueries.selectHistoryByStation(stationId, limit).executeAsList().map { row ->
                 HistoryEntry(
@@ -413,14 +462,18 @@ class StationRepository(private val db: RadioShedDatabase) {
             }
         }
 
-    suspend fun recentTrackIdsForStation(stationId: Long, limit: Long): List<Long> =
+    suspend fun recentTrackIdsForStation(
+        stationId: Long,
+        limit: Long,
+    ): List<Long> =
         withContext(IODispatcher) {
             db.stationsQueries.selectRecentTrackIdsForStation(stationId, limit).executeAsList()
         }
 
-    suspend fun trimHistoryOlderThan(threshold: Long) = withContext(IODispatcher) {
-        db.stationsQueries.trimHistoryOlderThan(threshold)
-    }
+    suspend fun trimHistoryOlderThan(threshold: Long) =
+        withContext(IODispatcher) {
+            db.stationsQueries.trimHistoryOlderThan(threshold)
+        }
 
     /**
      * Wipe the rows from the *recent* end of the history timeline.
@@ -429,26 +482,28 @@ class StationRepository(private val db: RadioShedDatabase) {
      * deleted. Counters on `station` are intentionally left alone:
      * the play happened, just not in the visible log.
      */
-    suspend fun trimHistoryNewerThan(threshold: Long) = withContext(IODispatcher) {
-        db.stationsQueries.trimHistoryNewerThan(threshold)
-    }
-
-    suspend fun clearAllHistory() = withContext(IODispatcher) {
-        // Wipe both the granular history rows AND the denormalized
-        // station-level counters so the Stats screen's Top Stations
-        // section actually resets (it reads station.play_count, not
-        // station_history aggregates).
-        //
-        // Wrapped in a transaction so a process kill between the two
-        // statements can't leave history empty but station play_count
-        // values stale. The single-station `resetStationStats(id)`
-        // analog already uses transactionWithResult — same protection
-        // is applied here.
-        db.stationsQueries.transaction {
-            db.stationsQueries.clearAllHistory()
-            db.stationsQueries.resetAllStationStats(nowMillis())
+    suspend fun trimHistoryNewerThan(threshold: Long) =
+        withContext(IODispatcher) {
+            db.stationsQueries.trimHistoryNewerThan(threshold)
         }
-    }
+
+    suspend fun clearAllHistory() =
+        withContext(IODispatcher) {
+            // Wipe both the granular history rows AND the denormalized
+            // station-level counters so the Stats screen's Top Stations
+            // section actually resets (it reads station.play_count, not
+            // station_history aggregates).
+            //
+            // Wrapped in a transaction so a process kill between the two
+            // statements can't leave history empty but station play_count
+            // values stale. The single-station `resetStationStats(id)`
+            // analog already uses transactionWithResult — same protection
+            // is applied here.
+            db.stationsQueries.transaction {
+                db.stationsQueries.clearAllHistory()
+                db.stationsQueries.resetAllStationStats(nowMillis())
+            }
+        }
 
     /** Top played tracks across all stations. Returned as (trackId, playCount). */
     suspend fun topPlayedTracks(limit: Long): List<Pair<Long, Long>> =
@@ -464,17 +519,21 @@ class StationRepository(private val db: RadioShedDatabase) {
      * milliseconds (compare against [nowMillis]). Returned ordered
      * oldest-first.
      */
-    suspend fun rediscoverTrackIds(olderThanMs: Long, limit: Long): List<Long> =
+    suspend fun rediscoverTrackIds(
+        olderThanMs: Long,
+        limit: Long,
+    ): List<Long> =
         withContext(IODispatcher) {
             db.stationsQueries.selectRediscoverTrackIds(olderThanMs, limit).executeAsList()
                 .map { it.track_id }
         }
 
-    suspend fun totalListenedMs(): Long = withContext(IODispatcher) {
-        // The IFNULL wrapping in the SQL ensures a non-null Long even
-        // when the table is empty (cold start), so executeAsOne is safe.
-        db.stationsQueries.totalListenedMs().executeAsOne()
-    }
+    suspend fun totalListenedMs(): Long =
+        withContext(IODispatcher) {
+            // The IFNULL wrapping in the SQL ensures a non-null Long even
+            // when the table is empty (cold start), so executeAsOne is safe.
+            db.stationsQueries.totalListenedMs().executeAsOne()
+        }
 
     /**
      * Sum of listened_ms in `[fromMs, toMs)`. Used by the Stats screen
@@ -482,14 +541,18 @@ class StationRepository(private val db: RadioShedDatabase) {
      * epoch ms in the device's wall-clock zone (caller computes the
      * boundary by stepping back N days from `nowMillis()`).
      */
-    suspend fun listenedMsBetween(fromMs: Long, toMs: Long): Long =
+    suspend fun listenedMsBetween(
+        fromMs: Long,
+        toMs: Long,
+    ): Long =
         withContext(IODispatcher) {
             db.stationsQueries.listenedMsBetween(fromMs, toMs).executeAsOne()
         }
 
-    suspend fun countAllPlays(): Long = withContext(IODispatcher) {
-        db.stationsQueries.countAllPlays().executeAsOne()
-    }
+    suspend fun countAllPlays(): Long =
+        withContext(IODispatcher) {
+            db.stationsQueries.countAllPlays().executeAsOne()
+        }
 
     /**
      * Earliest played_at across all of station_history, or null when
@@ -499,9 +562,10 @@ class StationRepository(private val db: RadioShedDatabase) {
      * returns one row containing NULL, so we unwrap the nullable
      * Long inside the row instead.
      */
-    suspend fun earliestPlayedAt(): Long? = withContext(IODispatcher) {
-        db.stationsQueries.earliestPlayedAt().executeAsOneOrNull()?.earliest_ms
-    }
+    suspend fun earliestPlayedAt(): Long? =
+        withContext(IODispatcher) {
+            db.stationsQueries.earliestPlayedAt().executeAsOneOrNull()?.earliest_ms
+        }
 
     /**
      * "How many distinct artists / albums have I played?" Joins
@@ -511,13 +575,15 @@ class StationRepository(private val db: RadioShedDatabase) {
      * "still have rows for" is more useful than counting artists
      * whose tracks no longer exist.
      */
-    suspend fun distinctArtistsPlayed(): Long = withContext(IODispatcher) {
-        db.stationsQueries.distinctArtistsPlayed().executeAsOne()
-    }
+    suspend fun distinctArtistsPlayed(): Long =
+        withContext(IODispatcher) {
+            db.stationsQueries.distinctArtistsPlayed().executeAsOne()
+        }
 
-    suspend fun distinctAlbumsPlayed(): Long = withContext(IODispatcher) {
-        db.stationsQueries.distinctAlbumsPlayed().executeAsOne()
-    }
+    suspend fun distinctAlbumsPlayed(): Long =
+        withContext(IODispatcher) {
+            db.stationsQueries.distinctAlbumsPlayed().executeAsOne()
+        }
 
     /**
      * Day-bucketed play activity for the last [windowDays]. Returns a
@@ -537,13 +603,15 @@ class StationRepository(private val db: RadioShedDatabase) {
             // this, the oldest day's plays silently disappear when
             // they happen to land on the boundary millisecond.
             val sinceMs = now - windowDays.toLong() * DAY_MS + 1L
-            val rows = db.stationsQueries.selectPlaysPerDayWindow(
-                nowMs = now,
-                sinceMs = sinceMs,
-            ).executeAsList()
-            val byDaysAgo = rows.associate {
-                it.days_ago.toInt() to (it.plays to it.listened_ms)
-            }
+            val rows =
+                db.stationsQueries.selectPlaysPerDayWindow(
+                    nowMs = now,
+                    sinceMs = sinceMs,
+                ).executeAsList()
+            val byDaysAgo =
+                rows.associate {
+                    it.days_ago.toInt() to (it.plays to it.listened_ms)
+                }
             // Render oldest → newest so the bar chart reads left-to-
             // right with "today" on the right.
             (windowDays - 1 downTo 0).map { offset ->
@@ -584,8 +652,9 @@ class StationRepository(private val db: RadioShedDatabase) {
     suspend fun playsByWeekday(windowDays: Int = 30): LongArray =
         withContext(IODispatcher) {
             val sinceMs = nowMillis() - windowDays.toLong() * DAY_MS
-            val rows = db.stationsQueries.selectPlaysPerWeekdayWindow(sinceMs)
-                .executeAsList()
+            val rows =
+                db.stationsQueries.selectPlaysPerWeekdayWindow(sinceMs)
+                    .executeAsList()
             val out = LongArray(7)
             rows.forEach { row ->
                 val sqliteWd = row.weekday?.toInt() ?: return@forEach
@@ -610,9 +679,10 @@ class StationRepository(private val db: RadioShedDatabase) {
     suspend fun listeningStreaks(windowDays: Int = 90): Pair<Int, Int> =
         withContext(IODispatcher) {
             val sinceMs = nowMillis() - windowDays.toLong() * DAY_MS
-            val daysList: List<Long> = db.stationsQueries.selectActivePlayDays(sinceMs)
-                .executeAsList()
-                .mapNotNull { it.day_epoch }
+            val daysList: List<Long> =
+                db.stationsQueries.selectActivePlayDays(sinceMs)
+                    .executeAsList()
+                    .mapNotNull { it.day_epoch }
             if (daysList.isEmpty()) {
                 return@withContext Pair(0, 0)
             }
@@ -657,10 +727,11 @@ class StationRepository(private val db: RadioShedDatabase) {
      * case returns 0 / 0; UI must guard against divide-by-zero.
      * Both columns are non-null thanks to IFNULL/COUNT in the SQL.
      */
-    suspend fun completionStats(): Pair<Long, Long> = withContext(IODispatcher) {
-        val row = db.stationsQueries.selectCompletionStats().executeAsOne()
-        row.completed to row.total
-    }
+    suspend fun completionStats(): Pair<Long, Long> =
+        withContext(IODispatcher) {
+            val row = db.stationsQueries.selectCompletionStats().executeAsOne()
+            row.completed to row.total
+        }
 
     /** Top artists by play count. Returned as (artistId, artistName, plays). */
     suspend fun topPlayedArtists(limit: Long): List<TopArtistEntry> =
@@ -701,33 +772,33 @@ class StationRepository(private val db: RadioShedDatabase) {
 
     // ---- Mappers ----
 
-    private fun toStation(row: StationRow): Station = Station(
-        id = row.id,
-        name = row.name,
-        color = row.color.toInt(),
-        icon = row.icon,
-        artworkUri = row.artwork_uri,
-        sortPosition = row.sort_position.toInt(),
-        customSubtitle = row.custom_subtitle,
-        source = decodeSource(row.source_json),
-        playback = decodePlayback(row.playback_json),
-        stats = StationStats(
-            playCount = row.play_count,
-            lastPlayedAt = row.last_played_at,
-            totalListenMs = row.total_listen_ms,
-            skipRate = row.skip_rate,
-        ),
-        isPinned = row.is_pinned == 1L,
-        isBuiltIn = row.is_built_in == 1L,
-        createdAt = row.created_at,
-        updatedAt = row.updated_at,
-    )
+    private fun toStation(row: StationRow): Station =
+        Station(
+            id = row.id,
+            name = row.name,
+            color = row.color.toInt(),
+            icon = row.icon,
+            artworkUri = row.artwork_uri,
+            sortPosition = row.sort_position.toInt(),
+            customSubtitle = row.custom_subtitle,
+            source = decodeSource(row.source_json),
+            playback = decodePlayback(row.playback_json),
+            stats =
+                StationStats(
+                    playCount = row.play_count,
+                    lastPlayedAt = row.last_played_at,
+                    totalListenMs = row.total_listen_ms,
+                    skipRate = row.skip_rate,
+                ),
+            isPinned = row.is_pinned == 1L,
+            isBuiltIn = row.is_built_in == 1L,
+            createdAt = row.created_at,
+            updatedAt = row.updated_at,
+        )
 
-    private fun encodeSource(source: SourceRule): String =
-        RadioShedJson.encodeToString(SourceRule.serializer(), source)
+    private fun encodeSource(source: SourceRule): String = RadioShedJson.encodeToString(SourceRule.serializer(), source)
 
-    private fun decodeSource(json: String): SourceRule =
-        RadioShedJson.decodeFromString(SourceRule.serializer(), json)
+    private fun decodeSource(json: String): SourceRule = RadioShedJson.decodeFromString(SourceRule.serializer(), json)
 
     private fun encodePlayback(playback: PlaybackRule): String =
         RadioShedJson.encodeToString(PlaybackRule.serializer(), playback)

@@ -11,8 +11,8 @@ package com.visorcraft.radioshed.source
  *   - mobile-ffmpeg fallback for WMA/APE/DSD
  */
 class IosTagReader : TagReader {
-
-    override suspend fun read(uri: String): ParsedTags? = ParsedTags(
-        title = uri.substringAfterLast('/').substringBeforeLast('.').takeIf { it.isNotBlank() },
-    )
+    override suspend fun read(uri: String): ParsedTags? =
+        ParsedTags(
+            title = uri.substringAfterLast('/').substringBeforeLast('.').takeIf { it.isNotBlank() },
+        )
 }

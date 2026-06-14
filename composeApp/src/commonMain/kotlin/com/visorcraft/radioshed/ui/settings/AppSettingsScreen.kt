@@ -21,8 +21,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Brightness4
-import androidx.compose.material.icons.filled.Brightness7
 import androidx.compose.material.icons.filled.Brightness6
+import androidx.compose.material.icons.filled.Brightness7
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.NightsStay
@@ -30,9 +30,9 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -162,9 +162,10 @@ fun AppSettingsScreen(
             TopAppBar(
                 title = { Text("Settings") },
                 navigationIcon = { TextButton(onClick = onBack) { Text("Back") } },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                ),
+                colors =
+                    TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                    ),
             )
         },
         containerColor = MaterialTheme.colorScheme.background,
@@ -184,614 +185,636 @@ fun AppSettingsScreen(
         androidx.compose.foundation.layout.Box(
             modifier = Modifier.fillMaxSize().padding(padding),
         ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(scrollState)
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-        ) {
-            // ---- Appearance ----
-            SettingsSectionHeader("Appearance")
-            ThemeChoiceList(
-                current = currentThemeMode,
-                onPick = { mode ->
-                    onThemeModeChange(mode)
-                    settings.setThemeMode(mode)
-                },
-            )
-            Spacer(Modifier.height(8.dp))
-            ThemeColorSourceSection(
-                source = currentColorSource,
-                onSourceChange = { src ->
-                    onColorSourceChange(src)
-                    settings.setThemeColorSource(src)
-                },
-                themeSeed = currentThemeSeed,
-                onThemeSeedChange = { c ->
-                    onThemeSeedChange(c)
-                    settings.setThemeSeedArgb(c.toArgb())
-                },
-                accentSeed = currentAccentSeed,
-                onAccentSeedChange = { c ->
-                    onAccentSeedChange(c)
-                    settings.setAccentSeedArgb(c.toArgb())
-                },
-            )
-
-            Spacer(Modifier.height(16.dp))
-
-            // ---- Accessibility ----
-            SettingsSectionHeader("Accessibility")
-            FontScaleRow(
-                value = currentFontScale,
-                onChange = { v ->
-                    onFontScaleChange(v)
-                    settings.setFontScale(v)
-                },
-            )
-            Spacer(Modifier.height(8.dp))
-            SettingsToggleRow(
-                title = "Reduce motion",
-                subtitle = "Minimize animations across the app. Useful for motion-sensitivity, also " +
-                    "helps perceived performance on lower-end hardware.",
-                checked = reduceMotion,
-                onCheckedChange = { v ->
-                    reduceMotion = v
-                    settings.setReduceMotion(v)
-                },
-            )
-            Spacer(Modifier.height(8.dp))
-            NavRow(
-                title = "Drive Mode",
-                subtitle = "Larger transport buttons, automatic triggers, a station " +
-                    "quick list, and the in-car button bar.",
-                onClick = onOpenDriveMode,
-            )
-            Spacer(Modifier.height(8.dp))
-            // Now Playing layout selector. Reads via the mirror
-            // StateFlow so the chip selection stays in sync with
-            // any external write (e.g. backup-restore). Writing
-            // through `setNowPlayingLayout` updates both the
-            // underlying Settings and the flow, so NowPlayingScreen
-            // (also subscribed) sees the change live.
-            val npLayout by settings.nowPlayingLayoutFlow.collectAsState()
-            NowPlayingLayoutRow(
-                current = npLayout,
-                onPick = { v -> settings.setNowPlayingLayout(v) },
-            )
-            Spacer(Modifier.height(8.dp))
-            SettingsToggleRow(
-                title = "Haptic feedback",
-                subtitle = "Subtle vibration on long-press / mode-flip gestures. Off mutes " +
-                    "every haptic across the app — useful if your phone's vibration motor " +
-                    "is loud or you find the gestures distracting.",
-                checked = hapticsEnabled,
-                onCheckedChange = { v ->
-                    hapticsEnabled = v
-                    settings.setHapticsEnabled(v)
-                },
-            )
-            Spacer(Modifier.height(8.dp))
-            SettingsToggleRow(
-                title = "Keep screen on while playing",
-                subtitle = "Holds the display on while a track is actually playing. " +
-                    "Pause / idle releases the lock so the screen times out normally " +
-                    "between tracks. Off by default to save battery.",
-                checked = keepScreenOn,
-                onCheckedChange = { v ->
-                    keepScreenOn = v
-                    settings.setKeepScreenOn(v)
-                },
-            )
-
-            Spacer(Modifier.height(24.dp))
-
-            // ---- Audio ----
-            SettingsSectionHeader("Audio")
-            SettingsToggleRow(
-                title = "Resume last station on launch",
-                subtitle = "Start playing whatever station was last active when the " +
-                    "app reopens. Off by default — silent launches are usually what " +
-                    "you want.",
-                checked = autoResume,
-                onCheckedChange = { v ->
-                    autoResume = v
-                    settings.setAutoResumeLastStation(v)
-                },
-            )
-            Spacer(Modifier.height(8.dp))
-            SettingsToggleRow(
-                title = "ReplayGain",
-                subtitle = "Normalize per-track loudness using embedded ReplayGain " +
-                    "tags. Loud tracks are attenuated toward a common reference; " +
-                    "tracks without tags play unchanged.",
-                checked = replayGain,
-                onCheckedChange = { v ->
-                    replayGain = v
-                    settings.setReplayGainEnabled(v)
-                },
-            )
-            if (replayGain) {
-                Spacer(Modifier.height(8.dp))
-                PreampSlider(
-                    valueDb = preampDb,
-                    onChange = { v ->
-                        preampDb = v
-                        settings.setReplayGainPreampDb(v)
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .verticalScroll(scrollState)
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+            ) {
+                // ---- Appearance ----
+                SettingsSectionHeader("Appearance")
+                ThemeChoiceList(
+                    current = currentThemeMode,
+                    onPick = { mode ->
+                        onThemeModeChange(mode)
+                        settings.setThemeMode(mode)
                     },
                 )
-            }
-            Spacer(Modifier.height(8.dp))
-            EndFadeSlider(
-                seconds = endFadeSec,
-                onChange = { v ->
-                    endFadeSec = v
-                    settings.setEndFadeSec(v)
-                },
-            )
-            Spacer(Modifier.height(8.dp))
-            NavRow(
-                title = "Equalizer",
-                subtitle = "5-band EQ with Bass / Vocal / Treble presets",
-                onClick = onOpenEqualizer,
-            )
-            Spacer(Modifier.height(8.dp))
-            NavRow(
-                title = "AI DJ",
-                subtitle = "Automated between-track voice — cadence, quiet hours, " +
-                    "ducking, and editable announcement templates",
-                onClick = onOpenDjSettings,
-            )
-            Spacer(Modifier.height(8.dp))
-            NavRow(
-                title = "Playlists",
-                subtitle = "Create, edit, and play your custom collections",
-                onClick = onOpenPlaylists,
-            )
-            Spacer(Modifier.height(8.dp))
-            NavRow(
-                title = "Backup & restore",
-                subtitle = "Export stations, playlists, and ratings to a JSON file",
-                onClick = onOpenBackup,
-            )
-            Spacer(Modifier.height(8.dp))
-            SettingsToggleRow(
-                title = "Auto-backup weekly",
-                subtitle = "Silently writes a fresh backup once per week so you " +
-                    "don't have to remember. Files live alongside manual backups " +
-                    "and obey the retention cap below.",
-                checked = autoBackup,
-                onCheckedChange = { v ->
-                    autoBackup = v
-                    settings.setAutoBackupEnabled(v)
-                },
-            )
-            Spacer(Modifier.height(8.dp))
-            BackupRetentionSlider(
-                value = backupRetention,
-                onChange = { v ->
-                    backupRetention = v
-                    settings.setBackupRetention(v)
-                },
-            )
-            Spacer(Modifier.height(8.dp))
-            SettingsToggleRow(
-                title = "Auto-fetch lyrics over network",
-                subtitle = "Allows the lyrics view to query LRClib when local " +
-                    "sidecar / embedded lyrics aren't found. Off keeps the app " +
-                    "fully local for new lookups; existing cached lyrics stay.",
-                checked = autoFetchLyrics,
-                onCheckedChange = { v ->
-                    autoFetchLyrics = v
-                    settings.setAutoFetchLyrics(v)
-                },
-            )
-            Spacer(Modifier.height(8.dp))
-            ListenBrainzRow(settings = settings)
-            Spacer(Modifier.height(8.dp))
-            SubsonicConfigRow(settings = settings, onOpenBrowse = onOpenSubsonic)
-            Spacer(Modifier.height(8.dp))
-            SettingsToggleRow(
-                title = "Sleep timer stops playback",
-                subtitle = "When the timer expires, fully stop playback (clears " +
-                    "the lock-screen tile) instead of pausing. Off keeps the " +
-                    "queue ready to resume with one tap.",
-                checked = sleepStopOnExpire,
-                onCheckedChange = { v ->
-                    sleepStopOnExpire = v
-                    settings.setSleepStopOnExpire(v)
-                },
-            )
-            Spacer(Modifier.height(8.dp))
-            NavRow(
-                title = "Listening stats",
-                subtitle = "Total time, play count, top tracks",
-                onClick = onOpenStats,
-            )
-            Spacer(Modifier.height(8.dp))
-            NavRow(
-                title = "Listening history",
-                subtitle = "Chronological log of every track you've played",
-                onClick = onOpenHistory,
-            )
-            Spacer(Modifier.height(8.dp))
-            NavRow(
-                title = "Crash log",
-                subtitle = "Recent crashes / ANRs reported by Android. Local-only — " +
-                    "share via the system share sheet if you want to send a report.",
-                onClick = onOpenCrashLog,
-            )
-            Spacer(Modifier.height(8.dp))
-            // Syncthing setup wizard. The wizard's a one-time flow but
-            // we leave the entry point here so users can re-run it for
-            // additional folders or after re-installing Syncthing.
-            NavRow(
-                title = "Set up Syncthing sync",
-                subtitle = "Step-by-step wizard to mirror a music folder " +
-                    "from your PC to this phone over Wi-Fi.",
-                onClick = onOpenSyncthingWizard,
-            )
+                Spacer(Modifier.height(8.dp))
+                ThemeColorSourceSection(
+                    source = currentColorSource,
+                    onSourceChange = { src ->
+                        onColorSourceChange(src)
+                        settings.setThemeColorSource(src)
+                    },
+                    themeSeed = currentThemeSeed,
+                    onThemeSeedChange = { c ->
+                        onThemeSeedChange(c)
+                        settings.setThemeSeedArgb(c.toArgb())
+                    },
+                    accentSeed = currentAccentSeed,
+                    onAccentSeedChange = { c ->
+                        onAccentSeedChange(c)
+                        settings.setAccentSeedArgb(c.toArgb())
+                    },
+                )
 
-            Spacer(Modifier.height(24.dp))
+                Spacer(Modifier.height(16.dp))
 
-            // ---- Online & Sync ----
-            // Global gate for online lookups (Cover Art Archive,
-            // LRClib). Per-service overrides for the two highest-
-            // bandwidth services live just below; everything else
-            // keeps inheriting the global policy unless the user
-            // toggles a row explicitly.
-            SettingsSectionHeader("Online")
-            ConnectivityPolicyRow(
-                current = connectivityPolicy,
-                onPick = { p ->
-                    connectivityPolicy = p
-                    settings.setConnectivityPolicy(p)
-                },
-            )
-            Spacer(Modifier.height(8.dp))
-            ServicePolicyOverrideRow(
-                title = "Cover Art Archive",
-                subtitle = "Album cover backfill from coverartarchive.org. " +
-                    "Override to keep covers off cellular without affecting " +
-                    "lyrics fetches.",
-                service = com.visorcraft.radioshed.source.NetworkService.CoverArt,
-                settings = settings,
-            )
-            Spacer(Modifier.height(8.dp))
-            ServicePolicyOverrideRow(
-                title = "Lyrics (LRClib)",
-                subtitle = "Time-synced + plain lyrics from lrclib.net. " +
-                    "Override independently of artwork — handy for keeping " +
-                    "lyrics open while artwork stays restricted, or vice " +
-                    "versa.",
-                service = com.visorcraft.radioshed.source.NetworkService.Lyrics,
-                settings = settings,
-            )
+                // ---- Accessibility ----
+                SettingsSectionHeader("Accessibility")
+                FontScaleRow(
+                    value = currentFontScale,
+                    onChange = { v ->
+                        onFontScaleChange(v)
+                        settings.setFontScale(v)
+                    },
+                )
+                Spacer(Modifier.height(8.dp))
+                SettingsToggleRow(
+                    title = "Reduce motion",
+                    subtitle =
+                        "Minimize animations across the app. Useful for motion-sensitivity, also " +
+                            "helps perceived performance on lower-end hardware.",
+                    checked = reduceMotion,
+                    onCheckedChange = { v ->
+                        reduceMotion = v
+                        settings.setReduceMotion(v)
+                    },
+                )
+                Spacer(Modifier.height(8.dp))
+                NavRow(
+                    title = "Drive Mode",
+                    subtitle =
+                        "Larger transport buttons, automatic triggers, a station " +
+                            "quick list, and the in-car button bar.",
+                    onClick = onOpenDriveMode,
+                )
+                Spacer(Modifier.height(8.dp))
+                // Now Playing layout selector. Reads via the mirror
+                // StateFlow so the chip selection stays in sync with
+                // any external write (e.g. backup-restore). Writing
+                // through `setNowPlayingLayout` updates both the
+                // underlying Settings and the flow, so NowPlayingScreen
+                // (also subscribed) sees the change live.
+                val npLayout by settings.nowPlayingLayoutFlow.collectAsState()
+                NowPlayingLayoutRow(
+                    current = npLayout,
+                    onPick = { v -> settings.setNowPlayingLayout(v) },
+                )
+                Spacer(Modifier.height(8.dp))
+                SettingsToggleRow(
+                    title = "Haptic feedback",
+                    subtitle =
+                        "Subtle vibration on long-press / mode-flip gestures. Off mutes " +
+                            "every haptic across the app — useful if your phone's vibration motor " +
+                            "is loud or you find the gestures distracting.",
+                    checked = hapticsEnabled,
+                    onCheckedChange = { v ->
+                        hapticsEnabled = v
+                        settings.setHapticsEnabled(v)
+                    },
+                )
+                Spacer(Modifier.height(8.dp))
+                SettingsToggleRow(
+                    title = "Keep screen on while playing",
+                    subtitle =
+                        "Holds the display on while a track is actually playing. " +
+                            "Pause / idle releases the lock so the screen times out normally " +
+                            "between tracks. Off by default to save battery.",
+                    checked = keepScreenOn,
+                    onCheckedChange = { v ->
+                        keepScreenOn = v
+                        settings.setKeepScreenOn(v)
+                    },
+                )
 
-            Spacer(Modifier.height(24.dp))
+                Spacer(Modifier.height(24.dp))
 
-            // ---- Library maintenance ----
-            SettingsSectionHeader("Library")
-            SettingsToggleRow(
-                title = "Rescan folders on launch",
-                subtitle = "Walks every registered folder every time RadioShed " +
-                    "starts cold, picking up files added externally (USB " +
-                    "drag-and-drop, ripping a CD, etc). Scanner is idempotent " +
-                    "so this is safe to leave on, but it adds a few seconds " +
-                    "to the first-frame on libraries that change often.",
-                checked = autoRescan,
-                onCheckedChange = { v ->
-                    autoRescan = v
-                    settings.setAutoRescanOnLaunch(v)
-                },
-            )
-            Spacer(Modifier.height(8.dp))
-            ArtworkSyncCard(
-                state = artworkState,
-                onStart = {
-                    artworkJob = scope.launch {
-                        artworkSync.sweep().collect { p -> artworkState = artworkState.advance(p) }
-                    }
-                },
-                onCancel = {
-                    artworkJob?.cancel()
-                    artworkJob = null
-                    artworkState = ArtworkSyncState.Idle
-                },
-            )
+                // ---- Audio ----
+                SettingsSectionHeader("Audio")
+                SettingsToggleRow(
+                    title = "Resume last station on launch",
+                    subtitle =
+                        "Start playing whatever station was last active when the " +
+                            "app reopens. Off by default — silent launches are usually what " +
+                            "you want.",
+                    checked = autoResume,
+                    onCheckedChange = { v ->
+                        autoResume = v
+                        settings.setAutoResumeLastStation(v)
+                    },
+                )
+                Spacer(Modifier.height(8.dp))
+                SettingsToggleRow(
+                    title = "ReplayGain",
+                    subtitle =
+                        "Normalize per-track loudness using embedded ReplayGain " +
+                            "tags. Loud tracks are attenuated toward a common reference; " +
+                            "tracks without tags play unchanged.",
+                    checked = replayGain,
+                    onCheckedChange = { v ->
+                        replayGain = v
+                        settings.setReplayGainEnabled(v)
+                    },
+                )
+                if (replayGain) {
+                    Spacer(Modifier.height(8.dp))
+                    PreampSlider(
+                        valueDb = preampDb,
+                        onChange = { v ->
+                            preampDb = v
+                            settings.setReplayGainPreampDb(v)
+                        },
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+                EndFadeSlider(
+                    seconds = endFadeSec,
+                    onChange = { v ->
+                        endFadeSec = v
+                        settings.setEndFadeSec(v)
+                    },
+                )
+                Spacer(Modifier.height(8.dp))
+                NavRow(
+                    title = "Equalizer",
+                    subtitle = "5-band EQ with Bass / Vocal / Treble presets",
+                    onClick = onOpenEqualizer,
+                )
+                Spacer(Modifier.height(8.dp))
+                NavRow(
+                    title = "AI DJ",
+                    subtitle =
+                        "Automated between-track voice — cadence, quiet hours, " +
+                            "ducking, and editable announcement templates",
+                    onClick = onOpenDjSettings,
+                )
+                Spacer(Modifier.height(8.dp))
+                NavRow(
+                    title = "Playlists",
+                    subtitle = "Create, edit, and play your custom collections",
+                    onClick = onOpenPlaylists,
+                )
+                Spacer(Modifier.height(8.dp))
+                NavRow(
+                    title = "Backup & restore",
+                    subtitle = "Export stations, playlists, and ratings to a JSON file",
+                    onClick = onOpenBackup,
+                )
+                Spacer(Modifier.height(8.dp))
+                SettingsToggleRow(
+                    title = "Auto-backup weekly",
+                    subtitle =
+                        "Silently writes a fresh backup once per week so you " +
+                            "don't have to remember. Files live alongside manual backups " +
+                            "and obey the retention cap below.",
+                    checked = autoBackup,
+                    onCheckedChange = { v ->
+                        autoBackup = v
+                        settings.setAutoBackupEnabled(v)
+                    },
+                )
+                Spacer(Modifier.height(8.dp))
+                BackupRetentionSlider(
+                    value = backupRetention,
+                    onChange = { v ->
+                        backupRetention = v
+                        settings.setBackupRetention(v)
+                    },
+                )
+                Spacer(Modifier.height(8.dp))
+                SettingsToggleRow(
+                    title = "Auto-fetch lyrics over network",
+                    subtitle =
+                        "Allows the lyrics view to query LRClib when local " +
+                            "sidecar / embedded lyrics aren't found. Off keeps the app " +
+                            "fully local for new lookups; existing cached lyrics stay.",
+                    checked = autoFetchLyrics,
+                    onCheckedChange = { v ->
+                        autoFetchLyrics = v
+                        settings.setAutoFetchLyrics(v)
+                    },
+                )
+                Spacer(Modifier.height(8.dp))
+                ListenBrainzRow(settings = settings)
+                Spacer(Modifier.height(8.dp))
+                SubsonicConfigRow(settings = settings, onOpenBrowse = onOpenSubsonic)
+                Spacer(Modifier.height(8.dp))
+                SettingsToggleRow(
+                    title = "Sleep timer stops playback",
+                    subtitle =
+                        "When the timer expires, fully stop playback (clears " +
+                            "the lock-screen tile) instead of pausing. Off keeps the " +
+                            "queue ready to resume with one tap.",
+                    checked = sleepStopOnExpire,
+                    onCheckedChange = { v ->
+                        sleepStopOnExpire = v
+                        settings.setSleepStopOnExpire(v)
+                    },
+                )
+                Spacer(Modifier.height(8.dp))
+                NavRow(
+                    title = "Listening stats",
+                    subtitle = "Total time, play count, top tracks",
+                    onClick = onOpenStats,
+                )
+                Spacer(Modifier.height(8.dp))
+                NavRow(
+                    title = "Listening history",
+                    subtitle = "Chronological log of every track you've played",
+                    onClick = onOpenHistory,
+                )
+                Spacer(Modifier.height(8.dp))
+                NavRow(
+                    title = "Crash log",
+                    subtitle =
+                        "Recent crashes / ANRs reported by Android. Local-only — " +
+                            "share via the system share sheet if you want to send a report.",
+                    onClick = onOpenCrashLog,
+                )
+                Spacer(Modifier.height(8.dp))
+                // Syncthing setup wizard. The wizard's a one-time flow but
+                // we leave the entry point here so users can re-run it for
+                // additional folders or after re-installing Syncthing.
+                NavRow(
+                    title = "Set up Syncthing sync",
+                    subtitle =
+                        "Step-by-step wizard to mirror a music folder " +
+                            "from your PC to this phone over Wi-Fi.",
+                    onClick = onOpenSyncthingWizard,
+                )
 
-            Spacer(Modifier.height(8.dp))
-            LyricsSyncCard(
-                state = lyricsState,
-                onStart = {
-                    lyricsJob = scope.launch {
-                        lyricsSync.sweep().collect { p -> lyricsState = lyricsState.advance(p) }
-                    }
-                },
-                onCancel = {
-                    lyricsJob?.cancel()
-                    lyricsJob = null
-                    lyricsState = LyricsSyncState.Idle
-                },
-            )
+                Spacer(Modifier.height(24.dp))
 
-            Spacer(Modifier.height(8.dp))
-            // One-tap "create stations from your tag-genre histogram"
-            // — closes SPEC §5 "Genre auto-stations" without forcing
-            // users to create them by hand. Idempotent: stations
-            // named `Genre: X` are skipped on re-run, so the button
-            // can be tapped repeatedly after the library grows
-            // without producing duplicates.
-            GenerateGenreStationsRow()
-            Spacer(Modifier.height(8.dp))
-            // Same idempotent pattern for decade auto-stations.
-            // Album.year drives the bucket; albums with NULL year
-            // sit out (avoids padding a "60s" station with
-            // year-less rips that may or may not belong).
-            GenerateDecadeStationsRow()
-            Spacer(Modifier.height(8.dp))
-            // Clear lyrics cache. Used when LRClib improves their
-            // database — the user gets a re-fetch on next track plays.
-            // Keeps user-supplied artist/title overrides intact since
-            // those represent manual corrections.
-            var lyricsCleared by remember { mutableStateOf(false) }
-            ClearLyricsCacheRow(
-                cleared = lyricsCleared,
-                onClick = {
-                    scope.launch {
-                        lyricsCache.deleteAll()
-                        lyricsCleared = true
-                    }
-                },
-            )
-            Spacer(Modifier.height(8.dp))
-            // Three-step artwork cache reset: wipe the artwork_cache
-            // table, delete every artwork blob on disk, then null out
-            // every album.artwork_uri pointer so the UI stops trying
-            // to load deleted files. The next CoverArt sweep / scan
-            // refetches.
-            val artworkCache: com.visorcraft.radioshed.data.ArtworkCacheRepository = koinInject()
-            val artworkPersister: com.visorcraft.radioshed.source.ArtworkPersister = koinInject()
-            val libraryRepoForCache: com.visorcraft.radioshed.data.LibraryRepository = koinInject()
-            var artworkClearStatus by remember { mutableStateOf<String?>(null) }
-            ClearArtworkCacheRow(
-                status = artworkClearStatus,
-                onClick = {
-                    scope.launch {
-                        artworkClearStatus = "Clearing artwork…"
-                        val removed = artworkPersister.clearAll()
-                        artworkCache.deleteAll()
-                        libraryRepoForCache.clearAllAlbumArtwork()
-                        artworkClearStatus =
-                            "Cleared $removed artwork file" +
-                                if (removed == 1) "." else "s."
-                    }
-                },
-            )
-            // DJ TTS cache. The blob paths each row points at live in
-            // the app's writable area; we read the row list first so
-            // we can attempt to delete the on-disk blobs, then wipe
-            // the table. Best-effort — runCatching swallows individual
-            // missing-file failures so a partially purged cache
-            // (e.g. from a manual file-manager pass) still completes.
-            val djCache: com.visorcraft.radioshed.data.DjCacheRepository = koinInject()
-            var djClearStatus by remember { mutableStateOf<String?>(null) }
-            ClearDjCacheRow(
-                status = djClearStatus,
-                onClick = {
-                    scope.launch {
-                        djClearStatus = "Clearing DJ cache…"
-                        val rows = djCache.listAll()
-                        var removed = 0
-                        rows.forEach { row ->
-                            runCatching {
-                                val ok = com.visorcraft.radioshed.source
-                                    .deleteFileIfExists(row.blobPath)
-                                if (ok) removed += 1
+                // ---- Online & Sync ----
+                // Global gate for online lookups (Cover Art Archive,
+                // LRClib). Per-service overrides for the two highest-
+                // bandwidth services live just below; everything else
+                // keeps inheriting the global policy unless the user
+                // toggles a row explicitly.
+                SettingsSectionHeader("Online")
+                ConnectivityPolicyRow(
+                    current = connectivityPolicy,
+                    onPick = { p ->
+                        connectivityPolicy = p
+                        settings.setConnectivityPolicy(p)
+                    },
+                )
+                Spacer(Modifier.height(8.dp))
+                ServicePolicyOverrideRow(
+                    title = "Cover Art Archive",
+                    subtitle =
+                        "Album cover backfill from coverartarchive.org. " +
+                            "Override to keep covers off cellular without affecting " +
+                            "lyrics fetches.",
+                    service = com.visorcraft.radioshed.source.NetworkService.CoverArt,
+                    settings = settings,
+                )
+                Spacer(Modifier.height(8.dp))
+                ServicePolicyOverrideRow(
+                    title = "Lyrics (LRClib)",
+                    subtitle =
+                        "Time-synced + plain lyrics from lrclib.net. " +
+                            "Override independently of artwork — handy for keeping " +
+                            "lyrics open while artwork stays restricted, or vice " +
+                            "versa.",
+                    service = com.visorcraft.radioshed.source.NetworkService.Lyrics,
+                    settings = settings,
+                )
+
+                Spacer(Modifier.height(24.dp))
+
+                // ---- Library maintenance ----
+                SettingsSectionHeader("Library")
+                SettingsToggleRow(
+                    title = "Rescan folders on launch",
+                    subtitle =
+                        "Walks every registered folder every time RadioShed " +
+                            "starts cold, picking up files added externally (USB " +
+                            "drag-and-drop, ripping a CD, etc). Scanner is idempotent " +
+                            "so this is safe to leave on, but it adds a few seconds " +
+                            "to the first-frame on libraries that change often.",
+                    checked = autoRescan,
+                    onCheckedChange = { v ->
+                        autoRescan = v
+                        settings.setAutoRescanOnLaunch(v)
+                    },
+                )
+                Spacer(Modifier.height(8.dp))
+                ArtworkSyncCard(
+                    state = artworkState,
+                    onStart = {
+                        artworkJob =
+                            scope.launch {
+                                artworkSync.sweep().collect { p -> artworkState = artworkState.advance(p) }
                             }
+                    },
+                    onCancel = {
+                        artworkJob?.cancel()
+                        artworkJob = null
+                        artworkState = ArtworkSyncState.Idle
+                    },
+                )
+
+                Spacer(Modifier.height(8.dp))
+                LyricsSyncCard(
+                    state = lyricsState,
+                    onStart = {
+                        lyricsJob =
+                            scope.launch {
+                                lyricsSync.sweep().collect { p -> lyricsState = lyricsState.advance(p) }
+                            }
+                    },
+                    onCancel = {
+                        lyricsJob?.cancel()
+                        lyricsJob = null
+                        lyricsState = LyricsSyncState.Idle
+                    },
+                )
+
+                Spacer(Modifier.height(8.dp))
+                // One-tap "create stations from your tag-genre histogram"
+                // — closes SPEC §5 "Genre auto-stations" without forcing
+                // users to create them by hand. Idempotent: stations
+                // named `Genre: X` are skipped on re-run, so the button
+                // can be tapped repeatedly after the library grows
+                // without producing duplicates.
+                GenerateGenreStationsRow()
+                Spacer(Modifier.height(8.dp))
+                // Same idempotent pattern for decade auto-stations.
+                // Album.year drives the bucket; albums with NULL year
+                // sit out (avoids padding a "60s" station with
+                // year-less rips that may or may not belong).
+                GenerateDecadeStationsRow()
+                Spacer(Modifier.height(8.dp))
+                // Clear lyrics cache. Used when LRClib improves their
+                // database — the user gets a re-fetch on next track plays.
+                // Keeps user-supplied artist/title overrides intact since
+                // those represent manual corrections.
+                var lyricsCleared by remember { mutableStateOf(false) }
+                ClearLyricsCacheRow(
+                    cleared = lyricsCleared,
+                    onClick = {
+                        scope.launch {
+                            lyricsCache.deleteAll()
+                            lyricsCleared = true
                         }
-                        djCache.deleteAll()
-                        djClearStatus = "Cleared $removed DJ clip" +
-                            if (removed == 1) "." else "s."
-                    }
-                },
-            )
-            Spacer(Modifier.height(8.dp))
-            // One-shot for users who don't care which cache is which —
-            // wipes lyrics + artwork + DJ in one tap and reports an
-            // aggregate count. Useful as part of the "free up storage"
-            // motion without making the user hunt through three rows.
-            // Sequential rather than parallel because the on-disk
-            // deletions trip on each other otherwise (the artwork
-            // persister and DJ blob path both walk filesDir).
-            var clearAllStatus by remember { mutableStateOf<String?>(null) }
-            // Confirm gate. The granular clear rows act on a single
-            // cache each (lyrics / artwork / DJ) where the user
-            // typically knows what they're nuking; the all-in-one
-            // path wipes ~hundreds of artwork files plus regenerable
-            // TTS clips and earned a lot more "wait, did I mean to
-            // do that?" feedback. Confirm dialog matches the
-            // Reset-settings flow's pattern.
-            var clearAllConfirm by remember { mutableStateOf(false) }
-            ClearAllCachesRow(
-                status = clearAllStatus,
-                onClick = { clearAllConfirm = true },
-            )
-            if (clearAllConfirm) {
-                androidx.compose.material3.AlertDialog(
-                    onDismissRequest = { clearAllConfirm = false },
-                    title = { Text("Clear all online caches?") },
-                    text = {
-                        Text(
-                            "Wipes lyrics, downloaded album art, and DJ TTS " +
-                                "clips. All three regenerate on demand from " +
-                                "their original sources. This is safe — " +
-                                "your library, ratings, playlists, and " +
-                                "stations stay intact.",
+                    },
+                )
+                Spacer(Modifier.height(8.dp))
+                // Three-step artwork cache reset: wipe the artwork_cache
+                // table, delete every artwork blob on disk, then null out
+                // every album.artwork_uri pointer so the UI stops trying
+                // to load deleted files. The next CoverArt sweep / scan
+                // refetches.
+                val artworkCache: com.visorcraft.radioshed.data.ArtworkCacheRepository = koinInject()
+                val artworkPersister: com.visorcraft.radioshed.source.ArtworkPersister = koinInject()
+                val libraryRepoForCache: com.visorcraft.radioshed.data.LibraryRepository = koinInject()
+                var artworkClearStatus by remember { mutableStateOf<String?>(null) }
+                ClearArtworkCacheRow(
+                    status = artworkClearStatus,
+                    onClick = {
+                        scope.launch {
+                            artworkClearStatus = "Clearing artwork…"
+                            val removed = artworkPersister.clearAll()
+                            artworkCache.deleteAll()
+                            libraryRepoForCache.clearAllAlbumArtwork()
+                            artworkClearStatus =
+                                "Cleared $removed artwork file" +
+                                if (removed == 1) "." else "s."
+                        }
+                    },
+                )
+                // DJ TTS cache. The blob paths each row points at live in
+                // the app's writable area; we read the row list first so
+                // we can attempt to delete the on-disk blobs, then wipe
+                // the table. Best-effort — runCatching swallows individual
+                // missing-file failures so a partially purged cache
+                // (e.g. from a manual file-manager pass) still completes.
+                val djCache: com.visorcraft.radioshed.data.DjCacheRepository = koinInject()
+                var djClearStatus by remember { mutableStateOf<String?>(null) }
+                ClearDjCacheRow(
+                    status = djClearStatus,
+                    onClick = {
+                        scope.launch {
+                            djClearStatus = "Clearing DJ cache…"
+                            val rows = djCache.listAll()
+                            var removed = 0
+                            rows.forEach { row ->
+                                runCatching {
+                                    val ok =
+                                        com.visorcraft.radioshed.source
+                                            .deleteFileIfExists(row.blobPath)
+                                    if (ok) removed += 1
+                                }
+                            }
+                            djCache.deleteAll()
+                            djClearStatus = "Cleared $removed DJ clip" +
+                                if (removed == 1) "." else "s."
+                        }
+                    },
+                )
+                Spacer(Modifier.height(8.dp))
+                // One-shot for users who don't care which cache is which —
+                // wipes lyrics + artwork + DJ in one tap and reports an
+                // aggregate count. Useful as part of the "free up storage"
+                // motion without making the user hunt through three rows.
+                // Sequential rather than parallel because the on-disk
+                // deletions trip on each other otherwise (the artwork
+                // persister and DJ blob path both walk filesDir).
+                var clearAllStatus by remember { mutableStateOf<String?>(null) }
+                // Confirm gate. The granular clear rows act on a single
+                // cache each (lyrics / artwork / DJ) where the user
+                // typically knows what they're nuking; the all-in-one
+                // path wipes ~hundreds of artwork files plus regenerable
+                // TTS clips and earned a lot more "wait, did I mean to
+                // do that?" feedback. Confirm dialog matches the
+                // Reset-settings flow's pattern.
+                var clearAllConfirm by remember { mutableStateOf(false) }
+                ClearAllCachesRow(
+                    status = clearAllStatus,
+                    onClick = { clearAllConfirm = true },
+                )
+                if (clearAllConfirm) {
+                    androidx.compose.material3.AlertDialog(
+                        onDismissRequest = { clearAllConfirm = false },
+                        title = { Text("Clear all online caches?") },
+                        text = {
+                            Text(
+                                "Wipes lyrics, downloaded album art, and DJ TTS " +
+                                    "clips. All three regenerate on demand from " +
+                                    "their original sources. This is safe — " +
+                                    "your library, ratings, playlists, and " +
+                                    "stations stay intact.",
+                            )
+                        },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                clearAllConfirm = false
+                                scope.launch {
+                                    clearAllStatus = "Clearing all caches…"
+                                    var artworkRemoved = 0
+                                    runCatching {
+                                        artworkRemoved = artworkPersister.clearAll()
+                                        artworkCache.deleteAll()
+                                        libraryRepoForCache.clearAllAlbumArtwork()
+                                    }
+                                    var djRemoved = 0
+                                    runCatching {
+                                        val rows = djCache.listAll()
+                                        rows.forEach { row ->
+                                            runCatching {
+                                                val ok =
+                                                    com.visorcraft.radioshed.source
+                                                        .deleteFileIfExists(row.blobPath)
+                                                if (ok) djRemoved += 1
+                                            }
+                                        }
+                                        djCache.deleteAll()
+                                    }
+                                    runCatching { lyricsCache.deleteAll() }
+                                    clearAllStatus = "Cleared lyrics, $artworkRemoved " +
+                                        (if (artworkRemoved == 1) "artwork file, " else "artwork files, ") +
+                                        "and $djRemoved DJ clip" +
+                                        (if (djRemoved == 1) "." else "s.")
+                                }
+                            }) {
+                                Text(
+                                    "Clear all",
+                                    color = MaterialTheme.colorScheme.error,
+                                )
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { clearAllConfirm = false }) { Text("Cancel") }
+                        },
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+                // Reclaim the disk space SQLite is hanging onto after a
+                // big "Clear all caches" pass. SQLite never automatically
+                // shrinks the DB file — freed pages get marked for reuse
+                // but the file stays large on disk. VACUUM rebuilds the
+                // file in place and is the canonical way to actually
+                // recover the bytes. Cheap and safe (full transactional
+                // semantics; a power cut mid-VACUUM falls back to the
+                // pre-VACUUM file via SQLite's rollback journal).
+                val dbMaintenance: com.visorcraft.radioshed.data.DatabaseMaintenanceRepository =
+                    koinInject()
+                var vacuumStatus by remember { mutableStateOf<String?>(null) }
+                VacuumDbRow(
+                    status = vacuumStatus,
+                    onClick = {
+                        scope.launch {
+                            vacuumStatus = "Compacting database…"
+                            runCatching { dbMaintenance.vacuum() }
+                                .onSuccess { vacuumStatus = "Database compacted." }
+                                .onFailure { vacuumStatus = "Compaction failed: ${it.message}" }
+                        }
+                    },
+                )
+
+                Spacer(Modifier.height(24.dp))
+
+                // ---- About ----
+                SettingsSectionHeader("About")
+                // The version row doubles as a hidden affordance: long-press
+                // to open the read-only DB-stats screen. Lets a developer
+                // (or a user filing a bug) inspect row counts without an
+                // adb pull, but keeps the surface invisible to casual users.
+                Text(
+                    "RadioShed v${BuildInfo.VERSION_NAME} · built ${BuildInfo.BUILD_DATE}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f),
+                    modifier =
+                        Modifier.combinedClickable(
+                            onClick = {},
+                            onLongClick = onOpenDbBrowser,
+                        ),
+                )
+                Text(
+                    "Your music turned into stations. No subscriptions, no telemetry, internet optional.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
+                )
+                Spacer(Modifier.height(12.dp))
+                LibrarySummaryCard()
+                Spacer(Modifier.height(12.dp))
+                CreditsCard(onOpenLicenses = onOpenLicenses)
+                Spacer(Modifier.height(12.dp))
+                // Copy-build-info pair. Clipboard write goes through
+                // rememberCopyToClipboard for parity with the rest of
+                // the app's copy actions; the user pastes the resulting
+                // build string into the bug-report email below.
+                val aboutCopy = com.visorcraft.radioshed.ui.util.rememberCopyToClipboard()
+                AboutLinkRow(
+                    title = "Copy build info",
+                    subtitle = "Useful for bug reports.",
+                    onClick = {
+                        aboutCopy(
+                            "RadioShed v${BuildInfo.VERSION_NAME} " +
+                                "(code ${BuildInfo.VERSION_CODE}) " +
+                                "built ${BuildInfo.BUILD_DATE}",
                         )
                     },
-                    confirmButton = {
-                        TextButton(onClick = {
-                            clearAllConfirm = false
-                            scope.launch {
-                                clearAllStatus = "Clearing all caches…"
-                                var artworkRemoved = 0
-                                runCatching {
-                                    artworkRemoved = artworkPersister.clearAll()
-                                    artworkCache.deleteAll()
-                                    libraryRepoForCache.clearAllAlbumArtwork()
-                                }
-                                var djRemoved = 0
-                                runCatching {
-                                    val rows = djCache.listAll()
-                                    rows.forEach { row ->
-                                        runCatching {
-                                            val ok = com.visorcraft.radioshed.source
-                                                .deleteFileIfExists(row.blobPath)
-                                            if (ok) djRemoved += 1
-                                        }
-                                    }
-                                    djCache.deleteAll()
-                                }
-                                runCatching { lyricsCache.deleteAll() }
-                                clearAllStatus = "Cleared lyrics, $artworkRemoved " +
-                                    (if (artworkRemoved == 1) "artwork file, " else "artwork files, ") +
-                                    "and $djRemoved DJ clip" +
-                                    (if (djRemoved == 1) "." else "s.")
-                            }
-                        }) {
-                            Text(
-                                "Clear all",
-                                color = MaterialTheme.colorScheme.error,
-                            )
-                        }
-                    },
-                    dismissButton = {
-                        TextButton(onClick = { clearAllConfirm = false }) { Text("Cancel") }
+                )
+                Spacer(Modifier.height(8.dp))
+                // Bug report link — opens the user's default email client
+                // pre-addressed to the developer. Pairs with Copy-build-info
+                // above so the reporter can paste the build string into the
+                // body. mailto: URIs go through openWebUrl (Intent.ACTION_VIEW
+                // on Android, UIApplication.openURL on iOS — both resolve
+                // mailto: to the system mail handler).
+                AboutLinkRow(
+                    title = "Report a bug",
+                    subtitle = "thomas@visorcraft.com",
+                    onClick = {
+                        com.visorcraft.radioshed.source.openWebUrl(
+                            "mailto:thomas@visorcraft.com",
+                        )
                     },
                 )
-            }
-            Spacer(Modifier.height(8.dp))
-            // Reclaim the disk space SQLite is hanging onto after a
-            // big "Clear all caches" pass. SQLite never automatically
-            // shrinks the DB file — freed pages get marked for reuse
-            // but the file stays large on disk. VACUUM rebuilds the
-            // file in place and is the canonical way to actually
-            // recover the bytes. Cheap and safe (full transactional
-            // semantics; a power cut mid-VACUUM falls back to the
-            // pre-VACUUM file via SQLite's rollback journal).
-            val dbMaintenance: com.visorcraft.radioshed.data.DatabaseMaintenanceRepository =
-                koinInject()
-            var vacuumStatus by remember { mutableStateOf<String?>(null) }
-            VacuumDbRow(
-                status = vacuumStatus,
-                onClick = {
-                    scope.launch {
-                        vacuumStatus = "Compacting database…"
-                        runCatching { dbMaintenance.vacuum() }
-                            .onSuccess { vacuumStatus = "Database compacted." }
-                            .onFailure { vacuumStatus = "Compaction failed: ${it.message}" }
-                    }
-                },
-            )
-
-            Spacer(Modifier.height(24.dp))
-
-            // ---- About ----
-            SettingsSectionHeader("About")
-            // The version row doubles as a hidden affordance: long-press
-            // to open the read-only DB-stats screen. Lets a developer
-            // (or a user filing a bug) inspect row counts without an
-            // adb pull, but keeps the surface invisible to casual users.
-            Text(
-                "RadioShed v${BuildInfo.VERSION_NAME} · built ${BuildInfo.BUILD_DATE}",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f),
-                modifier = Modifier.combinedClickable(
-                    onClick = {},
-                    onLongClick = onOpenDbBrowser,
-                ),
-            )
-            Text(
-                "Your music turned into stations. No subscriptions, no telemetry, internet optional.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
-            )
-            Spacer(Modifier.height(12.dp))
-            LibrarySummaryCard()
-            Spacer(Modifier.height(12.dp))
-            CreditsCard(onOpenLicenses = onOpenLicenses)
-            Spacer(Modifier.height(12.dp))
-            // Copy-build-info pair. Clipboard write goes through
-            // rememberCopyToClipboard for parity with the rest of
-            // the app's copy actions; the user pastes the resulting
-            // build string into the bug-report email below.
-            val aboutCopy = com.visorcraft.radioshed.ui.util.rememberCopyToClipboard()
-            AboutLinkRow(
-                title = "Copy build info",
-                subtitle = "Useful for bug reports.",
-                onClick = {
-                    aboutCopy(
-                        "RadioShed v${BuildInfo.VERSION_NAME} " +
-                            "(code ${BuildInfo.VERSION_CODE}) " +
-                            "built ${BuildInfo.BUILD_DATE}",
-                    )
-                },
-            )
-            Spacer(Modifier.height(8.dp))
-            // Bug report link — opens the user's default email client
-            // pre-addressed to the developer. Pairs with Copy-build-info
-            // above so the reporter can paste the build string into the
-            // body. mailto: URIs go through openWebUrl (Intent.ACTION_VIEW
-            // on Android, UIApplication.openURL on iOS — both resolve
-            // mailto: to the system mail handler).
-            AboutLinkRow(
-                title = "Report a bug",
-                subtitle = "thomas@visorcraft.com",
-                onClick = {
-                    com.visorcraft.radioshed.source.openWebUrl(
-                        "mailto:thomas@visorcraft.com",
-                    )
-                },
-            )
-            Spacer(Modifier.height(8.dp))
-            // License row rounds out the About section. RadioShed is a
-            // private repo, so this opens the proprietary LICENSE text
-            // in-app via the Licenses screen (which pins the proprietary
-            // entry as its first section) rather than linking out. The
-            // canonical repo URL is reachable as "View online" inside
-            // that entry's detail view.
-            AboutLinkRow(
-                title = "License",
-                subtitle = "Proprietary — tap to read in-app.",
-                onClick = onOpenLicenses,
-            )
-            Spacer(Modifier.height(16.dp))
-            // Reset to defaults — wipes the user-portable preference
-            // keys but leaves library / playlists / ratings / station
-            // definitions / EQ presets intact. Confirmed via dialog
-            // because there's no undo and a misclick here would be
-            // genuinely annoying to recover from.
-            ResetSettingsRow(onClick = { resetConfirmOpen = true })
-
-            Spacer(Modifier.height(16.dp))
-        }
-        if (showScrollTop) {
-            androidx.compose.material3.SmallFloatingActionButton(
-                onClick = {
-                    scope.launch { scrollState.animateScrollTo(0) }
-                },
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(end = 16.dp, bottom = 16.dp),
-                containerColor = MaterialTheme.colorScheme.primaryContainer,
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.KeyboardArrowUp,
-                    contentDescription = "Scroll to top",
+                Spacer(Modifier.height(8.dp))
+                // License row rounds out the About section. RadioShed is a
+                // private repo, so this opens the proprietary LICENSE text
+                // in-app via the Licenses screen (which pins the proprietary
+                // entry as its first section) rather than linking out. The
+                // canonical repo URL is reachable as "View online" inside
+                // that entry's detail view.
+                AboutLinkRow(
+                    title = "License",
+                    subtitle = "Proprietary — tap to read in-app.",
+                    onClick = onOpenLicenses,
                 )
+                Spacer(Modifier.height(16.dp))
+                // Reset to defaults — wipes the user-portable preference
+                // keys but leaves library / playlists / ratings / station
+                // definitions / EQ presets intact. Confirmed via dialog
+                // because there's no undo and a misclick here would be
+                // genuinely annoying to recover from.
+                ResetSettingsRow(onClick = { resetConfirmOpen = true })
+
+                Spacer(Modifier.height(16.dp))
             }
-        }
+            if (showScrollTop) {
+                androidx.compose.material3.SmallFloatingActionButton(
+                    onClick = {
+                        scope.launch { scrollState.animateScrollTo(0) }
+                    },
+                    modifier =
+                        Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(end = 16.dp, bottom = 16.dp),
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.KeyboardArrowUp,
+                        contentDescription = "Scroll to top",
+                    )
+                }
+            }
         }
     }
 
@@ -804,7 +827,7 @@ fun AppSettingsScreen(
                     "Clears every preference toggled in this screen — theme, font scale, " +
                         "audio prefs, sleep behavior, sort orders, etc. Your library, " +
                         "stations, playlists, ratings, listening history, and saved EQ " +
-                        "presets are kept exactly as they are."
+                        "presets are kept exactly as they are.",
                 )
             },
             confirmButton = {
@@ -848,7 +871,11 @@ fun AppSettingsScreen(
 }
 
 @Composable
-private fun AboutLinkRow(title: String, subtitle: String, onClick: () -> Unit) {
+private fun AboutLinkRow(
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+) {
     Surface(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
@@ -926,23 +953,24 @@ private fun LibrarySummaryCard(
     Surface(
         shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-        modifier = Modifier
-            .fillMaxWidth()
-            // Tap copies a paste-friendly multi-line summary —
-            // useful for "what's in your library?" chats and bug
-            // reports. No long-press behavior because the row is
-            // purely informational.
-            .clickable {
-                val tc = trackCount?.toString() ?: "…"
-                val ac = albumCount?.toString() ?: "…"
-                val arc = artistCount?.toString() ?: "…"
-                val sc = stationCount?.toString() ?: "…"
-                val rt = totalRuntimeMs?.let { formatLibraryRuntime(it) } ?: "…"
-                copyToClipboard(
-                    "Library: $tc tracks · $ac albums · $arc artists · " +
-                        "$sc stations · $rt total runtime",
-                )
-            },
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                // Tap copies a paste-friendly multi-line summary —
+                // useful for "what's in your library?" chats and bug
+                // reports. No long-press behavior because the row is
+                // purely informational.
+                .clickable {
+                    val tc = trackCount?.toString() ?: "…"
+                    val ac = albumCount?.toString() ?: "…"
+                    val arc = artistCount?.toString() ?: "…"
+                    val sc = stationCount?.toString() ?: "…"
+                    val rt = totalRuntimeMs?.let { formatLibraryRuntime(it) } ?: "…"
+                    copyToClipboard(
+                        "Library: $tc tracks · $ac albums · $arc artists · " +
+                            "$sc stations · $rt total runtime",
+                    )
+                },
     ) {
         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
             Text(
@@ -965,7 +993,10 @@ private fun LibrarySummaryCard(
 }
 
 @Composable
-private fun SummaryRow(label: String, value: String) {
+private fun SummaryRow(
+    label: String,
+    value: String,
+) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -1003,7 +1034,10 @@ private fun formatLibraryRuntime(ms: Long): String {
 }
 
 @Composable
-private fun ClearLyricsCacheRow(cleared: Boolean, onClick: () -> Unit) {
+private fun ClearLyricsCacheRow(
+    cleared: Boolean,
+    onClick: () -> Unit,
+) {
     Surface(
         shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
@@ -1020,8 +1054,12 @@ private fun ClearLyricsCacheRow(cleared: Boolean, onClick: () -> Unit) {
                     fontWeight = FontWeight.Medium,
                 )
                 Text(
-                    text = if (cleared) "Cache cleared. Next plays will re-fetch."
-                           else "Re-fetches lyrics for every track on next play.",
+                    text =
+                        if (cleared) {
+                            "Cache cleared. Next plays will re-fetch."
+                        } else {
+                            "Re-fetches lyrics for every track on next play."
+                        },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
                 )
@@ -1040,7 +1078,10 @@ private fun ClearLyricsCacheRow(cleared: Boolean, onClick: () -> Unit) {
  * just confirms zero files this time.
  */
 @Composable
-private fun ClearDjCacheRow(status: String?, onClick: () -> Unit) {
+private fun ClearDjCacheRow(
+    status: String?,
+    onClick: () -> Unit,
+) {
     Surface(
         shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
@@ -1057,8 +1098,9 @@ private fun ClearDjCacheRow(status: String?, onClick: () -> Unit) {
                     fontWeight = FontWeight.Medium,
                 )
                 Text(
-                    text = status ?: "Wipes generated DJ TTS audio clips. " +
-                        "Future stings regenerate from the TTS pipeline.",
+                    text =
+                        status ?: "Wipes generated DJ TTS audio clips. " +
+                            "Future stings regenerate from the TTS pipeline.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
                 )
@@ -1077,7 +1119,10 @@ private fun ClearDjCacheRow(status: String?, onClick: () -> Unit) {
  * (e.g. "Cleared lyrics, 124 artwork files, and 8 DJ clips.").
  */
 @Composable
-private fun ClearAllCachesRow(status: String?, onClick: () -> Unit) {
+private fun ClearAllCachesRow(
+    status: String?,
+    onClick: () -> Unit,
+) {
     Surface(
         shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
@@ -1094,8 +1139,9 @@ private fun ClearAllCachesRow(status: String?, onClick: () -> Unit) {
                     fontWeight = FontWeight.Medium,
                 )
                 Text(
-                    text = status ?: "Wipes lyrics, artwork, and DJ clips in " +
-                        "one tap. All three regenerate on demand.",
+                    text =
+                        status ?: "Wipes lyrics, artwork, and DJ clips in " +
+                            "one tap. All three regenerate on demand.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
                 )
@@ -1106,7 +1152,10 @@ private fun ClearAllCachesRow(status: String?, onClick: () -> Unit) {
 }
 
 @Composable
-private fun VacuumDbRow(status: String?, onClick: () -> Unit) {
+private fun VacuumDbRow(
+    status: String?,
+    onClick: () -> Unit,
+) {
     Surface(
         shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
@@ -1123,8 +1172,9 @@ private fun VacuumDbRow(status: String?, onClick: () -> Unit) {
                     fontWeight = FontWeight.Medium,
                 )
                 Text(
-                    text = status ?: "Reclaims disk space SQLite is holding " +
-                        "after large deletes. Safe; takes a second or two.",
+                    text =
+                        status ?: "Reclaims disk space SQLite is holding " +
+                            "after large deletes. Safe; takes a second or two.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
                 )
@@ -1135,7 +1185,10 @@ private fun VacuumDbRow(status: String?, onClick: () -> Unit) {
 }
 
 @Composable
-private fun ClearArtworkCacheRow(status: String?, onClick: () -> Unit) {
+private fun ClearArtworkCacheRow(
+    status: String?,
+    onClick: () -> Unit,
+) {
     Surface(
         shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
@@ -1152,8 +1205,9 @@ private fun ClearArtworkCacheRow(status: String?, onClick: () -> Unit) {
                     fontWeight = FontWeight.Medium,
                 )
                 Text(
-                    text = status ?: "Wipes downloaded album art. The next " +
-                        "Cover Art sweep or library scan refetches.",
+                    text =
+                        status ?: "Wipes downloaded album art. The next " +
+                            "Cover Art sweep or library scan refetches.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
                 )
@@ -1186,10 +1240,11 @@ private fun CreditsCard(onOpenLicenses: () -> Unit) {
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                text = "Lyrics from LRClib (CC0). Album art via the Cover Art " +
-                    "Archive (CC0 / public domain). Genre + rating data from local " +
-                    "file tags only — no online fingerprinting, no telemetry; " +
-                    "internet usage is opt-in via the Connectivity policy above.",
+                text =
+                    "Lyrics from LRClib (CC0). Album art via the Cover Art " +
+                        "Archive (CC0 / public domain). Genre + rating data from local " +
+                        "file tags only — no online fingerprinting, no telemetry; " +
+                        "internet usage is opt-in via the Connectivity policy above.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
             )
@@ -1245,16 +1300,21 @@ private fun ThemeChoiceRow(
     onClick: () -> Unit,
 ) {
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .border(
-                width = if (selected) 2.dp else 0.dp,
-                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
-                shape = RoundedCornerShape(12.dp),
-            ),
-        color = if (selected) MaterialTheme.colorScheme.primaryContainer
-                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onClick)
+                .border(
+                    width = if (selected) 2.dp else 0.dp,
+                    color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
+                    shape = RoundedCornerShape(12.dp),
+                ),
+        color =
+            if (selected) {
+                MaterialTheme.colorScheme.primaryContainer
+            } else {
+                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+            },
         shape = RoundedCornerShape(12.dp),
     ) {
         Row(
@@ -1262,21 +1322,30 @@ private fun ThemeChoiceRow(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .background(
-                        color = if (selected) MaterialTheme.colorScheme.primary
-                                else MaterialTheme.colorScheme.surface,
-                        shape = CircleShape,
-                    ),
+                modifier =
+                    Modifier
+                        .size(40.dp)
+                        .background(
+                            color =
+                                if (selected) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.surface
+                                },
+                            shape = CircleShape,
+                        ),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
                     imageVector = option.icon,
                     contentDescription = null,
                     modifier = Modifier.size(20.dp),
-                    tint = if (selected) MaterialTheme.colorScheme.onPrimary
-                           else MaterialTheme.colorScheme.onSurface,
+                    tint =
+                        if (selected) {
+                            MaterialTheme.colorScheme.onPrimary
+                        } else {
+                            MaterialTheme.colorScheme.onSurface
+                        },
                 )
             }
             Spacer(Modifier.size(12.dp))
@@ -1285,14 +1354,22 @@ private fun ThemeChoiceRow(
                     option.label,
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
-                    color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer
-                            else MaterialTheme.colorScheme.onSurface,
+                    color =
+                        if (selected) {
+                            MaterialTheme.colorScheme.onPrimaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.onSurface
+                        },
                 )
                 Text(
                     option.description,
                     style = MaterialTheme.typography.bodySmall,
-                    color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.75f)
-                            else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    color =
+                        if (selected) {
+                            MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.75f)
+                        } else {
+                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        },
                 )
             }
             // Three-dot color preview — surface / primary / accent
@@ -1318,14 +1395,15 @@ private fun ThemeSwatchTrio(mode: ThemeMode) {
     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         triplet.forEach { color ->
             Box(
-                modifier = Modifier
-                    .size(12.dp)
-                    .background(color, CircleShape)
-                    .border(
-                        width = 1.dp,
-                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
-                        shape = CircleShape,
-                    ),
+                modifier =
+                    Modifier
+                        .size(12.dp)
+                        .background(color, CircleShape)
+                        .border(
+                            width = 1.dp,
+                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
+                            shape = CircleShape,
+                        ),
             )
         }
     }
@@ -1336,7 +1414,10 @@ private fun ThemeSwatchTrio(mode: ThemeMode) {
  * end-of-track fade slider ([EndFadeSlider]) below.
  */
 @Composable
-private fun BackupRetentionSlider(value: Int, onChange: (Int) -> Unit) {
+private fun BackupRetentionSlider(
+    value: Int,
+    onChange: (Int) -> Unit,
+) {
     // Mirror EndFadeSlider's lift-up-state pattern so prefs writes
     // happen on release, not every drag frame. Range 3..30 — past
     // 30 the user is better off archiving snapshots manually.
@@ -1383,7 +1464,10 @@ private fun BackupRetentionSlider(value: Int, onChange: (Int) -> Unit) {
 }
 
 @Composable
-private fun EndFadeSlider(seconds: Int, onChange: (Int) -> Unit) {
+private fun EndFadeSlider(
+    seconds: Int,
+    onChange: (Int) -> Unit,
+) {
     // Same lift-up-state pattern as PreampSlider so the readout
     // tracks the drag without burning a SharedPreferences write
     // every frame. Discrete steps mean fewer onValueChange events
@@ -1409,10 +1493,11 @@ private fun EndFadeSlider(seconds: Int, onChange: (Int) -> Unit) {
             )
         }
         Text(
-            text = "Ramps the volume down over the last few seconds of " +
-                "each track to soften the cut. Applies only when a station's " +
-                "crossfade is Off — per-station crossfade (with true overlap) " +
-                "is configured in Station editor → Playback rules.",
+            text =
+                "Ramps the volume down over the last few seconds of " +
+                    "each track to soften the cut. Applies only when a station's " +
+                    "crossfade is Off — per-station crossfade (with true overlap) " +
+                    "is configured in Station editor → Playback rules.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
         )
@@ -1434,7 +1519,10 @@ private fun EndFadeSlider(seconds: Int, onChange: (Int) -> Unit) {
 }
 
 @Composable
-private fun PreampSlider(valueDb: Float, onChange: (Float) -> Unit) {
+private fun PreampSlider(
+    valueDb: Float,
+    onChange: (Float) -> Unit,
+) {
     // Local pending state so the dB readout AND slider track the
     // drag in real time, but the SharedPreferences write (which
     // onChange routes through) only fires on onValueChangeFinished.
@@ -1497,9 +1585,10 @@ private fun NavRow(
     onClick: () -> Unit,
 ) {
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onClick),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
         shape = RoundedCornerShape(12.dp),
     ) {
@@ -1537,27 +1626,32 @@ private fun NavRow(
  */
 private sealed interface ArtworkSyncState {
     object Idle : ArtworkSyncState
+
     data class Running(val index: Int, val total: Int, val found: Int) : ArtworkSyncState
+
     data class Done(val found: Int, val missing: Int, val failed: Int) : ArtworkSyncState
+
     object Blocked : ArtworkSyncState
 }
 
-private fun ArtworkSyncState.advance(p: MissingArtworkSync.Progress): ArtworkSyncState = when (p) {
-    is MissingArtworkSync.Progress.Started -> ArtworkSyncState.Running(0, p.total, 0)
-    is MissingArtworkSync.Progress.Fetching -> {
-        val cur = (this as? ArtworkSyncState.Running) ?: ArtworkSyncState.Running(0, p.total, 0)
-        cur.copy(index = p.index, total = p.total)
+private fun ArtworkSyncState.advance(p: MissingArtworkSync.Progress): ArtworkSyncState =
+    when (p) {
+        is MissingArtworkSync.Progress.Started -> ArtworkSyncState.Running(0, p.total, 0)
+        is MissingArtworkSync.Progress.Fetching -> {
+            val cur = (this as? ArtworkSyncState.Running) ?: ArtworkSyncState.Running(0, p.total, 0)
+            cur.copy(index = p.index, total = p.total)
+        }
+        is MissingArtworkSync.Progress.Found -> {
+            val cur = (this as? ArtworkSyncState.Running) ?: return this
+            cur.copy(found = cur.found + 1)
+        }
+        is MissingArtworkSync.Progress.Missing,
+        is MissingArtworkSync.Progress.Failed,
+        -> this
+        is MissingArtworkSync.Progress.Completed ->
+            ArtworkSyncState.Done(found = p.found, missing = p.missing, failed = p.failed)
+        is MissingArtworkSync.Progress.PolicyBlocked -> ArtworkSyncState.Blocked
     }
-    is MissingArtworkSync.Progress.Found -> {
-        val cur = (this as? ArtworkSyncState.Running) ?: return this
-        cur.copy(found = cur.found + 1)
-    }
-    is MissingArtworkSync.Progress.Missing,
-    is MissingArtworkSync.Progress.Failed -> this
-    is MissingArtworkSync.Progress.Completed ->
-        ArtworkSyncState.Done(found = p.found, missing = p.missing, failed = p.failed)
-    is MissingArtworkSync.Progress.PolicyBlocked -> ArtworkSyncState.Blocked
-}
 
 @Composable
 private fun ArtworkSyncCard(
@@ -1573,9 +1667,10 @@ private fun ArtworkSyncCard(
         Column(modifier = Modifier.padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .background(MaterialTheme.colorScheme.surface, CircleShape),
+                    modifier =
+                        Modifier
+                            .size(40.dp)
+                            .background(MaterialTheme.colorScheme.surface, CircleShape),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
@@ -1657,27 +1752,32 @@ private fun ArtworkSyncCard(
  */
 private sealed interface LyricsSyncState {
     object Idle : LyricsSyncState
+
     data class Running(val index: Int, val total: Int, val found: Int) : LyricsSyncState
+
     data class Done(val found: Int, val missing: Int, val failed: Int) : LyricsSyncState
+
     object Blocked : LyricsSyncState
 }
 
-private fun LyricsSyncState.advance(p: MissingLyricsSync.Progress): LyricsSyncState = when (p) {
-    is MissingLyricsSync.Progress.Started -> LyricsSyncState.Running(0, p.total, 0)
-    is MissingLyricsSync.Progress.Fetching -> {
-        val cur = (this as? LyricsSyncState.Running) ?: LyricsSyncState.Running(0, p.total, 0)
-        cur.copy(index = p.index, total = p.total)
+private fun LyricsSyncState.advance(p: MissingLyricsSync.Progress): LyricsSyncState =
+    when (p) {
+        is MissingLyricsSync.Progress.Started -> LyricsSyncState.Running(0, p.total, 0)
+        is MissingLyricsSync.Progress.Fetching -> {
+            val cur = (this as? LyricsSyncState.Running) ?: LyricsSyncState.Running(0, p.total, 0)
+            cur.copy(index = p.index, total = p.total)
+        }
+        is MissingLyricsSync.Progress.Found -> {
+            val cur = (this as? LyricsSyncState.Running) ?: return this
+            cur.copy(found = cur.found + 1)
+        }
+        is MissingLyricsSync.Progress.Missing,
+        is MissingLyricsSync.Progress.Failed,
+        -> this
+        is MissingLyricsSync.Progress.Completed ->
+            LyricsSyncState.Done(found = p.found, missing = p.missing, failed = p.failed)
+        is MissingLyricsSync.Progress.PolicyBlocked -> LyricsSyncState.Blocked
     }
-    is MissingLyricsSync.Progress.Found -> {
-        val cur = (this as? LyricsSyncState.Running) ?: return this
-        cur.copy(found = cur.found + 1)
-    }
-    is MissingLyricsSync.Progress.Missing,
-    is MissingLyricsSync.Progress.Failed -> this
-    is MissingLyricsSync.Progress.Completed ->
-        LyricsSyncState.Done(found = p.found, missing = p.missing, failed = p.failed)
-    is MissingLyricsSync.Progress.PolicyBlocked -> LyricsSyncState.Blocked
-}
 
 @Composable
 private fun LyricsSyncCard(
@@ -1693,9 +1793,10 @@ private fun LyricsSyncCard(
         Column(modifier = Modifier.padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .background(MaterialTheme.colorScheme.surface, CircleShape),
+                    modifier =
+                        Modifier
+                            .size(40.dp)
+                            .background(MaterialTheme.colorScheme.surface, CircleShape),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
@@ -1825,42 +1926,46 @@ private fun ConnectivityPolicyRow(
     current: com.visorcraft.radioshed.domain.ConnectivityPolicy,
     onPick: (com.visorcraft.radioshed.domain.ConnectivityPolicy) -> Unit,
 ) {
-    val options = listOf(
-        com.visorcraft.radioshed.domain.ConnectivityPolicy.Always to "Always",
-        com.visorcraft.radioshed.domain.ConnectivityPolicy.WiFiOnly to "Wi-Fi only",
-        com.visorcraft.radioshed.domain.ConnectivityPolicy.Manual to "Ask each time",
-        com.visorcraft.radioshed.domain.ConnectivityPolicy.Never to "Never",
-    )
-    val explanation = when (current) {
-        com.visorcraft.radioshed.domain.ConnectivityPolicy.Always ->
-            "Cover Art Archive + LRClib lyrics fetch on demand whenever the app needs them."
-        com.visorcraft.radioshed.domain.ConnectivityPolicy.WiFiOnly ->
-            "Online fetches only happen on Wi-Fi — keeps mobile data quiet."
-        com.visorcraft.radioshed.domain.ConnectivityPolicy.Manual ->
-            "The app asks before every online fetch. Slower but in your hands."
-        com.visorcraft.radioshed.domain.ConnectivityPolicy.Never ->
-            "All online lookups disabled — only embedded artwork + sidecar lyrics."
-    }
-    val cycle = remember {
+    val options =
         listOf(
-            com.visorcraft.radioshed.domain.ConnectivityPolicy.Always,
-            com.visorcraft.radioshed.domain.ConnectivityPolicy.WiFiOnly,
-            com.visorcraft.radioshed.domain.ConnectivityPolicy.Manual,
-            com.visorcraft.radioshed.domain.ConnectivityPolicy.Never,
+            com.visorcraft.radioshed.domain.ConnectivityPolicy.Always to "Always",
+            com.visorcraft.radioshed.domain.ConnectivityPolicy.WiFiOnly to "Wi-Fi only",
+            com.visorcraft.radioshed.domain.ConnectivityPolicy.Manual to "Ask each time",
+            com.visorcraft.radioshed.domain.ConnectivityPolicy.Never to "Never",
         )
-    }
+    val explanation =
+        when (current) {
+            com.visorcraft.radioshed.domain.ConnectivityPolicy.Always ->
+                "Cover Art Archive + LRClib lyrics fetch on demand whenever the app needs them."
+            com.visorcraft.radioshed.domain.ConnectivityPolicy.WiFiOnly ->
+                "Online fetches only happen on Wi-Fi — keeps mobile data quiet."
+            com.visorcraft.radioshed.domain.ConnectivityPolicy.Manual ->
+                "The app asks before every online fetch. Slower but in your hands."
+            com.visorcraft.radioshed.domain.ConnectivityPolicy.Never ->
+                "All online lookups disabled — only embedded artwork + sidecar lyrics."
+        }
+    val cycle =
+        remember {
+            listOf(
+                com.visorcraft.radioshed.domain.ConnectivityPolicy.Always,
+                com.visorcraft.radioshed.domain.ConnectivityPolicy.WiFiOnly,
+                com.visorcraft.radioshed.domain.ConnectivityPolicy.Manual,
+                com.visorcraft.radioshed.domain.ConnectivityPolicy.Never,
+            )
+        }
     Surface(
         shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-        modifier = Modifier
-            .fillMaxWidth()
-            .combinedClickable(
-                onClick = {},
-                onLongClick = {
-                    val nextIdx = (cycle.indexOf(current) + 1).mod(cycle.size)
-                    onPick(cycle[nextIdx])
-                },
-            ),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .combinedClickable(
+                    onClick = {},
+                    onLongClick = {
+                        val nextIdx = (cycle.indexOf(current) + 1).mod(cycle.size)
+                        onPick(cycle[nextIdx])
+                    },
+                ),
     ) {
         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
             Text(
@@ -1914,12 +2019,13 @@ private fun ServicePolicyOverrideRow(
     var current by remember(service) {
         mutableStateOf(settings.getServicePolicyOverride(service))
     }
-    val options = listOf(
-        com.visorcraft.radioshed.source.ServicePolicyOverride.Inherit to "Inherit",
-        com.visorcraft.radioshed.source.ServicePolicyOverride.Always to "Always",
-        com.visorcraft.radioshed.source.ServicePolicyOverride.WiFiOnly to "Wi-Fi only",
-        com.visorcraft.radioshed.source.ServicePolicyOverride.Never to "Never",
-    )
+    val options =
+        listOf(
+            com.visorcraft.radioshed.source.ServicePolicyOverride.Inherit to "Inherit",
+            com.visorcraft.radioshed.source.ServicePolicyOverride.Always to "Always",
+            com.visorcraft.radioshed.source.ServicePolicyOverride.WiFiOnly to "Wi-Fi only",
+            com.visorcraft.radioshed.source.ServicePolicyOverride.Never to "Never",
+        )
     Surface(
         shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
@@ -1981,14 +2087,16 @@ private fun NowPlayingLayoutRow(
     current: String,
     onPick: (String) -> Unit,
 ) {
-    val options = listOf(
-        "Auto" to "Match the screen width",
-        "Compact" to "Single column — phone portrait",
-        "TwoPane" to "Art + transport — phone landscape",
-        "TriplePane" to "Stations | transport | art — dashboard / foldable / tablet",
-    )
-    val explanation = options.firstOrNull { it.first == current }?.second
-        ?: options.first().second
+    val options =
+        listOf(
+            "Auto" to "Match the screen width",
+            "Compact" to "Single column — phone portrait",
+            "TwoPane" to "Art + transport — phone landscape",
+            "TriplePane" to "Stations | transport | art — dashboard / foldable / tablet",
+        )
+    val explanation =
+        options.firstOrNull { it.first == current }?.second
+            ?: options.first().second
     Surface(
         shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
@@ -2053,15 +2161,19 @@ private fun NowPlayingLayoutRow(
 }
 
 @Composable
-private fun FontScaleRow(value: Float, onChange: (Float) -> Unit) {
-    val activeIdx = remember(value) {
-        // Snap whatever's persisted to the nearest stop so the chip
-        // row reads cleanly even if a future slider write produced
-        // an intermediate value.
-        FONT_SCALE_STOPS.indices.minByOrNull {
-            kotlin.math.abs(FONT_SCALE_STOPS[it] - value)
-        } ?: 2
-    }
+private fun FontScaleRow(
+    value: Float,
+    onChange: (Float) -> Unit,
+) {
+    val activeIdx =
+        remember(value) {
+            // Snap whatever's persisted to the nearest stop so the chip
+            // row reads cleanly even if a future slider write produced
+            // an intermediate value.
+            FONT_SCALE_STOPS.indices.minByOrNull {
+                kotlin.math.abs(FONT_SCALE_STOPS[it] - value)
+            } ?: 2
+        }
     androidx.compose.material3.Surface(
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
         shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
@@ -2159,11 +2271,12 @@ private fun GenerateGenreStationsRow(
                             // stalled cold-start on libraries with many
                             // distinct genres.
                             val counts = libraryRepo.tagValueTrackCounts("GENRE")
-                            val topGenres = counts.entries
-                                .filter { it.value >= 20L }
-                                .sortedByDescending { it.value }
-                                .take(10)
-                                .map { it.key }
+                            val topGenres =
+                                counts.entries
+                                    .filter { it.value >= 20L }
+                                    .sortedByDescending { it.value }
+                                    .take(10)
+                                    .map { it.key }
                             if (topGenres.isEmpty()) {
                                 status = "No genres with at least 20 tracks. " +
                                     "Tag your tracks with a `GENRE` field, then re-run."
@@ -2175,14 +2288,17 @@ private fun GenerateGenreStationsRow(
                             // TagFilter(GENRE, [name]) source so a user
                             // renaming "Genre: Rock" to "Rock Mix"
                             // doesn't cause a re-run to spawn a duplicate.
-                            val existingGenres = existing.mapNotNullTo(mutableSetOf()) { st ->
-                                (st.source as? com.visorcraft.radioshed.domain
-                                    .SourceRule.TagFilter)
-                                    ?.takeIf { it.key.equals("GENRE", ignoreCase = true) }
-                                    ?.values
-                                    ?.singleOrNull()
-                                    ?.lowercase()
-                            }
+                            val existingGenres =
+                                existing.mapNotNullTo(mutableSetOf()) { st ->
+                                    (
+                                        st.source as? com.visorcraft.radioshed.domain
+                                            .SourceRule.TagFilter
+                                    )
+                                        ?.takeIf { it.key.equals("GENRE", ignoreCase = true) }
+                                        ?.values
+                                        ?.singleOrNull()
+                                        ?.lowercase()
+                                }
                             val maxSort = existing.maxOfOrNull { it.sortPosition } ?: 0
                             var inserted = 0
                             var skipped = 0
@@ -2194,27 +2310,31 @@ private fun GenerateGenreStationsRow(
                                 val name = "Genre: $genre"
                                 stationRepo.insert(
                                     name = name,
-                                    source = com.visorcraft.radioshed.domain
-                                        .SourceRule.TagFilter(
-                                            key = "GENRE",
-                                            values = listOf(genre),
-                                        ),
-                                    playback = com.visorcraft.radioshed.domain
-                                        .PlaybackRule(
-                                            order = com.visorcraft.radioshed.domain
-                                                .PlayOrder.SmartShuffle,
-                                        ),
+                                    source =
+                                        com.visorcraft.radioshed.domain
+                                            .SourceRule.TagFilter(
+                                                key = "GENRE",
+                                                values = listOf(genre),
+                                            ),
+                                    playback =
+                                        com.visorcraft.radioshed.domain
+                                            .PlaybackRule(
+                                                order =
+                                                    com.visorcraft.radioshed.domain
+                                                        .PlayOrder.SmartShuffle,
+                                            ),
                                     sortPosition = maxSort + 1 + idx,
                                     customSubtitle = "Tag-driven · ${counts[genre] ?: 0} tracks",
                                 )
                                 inserted += 1
                             }
-                            status = buildString {
-                                append("Created $inserted station")
-                                if (inserted != 1) append("s")
-                                if (skipped > 0) append(" ($skipped already existed)")
-                                append(".")
-                            }
+                            status =
+                                buildString {
+                                    append("Created $inserted station")
+                                    if (inserted != 1) append("s")
+                                    if (skipped > 0) append(" ($skipped already existed)")
+                                    append(".")
+                                }
                         } finally {
                             working = false
                         }
@@ -2291,20 +2411,21 @@ private fun GenerateDecadeStationsRow(
                             // the moment a 2031 album appeared.
                             val nowYear = com.visorcraft.radioshed.data.currentYear()
                             val currentDecadeEnd = ((nowYear / 10) * 10) + 9
-                            val buckets = buildList {
-                                add("Pre-50s" to (1900 to 1949))
-                                add("50s" to (1950 to 1959))
-                                add("60s" to (1960 to 1969))
-                                add("70s" to (1970 to 1979))
-                                add("80s" to (1980 to 1989))
-                                add("90s" to (1990 to 1999))
-                                add("2000s" to (2000 to 2009))
-                                add("2010s" to (2010 to 2019))
-                                add("2020s" to (2020 to maxOf(2029, currentDecadeEnd)))
-                                if (currentDecadeEnd >= 2039) {
-                                    add("2030s" to (2030 to maxOf(2039, currentDecadeEnd)))
+                            val buckets =
+                                buildList {
+                                    add("Pre-50s" to (1900 to 1949))
+                                    add("50s" to (1950 to 1959))
+                                    add("60s" to (1960 to 1969))
+                                    add("70s" to (1970 to 1979))
+                                    add("80s" to (1980 to 1989))
+                                    add("90s" to (1990 to 1999))
+                                    add("2000s" to (2000 to 2009))
+                                    add("2010s" to (2010 to 2019))
+                                    add("2020s" to (2020 to maxOf(2029, currentDecadeEnd)))
+                                    if (currentDecadeEnd >= 2039) {
+                                        add("2030s" to (2030 to maxOf(2039, currentDecadeEnd)))
+                                    }
                                 }
-                            }
                             val existing = stationRepo.list()
                             // Idempotency by source rule: if a station's
                             // AlbumSelector already covers a decade's
@@ -2314,11 +2435,14 @@ private fun GenerateDecadeStationsRow(
                             // station's customSubtitle would be flaky;
                             // instead match by overlap of selected
                             // album IDs vs the decade's album IDs.
-                            val existingAlbumSelectors = existing
-                                .mapNotNull { st ->
-                                    (st.source as? com.visorcraft.radioshed.domain
-                                        .SourceRule.AlbumSelector)?.albumIds?.toSet()
-                                }
+                            val existingAlbumSelectors =
+                                existing
+                                    .mapNotNull { st ->
+                                        (
+                                            st.source as? com.visorcraft.radioshed.domain
+                                                .SourceRule.AlbumSelector
+                                        )?.albumIds?.toSet()
+                                    }
                             val maxSort = existing.maxOfOrNull { it.sortPosition } ?: 0
                             var inserted = 0
                             var skipped = 0
@@ -2331,10 +2455,11 @@ private fun GenerateDecadeStationsRow(
                                 // station already covers ≥80% of this
                                 // decade — that's almost certainly
                                 // a renamed prior auto-generated one.
-                                val isDuplicate = existingAlbumSelectors.any { existingSet ->
-                                    val overlap = existingSet.count { it in albumSet }
-                                    overlap >= (albumSet.size * 0.8)
-                                }
+                                val isDuplicate =
+                                    existingAlbumSelectors.any { existingSet ->
+                                        val overlap = existingSet.count { it in albumSet }
+                                        overlap >= (albumSet.size * 0.8)
+                                    }
                                 if (isDuplicate) {
                                     skipped += 1
                                     return@forEachIndexed
@@ -2342,29 +2467,33 @@ private fun GenerateDecadeStationsRow(
                                 val name = "Decade: $label"
                                 stationRepo.insert(
                                     name = name,
-                                    source = com.visorcraft.radioshed.domain
-                                        .SourceRule.AlbumSelector(albumIds = albumIds),
-                                    playback = com.visorcraft.radioshed.domain
-                                        .PlaybackRule(
-                                            order = com.visorcraft.radioshed.domain
-                                                .PlayOrder.SmartShuffle,
-                                        ),
+                                    source =
+                                        com.visorcraft.radioshed.domain
+                                            .SourceRule.AlbumSelector(albumIds = albumIds),
+                                    playback =
+                                        com.visorcraft.radioshed.domain
+                                            .PlaybackRule(
+                                                order =
+                                                    com.visorcraft.radioshed.domain
+                                                        .PlayOrder.SmartShuffle,
+                                            ),
                                     sortPosition = maxSort + 1 + idx,
                                     customSubtitle = "${albumIds.size} albums",
                                 )
                                 inserted += 1
                             }
-                            status = if (inserted == 0 && skipped == 0) {
-                                "No decades with at least 3 albums. Tag your " +
-                                    "albums' year fields and re-run."
-                            } else {
-                                buildString {
-                                    append("Created $inserted station")
-                                    if (inserted != 1) append("s")
-                                    if (skipped > 0) append(" ($skipped already existed)")
-                                    append(".")
+                            status =
+                                if (inserted == 0 && skipped == 0) {
+                                    "No decades with at least 3 albums. Tag your " +
+                                        "albums' year fields and re-run."
+                                } else {
+                                    buildString {
+                                        append("Created $inserted station")
+                                        if (inserted != 1) append("s")
+                                        if (skipped > 0) append(" ($skipped already existed)")
+                                        append(".")
+                                    }
                                 }
-                            }
                         } finally {
                             working = false
                         }
@@ -2395,11 +2524,12 @@ private fun ListenBrainzRow(settings: SettingsStore) {
     Column {
         SettingsToggleRow(
             title = "ListenBrainz scrobbling",
-            subtitle = if (token.isBlank()) {
-                "Send completed plays to your ListenBrainz profile. Tap to add token."
-            } else {
-                "Scrobbling enabled. Token: " + token.take(8) + "..."
-            },
+            subtitle =
+                if (token.isBlank()) {
+                    "Send completed plays to your ListenBrainz profile. Tap to add token."
+                } else {
+                    "Scrobbling enabled. Token: " + token.take(8) + "..."
+                },
             checked = enabled,
             onCheckedChange = { v ->
                 enabled = v
@@ -2457,11 +2587,12 @@ private fun ListenBrainzRow(settings: SettingsStore) {
                         validation = "Validating..."
                         scope.launch {
                             val ok = if (pasted.isBlank()) true else client.validateToken(pasted)
-                            validation = when {
-                                pasted.isBlank() -> "Token cleared."
-                                ok -> "Token validated."
-                                else -> "Token rejected by ListenBrainz."
-                            }
+                            validation =
+                                when {
+                                    pasted.isBlank() -> "Token cleared."
+                                    ok -> "Token validated."
+                                    else -> "Token rejected by ListenBrainz."
+                                }
                             if (pasted.isBlank() || ok) {
                                 settings.setListenBrainzToken(pasted)
                                 token = pasted
@@ -2528,11 +2659,12 @@ private fun SubsonicConfigRow(
     Column {
         NavRow(
             title = "Subsonic / Navidrome cloud library",
-            subtitle = if (configured) {
-                "Connected to ${url.removePrefix("https://").removePrefix("http://").take(40)}"
-            } else {
-                "Stream from your own server. Tap to configure."
-            },
+            subtitle =
+                if (configured) {
+                    "Connected to ${url.removePrefix("https://").removePrefix("http://").take(40)}"
+                } else {
+                    "Stream from your own server. Tap to configure."
+                },
             onClick = {
                 if (configured) onOpenBrowse() else dialogOpen = true
             },
@@ -2543,17 +2675,19 @@ private fun SubsonicConfigRow(
                     text = "Edit server config",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier
-                        .clickable { dialogOpen = true }
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    modifier =
+                        Modifier
+                            .clickable { dialogOpen = true }
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
                 )
                 Text(
                     text = "Disconnect",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier
-                        .clickable { disconnectConfirmOpen = true }
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    modifier =
+                        Modifier
+                            .clickable { disconnectConfirmOpen = true }
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
                 )
             }
         }
@@ -2599,55 +2733,58 @@ private fun SubsonicConfigRow(
                             else -> {
                                 testing = true
                                 status = "Testing connection…"
-                                pingJob = scope.launch {
-                                    try {
-                                        val server = com.visorcraft.radioshed.source.SubsonicServer(
-                                            baseUrl = u,
-                                            username = user,
-                                            password = pass,
-                                        )
-                                        // ping() reports failure as null, but this
-                                        // launch has no other safety net — anything
-                                        // that still escapes (clients can't predict
-                                        // every URL/transport quirk) must read as
-                                        // "ping failed", not crash the app.
-                                        // Cancellation is rethrown so a dialog
-                                        // dismiss doesn't paint a stale status.
-                                        val result = try {
-                                            client.ping(server)
-                                        } catch (e: kotlinx.coroutines.CancellationException) {
-                                            throw e
-                                        } catch (e: Exception) {
-                                            null
+                                pingJob =
+                                    scope.launch {
+                                        try {
+                                            val server =
+                                                com.visorcraft.radioshed.source.SubsonicServer(
+                                                    baseUrl = u,
+                                                    username = user,
+                                                    password = pass,
+                                                )
+                                            // ping() reports failure as null, but this
+                                            // launch has no other safety net — anything
+                                            // that still escapes (clients can't predict
+                                            // every URL/transport quirk) must read as
+                                            // "ping failed", not crash the app.
+                                            // Cancellation is rethrown so a dialog
+                                            // dismiss doesn't paint a stale status.
+                                            val result =
+                                                try {
+                                                    client.ping(server)
+                                                } catch (e: kotlinx.coroutines.CancellationException) {
+                                                    throw e
+                                                } catch (e: Exception) {
+                                                    null
+                                                }
+                                            if (result == null) {
+                                                status = "Couldn't connect. Verify URL, " +
+                                                    "username, password, and that the server is " +
+                                                    "reachable from this device."
+                                            } else {
+                                                settings.setSubsonicUrl(u)
+                                                settings.setSubsonicUsername(user)
+                                                settings.setSubsonicPassword(pass)
+                                                url = settings.getSubsonicUrl()
+                                                username = settings.getSubsonicUsername()
+                                                password = settings.getSubsonicPassword()
+                                                // Register the cloud MediaSource now
+                                                // that a server is confirmed reachable;
+                                                // the source reads these same settings
+                                                // live on each enumeration.
+                                                mediaSourceRegistry.register(subsonicSource)
+                                                status = "Connected to ${result.product} v${result.version}."
+                                                dialogOpen = false
+                                            }
+                                        } finally {
+                                            // Clear the in-flight flag on every exit —
+                                            // success, failure, or cancellation —
+                                            // otherwise the confirm button sticks on
+                                            // "Testing…" forever.
+                                            testing = false
+                                            pingJob = null
                                         }
-                                        if (result == null) {
-                                            status = "Couldn't connect. Verify URL, " +
-                                                "username, password, and that the server is " +
-                                                "reachable from this device."
-                                        } else {
-                                            settings.setSubsonicUrl(u)
-                                            settings.setSubsonicUsername(user)
-                                            settings.setSubsonicPassword(pass)
-                                            url = settings.getSubsonicUrl()
-                                            username = settings.getSubsonicUsername()
-                                            password = settings.getSubsonicPassword()
-                                            // Register the cloud MediaSource now
-                                            // that a server is confirmed reachable;
-                                            // the source reads these same settings
-                                            // live on each enumeration.
-                                            mediaSourceRegistry.register(subsonicSource)
-                                            status = "Connected to ${result.product} v${result.version}."
-                                            dialogOpen = false
-                                        }
-                                    } finally {
-                                        // Clear the in-flight flag on every exit —
-                                        // success, failure, or cancellation —
-                                        // otherwise the confirm button sticks on
-                                        // "Testing…" forever.
-                                        testing = false
-                                        pingJob = null
                                     }
-                                }
                             }
                         }
                     },
@@ -2859,36 +2996,41 @@ private fun ColorSourceChip(
     modifier: Modifier = Modifier,
 ) {
     Surface(
-        modifier = modifier
-            .clickable(onClick = onClick)
-            .border(
-                width = if (selected) 2.dp else 1.dp,
-                color = if (selected) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
-                },
-                shape = RoundedCornerShape(20.dp),
-            ),
+        modifier =
+            modifier
+                .clickable(onClick = onClick)
+                .border(
+                    width = if (selected) 2.dp else 1.dp,
+                    color =
+                        if (selected) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+                        },
+                    shape = RoundedCornerShape(20.dp),
+                ),
         shape = RoundedCornerShape(20.dp),
-        color = if (selected) {
-            MaterialTheme.colorScheme.primaryContainer
-        } else {
-            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-        },
+        color =
+            if (selected) {
+                MaterialTheme.colorScheme.primaryContainer
+            } else {
+                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+            },
     ) {
         Text(
             label,
             style = MaterialTheme.typography.labelLarge,
-            color = if (selected) {
-                MaterialTheme.colorScheme.onPrimaryContainer
-            } else {
-                MaterialTheme.colorScheme.onSurface
-            },
+            color =
+                if (selected) {
+                    MaterialTheme.colorScheme.onPrimaryContainer
+                } else {
+                    MaterialTheme.colorScheme.onSurface
+                },
             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 10.dp, horizontal = 8.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 10.dp, horizontal = 8.dp),
         )
     }
 }
@@ -2901,9 +3043,10 @@ private fun ColorSeedRow(
     onClick: () -> Unit,
 ) {
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onClick),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
         shape = RoundedCornerShape(12.dp),
     ) {
@@ -2926,14 +3069,15 @@ private fun ColorSeedRow(
             }
             Spacer(Modifier.size(12.dp))
             Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .background(color, CircleShape)
-                    .border(
-                        width = 1.dp,
-                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
-                        shape = CircleShape,
-                    ),
+                modifier =
+                    Modifier
+                        .size(36.dp)
+                        .background(color, CircleShape)
+                        .border(
+                            width = 1.dp,
+                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
+                            shape = CircleShape,
+                        ),
             )
         }
     }

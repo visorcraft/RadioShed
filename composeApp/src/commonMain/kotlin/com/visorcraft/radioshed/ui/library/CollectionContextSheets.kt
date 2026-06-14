@@ -20,7 +20,6 @@ import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material.icons.filled.Shuffle
@@ -82,97 +81,99 @@ fun AlbumContextSheet(
     var step by remember { mutableStateOf(CollectionStep.Main) }
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
         when (step) {
-            CollectionStep.Main -> Column(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
-            ) {
-                Text(
-                    text = album.title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-                )
-                album.year?.let { y ->
+            CollectionStep.Main ->
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
+                ) {
                     Text(
-                        text = "$y",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 0.dp),
+                        text = album.title,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
                     )
+                    album.year?.let { y ->
+                        Text(
+                            text = "$y",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 0.dp),
+                        )
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    CollectionActionRow(
+                        icon = Icons.Filled.PlayArrow,
+                        label = "Play album",
+                        onClick = {
+                            scope.launch {
+                                val tracks = libraryRepo.tracksForAlbum(album.id)
+                                if (tracks.isNotEmpty()) {
+                                    stationPlayback.playTracks(tracks, startIndex = 0)
+                                }
+                                onDismiss()
+                            }
+                        },
+                    )
+                    CollectionActionRow(
+                        icon = Icons.Filled.Shuffle,
+                        label = "Shuffle album",
+                        onClick = {
+                            scope.launch {
+                                val tracks = libraryRepo.tracksForAlbum(album.id).shuffled()
+                                if (tracks.isNotEmpty()) {
+                                    stationPlayback.playTracks(tracks, startIndex = 0)
+                                }
+                                onDismiss()
+                            }
+                        },
+                    )
+                    CollectionActionRow(
+                        icon = Icons.AutoMirrored.Filled.QueueMusic,
+                        label = "Add album to queue",
+                        onClick = {
+                            scope.launch {
+                                val tracks = libraryRepo.tracksForAlbum(album.id)
+                                stationPlayback.addAllToQueue(tracks)
+                                onDismiss()
+                            }
+                        },
+                    )
+                    CollectionActionRow(
+                        icon = Icons.Filled.PlayArrow,
+                        label = "Play next",
+                        onClick = {
+                            scope.launch {
+                                val tracks = libraryRepo.tracksForAlbum(album.id)
+                                stationPlayback.playNextAll(tracks)
+                                onDismiss()
+                            }
+                        },
+                    )
+                    CollectionActionRow(
+                        icon = Icons.AutoMirrored.Filled.PlaylistAdd,
+                        label = "Add album to playlist…",
+                        onClick = { step = CollectionStep.PlaylistPicker },
+                    )
+                    CollectionActionRow(
+                        icon = Icons.Filled.Radio,
+                        label = "Create station from this album",
+                        onClick = onCreateStation,
+                    )
+                    CollectionActionRow(
+                        icon = Icons.AutoMirrored.Filled.OpenInNew,
+                        label = "Go to album",
+                        onClick = onGoToAlbum,
+                    )
+                    Spacer(Modifier.height(8.dp))
                 }
-                Spacer(Modifier.height(4.dp))
-                CollectionActionRow(
-                    icon = Icons.Filled.PlayArrow,
-                    label = "Play album",
-                    onClick = {
-                        scope.launch {
-                            val tracks = libraryRepo.tracksForAlbum(album.id)
-                            if (tracks.isNotEmpty()) {
-                                stationPlayback.playTracks(tracks, startIndex = 0)
-                            }
-                            onDismiss()
-                        }
-                    },
+            CollectionStep.PlaylistPicker ->
+                CollectionPlaylistPicker(
+                    title = "Add ${album.title} to playlist",
+                    resolveTracks = { libraryRepo.tracksForAlbum(album.id) },
+                    onDone = onDismiss,
+                    onBack = { step = CollectionStep.Main },
                 )
-                CollectionActionRow(
-                    icon = Icons.Filled.Shuffle,
-                    label = "Shuffle album",
-                    onClick = {
-                        scope.launch {
-                            val tracks = libraryRepo.tracksForAlbum(album.id).shuffled()
-                            if (tracks.isNotEmpty()) {
-                                stationPlayback.playTracks(tracks, startIndex = 0)
-                            }
-                            onDismiss()
-                        }
-                    },
-                )
-                CollectionActionRow(
-                    icon = Icons.AutoMirrored.Filled.QueueMusic,
-                    label = "Add album to queue",
-                    onClick = {
-                        scope.launch {
-                            val tracks = libraryRepo.tracksForAlbum(album.id)
-                            stationPlayback.addAllToQueue(tracks)
-                            onDismiss()
-                        }
-                    },
-                )
-                CollectionActionRow(
-                    icon = Icons.Filled.PlayArrow,
-                    label = "Play next",
-                    onClick = {
-                        scope.launch {
-                            val tracks = libraryRepo.tracksForAlbum(album.id)
-                            stationPlayback.playNextAll(tracks)
-                            onDismiss()
-                        }
-                    },
-                )
-                CollectionActionRow(
-                    icon = Icons.AutoMirrored.Filled.PlaylistAdd,
-                    label = "Add album to playlist…",
-                    onClick = { step = CollectionStep.PlaylistPicker },
-                )
-                CollectionActionRow(
-                    icon = Icons.Filled.Radio,
-                    label = "Create station from this album",
-                    onClick = onCreateStation,
-                )
-                CollectionActionRow(
-                    icon = Icons.AutoMirrored.Filled.OpenInNew,
-                    label = "Go to album",
-                    onClick = onGoToAlbum,
-                )
-                Spacer(Modifier.height(8.dp))
-            }
-            CollectionStep.PlaylistPicker -> CollectionPlaylistPicker(
-                title = "Add ${album.title} to playlist",
-                resolveTracks = { libraryRepo.tracksForAlbum(album.id) },
-                onDone = onDismiss,
-                onBack = { step = CollectionStep.Main },
-            )
         }
     }
 }
@@ -202,95 +203,97 @@ fun ArtistContextSheet(
     var step by remember { mutableStateOf(CollectionStep.Main) }
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
         when (step) {
-            CollectionStep.Main -> Column(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
-            ) {
-                Text(
-                    text = artist.name,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-                )
-                Spacer(Modifier.height(4.dp))
-                CollectionActionRow(
-                    icon = Icons.Filled.PlayArrow,
-                    label = "Play all",
-                    onClick = {
-                        scope.launch {
-                            val tracks = libraryRepo.tracksForArtist(artist.id)
-                            if (tracks.isNotEmpty()) {
-                                stationPlayback.playTracks(tracks, startIndex = 0)
+            CollectionStep.Main ->
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
+                ) {
+                    Text(
+                        text = artist.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    CollectionActionRow(
+                        icon = Icons.Filled.PlayArrow,
+                        label = "Play all",
+                        onClick = {
+                            scope.launch {
+                                val tracks = libraryRepo.tracksForArtist(artist.id)
+                                if (tracks.isNotEmpty()) {
+                                    stationPlayback.playTracks(tracks, startIndex = 0)
+                                }
+                                onDismiss()
                             }
-                            onDismiss()
-                        }
-                    },
-                )
-                CollectionActionRow(
-                    icon = Icons.Filled.Shuffle,
-                    label = "Shuffle artist",
-                    onClick = {
-                        scope.launch {
-                            val tracks = libraryRepo.tracksForArtist(artist.id).shuffled()
-                            if (tracks.isNotEmpty()) {
-                                stationPlayback.playTracks(tracks, startIndex = 0)
+                        },
+                    )
+                    CollectionActionRow(
+                        icon = Icons.Filled.Shuffle,
+                        label = "Shuffle artist",
+                        onClick = {
+                            scope.launch {
+                                val tracks = libraryRepo.tracksForArtist(artist.id).shuffled()
+                                if (tracks.isNotEmpty()) {
+                                    stationPlayback.playTracks(tracks, startIndex = 0)
+                                }
+                                onDismiss()
                             }
-                            onDismiss()
-                        }
-                    },
+                        },
+                    )
+                    CollectionActionRow(
+                        icon = Icons.AutoMirrored.Filled.QueueMusic,
+                        label = "Add to queue",
+                        onClick = {
+                            scope.launch {
+                                val tracks = libraryRepo.tracksForArtist(artist.id)
+                                stationPlayback.addAllToQueue(tracks)
+                                onDismiss()
+                            }
+                        },
+                    )
+                    CollectionActionRow(
+                        icon = Icons.AutoMirrored.Filled.PlaylistAdd,
+                        label = "Add artist to playlist…",
+                        onClick = { step = CollectionStep.PlaylistPicker },
+                    )
+                    CollectionActionRow(
+                        icon = Icons.Filled.Radio,
+                        label = "Create station from this artist",
+                        onClick = onCreateStation,
+                    )
+                    CollectionActionRow(
+                        icon = Icons.AutoMirrored.Filled.OpenInNew,
+                        label = "Go to artist",
+                        onClick = onGoToArtist,
+                    )
+                    // Edit artist: rename + manage alias list. Alternate-
+                    // name aliases let "Slim Shady" and "Eminem" resolve
+                    // to the same artist on the next scan.
+                    CollectionActionRow(
+                        icon = Icons.Filled.Edit,
+                        label = "Edit artist",
+                        onClick = onEditArtist,
+                    )
+                    // Merge into another artist: pick a target, relink
+                    // every track / album / alias, drop the source row.
+                    // Useful for collapsing "Jennie" + "Jennie (제니)" or
+                    // mismatched-case duplicates from old scans.
+                    CollectionActionRow(
+                        icon = Icons.AutoMirrored.Filled.MergeType,
+                        label = "Merge into another artist…",
+                        onClick = onMergeArtist,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                }
+            CollectionStep.PlaylistPicker ->
+                CollectionPlaylistPicker(
+                    title = "Add ${artist.name} to playlist",
+                    resolveTracks = { libraryRepo.tracksForArtist(artist.id) },
+                    onDone = onDismiss,
+                    onBack = { step = CollectionStep.Main },
                 )
-                CollectionActionRow(
-                    icon = Icons.AutoMirrored.Filled.QueueMusic,
-                    label = "Add to queue",
-                    onClick = {
-                        scope.launch {
-                            val tracks = libraryRepo.tracksForArtist(artist.id)
-                            stationPlayback.addAllToQueue(tracks)
-                            onDismiss()
-                        }
-                    },
-                )
-                CollectionActionRow(
-                    icon = Icons.AutoMirrored.Filled.PlaylistAdd,
-                    label = "Add artist to playlist…",
-                    onClick = { step = CollectionStep.PlaylistPicker },
-                )
-                CollectionActionRow(
-                    icon = Icons.Filled.Radio,
-                    label = "Create station from this artist",
-                    onClick = onCreateStation,
-                )
-                CollectionActionRow(
-                    icon = Icons.AutoMirrored.Filled.OpenInNew,
-                    label = "Go to artist",
-                    onClick = onGoToArtist,
-                )
-                // Edit artist: rename + manage alias list. Alternate-
-                // name aliases let "Slim Shady" and "Eminem" resolve
-                // to the same artist on the next scan.
-                CollectionActionRow(
-                    icon = Icons.Filled.Edit,
-                    label = "Edit artist",
-                    onClick = onEditArtist,
-                )
-                // Merge into another artist: pick a target, relink
-                // every track / album / alias, drop the source row.
-                // Useful for collapsing "Jennie" + "Jennie (제니)" or
-                // mismatched-case duplicates from old scans.
-                CollectionActionRow(
-                    icon = Icons.AutoMirrored.Filled.MergeType,
-                    label = "Merge into another artist…",
-                    onClick = onMergeArtist,
-                )
-                Spacer(Modifier.height(8.dp))
-            }
-            CollectionStep.PlaylistPicker -> CollectionPlaylistPicker(
-                title = "Add ${artist.name} to playlist",
-                resolveTracks = { libraryRepo.tracksForArtist(artist.id) },
-                onDone = onDismiss,
-                onBack = { step = CollectionStep.Main },
-            )
         }
     }
 }
@@ -410,12 +413,14 @@ private fun CollectionPlaylistPicker(
                     onValueChange = { newName = it },
                     label = { Text("Name") },
                     singleLine = true,
-                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                        imeAction = androidx.compose.ui.text.input.ImeAction.Done,
-                    ),
-                    keyboardActions = androidx.compose.foundation.text.KeyboardActions(
-                        onDone = { confirmCreate() },
-                    ),
+                    keyboardOptions =
+                        androidx.compose.foundation.text.KeyboardOptions(
+                            imeAction = androidx.compose.ui.text.input.ImeAction.Done,
+                        ),
+                    keyboardActions =
+                        androidx.compose.foundation.text.KeyboardActions(
+                            onDone = { confirmCreate() },
+                        ),
                 )
             },
             confirmButton = {
@@ -438,10 +443,11 @@ private fun CollectionActionRow(
     onClick: () -> Unit,
 ) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onClick)
+                .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(16.dp),
     ) {

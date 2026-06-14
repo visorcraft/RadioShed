@@ -83,18 +83,20 @@ fun DriveStationPicker(
     var stations by remember { mutableStateOf<List<Station>>(emptyList()) }
     LaunchedEffect(Unit) {
         val all = stationRepo.list()
-        val quickIds = settings.getDriveQuickList()
-            .split(',')
-            .map { it.trim() }
-            .filter { it.isNotEmpty() }
-        stations = if (quickIds.isEmpty()) {
-            all.sortedByDescending { it.stats.playCount }.take(DRIVE_PICKER_MAX)
-        } else {
-            val byId = all.associateBy { it.id.toString() }
-            // Preserve the user's chosen order; drop ids whose station was
-            // deleted so a stale quick-list never renders a blank tile.
-            quickIds.mapNotNull { byId[it] }.take(DRIVE_PICKER_MAX)
-        }
+        val quickIds =
+            settings.getDriveQuickList()
+                .split(',')
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+        stations =
+            if (quickIds.isEmpty()) {
+                all.sortedByDescending { it.stats.playCount }.take(DRIVE_PICKER_MAX)
+            } else {
+                val byId = all.associateBy { it.id.toString() }
+                // Preserve the user's chosen order; drop ids whose station was
+                // deleted so a stale quick-list never renders a blank tile.
+                quickIds.mapNotNull { byId[it] }.take(DRIVE_PICKER_MAX)
+            }
     }
 
     Surface(
@@ -122,13 +124,14 @@ fun DriveStationPicker(
                     Surface(
                         shape = RoundedCornerShape(28.dp),
                         color = MaterialTheme.colorScheme.surfaceVariant,
-                        modifier = Modifier
-                            .align(Alignment.CenterEnd)
-                            .size(56.dp)
-                            .clickable {
-                                haptic()
-                                onDismiss()
-                            },
+                        modifier =
+                            Modifier
+                                .align(Alignment.CenterEnd)
+                                .size(56.dp)
+                                .clickable {
+                                    haptic()
+                                    onDismiss()
+                                },
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Icon(
@@ -194,18 +197,20 @@ private fun DriveStationTile(
     val accent = stationColor(station)
     Surface(
         shape = RoundedCornerShape(20.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = TILE_MIN_HEIGHT)
-            .clip(RoundedCornerShape(20.dp))
-            .clickable(onClick = onTap),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = TILE_MIN_HEIGHT)
+                .clip(RoundedCornerShape(20.dp))
+                .clickable(onClick = onTap),
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
             StationArtwork(
                 station = station,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(1.5f),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(1.5f),
                 background = stationGradient(accent),
                 fallbackIconTint = Color.White.copy(alpha = 0.92f),
                 fallbackIconSize = 72.dp,
@@ -217,9 +222,10 @@ private fun DriveStationTile(
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(16.dp),
+                modifier =
+                    Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(16.dp),
             )
         }
     }

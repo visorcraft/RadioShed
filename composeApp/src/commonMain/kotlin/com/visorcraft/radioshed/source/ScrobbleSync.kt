@@ -60,13 +60,14 @@ class ScrobbleSync(
         val token = settings.getListenBrainzToken()
         if (token.isBlank()) return
 
-        val listen = ListenBrainzClient.Listen(
-            artist = artist,
-            track = track,
-            album = album,
-            listenedAtSeconds = listenedAtSeconds,
-            token = token,
-        )
+        val listen =
+            ListenBrainzClient.Listen(
+                artist = artist,
+                track = track,
+                album = album,
+                listenedAtSeconds = listenedAtSeconds,
+                token = token,
+            )
         val submitted = allowNetwork() && client.submit(listen)
         if (submitted) {
             drain()
@@ -104,13 +105,14 @@ class ScrobbleSync(
                         queue.deleteById(row.id)
                         continue
                     }
-                    val listen = ListenBrainzClient.Listen(
-                        artist = row.artist,
-                        track = row.track,
-                        album = row.album,
-                        listenedAtSeconds = row.listenedAtSeconds,
-                        token = token,
-                    )
+                    val listen =
+                        ListenBrainzClient.Listen(
+                            artist = row.artist,
+                            track = row.track,
+                            album = row.album,
+                            listenedAtSeconds = row.listenedAtSeconds,
+                            token = token,
+                        )
                     if (client.submit(listen)) {
                         queue.deleteById(row.id)
                     } else {

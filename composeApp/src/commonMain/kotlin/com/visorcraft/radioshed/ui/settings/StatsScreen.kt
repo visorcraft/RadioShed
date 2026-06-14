@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -17,7 +18,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.MusicNote
@@ -36,15 +36,16 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.layout.ContentScale
 import com.visorcraft.radioshed.data.LibraryRepository
 import com.visorcraft.radioshed.data.StationRepository
 import com.visorcraft.radioshed.data.TopAlbumEntry
@@ -53,7 +54,6 @@ import com.visorcraft.radioshed.domain.Station
 import com.visorcraft.radioshed.domain.Track
 import com.visorcraft.radioshed.stations.StationPlayback
 import kotlinx.coroutines.launch
-import androidx.compose.runtime.rememberCoroutineScope
 import org.koin.compose.koinInject
 
 /**
@@ -146,15 +146,20 @@ fun StatsScreen(
             val weekMs = 7L * 24L * 60L * 60L * 1000L
             val thisWeek = stationRepo.listenedMsBetween(now - weekMs, now)
             val lastWeek = stationRepo.listenedMsBetween(now - 2 * weekMs, now - weekMs)
-            weekDeltaPct = if (lastWeek <= 0L) null
-            else (((thisWeek - lastWeek) * 100.0) / lastWeek).toInt()
+            weekDeltaPct =
+                if (lastWeek <= 0L) {
+                    null
+                } else {
+                    (((thisWeek - lastWeek) * 100.0) / lastWeek).toInt()
+                }
         }
         // top track ids → resolve to Track objects via LibraryRepo;
         // skip ids whose tracks have been deleted from the library.
-        topTracks = stationRepo.topPlayedTracks(limit = 25L)
-            .mapNotNull { (id, count) ->
-                libraryRepo.getTrackById(id)?.let { it to count }
-            }
+        topTracks =
+            stationRepo.topPlayedTracks(limit = 25L)
+                .mapNotNull { (id, count) ->
+                    libraryRepo.getTrackById(id)?.let { it to count }
+                }
         topArtists = stationRepo.topPlayedArtists(limit = 10L)
         topAlbums = stationRepo.topPlayedAlbums(limit = 10L)
         topGenres = stationRepo.topPlayedGenres(limit = 8L)
@@ -162,10 +167,11 @@ fun StatsScreen(
         // stations table — distinct from the station_history-based
         // lists above, since "play count" here is "times the user
         // started this station" (cheaper signal than per-track plays).
-        topStations = stationRepo.list()
-            .filter { it.stats.playCount > 0 }
-            .sortedByDescending { it.stats.playCount }
-            .take(5)
+        topStations =
+            stationRepo.list()
+                .filter { it.stats.playCount > 0 }
+                .sortedByDescending { it.stats.playCount }
+                .take(5)
         mostSkipped = ratingRepo.mostSkippedTracks(limit = 10L)
         dailyActivity = stationRepo.dailyActivity(windowDays = windowDays)
         hourActivity = stationRepo.playsByHourOfDay(windowDays = windowDays)
@@ -192,22 +198,27 @@ fun StatsScreen(
                     // are too long for a clipboard-friendly summary.
                     TextButton(onClick = {
                         val avg = if (windowDays > 0) totalMs / windowDays else 0L
-                        val streakLine = if (streaks.second > 0) {
-                            "Current streak: ${streaks.first} day${if (streaks.first == 1) "" else "s"} · longest ${streaks.second}"
-                        } else ""
-                        val text = buildString {
-                            appendLine("RadioShed — last $windowDays days")
-                            appendLine("Total listened: ${formatTotalDuration(totalMs)}")
-                            appendLine("Tracks played (lifetime): $totalPlays")
-                            appendLine("Avg/day: ${formatTotalDuration(avg)}")
-                            if (streakLine.isNotEmpty()) appendLine(streakLine)
-                        }.trimEnd()
+                        val streakLine =
+                            if (streaks.second > 0) {
+                                "Current streak: ${streaks.first} day${if (streaks.first == 1) "" else "s"} · longest ${streaks.second}"
+                            } else {
+                                ""
+                            }
+                        val text =
+                            buildString {
+                                appendLine("RadioShed — last $windowDays days")
+                                appendLine("Total listened: ${formatTotalDuration(totalMs)}")
+                                appendLine("Tracks played (lifetime): $totalPlays")
+                                appendLine("Avg/day: ${formatTotalDuration(avg)}")
+                                if (streakLine.isNotEmpty()) appendLine(streakLine)
+                            }.trimEnd()
                         summaryClipboard(text)
                     }) { Text("Copy") }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                ),
+                colors =
+                    TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                    ),
             )
         },
         containerColor = MaterialTheme.colorScheme.background,
@@ -225,23 +236,26 @@ fun StatsScreen(
                 // unreadable on a phone) so we cap there.
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 8.dp),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 8.dp),
                 ) {
                     listOf(7, 30, 90).forEach { days ->
                         androidx.compose.material3.FilterChip(
                             selected = windowDays == days,
                             onClick = { windowDays = days },
                             label = { Text("$days days") },
-                            colors = androidx.compose.material3.FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                            ),
+                            colors =
+                                androidx.compose.material3.FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                ),
                         )
                     }
                 }
-                val topRowClipboard = com.visorcraft.radioshed.ui.util
-                    .rememberCopyToClipboard()
+                val topRowClipboard =
+                    com.visorcraft.radioshed.ui.util
+                        .rememberCopyToClipboard()
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     modifier = Modifier.fillMaxWidth(),
@@ -255,25 +269,28 @@ fun StatsScreen(
                                 "Total listened: ${formatTotalDuration(totalMs)}",
                             )
                         },
-                        trailing = weekDeltaPct?.let { pct ->
-                            {
-                                val arrow = when {
-                                    pct > 0 -> "▲"
-                                    pct < 0 -> "▼"
-                                    else -> "•"
+                        trailing =
+                            weekDeltaPct?.let { pct ->
+                                {
+                                    val arrow =
+                                        when {
+                                            pct > 0 -> "▲"
+                                            pct < 0 -> "▼"
+                                            else -> "•"
+                                        }
+                                    val color =
+                                        when {
+                                            pct > 0 -> MaterialTheme.colorScheme.primary
+                                            pct < 0 -> MaterialTheme.colorScheme.error
+                                            else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                        }
+                                    Text(
+                                        "$arrow ${kotlin.math.abs(pct)}%",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = color,
+                                    )
                                 }
-                                val color = when {
-                                    pct > 0 -> MaterialTheme.colorScheme.primary
-                                    pct < 0 -> MaterialTheme.colorScheme.error
-                                    else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                                }
-                                Text(
-                                    "$arrow ${kotlin.math.abs(pct)}%",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = color,
-                                )
-                            }
-                        },
+                            },
                     )
                     StatTile(
                         label = "Tracks played",
@@ -286,10 +303,14 @@ fun StatsScreen(
                 }
                 if (completionStats.second > 0L) {
                     Spacer(Modifier.height(12.dp))
-                    val pct = (completionStats.first.toDouble() /
-                        completionStats.second.toDouble() * 100.0).toInt()
-                    val completionClipboard = com.visorcraft.radioshed.ui.util
-                        .rememberCopyToClipboard()
+                    val pct =
+                        (
+                            completionStats.first.toDouble() /
+                                completionStats.second.toDouble() * 100.0
+                        ).toInt()
+                    val completionClipboard =
+                        com.visorcraft.radioshed.ui.util
+                            .rememberCopyToClipboard()
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         modifier = Modifier.fillMaxWidth(),
@@ -330,15 +351,17 @@ fun StatsScreen(
                 if (windowedPlays > 0L && windowDays > 0) {
                     Spacer(Modifier.height(12.dp))
                     val rawAvg = windowedPlays.toDouble() / windowDays.toDouble()
-                    val avgLabel = when {
-                        rawAvg >= 10.0 -> rawAvg.toInt().toString()
-                        else -> {
-                            val rounded = (rawAvg * 100.0).toInt() / 100.0
-                            rounded.toString()
+                    val avgLabel =
+                        when {
+                            rawAvg >= 10.0 -> rawAvg.toInt().toString()
+                            else -> {
+                                val rounded = (rawAvg * 100.0).toInt() / 100.0
+                                rounded.toString()
+                            }
                         }
-                    }
-                    val avgRowClipboard = com.visorcraft.radioshed.ui.util
-                        .rememberCopyToClipboard()
+                    val avgRowClipboard =
+                        com.visorcraft.radioshed.ui.util
+                            .rememberCopyToClipboard()
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         modifier = Modifier.fillMaxWidth(),
@@ -362,8 +385,9 @@ fun StatsScreen(
                 }
                 if (streaks.second > 0) {
                     Spacer(Modifier.height(12.dp))
-                    val streakClipboard = com.visorcraft.radioshed.ui.util
-                        .rememberCopyToClipboard()
+                    val streakClipboard =
+                        com.visorcraft.radioshed.ui.util
+                            .rememberCopyToClipboard()
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         modifier = Modifier.fillMaxWidth(),
@@ -395,11 +419,12 @@ fun StatsScreen(
                 val statsCopy = com.visorcraft.radioshed.ui.util.rememberCopyToClipboard()
                 listeningSinceMs?.let { ms ->
                     Spacer(Modifier.height(12.dp))
-                    val daysAgo = remember(ms) {
-                        val DAY_MS = 24L * 60L * 60L * 1000L
-                        ((com.visorcraft.radioshed.data.nowMillis() - ms) / DAY_MS)
-                            .coerceAtLeast(0L)
-                    }
+                    val daysAgo =
+                        remember(ms) {
+                            val DAY_MS = 24L * 60L * 60L * 1000L
+                            ((com.visorcraft.radioshed.data.nowMillis() - ms) / DAY_MS)
+                                .coerceAtLeast(0L)
+                        }
                     val sinceDate = com.visorcraft.radioshed.data.formatShortDate(ms)
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -467,16 +492,18 @@ fun StatsScreen(
                     // data fetch (important for users who leave the
                     // screen open across midnight).
                     val DAY_MS_LOCAL = 24L * 60L * 60L * 1000L
-                    val rangeLabel = remember(dailyActivity, windowDays) {
-                        runCatching {
-                            val nowMs = com.visorcraft.radioshed.data.nowMillis()
-                            val start = com.visorcraft.radioshed.data.formatShortDate(
-                                nowMs - (windowDays - 1).toLong() * DAY_MS_LOCAL,
-                            )
-                            val end = com.visorcraft.radioshed.data.formatShortDate(nowMs)
-                            "$start – $end"
-                        }.getOrDefault("Last $windowDays days")
-                    }
+                    val rangeLabel =
+                        remember(dailyActivity, windowDays) {
+                            runCatching {
+                                val nowMs = com.visorcraft.radioshed.data.nowMillis()
+                                val start =
+                                    com.visorcraft.radioshed.data.formatShortDate(
+                                        nowMs - (windowDays - 1).toLong() * DAY_MS_LOCAL,
+                                    )
+                                val end = com.visorcraft.radioshed.data.formatShortDate(nowMs)
+                                "$start – $end"
+                            }.getOrDefault("Last $windowDays days")
+                        }
                     SectionHeader(rangeLabel)
                     Spacer(Modifier.height(4.dp))
                     ActivityTimeline(dailyActivity)
@@ -620,21 +647,26 @@ private fun SectionHeader(label: String) {
 
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-private fun TopStationRow(station: Station, rank: Int, onTap: () -> Unit) {
+private fun TopStationRow(
+    station: Station,
+    rank: Int,
+    onTap: () -> Unit,
+) {
     val copyToClipboard = com.visorcraft.radioshed.ui.util.rememberCopyToClipboard()
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .combinedClickable(
-                onClick = onTap,
-                onLongClick = {
-                    val plays = station.stats.playCount
-                    copyToClipboard(
-                        "${station.name} — $plays play" +
-                            if (plays == 1L) "" else "s",
-                    )
-                },
-            ),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .combinedClickable(
+                    onClick = onTap,
+                    onLongClick = {
+                        val plays = station.stats.playCount
+                        copyToClipboard(
+                            "${station.name} — $plays play" +
+                                if (plays == 1L) "" else "s",
+                        )
+                    },
+                ),
         color = Color.Transparent,
     ) {
         Row(
@@ -649,17 +681,21 @@ private fun TopStationRow(station: Station, rank: Int, onTap: () -> Unit) {
                 modifier = Modifier.size(28.dp),
             )
             Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(
-                        // Station accent fallback to brand amber when
-                        // color is unset (built-ins always set color).
-                        if (station.color == 0) MaterialTheme.colorScheme.primary
-                        else androidx.compose.ui.graphics.Color(
-                            station.color.toLong() and 0xFFFFFFFFL,
+                modifier =
+                    Modifier
+                        .size(36.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(
+                            // Station accent fallback to brand amber when
+                            // color is unset (built-ins always set color).
+                            if (station.color == 0) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                androidx.compose.ui.graphics.Color(
+                                    station.color.toLong() and 0xFFFFFFFFL,
+                                )
+                            },
                         ),
-                    ),
             )
             Spacer(Modifier.size(10.dp))
             Column(modifier = Modifier.weight(1f)) {
@@ -682,20 +718,25 @@ private fun TopStationRow(station: Station, rank: Int, onTap: () -> Unit) {
 
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-private fun TopArtistRow(artist: TopArtistEntry, rank: Int, onTap: () -> Unit) {
+private fun TopArtistRow(
+    artist: TopArtistEntry,
+    rank: Int,
+    onTap: () -> Unit,
+) {
     val copyToClipboard = com.visorcraft.radioshed.ui.util.rememberCopyToClipboard()
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .combinedClickable(
-                onClick = onTap,
-                onLongClick = {
-                    copyToClipboard(
-                        "${artist.name} — ${artist.plays} play" +
-                            if (artist.plays == 1L) "" else "s",
-                    )
-                },
-            ),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .combinedClickable(
+                    onClick = onTap,
+                    onLongClick = {
+                        copyToClipboard(
+                            "${artist.name} — ${artist.plays} play" +
+                                if (artist.plays == 1L) "" else "s",
+                        )
+                    },
+                ),
         color = Color.Transparent,
     ) {
         Row(
@@ -710,10 +751,11 @@ private fun TopArtistRow(artist: TopArtistEntry, rank: Int, onTap: () -> Unit) {
                 modifier = Modifier.size(28.dp),
             )
             Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(RoundedCornerShape(18.dp))
-                    .background(MaterialTheme.colorScheme.primaryContainer),
+                modifier =
+                    Modifier
+                        .size(36.dp)
+                        .clip(RoundedCornerShape(18.dp))
+                        .background(MaterialTheme.colorScheme.primaryContainer),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
@@ -744,20 +786,25 @@ private fun TopArtistRow(artist: TopArtistEntry, rank: Int, onTap: () -> Unit) {
 
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-private fun TopAlbumRow(album: TopAlbumEntry, rank: Int, onTap: () -> Unit) {
+private fun TopAlbumRow(
+    album: TopAlbumEntry,
+    rank: Int,
+    onTap: () -> Unit,
+) {
     val copyToClipboard = com.visorcraft.radioshed.ui.util.rememberCopyToClipboard()
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .combinedClickable(
-                onClick = onTap,
-                onLongClick = {
-                    copyToClipboard(
-                        "${album.title} — ${album.plays} play" +
-                            if (album.plays == 1L) "" else "s",
-                    )
-                },
-            ),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .combinedClickable(
+                    onClick = onTap,
+                    onLongClick = {
+                        copyToClipboard(
+                            "${album.title} — ${album.plays} play" +
+                                if (album.plays == 1L) "" else "s",
+                        )
+                    },
+                ),
         color = Color.Transparent,
     ) {
         Row(
@@ -772,11 +819,12 @@ private fun TopAlbumRow(album: TopAlbumEntry, rank: Int, onTap: () -> Unit) {
                 modifier = Modifier.size(28.dp),
             )
             Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .aspectRatio(1f),
+                modifier =
+                    Modifier
+                        .size(36.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .aspectRatio(1f),
                 contentAlignment = Alignment.Center,
             ) {
                 if (album.artworkUri != null) {
@@ -823,12 +871,13 @@ private fun StatTile(
     onClick: (() -> Unit)? = null,
 ) {
     Surface(
-        modifier = modifier.then(
-            // Optional clickable wrapper for tap-to-copy. Tiles
-            // without onClick stay rippleless so the visual stays
-            // identical for purely informational tiles.
-            if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier
-        ),
+        modifier =
+            modifier.then(
+                // Optional clickable wrapper for tap-to-copy. Tiles
+                // without onClick stay rippleless so the visual stays
+                // identical for purely informational tiles.
+                if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier,
+            ),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
         shape = RoundedCornerShape(12.dp),
     ) {
@@ -862,10 +911,11 @@ private fun StatTile(
 @Composable
 private fun HourHistogram(plays: LongArray) {
     val peak = remember(plays) { (plays.maxOrNull() ?: 0L).coerceAtLeast(1L) }
-    val peakHour = remember(plays) {
-        val idx = plays.indices.maxByOrNull { plays[it] } ?: 0
-        idx
-    }
+    val peakHour =
+        remember(plays) {
+            val idx = plays.indices.maxByOrNull { plays[it] } ?: 0
+            idx
+        }
     Surface(
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
         shape = RoundedCornerShape(12.dp),
@@ -879,36 +929,45 @@ private fun HourHistogram(plays: LongArray) {
             )
             Spacer(Modifier.height(10.dp))
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(72.dp),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(72.dp),
                 verticalAlignment = Alignment.Bottom,
                 horizontalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 for (h in 0..23) {
                     val v = plays[h]
-                    val ratio = if (v == 0L) 0.04f
-                                else (0.12f + 0.88f * (v.toFloat() / peak.toFloat()))
+                    val ratio =
+                        if (v == 0L) {
+                            0.04f
+                        } else {
+                            (0.12f + 0.88f * (v.toFloat() / peak.toFloat()))
+                        }
                     Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxSize(),
+                        modifier =
+                            Modifier
+                                .weight(1f)
+                                .fillMaxSize(),
                         contentAlignment = Alignment.BottomCenter,
                     ) {
                         Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height((72f * ratio).dp.coerceAtLeast(2.dp))
-                                .clip(RoundedCornerShape(2.dp))
-                                .background(
-                                    if (v == 0L)
-                                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
-                                    else
-                                        MaterialTheme.colorScheme.tertiary.copy(
-                                            alpha = (0.45f + 0.55f * (v.toFloat() / peak.toFloat()))
-                                                .coerceAtMost(1f),
-                                        ),
-                                ),
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .height((72f * ratio).dp.coerceAtLeast(2.dp))
+                                    .clip(RoundedCornerShape(2.dp))
+                                    .background(
+                                        if (v == 0L) {
+                                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
+                                        } else {
+                                            MaterialTheme.colorScheme.tertiary.copy(
+                                                alpha =
+                                                    (0.45f + 0.55f * (v.toFloat() / peak.toFloat()))
+                                                        .coerceAtMost(1f),
+                                            )
+                                        },
+                                    ),
                         )
                     }
                 }
@@ -931,12 +990,13 @@ private fun HourHistogram(plays: LongArray) {
 }
 
 /** Format a 0..23 hour as "7am" / "1pm" / "midnight" / "noon". */
-private fun formatHour(h: Int): String = when (h) {
-    0 -> "midnight"
-    12 -> "noon"
-    in 1..11 -> "${h}am"
-    else -> "${h - 12}pm"
-}
+private fun formatHour(h: Int): String =
+    when (h) {
+        0 -> "midnight"
+        12 -> "noon"
+        in 1..11 -> "${h}am"
+        else -> "${h - 12}pm"
+    }
 
 /**
  * 7-bar weekday histogram. Index 0 = Monday … 6 = Sunday so the
@@ -962,36 +1022,45 @@ private fun WeekdayHistogram(plays: LongArray) {
             )
             Spacer(Modifier.height(10.dp))
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(72.dp),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(72.dp),
                 verticalAlignment = Alignment.Bottom,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 for (d in 0..6) {
                     val v = plays[d]
-                    val ratio = if (v == 0L) 0.04f
-                                else (0.12f + 0.88f * (v.toFloat() / peak.toFloat()))
+                    val ratio =
+                        if (v == 0L) {
+                            0.04f
+                        } else {
+                            (0.12f + 0.88f * (v.toFloat() / peak.toFloat()))
+                        }
                     Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxSize(),
+                        modifier =
+                            Modifier
+                                .weight(1f)
+                                .fillMaxSize(),
                         contentAlignment = Alignment.BottomCenter,
                     ) {
                         Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height((72f * ratio).dp.coerceAtLeast(2.dp))
-                                .clip(RoundedCornerShape(3.dp))
-                                .background(
-                                    if (v == 0L)
-                                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
-                                    else
-                                        MaterialTheme.colorScheme.tertiary.copy(
-                                            alpha = (0.45f + 0.55f * (v.toFloat() / peak.toFloat()))
-                                                .coerceAtMost(1f),
-                                        ),
-                                ),
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .height((72f * ratio).dp.coerceAtLeast(2.dp))
+                                    .clip(RoundedCornerShape(3.dp))
+                                    .background(
+                                        if (v == 0L) {
+                                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
+                                        } else {
+                                            MaterialTheme.colorScheme.tertiary.copy(
+                                                alpha =
+                                                    (0.45f + 0.55f * (v.toFloat() / peak.toFloat()))
+                                                        .coerceAtMost(1f),
+                                            )
+                                        },
+                                    ),
                         )
                     }
                 }
@@ -1023,9 +1092,7 @@ private fun WeekdayHistogram(plays: LongArray) {
  * bar.
  */
 @Composable
-private fun ActivityTimeline(
-    activity: List<com.visorcraft.radioshed.data.DailyActivity>,
-) {
+private fun ActivityTimeline(activity: List<com.visorcraft.radioshed.data.DailyActivity>) {
     val peak = remember(activity) { (activity.maxOfOrNull { it.plays } ?: 0L).coerceAtLeast(1L) }
     val totalPlays = remember(activity) { activity.sumOf { it.plays } }
     val totalListenedMs = remember(activity) { activity.sumOf { it.listenedMs } }
@@ -1053,9 +1120,10 @@ private fun ActivityTimeline(
             }
             Spacer(Modifier.height(10.dp))
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(72.dp),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(72.dp),
                 verticalAlignment = Alignment.Bottom,
                 horizontalArrangement = Arrangement.spacedBy(2.dp),
             ) {
@@ -1065,29 +1133,37 @@ private fun ActivityTimeline(
                     // floor empty bars at 6% and scale the rest
                     // linearly. Looks better than a strict linear
                     // mapping where lone plays disappear.
-                    val ratio = if (day.plays == 0L) 0.04f
-                                else (0.12f + 0.88f * (day.plays.toFloat() / peak.toFloat()))
+                    val ratio =
+                        if (day.plays == 0L) {
+                            0.04f
+                        } else {
+                            (0.12f + 0.88f * (day.plays.toFloat() / peak.toFloat()))
+                        }
                     Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxSize()
-                            .padding(horizontal = 0.dp),
+                        modifier =
+                            Modifier
+                                .weight(1f)
+                                .fillMaxSize()
+                                .padding(horizontal = 0.dp),
                         contentAlignment = Alignment.BottomCenter,
                     ) {
                         Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height((72f * ratio).dp.coerceAtLeast(2.dp))
-                                .clip(RoundedCornerShape(2.dp))
-                                .background(
-                                    if (day.plays == 0L)
-                                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
-                                    else
-                                        MaterialTheme.colorScheme.primary.copy(
-                                            alpha = (0.45f + 0.55f * (day.plays.toFloat() / peak.toFloat()))
-                                                .coerceAtMost(1f),
-                                        ),
-                                ),
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .height((72f * ratio).dp.coerceAtLeast(2.dp))
+                                    .clip(RoundedCornerShape(2.dp))
+                                    .background(
+                                        if (day.plays == 0L) {
+                                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
+                                        } else {
+                                            MaterialTheme.colorScheme.primary.copy(
+                                                alpha =
+                                                    (0.45f + 0.55f * (day.plays.toFloat() / peak.toFloat()))
+                                                        .coerceAtMost(1f),
+                                            )
+                                        },
+                                    ),
                         )
                     }
                 }
@@ -1123,18 +1199,19 @@ private fun TopTrackRow(
 ) {
     val copyToClipboard = com.visorcraft.radioshed.ui.util.rememberCopyToClipboard()
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .combinedClickable(
-                onClick = onTap,
-                onLongClick = {
-                    val title = track.title.ifBlank { track.fileName }
-                    copyToClipboard(
-                        "$title — $plays $playsLabel" +
-                            if (plays == 1L) "" else "s",
-                    )
-                },
-            ),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .combinedClickable(
+                    onClick = onTap,
+                    onLongClick = {
+                        val title = track.title.ifBlank { track.fileName }
+                        copyToClipboard(
+                            "$title — $plays $playsLabel" +
+                                if (plays == 1L) "" else "s",
+                        )
+                    },
+                ),
         color = Color.Transparent,
     ) {
         Row(
@@ -1149,10 +1226,11 @@ private fun TopTrackRow(
                 modifier = Modifier.size(28.dp),
             )
             Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                modifier =
+                    Modifier
+                        .size(36.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
@@ -1239,9 +1317,10 @@ private fun TopGenresChips(genres: List<Pair<String, Long>>) {
                     label = {
                         Text("$genre · $plays")
                     },
-                    colors = androidx.compose.material3.AssistChipDefaults.assistChipColors(
-                        containerColor = MaterialTheme.colorScheme.surface,
-                    ),
+                    colors =
+                        androidx.compose.material3.AssistChipDefaults.assistChipColors(
+                            containerColor = MaterialTheme.colorScheme.surface,
+                        ),
                 )
             }
         }

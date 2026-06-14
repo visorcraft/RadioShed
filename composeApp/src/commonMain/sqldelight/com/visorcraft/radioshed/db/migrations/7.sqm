@@ -1,5 +1,9 @@
 -- Migration v6 → v7: artist alias table.
 --
+CREATE TABLE IF NOT EXISTS artist (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT
+);
+
 -- Supports two user workflows:
 --   1. "Slim Shady" / "Eminem" style stage-name aliases — the user
 --      adds an alternate display name on the canonical artist so

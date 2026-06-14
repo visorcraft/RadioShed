@@ -9,7 +9,8 @@ import org.koin.dsl.KoinAppDeclaration
  * subclass with `androidContext` configured; iOS calls it from a small
  * Kotlin helper invoked by Swift on app launch.
  */
-fun initKoin(appDeclaration: KoinAppDeclaration = {}): KoinApplication = startKoin {
-    appDeclaration()
-    modules(appModules())
-}
+fun initKoin(appDeclaration: KoinAppDeclaration = {}): KoinApplication =
+    startKoin {
+        appDeclaration()
+        modules(appModules())
+    }

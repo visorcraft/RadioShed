@@ -42,7 +42,7 @@ jobs:
       - name: ktlint
         if: steps.scaffold.outputs.scaffolded == 'true'
         run: ./gradlew ktlintCheck --no-daemon
-        continue-on-error: true   # remove once style is enforced
+        continue-on-error: true   # ~20k legacy violations; enforce after cleanup pass
 
       - name: detekt
         if: steps.scaffold.outputs.scaffolded == 'true'

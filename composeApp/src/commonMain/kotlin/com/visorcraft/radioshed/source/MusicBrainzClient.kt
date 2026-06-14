@@ -23,7 +23,10 @@ interface MusicBrainzClient {
      * unavailable, or when the implementation is a no-op stub
      * (iOS today).
      */
-    suspend fun lookupReleaseGroup(artist: String, album: String): String?
+    suspend fun lookupReleaseGroup(
+        artist: String,
+        album: String,
+    ): String?
 
     /**
      * Resolve an artist MBID. Useful for downstream Wikidata bio
@@ -34,6 +37,10 @@ interface MusicBrainzClient {
 
 /** No-op stub for platforms with no HTTP client wired in (iOS today). */
 class NullMusicBrainzClient : MusicBrainzClient {
-    override suspend fun lookupReleaseGroup(artist: String, album: String): String? = null
+    override suspend fun lookupReleaseGroup(
+        artist: String,
+        album: String,
+    ): String? = null
+
     override suspend fun lookupArtist(artist: String): String? = null
 }

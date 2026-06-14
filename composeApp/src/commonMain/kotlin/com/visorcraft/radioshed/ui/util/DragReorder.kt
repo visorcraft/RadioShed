@@ -4,11 +4,11 @@ import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -105,15 +105,16 @@ class DragReorderState internal constructor(
         // index > current; going up: candidate index < current. Picking
         // the FARTHEST swappable target each frame avoids jitter when
         // the user drags fast over multiple items at once.
-        val target = if (draggedDistance > 0f) {
-            visible
-                .filter { it.index > current }
-                .lastOrNull { draggedCenter > it.centerY }
-        } else {
-            visible
-                .filter { it.index < current }
-                .firstOrNull { draggedCenter < it.centerY }
-        }
+        val target =
+            if (draggedDistance > 0f) {
+                visible
+                    .filter { it.index > current }
+                    .lastOrNull { draggedCenter > it.centerY }
+            } else {
+                visible
+                    .filter { it.index < current }
+                    .firstOrNull { draggedCenter < it.centerY }
+            }
         if (target != null && target.index != current) {
             onMove(current, target.index)
             // Compensate so the row stays visually stable across the
@@ -144,9 +145,10 @@ fun rememberDragReorderState(
     lazyListState: LazyListState,
     onMove: (from: Int, to: Int) -> Unit,
     onDrop: ((finalIndex: Int) -> Unit)? = null,
-): DragReorderState = remember(lazyListState) {
-    DragReorderState({ lazyListState.itemSpans() }, onMove, onDrop)
-}
+): DragReorderState =
+    remember(lazyListState) {
+        DragReorderState({ lazyListState.itemSpans() }, onMove, onDrop)
+    }
 
 /**
  * LazyVerticalGrid variant. Reorder still operates on the linear
@@ -158,9 +160,10 @@ fun rememberDragReorderState(
     lazyGridState: LazyGridState,
     onMove: (from: Int, to: Int) -> Unit,
     onDrop: ((finalIndex: Int) -> Unit)? = null,
-): DragReorderState = remember(lazyGridState) {
-    DragReorderState({ lazyGridState.itemSpans() }, onMove, onDrop)
-}
+): DragReorderState =
+    remember(lazyGridState) {
+        DragReorderState({ lazyGridState.itemSpans() }, onMove, onDrop)
+    }
 
 /**
  * Per-item modifier. Attach this to each row that should be draggable.
@@ -171,7 +174,10 @@ fun rememberDragReorderState(
  * `pointerInput(index)` keys the gesture detector by index so a
  * recomposition with a different index re-installs the detector.
  */
-fun Modifier.dragReorderItem(state: DragReorderState, index: Int): Modifier =
+fun Modifier.dragReorderItem(
+    state: DragReorderState,
+    index: Int,
+): Modifier =
     this
         .zIndex(if (state.draggedIndex == index) 1f else 0f)
         .graphicsLayer {

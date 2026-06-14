@@ -5,7 +5,6 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class SearchDslTest {
-
     @Test
     fun plainTextProducesFreeTerms() {
         val parsed = SearchDsl.parse("hendrix experience")

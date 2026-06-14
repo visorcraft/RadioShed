@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -34,9 +33,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import com.visorcraft.radioshed.ui.util.TooltipIconButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -65,6 +62,7 @@ import com.visorcraft.radioshed.domain.Playlist
 import com.visorcraft.radioshed.domain.Track
 import com.visorcraft.radioshed.stations.StationPlayback
 import com.visorcraft.radioshed.ui.util.NowPlayingIndicator
+import com.visorcraft.radioshed.ui.util.TooltipIconButton
 import com.visorcraft.radioshed.ui.util.dragReorderItem
 import com.visorcraft.radioshed.ui.util.rememberDragReorderState
 import kotlinx.coroutines.launch
@@ -122,8 +120,9 @@ fun PlaylistDetailScreen(
                             expanded = menuOpen,
                             onDismissRequest = { menuOpen = false },
                         ) {
-                            val summaryClipboard = com.visorcraft.radioshed.ui.util
-                                .rememberCopyToClipboard()
+                            val summaryClipboard =
+                                com.visorcraft.radioshed.ui.util
+                                    .rememberCopyToClipboard()
                             DropdownMenuItem(
                                 text = { Text("Copy summary") },
                                 enabled = playlist != null,
@@ -133,15 +132,16 @@ fun PlaylistDetailScreen(
                                     val name = playlist?.name ?: "Playlist"
                                     val mins = totalMs / 60_000L
                                     val hrs = mins / 60L
-                                    val durLabel = if (hrs > 0) {
-                                        "${hrs}h ${mins % 60L}m"
-                                    } else {
-                                        "${mins}m"
-                                    }
+                                    val durLabel =
+                                        if (hrs > 0) {
+                                            "${hrs}h ${mins % 60L}m"
+                                        } else {
+                                            "${mins}m"
+                                        }
                                     summaryClipboard(
                                         "$name — ${tracks.size} track" +
                                             (if (tracks.size == 1) "" else "s") +
-                                            " · $durLabel"
+                                            " · $durLabel",
                                     )
                                 },
                             )
@@ -166,14 +166,15 @@ fun PlaylistDetailScreen(
                                             libraryRepo.primaryArtistNameMap(
                                                 snapshot.map { it.id },
                                             )
-                                        val entries = snapshot.map { t ->
-                                            com.visorcraft.radioshed.source.M3uEntry(
-                                                absolutePath = t.path,
-                                                durationSec = (t.durationMs / 1000L).toInt(),
-                                                artist = artistByTrack[t.id],
-                                                title = t.title.ifBlank { t.fileName },
-                                            )
-                                        }
+                                        val entries =
+                                            snapshot.map { t ->
+                                                com.visorcraft.radioshed.source.M3uEntry(
+                                                    absolutePath = t.path,
+                                                    durationSec = (t.durationMs / 1000L).toInt(),
+                                                    artist = artistByTrack[t.id],
+                                                    title = t.title.ifBlank { t.fileName },
+                                                )
+                                            }
                                         playlistExporter.exportM3u(name, entries)
                                     }
                                 },
@@ -192,9 +193,10 @@ fun PlaylistDetailScreen(
                                 enabled = tracks.size > 1,
                                 onClick = {
                                     menuOpen = false
-                                    val ordered = tracks
-                                        .sortedBy { it.title.lowercase() }
-                                        .map { it.id }
+                                    val ordered =
+                                        tracks
+                                            .sortedBy { it.title.lowercase() }
+                                            .map { it.id }
                                     scope.launch {
                                         repo.setTrackOrder(playlistId, ordered)
                                         reload()
@@ -206,9 +208,10 @@ fun PlaylistDetailScreen(
                                 enabled = tracks.size > 1,
                                 onClick = {
                                     menuOpen = false
-                                    val ordered = tracks
-                                        .sortedBy { it.durationMs }
-                                        .map { it.id }
+                                    val ordered =
+                                        tracks
+                                            .sortedBy { it.durationMs }
+                                            .map { it.id }
                                     scope.launch {
                                         repo.setTrackOrder(playlistId, ordered)
                                         reload()
@@ -233,18 +236,20 @@ fun PlaylistDetailScreen(
                             // pruned. Disabled when there's nothing to
                             // remove so the menu item doesn't lie about
                             // having work to do.
-                            val hasDupes = remember(tracks) {
-                                tracks.map { it.id }.let { it.size != it.toSet().size }
-                            }
+                            val hasDupes =
+                                remember(tracks) {
+                                    tracks.map { it.id }.let { it.size != it.toSet().size }
+                                }
                             DropdownMenuItem(
                                 text = { Text("Remove duplicates") },
                                 enabled = hasDupes,
                                 onClick = {
                                     menuOpen = false
                                     val seen = mutableSetOf<Long>()
-                                    val ordered = tracks.mapNotNull { t ->
-                                        if (seen.add(t.id)) t.id else null
-                                    }
+                                    val ordered =
+                                        tracks.mapNotNull { t ->
+                                            if (seen.add(t.id)) t.id else null
+                                        }
                                     scope.launch {
                                         repo.setTrackOrder(playlistId, ordered)
                                         reload()
@@ -262,9 +267,10 @@ fun PlaylistDetailScreen(
                         }
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                ),
+                colors =
+                    TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                    ),
             )
         },
         containerColor = MaterialTheme.colorScheme.background,
@@ -281,30 +287,37 @@ fun PlaylistDetailScreen(
             // Hide the runtime half when empty since "0 tracks · 0
             // min" is just clutter.
             val trackCountLabel = "${tracks.size} track${if (tracks.size == 1) "" else "s"}"
-            val subtitleText = if (tracks.isEmpty()) {
-                trackCountLabel
-            } else {
-                val totalMs = tracks.sumOf { it.durationMs }
-                "$trackCountLabel · ${formatPlaylistRuntime(totalMs)}"
-            }
+            val subtitleText =
+                if (tracks.isEmpty()) {
+                    trackCountLabel
+                } else {
+                    val totalMs = tracks.sumOf { it.durationMs }
+                    "$trackCountLabel · ${formatPlaylistRuntime(totalMs)}"
+                }
             // Subtitle is tappable so the user can copy a paste-
             // friendly "{name} — {N tracks · runtime}" line into a
             // chat / journal without a separate Share flow. No
             // dedicated "Copy" affordance because the whole
             // subtitle row IS the affordance — single-tap surfaces
             // are unambiguous here.
-            val playlistSubtitleClipboard = com.visorcraft.radioshed.ui.util
-                .rememberCopyToClipboard()
+            val playlistSubtitleClipboard =
+                com.visorcraft.radioshed.ui.util
+                    .rememberCopyToClipboard()
             val playlistName = playlist?.name.orEmpty()
             Text(
                 subtitleText,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
-                modifier = Modifier.clickable {
-                    val combined = if (playlistName.isBlank()) subtitleText
-                                   else "$playlistName — $subtitleText"
-                    playlistSubtitleClipboard(combined)
-                },
+                modifier =
+                    Modifier.clickable {
+                        val combined =
+                            if (playlistName.isBlank()) {
+                                subtitleText
+                            } else {
+                                "$playlistName — $subtitleText"
+                            }
+                        playlistSubtitleClipboard(combined)
+                    },
             )
             Spacer(Modifier.height(12.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -325,9 +338,10 @@ fun PlaylistDetailScreen(
                     },
                     enabled = tracks.isNotEmpty(),
                     modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = MaterialTheme.colorScheme.primary,
-                    ),
+                    colors =
+                        ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.primary,
+                        ),
                 ) {
                     Icon(Icons.Filled.Shuffle, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.size(6.dp))
@@ -350,25 +364,27 @@ fun PlaylistDetailScreen(
                 }
             } else {
                 val listState = rememberLazyListState()
-                val dragState = rememberDragReorderState(
-                    lazyListState = listState,
-                    onMove = { from, to ->
-                        // In-memory swap so the row visually follows the
-                        // finger; persistence is deferred to onDrop so a
-                        // 5-row drag is a single SQL transaction rather
-                        // than five.
-                        tracks = tracks.toMutableList().also {
-                            val item = it.removeAt(from)
-                            it.add(to, item)
-                        }
-                    },
-                    onDrop = { _ ->
-                        val finalOrder = tracks.map { it.id }
-                        scope.launch {
-                            repo.setTrackOrder(playlistId, finalOrder)
-                        }
-                    },
-                )
+                val dragState =
+                    rememberDragReorderState(
+                        lazyListState = listState,
+                        onMove = { from, to ->
+                            // In-memory swap so the row visually follows the
+                            // finger; persistence is deferred to onDrop so a
+                            // 5-row drag is a single SQL transaction rather
+                            // than five.
+                            tracks =
+                                tracks.toMutableList().also {
+                                    val item = it.removeAt(from)
+                                    it.add(to, item)
+                                }
+                        },
+                        onDrop = { _ ->
+                            val finalOrder = tracks.map { it.id }
+                            scope.launch {
+                                repo.setTrackOrder(playlistId, finalOrder)
+                            }
+                        },
+                    )
                 val showFab by remember {
                     androidx.compose.runtime.derivedStateOf {
                         listState.firstVisibleItemIndex > 8
@@ -418,9 +434,10 @@ fun PlaylistDetailScreen(
                             onClick = {
                                 scope.launch { listState.animateScrollToItem(0) }
                             },
-                            modifier = Modifier
-                                .align(Alignment.BottomEnd)
-                                .padding(end = 16.dp, bottom = 16.dp),
+                            modifier =
+                                Modifier
+                                    .align(Alignment.BottomEnd)
+                                    .padding(end = 16.dp, bottom = 16.dp),
                             containerColor = MaterialTheme.colorScheme.primaryContainer,
                         ) {
                             Icon(
@@ -478,27 +495,33 @@ private fun PlaylistTrackRow(
     onRemove: () -> Unit,
 ) {
     Surface(
-        modifier = if (onLongPress != null) {
-            modifier
-                .fillMaxWidth()
-                .combinedClickable(onClick = onTap, onLongClick = onLongPress)
-        } else {
-            modifier.fillMaxWidth().clickable(onClick = onTap)
-        },
+        modifier =
+            if (onLongPress != null) {
+                modifier
+                    .fillMaxWidth()
+                    .combinedClickable(onClick = onTap, onLongClick = onLongPress)
+            } else {
+                modifier.fillMaxWidth().clickable(onClick = onTap)
+            },
         // Subtle background when actively dragging so the row visually
         // separates from its neighbours during the gesture.
-        color = if (isDragging) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                else Color.Transparent,
+        color =
+            if (isDragging) {
+                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            } else {
+                Color.Transparent
+            },
     ) {
         Row(
             modifier = Modifier.padding(vertical = 10.dp, horizontal = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                modifier =
+                    Modifier
+                        .size(36.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
@@ -514,8 +537,12 @@ private fun PlaylistTrackRow(
                     text = track.title.ifBlank { track.fileName },
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.Medium,
-                    color = if (isCurrent) MaterialTheme.colorScheme.primary
-                            else MaterialTheme.colorScheme.onBackground,
+                    color =
+                        if (isCurrent) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onBackground
+                        },
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f, fill = false),

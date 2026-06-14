@@ -17,12 +17,13 @@ actual class DatabaseDriverFactory(private val context: Context) {
      * Verified failing on AutoLinkR Elite (Bengal SoC, Android 13). The
      * bundled version is ~1MB per ABI and tracks SQLite upstream.
      */
-    actual fun create(): SqlDriver = AndroidSqliteDriver(
-        schema = RadioShedDatabase.Schema,
-        context = context,
-        name = DATABASE_NAME,
-        factory = RequerySQLiteOpenHelperFactory(),
-    )
+    actual fun create(): SqlDriver =
+        AndroidSqliteDriver(
+            schema = RadioShedDatabase.Schema,
+            context = context,
+            name = DATABASE_NAME,
+            factory = RequerySQLiteOpenHelperFactory(),
+        )
 
     companion object {
         const val DATABASE_NAME = "radioshed.db"

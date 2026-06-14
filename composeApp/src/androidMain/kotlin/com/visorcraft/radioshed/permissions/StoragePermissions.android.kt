@@ -8,7 +8,6 @@ import android.os.Environment
 import android.provider.Settings
 
 actual class StoragePermissions(private val context: Context) {
-
     actual fun hasAllFilesAccess(): Boolean = Environment.isExternalStorageManager()
 
     actual fun requestAllFilesAccess() {
@@ -20,17 +19,20 @@ actual class StoragePermissions(private val context: Context) {
         // the system-wide list so the user can scroll to RadioShed
         // manually; if even that's missing, drop into the generic app
         // settings page so the user can at least find the toggle.
-        val perApp = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
-            data = Uri.parse("package:${context.packageName}")
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        val systemWide = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        val appDetails = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-            data = Uri.parse("package:${context.packageName}")
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
+        val perApp =
+            Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
+                data = Uri.parse("package:${context.packageName}")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+        val systemWide =
+            Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+        val appDetails =
+            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                data = Uri.parse("package:${context.packageName}")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
         try {
             context.startActivity(perApp)
         } catch (_: ActivityNotFoundException) {

@@ -20,30 +20,33 @@ import java.nio.file.Files
  * java.net.URI parsing without platform-specific handling.
  */
 class DesktopBackupStorage : BackupStorage {
-
     private val backupDir: File by lazy {
         val dir = appAppDataDir().resolve("backups")
         Files.createDirectories(dir)
         dir.toFile()
     }
 
-    override suspend fun list(): List<BackupFile> = withContext(IODispatcher) {
-        backupDir.listFiles { f ->
-            f.isFile && (f.extension == "json" || f.extension == "rsbak")
-        }
-            ?.map { f ->
-                BackupFile(
-                    uri = f.toURI().toString(),
-                    displayName = f.name,
-                    sizeBytes = f.length(),
-                    createdAt = f.lastModified(),
-                )
+    override suspend fun list(): List<BackupFile> =
+        withContext(IODispatcher) {
+            backupDir.listFiles { f ->
+                f.isFile && (f.extension == "json" || f.extension == "rsbak")
             }
-            ?.sortedByDescending { it.createdAt }
-            .orEmpty()
-    }
+                ?.map { f ->
+                    BackupFile(
+                        uri = f.toURI().toString(),
+                        displayName = f.name,
+                        sizeBytes = f.length(),
+                        createdAt = f.lastModified(),
+                    )
+                }
+                ?.sortedByDescending { it.createdAt }
+                .orEmpty()
+        }
 
-    override suspend fun write(name: String, bytes: ByteArray): BackupFile? =
+    override suspend fun write(
+        name: String,
+        bytes: ByteArray,
+    ): BackupFile? =
         withContext(IODispatcher) {
             runCatching {
                 val safe = sanitizeFilename(name)
@@ -81,18 +84,20 @@ class DesktopBackupStorage : BackupStorage {
             }.getOrNull()
         }
 
-    override suspend fun read(fileUri: String): ByteArray? = withContext(IODispatcher) {
-        runCatching {
-            val file = File(URI(fileUri))
-            file.takeIf { it.exists() && it.canRead() }?.readBytes()
-        }.getOrNull()
-    }
+    override suspend fun read(fileUri: String): ByteArray? =
+        withContext(IODispatcher) {
+            runCatching {
+                val file = File(URI(fileUri))
+                file.takeIf { it.exists() && it.canRead() }?.readBytes()
+            }.getOrNull()
+        }
 
-    override suspend fun delete(fileUri: String): Boolean = withContext(IODispatcher) {
-        runCatching {
-            File(URI(fileUri)).delete()
-        }.getOrDefault(false)
-    }
+    override suspend fun delete(fileUri: String): Boolean =
+        withContext(IODispatcher) {
+            runCatching {
+                File(URI(fileUri)).delete()
+            }.getOrDefault(false)
+        }
 
     /**
      * Strip path separators and reserved Windows characters from

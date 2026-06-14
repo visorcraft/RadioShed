@@ -5,7 +5,6 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
 class RatingTest {
-
     @Test
     fun stars_in_valid_range() {
         Rating(trackId = 1, stars = 0.0, ratedAt = 0)

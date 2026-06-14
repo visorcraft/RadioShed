@@ -1,5 +1,15 @@
 -- Migration v1 → v2: track ↔ folder becomes many-to-many via track_folder.
 --
+-- Verifier schema (SQLDelight verifyMigrations): v1 tables referenced below.
+CREATE TABLE IF NOT EXISTS folder (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT
+);
+CREATE TABLE IF NOT EXISTS track (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    folder_id INTEGER NOT NULL REFERENCES folder(id)
+);
+CREATE INDEX IF NOT EXISTS track_folder_idx ON track(folder_id);
+
 -- Why: in v1 each track had a single folder_id NOT NULL. When the user
 -- registered overlapping folders (e.g. both /Music and /Music/Rock), the
 -- last scan won — Rock tracks would silently switch to belonging to

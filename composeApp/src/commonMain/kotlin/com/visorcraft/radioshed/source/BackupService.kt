@@ -2,8 +2,8 @@ package com.visorcraft.radioshed.source
 
 import com.visorcraft.radioshed.data.LibraryRepository
 import com.visorcraft.radioshed.data.PlaylistRepository
-import com.visorcraft.radioshed.data.RatingRepository
 import com.visorcraft.radioshed.data.RadioShedJson
+import com.visorcraft.radioshed.data.RatingRepository
 import com.visorcraft.radioshed.data.SettingsStore
 import com.visorcraft.radioshed.data.StationRepository
 import com.visorcraft.radioshed.data.nowMillis
@@ -39,7 +39,6 @@ class BackupService(
     private val packager: BackupPackager,
     private val artworkPersister: ArtworkPersister,
 ) {
-
     suspend fun listBackups(): List<BackupFile> = storage.list()
 
     /**
@@ -54,45 +53,49 @@ class BackupService(
         get() = settings.getBackupRetention()
 
     suspend fun export(): ExportResult {
-        val stations = stationRepo.list().filter { !it.isBuiltIn }.map { s ->
-            BackupStation(
-                name = s.name,
-                color = s.color,
-                icon = s.icon,
-                customSubtitle = s.customSubtitle,
-                sourceJson = RadioShedJson.encodeToString(s.source),
-                playbackJson = RadioShedJson.encodeToString(s.playback),
-                isPinned = s.isPinned,
-                sortPosition = s.sortPosition,
-            )
-        }
+        val stations =
+            stationRepo.list().filter { !it.isBuiltIn }.map { s ->
+                BackupStation(
+                    name = s.name,
+                    color = s.color,
+                    icon = s.icon,
+                    customSubtitle = s.customSubtitle,
+                    sourceJson = RadioShedJson.encodeToString(s.source),
+                    playbackJson = RadioShedJson.encodeToString(s.playback),
+                    isPinned = s.isPinned,
+                    sortPosition = s.sortPosition,
+                )
+            }
 
-        val playlists = playlistRepo.list().map { p ->
-            BackupPlaylist(
-                name = p.name,
-                description = p.description,
-                trackPaths = playlistRepo.tracksIn(p.id).map { it.path },
-            )
-        }
+        val playlists =
+            playlistRepo.list().map { p ->
+                BackupPlaylist(
+                    name = p.name,
+                    description = p.description,
+                    trackPaths = playlistRepo.tracksIn(p.id).map { it.path },
+                )
+            }
 
-        val ratings = ratingRepo.listAll().mapNotNull { r ->
-            val track = libraryRepo.getTrackById(r.trackId) ?: return@mapNotNull null
-            BackupRating(
-                trackPath = track.path,
-                stars = r.stars,
-                ratedAt = r.ratedAt,
-            )
-        }
+        val ratings =
+            ratingRepo.listAll().mapNotNull { r ->
+                val track = libraryRepo.getTrackById(r.trackId) ?: return@mapNotNull null
+                BackupRating(
+                    trackPath = track.path,
+                    stars = r.stars,
+                    ratedAt = r.ratedAt,
+                )
+            }
 
         // Liked tracks: serialize keyed by path so the restore can find
         // the same file on disk after a fresh install / new device.
         // liked_at metadata is preserved so the Liked Songs view's
         // "most recently liked first" sort survives the round-trip.
-        val likedTracks = ratingRepo.likedTracksWithTimestamps()
-            .mapNotNull { (id, likedAt) ->
-                val track = libraryRepo.getTrackById(id) ?: return@mapNotNull null
-                BackupLikedTrack(trackPath = track.path, likedAt = likedAt)
-            }
+        val likedTracks =
+            ratingRepo.likedTracksWithTimestamps()
+                .mapNotNull { (id, likedAt) ->
+                    val track = libraryRepo.getTrackById(id) ?: return@mapNotNull null
+                    BackupLikedTrack(trackPath = track.path, likedAt = likedAt)
+                }
 
         // Settings + custom EQ presets — round-tripped so a fresh
         // install fully reconstructs the user's config, not just
@@ -100,19 +103,21 @@ class BackupService(
         // station id, library tab index, etc.) is excluded inside
         // SettingsStore.dumpForBackup.
         val settingsDump = settings.dumpForBackup()
-        val customEqPresets = settings.getCustomEqPresets().map {
-            BackupEqPreset(name = it.name, gainsDb = it.gainsDb)
-        }
+        val customEqPresets =
+            settings.getCustomEqPresets().map {
+                BackupEqPreset(name = it.name, gainsDb = it.gainsDb)
+            }
 
-        val bundle = BackupBundle(
-            exportedAt = nowMillis(),
-            stations = stations,
-            playlists = playlists,
-            ratings = ratings,
-            likedTracks = likedTracks,
-            settings = settingsDump,
-            customEqPresets = customEqPresets,
-        )
+        val bundle =
+            BackupBundle(
+                exportedAt = nowMillis(),
+                stations = stations,
+                playlists = playlists,
+                ratings = ratings,
+                likedTracks = likedTracks,
+                settings = settingsDump,
+                customEqPresets = customEqPresets,
+            )
         val json = RadioShedJson.encodeToString(bundle)
         val jsonBytes = json.encodeToByteArray()
         // Try the zipped `.rsbak` format first — it bundles artwork
@@ -122,18 +127,21 @@ class BackupService(
         // disabled via Connectivity policy). Falls back to plain JSON
         // if the platform doesn't ship a packager (iOS today) or if
         // packing failed for any reason.
-        val artworkBlobs: Map<String, ByteArray> = runCatching {
-            artworkPersister.listBlobs()
-                .associate { (name, bytes) -> "artwork/$name" to bytes }
-        }.getOrDefault(emptyMap())
+        val artworkBlobs: Map<String, ByteArray> =
+            runCatching {
+                artworkPersister.listBlobs()
+                    .associate { (name, bytes) -> "artwork/$name" to bytes }
+            }.getOrDefault(emptyMap())
         val zipped = packager.pack(jsonBytes, artworkBlobs)
-        val (filename, payload) = if (zipped != null) {
-            "radioshed-backup-${nowMillis()}.rsbak" to zipped
-        } else {
-            "radioshed-backup-${nowMillis()}.json" to jsonBytes
-        }
-        val file = storage.write(filename, payload)
-            ?: return ExportResult.Failed("Couldn't write backup file.")
+        val (filename, payload) =
+            if (zipped != null) {
+                "radioshed-backup-${nowMillis()}.rsbak" to zipped
+            } else {
+                "radioshed-backup-${nowMillis()}.json" to jsonBytes
+            }
+        val file =
+            storage.write(filename, payload)
+                ?: return ExportResult.Failed("Couldn't write backup file.")
 
         // Prune older backups to a small cap so the directory doesn't
         // accumulate unboundedly. Errors during prune are swallowed —
@@ -153,9 +161,10 @@ class BackupService(
         // delete one of them on a stale list — including, in some
         // race orderings, the new file we just wrote.
         runCatching {
-            val all = storage.list()
-                .filter { it.uri != file.uri }
-                .sortedByDescending { it.createdAt }
+            val all =
+                storage.list()
+                    .filter { it.uri != file.uri }
+                    .sortedByDescending { it.createdAt }
             if (all.size >= maxBackupsToRetain) {
                 all.drop(maxBackupsToRetain - 1).forEach { stale ->
                     runCatching { storage.delete(stale.uri) }
@@ -172,8 +181,9 @@ class BackupService(
     }
 
     suspend fun restore(fileUri: String): RestoreResult {
-        val bytes = storage.read(fileUri)
-            ?: return RestoreResult.Failed("Couldn't read backup file.")
+        val bytes =
+            storage.read(fileUri)
+                ?: return RestoreResult.Failed("Couldn't read backup file.")
         return restoreFromBytes(bytes)
     }
 
@@ -195,14 +205,16 @@ class BackupService(
         // both run through this branch so any caller — Backup screen,
         // system file picker, share-sheet import — gets the same
         // format-agnostic behaviour.
-        val manifestBytes = if (looksLikeZip(bytes)) {
-            packager.unpack(bytes)?.manifestJson ?: return null
-        } else {
-            bytes
-        }
-        val bundle = runCatching {
-            RadioShedJson.decodeFromString<BackupBundle>(manifestBytes.decodeToString())
-        }.getOrNull() ?: return null
+        val manifestBytes =
+            if (looksLikeZip(bytes)) {
+                packager.unpack(bytes)?.manifestJson ?: return null
+            } else {
+                bytes
+            }
+        val bundle =
+            runCatching {
+                RadioShedJson.decodeFromString<BackupBundle>(manifestBytes.decodeToString())
+            }.getOrNull() ?: return null
         return BundlePreview(
             version = bundle.version,
             exportedAtMs = bundle.exportedAt,
@@ -243,20 +255,23 @@ class BackupService(
         // paint the library with its original cover art instead of
         // refetching from Cover Art Archive (which the user may have
         // disabled via Connectivity policy).
-        val (manifestBytes, artworkBlobs) = if (looksLikeZip(bytes)) {
-            val unpacked = packager.unpack(bytes)
-                ?: return RestoreResult.Failed(
-                    "Backup file is a zip but couldn't be opened.",
-                )
-            unpacked.manifestJson to unpacked.blobs
-        } else {
-            bytes to emptyMap()
-        }
-        val bundle = runCatching {
-            RadioShedJson.decodeFromString<BackupBundle>(manifestBytes.decodeToString())
-        }.getOrElse {
-            return RestoreResult.Failed("Backup file is corrupted: ${it.message ?: "decode failed"}")
-        }
+        val (manifestBytes, artworkBlobs) =
+            if (looksLikeZip(bytes)) {
+                val unpacked =
+                    packager.unpack(bytes)
+                        ?: return RestoreResult.Failed(
+                            "Backup file is a zip but couldn't be opened.",
+                        )
+                unpacked.manifestJson to unpacked.blobs
+            } else {
+                bytes to emptyMap()
+            }
+        val bundle =
+            runCatching {
+                RadioShedJson.decodeFromString<BackupBundle>(manifestBytes.decodeToString())
+            }.getOrElse {
+                return RestoreResult.Failed("Backup file is corrupted: ${it.message ?: "decode failed"}")
+            }
         if (artworkBlobs.isNotEmpty()) {
             // Strip the `artwork/` prefix so each entry restores under
             // its content-addressed basename — same shape the persister
@@ -287,16 +302,17 @@ class BackupService(
                 // the previous "list().lastOrNull { name == s.name }"
                 // pattern silently picked the wrong row when names
                 // collided.
-                val newId = stationRepo.insert(
-                    name = s.name,
-                    source = RadioShedJson.decodeFromString(s.sourceJson),
-                    playback = RadioShedJson.decodeFromString(s.playbackJson),
-                    color = s.color,
-                    icon = s.icon,
-                    customSubtitle = s.customSubtitle,
-                    sortPosition = s.sortPosition,
-                    isBuiltIn = false,
-                )
+                val newId =
+                    stationRepo.insert(
+                        name = s.name,
+                        source = RadioShedJson.decodeFromString(s.sourceJson),
+                        playback = RadioShedJson.decodeFromString(s.playbackJson),
+                        color = s.color,
+                        icon = s.icon,
+                        customSubtitle = s.customSubtitle,
+                        sortPosition = s.sortPosition,
+                        isBuiltIn = false,
+                    )
                 if (s.isPinned) {
                     stationRepo.setPinned(newId, true)
                 }
@@ -322,7 +338,10 @@ class BackupService(
         var ratingsFailed = 0
         bundle.ratings.forEach { r ->
             val track = libraryRepo.getTrackByPathOrSuffix(r.trackPath)
-            if (track == null) { ratingsSkipped += 1; return@forEach }
+            if (track == null) {
+                ratingsSkipped += 1
+                return@forEach
+            }
             runCatching {
                 ratingRepo.setRating(track.id, r.stars)
                 ratingsApplied += 1
@@ -334,7 +353,10 @@ class BackupService(
         var likedFailed = 0
         bundle.likedTracks.forEach { l ->
             val track = libraryRepo.getTrackByPathOrSuffix(l.trackPath)
-            if (track == null) { likedSkipped += 1; return@forEach }
+            if (track == null) {
+                likedSkipped += 1
+                return@forEach
+            }
             runCatching {
                 ratingRepo.like(track.id, l.likedAt)
                 likedApplied += 1
@@ -364,8 +386,9 @@ class BackupService(
                 eqPresetsApplied += 1
             }.onFailure { eqPresetsFailed += 1 }
         }
-        val totalFailed = stationsFailed + playlistsFailed + ratingsFailed +
-            likedFailed + eqPresetsFailed
+        val totalFailed =
+            stationsFailed + playlistsFailed + ratingsFailed +
+                likedFailed + eqPresetsFailed
 
         return RestoreResult.Done(
             stationsAdded = stationsAdded,
@@ -389,6 +412,7 @@ class BackupService(
             val playlistCount: Int,
             val ratingCount: Int,
         ) : ExportResult
+
         data class Failed(val reason: String) : ExportResult
     }
 
@@ -410,6 +434,7 @@ class BackupService(
              */
             val errors: Int = 0,
         ) : RestoreResult
+
         data class Failed(val reason: String) : RestoreResult
     }
 }

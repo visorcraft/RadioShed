@@ -30,24 +30,65 @@ import java.io.File
  * missing symbol on `stop` / `set_time` — acceptable and documented.
  */
 internal interface LibVlc : Library {
-    fun libvlc_new(argc: Int, argv: Array<String>?): Pointer?
+    fun libvlc_new(
+        argc: Int,
+        argv: Array<String>?,
+    ): Pointer?
+
     fun libvlc_release(instance: Pointer)
-    fun libvlc_media_new_path(instance: Pointer, path: String): Pointer?
-    fun libvlc_media_new_location(instance: Pointer, mrl: String): Pointer?
+
+    fun libvlc_media_new_path(
+        instance: Pointer,
+        path: String,
+    ): Pointer?
+
+    fun libvlc_media_new_location(
+        instance: Pointer,
+        mrl: String,
+    ): Pointer?
+
     fun libvlc_media_release(media: Pointer)
+
     fun libvlc_media_player_new(instance: Pointer): Pointer?
+
     fun libvlc_media_player_release(player: Pointer)
-    fun libvlc_media_player_set_media(player: Pointer, media: Pointer)
+
+    fun libvlc_media_player_set_media(
+        player: Pointer,
+        media: Pointer,
+    )
+
     fun libvlc_media_player_play(player: Pointer): Int
-    fun libvlc_media_player_set_pause(player: Pointer, doPause: Int)
+
+    fun libvlc_media_player_set_pause(
+        player: Pointer,
+        doPause: Int,
+    )
+
     fun libvlc_media_player_stop(player: Pointer)
-    fun libvlc_media_player_set_time(player: Pointer, ms: Long)
+
+    fun libvlc_media_player_set_time(
+        player: Pointer,
+        ms: Long,
+    )
+
     fun libvlc_media_player_get_time(player: Pointer): Long
+
     fun libvlc_media_player_get_length(player: Pointer): Long
+
     fun libvlc_media_player_get_state(player: Pointer): Int
-    fun libvlc_audio_set_volume(player: Pointer, volume: Int): Int
+
+    fun libvlc_audio_set_volume(
+        player: Pointer,
+        volume: Int,
+    ): Int
+
     fun libvlc_audio_get_volume(player: Pointer): Int
-    fun libvlc_media_player_set_rate(player: Pointer, rate: Float): Int
+
+    fun libvlc_media_player_set_rate(
+        player: Pointer,
+        rate: Float,
+    ): Int
 }
 
 /**
@@ -59,7 +100,11 @@ internal interface LibVlc : Library {
  * mirroring what VLCJ does.
  */
 private interface PosixEnv : Library {
-    fun setenv(name: String, value: String, overwrite: Int): Int
+    fun setenv(
+        name: String,
+        value: String,
+        overwrite: Int,
+    ): Int
 }
 
 private interface MsvcrtEnv : Library {
@@ -88,7 +133,6 @@ internal object LibVlcState {
  * relatively expensive load + probe runs exactly once via [available].
  */
 internal object NativeLibVlc {
-
     /**
      * The loaded libvlc binding, or null when discovery failed. Reading
      * this triggers discovery the first time (see [available]).
@@ -109,14 +153,15 @@ internal object NativeLibVlc {
         // libvlc.so / libvlc.dylib / libvlc.dll), then the versioned
         // Linux SONAME. On Linux the unversioned libvlc.so usually only
         // ships in the -dev package, so libvlc.so.5 is the common case.
-        val candidateNames = buildList {
-            add("vlc")
-            if (isLinux()) {
-                // The unversioned libvlc.so usually only ships in the -dev
-                // package, so the versioned SONAME is the common runtime case.
-                add("libvlc.so.5")
+        val candidateNames =
+            buildList {
+                add("vlc")
+                if (isLinux()) {
+                    // The unversioned libvlc.so usually only ships in the -dev
+                    // package, so the versioned SONAME is the common runtime case.
+                    add("libvlc.so.5")
+                }
             }
-        }
         for (name in candidateNames) {
             val loaded = runCatching { Native.load(name, LibVlc::class.java) }.getOrNull() ?: continue
             // Probe: create then release a throwaway instance. A
@@ -181,10 +226,11 @@ internal object NativeLibVlc {
         val existing = dirs.filter { File(it).isDirectory }
         if (existing.isNotEmpty()) {
             val current = System.getProperty("jna.library.path").orEmpty()
-            val merged = (existing + current.split(File.pathSeparator))
-                .filter { it.isNotBlank() }
-                .distinct()
-                .joinToString(File.pathSeparator)
+            val merged =
+                (existing + current.split(File.pathSeparator))
+                    .filter { it.isNotBlank() }
+                    .distinct()
+                    .joinToString(File.pathSeparator)
             System.setProperty("jna.library.path", merged)
         }
 
@@ -194,9 +240,10 @@ internal object NativeLibVlc {
         //    so set it through the platform C runtime — but only when not
         //    already set, to respect a user-provided value.
         if (System.getenv("VLC_PLUGIN_PATH").isNullOrBlank()) {
-            val pluginsDir = existing.asSequence()
-                .map { File(it, "plugins") }
-                .firstOrNull { it.isDirectory }
+            val pluginsDir =
+                existing.asSequence()
+                    .map { File(it, "plugins") }
+                    .firstOrNull { it.isDirectory }
             if (pluginsDir != null && (isWindows() || isMac())) {
                 setNativeEnv("VLC_PLUGIN_PATH", pluginsDir.absolutePath)
             }
@@ -209,15 +256,19 @@ internal object NativeLibVlc {
      * are present on the classpath cross-platform but the calls only make
      * sense (and only succeed) on Windows.
      */
-    private fun windowsRegistryInstallDir(): String? = runCatching {
-        Advapi32Util.registryGetStringValue(
-            WinReg.HKEY_LOCAL_MACHINE,
-            """Software\VideoLAN\VLC""",
-            "InstallDir",
-        )
-    }.getOrNull()?.takeIf { it.isNotBlank() }
+    private fun windowsRegistryInstallDir(): String? =
+        runCatching {
+            Advapi32Util.registryGetStringValue(
+                WinReg.HKEY_LOCAL_MACHINE,
+                """Software\VideoLAN\VLC""",
+                "InstallDir",
+            )
+        }.getOrNull()?.takeIf { it.isNotBlank() }
 
-    private fun setNativeEnv(name: String, value: String) {
+    private fun setNativeEnv(
+        name: String,
+        value: String,
+    ) {
         runCatching {
             if (isWindows()) {
                 Native.load("msvcrt", MsvcrtEnv::class.java)._putenv("$name=$value")
@@ -228,7 +279,10 @@ internal object NativeLibVlc {
     }
 
     private fun osName(): String = System.getProperty("os.name").orEmpty().lowercase()
+
     private fun isWindows(): Boolean = osName().contains("win")
+
     private fun isMac(): Boolean = osName().contains("mac") || osName().contains("darwin")
+
     private fun isLinux(): Boolean = osName().contains("linux")
 }

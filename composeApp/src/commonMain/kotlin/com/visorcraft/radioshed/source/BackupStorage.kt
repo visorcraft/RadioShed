@@ -8,13 +8,19 @@ package com.visorcraft.radioshed.source
  */
 interface BackupStorage {
     suspend fun list(): List<BackupFile>
-    suspend fun write(name: String, bytes: ByteArray): BackupFile?
+
+    suspend fun write(
+        name: String,
+        bytes: ByteArray,
+    ): BackupFile?
+
     suspend fun read(fileUri: String): ByteArray?
+
     suspend fun delete(fileUri: String): Boolean
 }
 
 data class BackupFile(
-    val uri: String,        // file:// path
+    val uri: String, // file:// path
     val displayName: String,
     val sizeBytes: Long,
     val createdAt: Long,
@@ -22,7 +28,13 @@ data class BackupFile(
 
 class NullBackupStorage : BackupStorage {
     override suspend fun list(): List<BackupFile> = emptyList()
-    override suspend fun write(name: String, bytes: ByteArray): BackupFile? = null
+
+    override suspend fun write(
+        name: String,
+        bytes: ByteArray,
+    ): BackupFile? = null
+
     override suspend fun read(fileUri: String): ByteArray? = null
+
     override suspend fun delete(fileUri: String): Boolean = false
 }

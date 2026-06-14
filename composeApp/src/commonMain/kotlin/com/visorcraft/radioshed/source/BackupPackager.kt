@@ -33,7 +33,10 @@ interface BackupPackager {
      * MUST NOT throw — a packaging failure should fall back to plain
      * JSON.
      */
-    suspend fun pack(manifestJson: ByteArray, blobs: Map<String, ByteArray>): ByteArray?
+    suspend fun pack(
+        manifestJson: ByteArray,
+        blobs: Map<String, ByteArray>,
+    ): ByteArray?
 
     /**
      * Reverse of [pack]. Returns null if the bytes don't look like

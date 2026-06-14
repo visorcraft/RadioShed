@@ -34,7 +34,10 @@ internal fun lyricsQueryCandidates(
     val results = mutableListOf<LyricsQuery>()
     val seen = mutableSetOf<Pair<String, String>>()
 
-    fun add(artist: String?, title: String?) {
+    fun add(
+        artist: String?,
+        title: String?,
+    ) {
         val a = artist?.trim().orEmpty()
         val t = title?.trim().orEmpty()
         if (a.isBlank() || t.isBlank()) return
@@ -94,10 +97,11 @@ internal fun stripParentheticals(title: String): String {
     // Live / Remastered / Demo / Edit / Mix / Version. Avoids
     // stripping legitimate em-dash separated titles by requiring
     // the keyword.
-    val dashSuffix = Regex(
-        pattern = """\s*[-–—]\s*(live|remaster(ed)?|demo|radio\s*edit|edit|mix|version|remix|acoustic|stereo|mono|extended)\b.*$""",
-        option = RegexOption.IGNORE_CASE,
-    )
+    val dashSuffix =
+        Regex(
+            pattern = """\s*[-–—]\s*(live|remaster(ed)?|demo|radio\s*edit|edit|mix|version|remix|acoustic|stereo|mono|extended)\b.*$""",
+            option = RegexOption.IGNORE_CASE,
+        )
     work = work.replace(dashSuffix, "").trim()
     return work.ifBlank { title }
 }
@@ -109,10 +113,11 @@ internal fun stripParentheticals(title: String): String {
  * splitting on "and" too eagerly breaks "Hall and Oates".
  */
 internal fun primaryArtistOf(artist: String): String {
-    val featSplit = Regex(
-        pattern = """\s+(feat\.?|ft\.?|featuring|with)\s+.*$""",
-        option = RegexOption.IGNORE_CASE,
-    )
+    val featSplit =
+        Regex(
+            pattern = """\s+(feat\.?|ft\.?|featuring|with)\s+.*$""",
+            option = RegexOption.IGNORE_CASE,
+        )
     var work = artist.replace(featSplit, "").trim()
     // ", " or " & " comma/ampersand collaborator suffix.
     val commaSplit = Regex("""\s*[,&]\s*.+$""")
@@ -131,9 +136,10 @@ internal data class FilenameParse(val artist: String, val title: String)
 internal fun parseFilenameForArtistTitle(fileName: String): FilenameParse? {
     val withoutExt = fileName.substringBeforeLast('.', fileName)
     // Strip a leading "<digits>. " or "<digits> - " track-number prefix.
-    val noPrefix = withoutExt
-        .replace(Regex("""^\d+\s*[.\-]\s*"""), "")
-        .trim()
+    val noPrefix =
+        withoutExt
+            .replace(Regex("""^\d+\s*[.\-]\s*"""), "")
+            .trim()
     val sep = " - "
     val idx = noPrefix.indexOf(sep)
     if (idx <= 0 || idx >= noPrefix.length - sep.length) return null

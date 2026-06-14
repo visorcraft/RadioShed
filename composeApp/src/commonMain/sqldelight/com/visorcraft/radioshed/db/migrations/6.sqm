@@ -1,5 +1,12 @@
 -- Migration v5 → v6: backfill station_pinned_track for older DBs.
 --
+CREATE TABLE IF NOT EXISTS station (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT
+);
+CREATE TABLE IF NOT EXISTS track (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT
+);
+
 -- The station_pinned_track table was added to Stations.sq's baseline
 -- when "Pinned tracks per station" landed (#180), but no migration
 -- was written at the same time. Users whose DB was created before

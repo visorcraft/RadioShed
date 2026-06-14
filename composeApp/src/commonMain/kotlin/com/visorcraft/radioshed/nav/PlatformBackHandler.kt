@@ -12,4 +12,7 @@ import androidx.compose.runtime.Composable
  * app's [AppScreen] state machine instead of finishing the activity.
  */
 @Composable
-expect fun PlatformBackHandler(enabled: Boolean = true, onBack: () -> Unit)
+expect fun PlatformBackHandler(
+    enabled: Boolean = true,
+    onBack: () -> Unit,
+)

@@ -13,7 +13,6 @@ import kotlin.test.assertTrue
  * reads, no DI — so every case below fixes all inputs explicitly.
  */
 class DjAnnouncerTest {
-
     /** Calls [DjAnnouncer.shouldAnnounce] with sensible non-suppressing defaults so
      *  each test only sets the fields it cares about. Defaults: outside any quiet
      *  window (quiet 0..0 is an empty window), never announced, no station change. */
@@ -28,18 +27,19 @@ class DjAnnouncerTest {
         quietStartMin: Int = 0,
         quietEndMin: Int = 0,
         stationChanged: Boolean = false,
-    ): Boolean = DjAnnouncer.shouldAnnounce(
-        frequency = frequency,
-        frequencyN = frequencyN,
-        frequencyMinutes = frequencyMinutes,
-        tracksSinceAnnounce = tracksSinceAnnounce,
-        lastAnnounceAtMs = lastAnnounceAtMs,
-        nowMs = nowMs,
-        nowMinutesOfDay = nowMinutesOfDay,
-        quietStartMin = quietStartMin,
-        quietEndMin = quietEndMin,
-        stationChanged = stationChanged,
-    )
+    ): Boolean =
+        DjAnnouncer.shouldAnnounce(
+            frequency = frequency,
+            frequencyN = frequencyN,
+            frequencyMinutes = frequencyMinutes,
+            tracksSinceAnnounce = tracksSinceAnnounce,
+            lastAnnounceAtMs = lastAnnounceAtMs,
+            nowMs = nowMs,
+            nowMinutesOfDay = nowMinutesOfDay,
+            quietStartMin = quietStartMin,
+            quietEndMin = quietEndMin,
+            stationChanged = stationChanged,
+        )
 
     @Test
     fun offFrequencyNeverAnnounces() {
@@ -171,7 +171,10 @@ class DjAnnouncerTest {
     // cache key is the rendered text — a divergent slot pick would mean the
     // precached clip is never the one the live lookup finds.
 
-    private fun playable(id: Long, artist: String? = "Artist $id") = Playable(
+    private fun playable(
+        id: Long,
+        artist: String? = "Artist $id",
+    ) = Playable(
         trackId = id,
         uri = "file:///music/$id.mp3",
         title = "Track $id",

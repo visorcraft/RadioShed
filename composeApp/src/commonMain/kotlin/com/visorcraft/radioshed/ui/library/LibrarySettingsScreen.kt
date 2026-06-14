@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -19,8 +18,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -46,18 +43,20 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.visorcraft.radioshed.data.FolderRepository
 import com.visorcraft.radioshed.data.LibraryRepository
 import com.visorcraft.radioshed.domain.Folder
-import com.visorcraft.radioshed.source.matchesGlob
 import com.visorcraft.radioshed.permissions.StoragePermissions
 import com.visorcraft.radioshed.scanner.ScanProgress
 import com.visorcraft.radioshed.scanner.Scanner
 import com.visorcraft.radioshed.source.DiscoveredVolume
 import com.visorcraft.radioshed.source.StorageVolumes
+import com.visorcraft.radioshed.source.matchesGlob
 import com.visorcraft.radioshed.ui.util.OnResume
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -108,19 +107,21 @@ fun LibrarySettingsScreen(
                 navigationIcon = {
                     TextButton(onClick = onBack) { Text("Back") }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                ),
+                colors =
+                    TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                    ),
             )
         },
         containerColor = MaterialTheme.colorScheme.background,
     ) { padding ->
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .verticalScroll(rememberScrollState())
+                    .padding(16.dp),
         ) {
             if (!permissionGranted) {
                 PermissionCard(
@@ -150,30 +151,31 @@ fun LibrarySettingsScreen(
                             onClick = {
                                 if (scanInFlight) return@TextButton
                                 scanError = null
-                                scanJob = scope.launch {
-                                    val targets = folders
-                                    targets.forEachIndexed { index, folder ->
-                                        scanStatus = "Scanning ${folder.displayName} " +
-                                            "(${index + 1}/${targets.size})…"
-                                        runCatching {
-                                            scanner.scanFolder(folder.id).collect { ev ->
-                                                if (ev is ScanProgress.Failed) {
-                                                    scanError = ev.message
+                                scanJob =
+                                    scope.launch {
+                                        val targets = folders
+                                        targets.forEachIndexed { index, folder ->
+                                            scanStatus = "Scanning ${folder.displayName} " +
+                                                "(${index + 1}/${targets.size})…"
+                                            runCatching {
+                                                scanner.scanFolder(folder.id).collect { ev ->
+                                                    if (ev is ScanProgress.Failed) {
+                                                        scanError = ev.message
+                                                    }
                                                 }
-                                            }
-                                        }.onFailure { scanError = "Scan crashed: ${it.message}" }
+                                            }.onFailure { scanError = "Scan crashed: ${it.message}" }
+                                        }
+                                        scanStatus = "Scanned ${targets.size} folder" +
+                                            if (targets.size == 1) "" else "s"
+                                    }.also { job ->
+                                        job.invokeOnCompletion { scanJob = null }
                                     }
-                                    scanStatus = "Scanned ${targets.size} folder" +
-                                        if (targets.size == 1) "" else "s"
-                                }.also { job ->
-                                    job.invokeOnCompletion { scanJob = null }
-                                }
                             },
                             enabled = !scanInFlight,
                         ) { Text("Rescan all") }
                     }
                     Button(onClick = {
-                        discoveredVolumes.value = storageVolumes.discover()  // refresh on open
+                        discoveredVolumes.value = storageVolumes.discover() // refresh on open
                         addDialogOpen = true
                     }) { Text("Add folder") }
                 }
@@ -196,20 +198,21 @@ fun LibrarySettingsScreen(
                                 if (scanInFlight) return@FolderCard
                                 scanStatus = "Starting…"
                                 scanError = null
-                                scanJob = scope.launch {
-                                    runCatching {
-                                        scanner.scanFolder(folder.id).collect { ev ->
-                                            scanStatus = ev.toLine()
-                                            if (ev is ScanProgress.Failed) scanError = ev.message
-                                        }
-                                    }.onFailure { scanError = "Scan crashed: ${it.message}" }
-                                }.also { job ->
-                                    // Job.isActive isn't observable State, so a completed job
-                                    // would leave scanInFlight stuck at true until something
-                                    // else triggered recomposition. Explicitly clear the
-                                    // ref on completion so the flag flips reactively.
-                                    job.invokeOnCompletion { scanJob = null }
-                                }
+                                scanJob =
+                                    scope.launch {
+                                        runCatching {
+                                            scanner.scanFolder(folder.id).collect { ev ->
+                                                scanStatus = ev.toLine()
+                                                if (ev is ScanProgress.Failed) scanError = ev.message
+                                            }
+                                        }.onFailure { scanError = "Scan crashed: ${it.message}" }
+                                    }.also { job ->
+                                        // Job.isActive isn't observable State, so a completed job
+                                        // would leave scanInFlight stuck at true until something
+                                        // else triggered recomposition. Explicitly clear the
+                                        // ref on completion so the flag flips reactively.
+                                        job.invokeOnCompletion { scanJob = null }
+                                    }
                             },
                             onEdit = { editingFolder = folder },
                             onMove = { movingFolder = folder },
@@ -268,9 +271,10 @@ fun LibrarySettingsScreen(
             )
             Spacer(Modifier.height(8.dp))
             Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(onClick = onOpenDuplicates),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable(onClick = onOpenDuplicates),
                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
                 shape = RoundedCornerShape(8.dp),
             ) {
@@ -298,9 +302,10 @@ fun LibrarySettingsScreen(
                 scope.launch {
                     runCatching {
                         folderRepo.insert(
-                            displayName = name.ifBlank {
-                                path.substringAfterLast('/').ifBlank { path }
-                            },
+                            displayName =
+                                name.ifBlank {
+                                    path.substringAfterLast('/').ifBlank { path }
+                                },
                             uri = path,
                             recursive = true,
                         )
@@ -354,12 +359,16 @@ fun LibrarySettingsScreen(
 }
 
 @Composable
-private fun PermissionCard(onRequest: () -> Unit, onRefresh: () -> Unit) {
+private fun PermissionCard(
+    onRequest: () -> Unit,
+    onRefresh: () -> Unit,
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.errorContainer,
-        ),
+        colors =
+            CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.errorContainer,
+            ),
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
@@ -395,9 +404,10 @@ private fun FolderCard(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface,
-        ),
+        colors =
+            CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface,
+            ),
     ) {
         // Folder accent bar at the top of the card. Visible only when
         // a color is set; renders as a 4dp colored strip across the
@@ -405,10 +415,11 @@ private fun FolderCard(
         // pick out their personal colorings at a glance.
         folder.accentColor?.let { color ->
             Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(4.dp)
-                    .background(Color(color.toLong() and 0xFFFFFFFFL)),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(4.dp)
+                        .background(Color(color.toLong() and 0xFFFFFFFFL)),
             )
         }
         Column(modifier = Modifier.padding(12.dp)) {
@@ -517,21 +528,27 @@ private fun ColorSwatch(
     selected: Boolean,
     onClick: () -> Unit,
 ) {
-    val fill = color?.let { Color(it.toLong() and 0xFFFFFFFFL) }
-        ?: MaterialTheme.colorScheme.surfaceVariant
-    val borderColor = if (selected) MaterialTheme.colorScheme.primary
-                      else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f)
+    val fill =
+        color?.let { Color(it.toLong() and 0xFFFFFFFFL) }
+            ?: MaterialTheme.colorScheme.surfaceVariant
+    val borderColor =
+        if (selected) {
+            MaterialTheme.colorScheme.primary
+        } else {
+            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f)
+        }
     Box(
-        modifier = Modifier
-            .size(24.dp)
-            .clip(CircleShape)
-            .clickable(onClick = onClick)
-            .border(
-                width = if (selected) 2.dp else 1.dp,
-                color = borderColor,
-                shape = CircleShape,
-            )
-            .background(fill, CircleShape),
+        modifier =
+            Modifier
+                .size(24.dp)
+                .clip(CircleShape)
+                .clickable(onClick = onClick)
+                .border(
+                    width = if (selected) 2.dp else 1.dp,
+                    color = borderColor,
+                    shape = CircleShape,
+                )
+                .background(fill, CircleShape),
     )
 }
 
@@ -540,14 +557,15 @@ private fun ColorSwatch(
  * (matches the Stations preset color set so the palettes feel
  * consistent when a folder + station share a tag).
  */
-private val FolderTagPalette: List<Int> = listOf(
-    0xFFFF7F1A.toInt(),  // brand amber
-    0xFFFFC107.toInt(),  // gold
-    0xFF4ECDC4.toInt(),  // teal
-    0xFF7B68EE.toInt(),  // medium slate blue
-    0xFFFF6B6B.toInt(),  // coral
-    0xFF607D8B.toInt(),  // blue grey
-)
+private val FolderTagPalette: List<Int> =
+    listOf(
+        0xFFFF7F1A.toInt(), // brand amber
+        0xFFFFC107.toInt(), // gold
+        0xFF4ECDC4.toInt(), // teal
+        0xFF7B68EE.toInt(), // medium slate blue
+        0xFFFF6B6B.toInt(), // coral
+        0xFF607D8B.toInt(), // blue grey
+    )
 
 @Composable
 private fun AddFolderDialog(
@@ -558,13 +576,14 @@ private fun AddFolderDialog(
     // Default path: prefer a removable volume's Music folder (the user just
     // inserted an SD card → that's almost certainly what they want), then
     // primary internal storage's Music, then the legacy fallback.
-    val defaultPath = remember(volumes) {
-        volumes.firstOrNull { it.isRemovable }
-            ?.let { com.visorcraft.radioshed.source.joinPath(it.path, "Music") }
-            ?: volumes.firstOrNull { it.isPrimary }
+    val defaultPath =
+        remember(volumes) {
+            volumes.firstOrNull { it.isRemovable }
                 ?.let { com.visorcraft.radioshed.source.joinPath(it.path, "Music") }
-            ?: com.visorcraft.radioshed.source.defaultMusicFolderPath()
-    }
+                ?: volumes.firstOrNull { it.isPrimary }
+                    ?.let { com.visorcraft.radioshed.source.joinPath(it.path, "Music") }
+                ?: com.visorcraft.radioshed.source.defaultMusicFolderPath()
+        }
     var path by remember { mutableStateOf(defaultPath) }
     var name by remember { mutableStateOf("") }
     var browserOpen by remember { mutableStateOf(false) }
@@ -609,9 +628,10 @@ private fun AddFolderDialog(
                     label = { Text("Folder path (or use Browse above)") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                        imeAction = androidx.compose.ui.text.input.ImeAction.Next,
-                    ),
+                    keyboardOptions =
+                        androidx.compose.foundation.text.KeyboardOptions(
+                            imeAction = androidx.compose.ui.text.input.ImeAction.Next,
+                        ),
                 )
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
@@ -620,9 +640,10 @@ private fun AddFolderDialog(
                     label = { Text("Display name (optional)") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                        imeAction = androidx.compose.ui.text.input.ImeAction.Done,
-                    ),
+                    keyboardOptions =
+                        androidx.compose.foundation.text.KeyboardOptions(
+                            imeAction = androidx.compose.ui.text.input.ImeAction.Done,
+                        ),
                 )
             }
         },
@@ -635,8 +656,9 @@ private fun AddFolderDialog(
         // showing /Music alongside /Pictures, /Downloads, etc.).
         // parentPath handles both `/` and `\`; the literal `/storage`
         // fallback was Android-only and meaningless on desktop.
-        val startPath = com.visorcraft.radioshed.source.parentPath(path)
-            .ifBlank { com.visorcraft.radioshed.source.defaultMusicFolderPath() }
+        val startPath =
+            com.visorcraft.radioshed.source.parentPath(path)
+                .ifBlank { com.visorcraft.radioshed.source.defaultMusicFolderPath() }
         FolderBrowserDialog(
             initialPath = startPath,
             onSelect = { picked ->
@@ -662,8 +684,12 @@ private fun VolumeChip(
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = if (volume.isRemovable) MaterialTheme.colorScheme.tertiaryContainer
-                else MaterialTheme.colorScheme.surfaceVariant,
+        color =
+            if (volume.isRemovable) {
+                MaterialTheme.colorScheme.tertiaryContainer
+            } else {
+                MaterialTheme.colorScheme.surfaceVariant
+            },
         shape = RoundedCornerShape(8.dp),
     ) {
         Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
@@ -802,9 +828,10 @@ private fun MoveFolderDialog(
                     label = { Text("New path") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                        imeAction = androidx.compose.ui.text.input.ImeAction.Done,
-                    ),
+                    keyboardOptions =
+                        androidx.compose.foundation.text.KeyboardOptions(
+                            imeAction = androidx.compose.ui.text.input.ImeAction.Done,
+                        ),
                 )
                 Spacer(Modifier.height(6.dp))
                 Button(
@@ -820,8 +847,9 @@ private fun MoveFolderDialog(
         // Start the browser one level up from the current URI so the
         // user can easily land on a sibling folder if the share name
         // (rather than the parent volume) is what changed.
-        val startPath = com.visorcraft.radioshed.source.parentPath(folder.uri)
-            .ifBlank { com.visorcraft.radioshed.source.defaultMusicFolderPath() }
+        val startPath =
+            com.visorcraft.radioshed.source.parentPath(folder.uri)
+                .ifBlank { com.visorcraft.radioshed.source.defaultMusicFolderPath() }
         FolderBrowserDialog(
             initialPath = startPath,
             onSelect = { picked ->
@@ -863,11 +891,12 @@ private fun EditFolderDialog(
     val nameClean = name.trim()
     val newIncludes = parseGlobs(includeText)
     val newExcludes = parseGlobs(excludeText)
-    val canSave = nameClean.isNotBlank() && (
-        nameClean != folder.displayName ||
-            newIncludes != folder.includeGlobs ||
-            newExcludes != folder.excludeGlobs
-    )
+    val canSave =
+        nameClean.isNotBlank() && (
+            nameClean != folder.displayName ||
+                newIncludes != folder.includeGlobs ||
+                newExcludes != folder.excludeGlobs
+        )
     val confirmSave: () -> Unit = {
         if (canSave) onSave(nameClean, newIncludes, newExcludes)
     }
@@ -886,9 +915,10 @@ private fun EditFolderDialog(
                     label = { Text("Display name") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                        imeAction = androidx.compose.ui.text.input.ImeAction.Next,
-                    ),
+                    keyboardOptions =
+                        androidx.compose.foundation.text.KeyboardOptions(
+                            imeAction = androidx.compose.ui.text.input.ImeAction.Next,
+                        ),
                 )
                 Spacer(Modifier.height(12.dp))
                 // Glob include / exclude. One pattern per line, matched
@@ -973,23 +1003,27 @@ private fun GlobPreviewPanel(
                                 // (no track→folder FK exists in the
                                 // schema); cheap on the typical
                                 // <10k-track library.
-                                val tracks = libraryRepo
-                                    .listAvailableTracks(limit = 100_000L, offset = 0L)
-                                    .filter { it.path.startsWith(folderUri) }
+                                val tracks =
+                                    libraryRepo
+                                        .listAvailableTracks(limit = 100_000L, offset = 0L)
+                                        .filter { it.path.startsWith(folderUri) }
                                 val excludedSamples = mutableListOf<String>()
                                 val notIncludedSamples = mutableListOf<String>()
                                 var excludedCount = 0
                                 var notIncludedCount = 0
                                 var keptCount = 0
                                 for (t in tracks) {
-                                    val rel = t.path
-                                        .removePrefix(folderUri)
-                                        .trimStart('/')
-                                    val excludeHit = excludeGlobs.any {
-                                        matchesGlob(rel, it)
-                                    }
-                                    val includePass = includeGlobs.isEmpty() ||
-                                        includeGlobs.any { matchesGlob(rel, it) }
+                                    val rel =
+                                        t.path
+                                            .removePrefix(folderUri)
+                                            .trimStart('/')
+                                    val excludeHit =
+                                        excludeGlobs.any {
+                                            matchesGlob(rel, it)
+                                        }
+                                    val includePass =
+                                        includeGlobs.isEmpty() ||
+                                            includeGlobs.any { matchesGlob(rel, it) }
                                     when {
                                         excludeHit -> {
                                             excludedCount += 1
@@ -1096,10 +1130,11 @@ private data class GlobPreview(
     val keptCount: Int,
 )
 
-private fun ScanProgress.toLine(): String = when (this) {
-    is ScanProgress.Started -> "Scanning…"
-    is ScanProgress.Progress -> "[$tracksProcessed] $currentFile"
-    is ScanProgress.Warning -> "WARN: $message"
-    is ScanProgress.Completed -> "✔ done — $totalTracks tracks in ${durationMs}ms"
-    is ScanProgress.Failed -> "✗ FAILED: $message"
-}
+private fun ScanProgress.toLine(): String =
+    when (this) {
+        is ScanProgress.Started -> "Scanning…"
+        is ScanProgress.Progress -> "[$tracksProcessed] $currentFile"
+        is ScanProgress.Warning -> "WARN: $message"
+        is ScanProgress.Completed -> "✔ done — $totalTracks tracks in ${durationMs}ms"
+        is ScanProgress.Failed -> "✗ FAILED: $message"
+    }

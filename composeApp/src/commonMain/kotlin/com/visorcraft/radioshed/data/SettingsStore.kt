@@ -9,6 +9,7 @@ import com.visorcraft.radioshed.ui.theme.ThemeMode
  * Each setting has a stable string key and a default value. Unknown stored
  * values fall back to defaults rather than throwing.
  */
+
 /** A user-named EQ preset captured from the current band gain values. */
 @kotlinx.serialization.Serializable
 data class CustomEqPreset(val name: String, val gainsDb: List<Float>)
@@ -43,11 +44,12 @@ data class EqPresetBundle(
     val version: Int = CURRENT_VERSION,
     val presets: List<CustomEqPreset>,
 ) {
-    companion object { const val CURRENT_VERSION = 1 }
+    companion object {
+        const val CURRENT_VERSION = 1
+    }
 }
 
 class SettingsStore(private val settings: Settings) {
-
     // ---- UI / theme ----
 
     fun getThemeMode(): ThemeMode {
@@ -60,6 +62,7 @@ class SettingsStore(private val settings: Settings) {
     }
 
     fun getMaterialYouEnabled(): Boolean = settings.getBoolean(KEY_MATERIAL_YOU, false)
+
     fun setMaterialYouEnabled(enabled: Boolean) = settings.putBoolean(KEY_MATERIAL_YOU, enabled)
 
     /**
@@ -99,8 +102,7 @@ class SettingsStore(private val settings: Settings) {
      * Custom without picking sees the original colour, not a sudden
      * white-on-white surprise.
      */
-    fun getThemeSeedArgb(): Int =
-        settings.getInt(KEY_THEME_SEED, DEFAULT_THEME_SEED_ARGB)
+    fun getThemeSeedArgb(): Int = settings.getInt(KEY_THEME_SEED, DEFAULT_THEME_SEED_ARGB)
 
     fun setThemeSeedArgb(argb: Int) {
         settings.putInt(KEY_THEME_SEED, argb)
@@ -112,8 +114,7 @@ class SettingsStore(private val settings: Settings) {
      * surfaces). Default is the brand secondary brown so the
      * out-of-box Custom look mirrors Brand until the user picks.
      */
-    fun getAccentSeedArgb(): Int =
-        settings.getInt(KEY_ACCENT_SEED, DEFAULT_ACCENT_SEED_ARGB)
+    fun getAccentSeedArgb(): Int = settings.getInt(KEY_ACCENT_SEED, DEFAULT_ACCENT_SEED_ARGB)
 
     fun setAccentSeedArgb(argb: Int) {
         settings.putInt(KEY_ACCENT_SEED, argb)
@@ -124,14 +125,14 @@ class SettingsStore(private val settings: Settings) {
      * ReplayGain attenuation when a track is loaded — effective
      * engine volume = userVolume * replayGain. Defaults to 1.0.
      */
-    fun getUserVolume(): Float =
-        settings.getFloat(KEY_USER_VOLUME, 1f).coerceIn(0f, 1f)
+    fun getUserVolume(): Float = settings.getFloat(KEY_USER_VOLUME, 1f).coerceIn(0f, 1f)
 
     fun setUserVolume(value: Float) {
         settings.putFloat(KEY_USER_VOLUME, value.coerceIn(0f, 1f))
     }
 
     fun getReduceMotion(): Boolean = settings.getBoolean(KEY_REDUCE_MOTION, false)
+
     fun setReduceMotion(enabled: Boolean) = settings.putBoolean(KEY_REDUCE_MOTION, enabled)
 
     /**
@@ -142,8 +143,7 @@ class SettingsStore(private val settings: Settings) {
      * Lyrics-only font adjuster, which still operates inside its own
      * scope on top of this.
      */
-    fun getFontScale(): Float =
-        settings.getFloat(KEY_FONT_SCALE, 1f).coerceIn(0.85f, 1.30f)
+    fun getFontScale(): Float = settings.getFloat(KEY_FONT_SCALE, 1f).coerceIn(0.85f, 1.30f)
 
     fun setFontScale(value: Float) {
         settings.putFloat(KEY_FONT_SCALE, value.coerceIn(0.85f, 1.30f))
@@ -158,8 +158,7 @@ class SettingsStore(private val settings: Settings) {
      * only kicks in on medium+ widths. Default 280dp matches the
      * pre-setting hard-coded value.
      */
-    fun getStationsTileSizeDp(): Int =
-        settings.getInt(KEY_STATIONS_TILE_SIZE, 280).coerceIn(160, 480)
+    fun getStationsTileSizeDp(): Int = settings.getInt(KEY_STATIONS_TILE_SIZE, 280).coerceIn(160, 480)
 
     fun setStationsTileSizeDp(value: Int) {
         settings.putInt(KEY_STATIONS_TILE_SIZE, value.coerceIn(160, 480))
@@ -171,8 +170,7 @@ class SettingsStore(private val settings: Settings) {
      * "Custom" preserves the user's pin / drag-reorder order, which
      * is the legacy behavior before the sort menu shipped.
      */
-    fun getStationsSort(): String =
-        settings.getStringOrNull(KEY_STATIONS_SORT) ?: "Custom"
+    fun getStationsSort(): String = settings.getStringOrNull(KEY_STATIONS_SORT) ?: "Custom"
 
     fun setStationsSort(value: String) {
         settings.putString(KEY_STATIONS_SORT, value)
@@ -184,8 +182,7 @@ class SettingsStore(private val settings: Settings) {
      * users with a dozen custom stations may toggle this on so the
      * grid scrolls less.
      */
-    fun getStationsHideBuiltIns(): Boolean =
-        settings.getBoolean(KEY_STATIONS_HIDE_BUILTINS, false)
+    fun getStationsHideBuiltIns(): Boolean = settings.getBoolean(KEY_STATIONS_HIDE_BUILTINS, false)
 
     fun setStationsHideBuiltIns(value: Boolean) {
         settings.putBoolean(KEY_STATIONS_HIDE_BUILTINS, value)
@@ -200,12 +197,15 @@ class SettingsStore(private val settings: Settings) {
      * (a removed/renamed sort key is silently ignored).
      */
     fun getAlbumTrackSort(): String? = settings.getStringOrNull(KEY_ALBUM_TRACK_SORT)
+
     fun setAlbumTrackSort(name: String) = settings.putString(KEY_ALBUM_TRACK_SORT, name)
 
     fun getArtistTrackSort(): String? = settings.getStringOrNull(KEY_ARTIST_TRACK_SORT)
+
     fun setArtistTrackSort(name: String) = settings.putString(KEY_ARTIST_TRACK_SORT, name)
 
     fun getGenreTrackSort(): String? = settings.getStringOrNull(KEY_GENRE_TRACK_SORT)
+
     fun setGenreTrackSort(name: String) = settings.putString(KEY_GENRE_TRACK_SORT, name)
 
     /**
@@ -215,8 +215,7 @@ class SettingsStore(private val settings: Settings) {
      * that the user is dealing with a fundamentally wrong file
      * and should re-fetch via the manual retry dialog.
      */
-    fun getLyricsSyncOffsetMs(): Int =
-        settings.getInt(KEY_LYRICS_SYNC_OFFSET, 0).coerceIn(-5000, 5000)
+    fun getLyricsSyncOffsetMs(): Int = settings.getInt(KEY_LYRICS_SYNC_OFFSET, 0).coerceIn(-5000, 5000)
 
     fun setLyricsSyncOffsetMs(value: Int) {
         settings.putInt(KEY_LYRICS_SYNC_OFFSET, value.coerceIn(-5000, 5000))
@@ -226,8 +225,7 @@ class SettingsStore(private val settings: Settings) {
      * Stats screen window in days. 7 / 30 / 90 / 365 are the
      * common stops; default 30 matches the prior hardcoded value.
      */
-    fun getStatsWindowDays(): Int =
-        settings.getInt(KEY_STATS_WINDOW_DAYS, 30).coerceIn(1, 365)
+    fun getStatsWindowDays(): Int = settings.getInt(KEY_STATS_WINDOW_DAYS, 30).coerceIn(1, 365)
 
     fun setStatsWindowDays(days: Int) {
         settings.putInt(KEY_STATS_WINDOW_DAYS, days.coerceIn(1, 365))
@@ -241,8 +239,7 @@ class SettingsStore(private val settings: Settings) {
      * via the BackupService.maxBackupsToRetain getter so a slider
      * tweak takes effect immediately.
      */
-    fun getBackupRetention(): Int =
-        settings.getInt(KEY_BACKUP_RETENTION, 10).coerceIn(3, 30)
+    fun getBackupRetention(): Int = settings.getInt(KEY_BACKUP_RETENTION, 10).coerceIn(3, 30)
 
     fun setBackupRetention(value: Int) {
         settings.putInt(KEY_BACKUP_RETENTION, value.coerceIn(3, 30))
@@ -255,6 +252,7 @@ class SettingsStore(private val settings: Settings) {
      * artwork-as-ambient. Off by default to avoid burning battery
      * for a screen the user isn't looking at.
      */
+
     /**
      * Mirrors the [_driveModeFlow] pattern. NowPlayingScreen reads
      * this as a `collectAsState` so toggling Keep-screen-on from the
@@ -275,6 +273,7 @@ class SettingsStore(private val settings: Settings) {
      * falls back to All.
      */
     fun getSearchScope(): String = settings.getStringOrNull(KEY_SEARCH_SCOPE) ?: "All"
+
     fun setSearchScope(name: String) = settings.putString(KEY_SEARCH_SCOPE, name)
 
     /**
@@ -289,6 +288,7 @@ class SettingsStore(private val settings: Settings) {
      * available on every width — it'll squeeze badly on a phone
      * portrait but the user asked for the option.
      */
+
     /**
      * Mirror flow for the layout preference. NowPlayingScreen
      * subscribes via `collectAsState()` so a layout change in
@@ -302,14 +302,15 @@ class SettingsStore(private val settings: Settings) {
         )
     val nowPlayingLayoutFlow: kotlinx.coroutines.flow.StateFlow<String> = _nowPlayingLayoutFlow
 
-    fun getNowPlayingLayout(): String =
-        settings.getStringOrNull(KEY_NOW_PLAYING_LAYOUT) ?: "Auto"
+    fun getNowPlayingLayout(): String = settings.getStringOrNull(KEY_NOW_PLAYING_LAYOUT) ?: "Auto"
+
     fun setNowPlayingLayout(name: String) {
         settings.putString(KEY_NOW_PLAYING_LAYOUT, name)
         _nowPlayingLayoutFlow.value = name
     }
 
     fun getKeepScreenOn(): Boolean = settings.getBoolean(KEY_KEEP_SCREEN_ON, false)
+
     fun setKeepScreenOn(enabled: Boolean) {
         settings.putBoolean(KEY_KEEP_SCREEN_ON, enabled)
         _keepScreenOnFlow.value = enabled
@@ -322,8 +323,8 @@ class SettingsStore(private val settings: Settings) {
      * connectivity policy already gates by metered/unmetered.
      */
     fun getAutoFetchLyrics(): Boolean = settings.getBoolean(KEY_AUTO_FETCH_LYRICS, true)
-    fun setAutoFetchLyrics(enabled: Boolean) =
-        settings.putBoolean(KEY_AUTO_FETCH_LYRICS, enabled)
+
+    fun setAutoFetchLyrics(enabled: Boolean) = settings.putBoolean(KEY_AUTO_FETCH_LYRICS, enabled)
 
     /**
      * Master haptic-feedback gate. When off, gesture/long-press
@@ -332,8 +333,8 @@ class SettingsStore(private val settings: Settings) {
      * find vibration distracting can disable in one place.
      */
     fun getHapticsEnabled(): Boolean = settings.getBoolean(KEY_HAPTICS_ENABLED, true)
-    fun setHapticsEnabled(enabled: Boolean) =
-        settings.putBoolean(KEY_HAPTICS_ENABLED, enabled)
+
+    fun setHapticsEnabled(enabled: Boolean) = settings.putBoolean(KEY_HAPTICS_ENABLED, enabled)
 
     // ListenBrainz scrobbling — opt-in. Token comes from
     // listenbrainz.org/profile/ and is opaque to us; we just round-
@@ -341,15 +342,18 @@ class SettingsStore(private val settings: Settings) {
     // Stored as a plain string in shared prefs — same trust boundary
     // as every other user secret on the device. Documented in
     // FAQ.md and USER_GUIDE.md.
-    fun getListenBrainzEnabled(): Boolean =
-        settings.getBoolean(KEY_LISTENBRAINZ_ENABLED, false)
-    fun setListenBrainzEnabled(enabled: Boolean) =
-        settings.putBoolean(KEY_LISTENBRAINZ_ENABLED, enabled)
-    fun getListenBrainzToken(): String =
-        settings.getStringOrNull(KEY_LISTENBRAINZ_TOKEN).orEmpty()
+    fun getListenBrainzEnabled(): Boolean = settings.getBoolean(KEY_LISTENBRAINZ_ENABLED, false)
+
+    fun setListenBrainzEnabled(enabled: Boolean) = settings.putBoolean(KEY_LISTENBRAINZ_ENABLED, enabled)
+
+    fun getListenBrainzToken(): String = settings.getStringOrNull(KEY_LISTENBRAINZ_TOKEN).orEmpty()
+
     fun setListenBrainzToken(token: String) {
-        if (token.isBlank()) settings.remove(KEY_LISTENBRAINZ_TOKEN)
-        else settings.putString(KEY_LISTENBRAINZ_TOKEN, token.trim())
+        if (token.isBlank()) {
+            settings.remove(KEY_LISTENBRAINZ_TOKEN)
+        } else {
+            settings.putString(KEY_LISTENBRAINZ_TOKEN, token.trim())
+        }
     }
 
     // Subsonic server config — URL/username get backed up so a new
@@ -358,24 +362,37 @@ class SettingsStore(private val settings: Settings) {
     // re-enters it once after restore. Same trust posture as the
     // ListenBrainz token.
     fun getSubsonicUrl(): String = settings.getStringOrNull(KEY_SUBSONIC_URL).orEmpty()
+
     fun setSubsonicUrl(url: String) {
         val trimmed = url.trim().trimEnd('/')
-        if (trimmed.isBlank()) settings.remove(KEY_SUBSONIC_URL)
-        else settings.putString(KEY_SUBSONIC_URL, trimmed)
+        if (trimmed.isBlank()) {
+            settings.remove(KEY_SUBSONIC_URL)
+        } else {
+            settings.putString(KEY_SUBSONIC_URL, trimmed)
+        }
     }
-    fun getSubsonicUsername(): String =
-        settings.getStringOrNull(KEY_SUBSONIC_USERNAME).orEmpty()
+
+    fun getSubsonicUsername(): String = settings.getStringOrNull(KEY_SUBSONIC_USERNAME).orEmpty()
+
     fun setSubsonicUsername(username: String) {
         val trimmed = username.trim()
-        if (trimmed.isBlank()) settings.remove(KEY_SUBSONIC_USERNAME)
-        else settings.putString(KEY_SUBSONIC_USERNAME, trimmed)
+        if (trimmed.isBlank()) {
+            settings.remove(KEY_SUBSONIC_USERNAME)
+        } else {
+            settings.putString(KEY_SUBSONIC_USERNAME, trimmed)
+        }
     }
-    fun getSubsonicPassword(): String =
-        settings.getStringOrNull(KEY_SUBSONIC_PASSWORD).orEmpty()
+
+    fun getSubsonicPassword(): String = settings.getStringOrNull(KEY_SUBSONIC_PASSWORD).orEmpty()
+
     fun setSubsonicPassword(password: String) {
-        if (password.isBlank()) settings.remove(KEY_SUBSONIC_PASSWORD)
-        else settings.putString(KEY_SUBSONIC_PASSWORD, password)
+        if (password.isBlank()) {
+            settings.remove(KEY_SUBSONIC_PASSWORD)
+        } else {
+            settings.putString(KEY_SUBSONIC_PASSWORD, password)
+        }
     }
+
     /** True when the user has filled in URL + username + password. */
     fun hasSubsonicConfig(): Boolean =
         getSubsonicUrl().isNotBlank() &&
@@ -388,8 +405,7 @@ class SettingsStore(private val settings: Settings) {
      * after every relaunch. Range 0.5..2.0; UI exposes 0.75 / 1.0 /
      * 1.25 / 1.5 / 2.0 as common stops. Default 1.0 (normal speed).
      */
-    fun getPlaybackSpeed(): Float =
-        settings.getFloat(KEY_PLAYBACK_SPEED, 1f).coerceIn(0.5f, 2f)
+    fun getPlaybackSpeed(): Float = settings.getFloat(KEY_PLAYBACK_SPEED, 1f).coerceIn(0.5f, 2f)
 
     fun setPlaybackSpeed(value: Float) {
         settings.putFloat(KEY_PLAYBACK_SPEED, value.coerceIn(0.5f, 2f))
@@ -402,8 +418,7 @@ class SettingsStore(private val settings: Settings) {
      * lock screen)? Pause is friendlier for "I want to keep listening
      * tomorrow"; stop is friendlier for "I want my phone fully quiet".
      */
-    fun getSleepStopOnExpire(): Boolean =
-        settings.getBoolean(KEY_SLEEP_STOP_ON_EXPIRE, false)
+    fun getSleepStopOnExpire(): Boolean = settings.getBoolean(KEY_SLEEP_STOP_ON_EXPIRE, false)
 
     fun setSleepStopOnExpire(value: Boolean) {
         settings.putBoolean(KEY_SLEEP_STOP_ON_EXPIRE, value)
@@ -413,6 +428,7 @@ class SettingsStore(private val settings: Settings) {
 
     /** Whether the DJ feature is active at all. Off by default. */
     fun getDjEnabled(): Boolean = settings.getBoolean(KEY_DJ_ENABLED, false)
+
     fun setDjEnabled(value: Boolean) = settings.putBoolean(KEY_DJ_ENABLED, value)
 
     /**
@@ -435,8 +451,7 @@ class SettingsStore(private val settings: Settings) {
      * Coerced to 2..20 on read and write so invalid stored data can't
      * break the scheduling logic.
      */
-    fun getDjFrequencyN(): Int =
-        settings.getInt(KEY_DJ_FREQUENCY_N, 4).coerceIn(2, 20)
+    fun getDjFrequencyN(): Int = settings.getInt(KEY_DJ_FREQUENCY_N, 4).coerceIn(2, 20)
 
     fun setDjFrequencyN(value: Int) {
         settings.putInt(KEY_DJ_FREQUENCY_N, value.coerceIn(2, 20))
@@ -446,8 +461,7 @@ class SettingsStore(private val settings: Settings) {
      * When [getDjFrequency] is `minutes`, the DJ speaks every N minutes.
      * Coerced to 5..120.
      */
-    fun getDjFrequencyMinutes(): Int =
-        settings.getInt(KEY_DJ_FREQUENCY_MINUTES, 15).coerceIn(5, 120)
+    fun getDjFrequencyMinutes(): Int = settings.getInt(KEY_DJ_FREQUENCY_MINUTES, 15).coerceIn(5, 120)
 
     fun setDjFrequencyMinutes(value: Int) {
         settings.putInt(KEY_DJ_FREQUENCY_MINUTES, value.coerceIn(5, 120))
@@ -458,8 +472,7 @@ class SettingsStore(private val settings: Settings) {
      * Default 1320 = 22:00. The DJ will not speak between
      * [getDjQuietStartMin] and [getDjQuietEndMin].
      */
-    fun getDjQuietStartMin(): Int =
-        settings.getInt(KEY_DJ_QUIET_START_MIN, 1320).coerceIn(0, 1439)
+    fun getDjQuietStartMin(): Int = settings.getInt(KEY_DJ_QUIET_START_MIN, 1320).coerceIn(0, 1439)
 
     fun setDjQuietStartMin(value: Int) {
         settings.putInt(KEY_DJ_QUIET_START_MIN, value.coerceIn(0, 1439))
@@ -469,8 +482,7 @@ class SettingsStore(private val settings: Settings) {
      * End of the DJ quiet window, in minutes since midnight (0..1439).
      * Default 420 = 07:00.
      */
-    fun getDjQuietEndMin(): Int =
-        settings.getInt(KEY_DJ_QUIET_END_MIN, 420).coerceIn(0, 1439)
+    fun getDjQuietEndMin(): Int = settings.getInt(KEY_DJ_QUIET_END_MIN, 420).coerceIn(0, 1439)
 
     fun setDjQuietEndMin(value: Int) {
         settings.putInt(KEY_DJ_QUIET_END_MIN, value.coerceIn(0, 1439))
@@ -481,8 +493,7 @@ class SettingsStore(private val settings: Settings) {
      * is speaking. 0.2 = music at 20 % volume during TTS. Coerced on
      * read and write.
      */
-    fun getDjDuckFraction(): Float =
-        settings.getFloat(KEY_DJ_DUCK_FRACTION, 0.2f).coerceIn(0.0f, 0.6f)
+    fun getDjDuckFraction(): Float = settings.getFloat(KEY_DJ_DUCK_FRACTION, 0.2f).coerceIn(0.0f, 0.6f)
 
     fun setDjDuckFraction(value: Float) {
         settings.putFloat(KEY_DJ_DUCK_FRACTION, value.coerceIn(0.0f, 0.6f))
@@ -495,12 +506,14 @@ class SettingsStore(private val settings: Settings) {
      * is not imported here to keep the data layer independent of the
      * stations layer.
      */
-    fun getDjTemplates(): String =
-        settings.getStringOrNull(KEY_DJ_TEMPLATES).orEmpty()
+    fun getDjTemplates(): String = settings.getStringOrNull(KEY_DJ_TEMPLATES).orEmpty()
 
     fun setDjTemplates(value: String) {
-        if (value.isEmpty()) settings.remove(KEY_DJ_TEMPLATES)
-        else settings.putString(KEY_DJ_TEMPLATES, value)
+        if (value.isEmpty()) {
+            settings.remove(KEY_DJ_TEMPLATES)
+        } else {
+            settings.putString(KEY_DJ_TEMPLATES, value)
+        }
     }
 
     // ---- Drive Mode trigger / quick-access settings ----
@@ -514,12 +527,14 @@ class SettingsStore(private val settings: Settings) {
      * configured — Drive Mode is only activated manually. Callers encode/
      * decode the list using RadioShedJson; this key stores the raw JSON blob.
      */
-    fun getDriveTriggers(): String =
-        settings.getStringOrNull(KEY_DRIVE_TRIGGERS).orEmpty()
+    fun getDriveTriggers(): String = settings.getStringOrNull(KEY_DRIVE_TRIGGERS).orEmpty()
 
     fun setDriveTriggers(value: String) {
-        if (value.isEmpty()) settings.remove(KEY_DRIVE_TRIGGERS)
-        else settings.putString(KEY_DRIVE_TRIGGERS, value)
+        if (value.isEmpty()) {
+            settings.remove(KEY_DRIVE_TRIGGERS)
+        } else {
+            settings.putString(KEY_DRIVE_TRIGGERS, value)
+        }
     }
 
     /**
@@ -528,13 +543,15 @@ class SettingsStore(private val settings: Settings) {
      * enforces this by calling `take(6)` on the incoming list before joining.
      * Default "" means the quick-list is empty (not configured).
      */
-    fun getDriveQuickList(): String =
-        settings.getStringOrNull(KEY_DRIVE_QUICKLIST).orEmpty()
+    fun getDriveQuickList(): String = settings.getStringOrNull(KEY_DRIVE_QUICKLIST).orEmpty()
 
     fun setDriveQuickList(ids: List<String>) {
         val joined = ids.take(6).joinToString(",")
-        if (joined.isEmpty()) settings.remove(KEY_DRIVE_QUICKLIST)
-        else settings.putString(KEY_DRIVE_QUICKLIST, joined)
+        if (joined.isEmpty()) {
+            settings.remove(KEY_DRIVE_QUICKLIST)
+        } else {
+            settings.putString(KEY_DRIVE_QUICKLIST, joined)
+        }
     }
 
     /**
@@ -548,16 +565,20 @@ class SettingsStore(private val settings: Settings) {
     fun getDriveButtons(): String {
         val raw = settings.getStringOrNull(KEY_DRIVE_BUTTONS)
         if (raw.isNullOrBlank()) return DRIVE_BUTTONS_DEFAULT
-        val filtered = raw.split(',')
-            .filter { it.trim() in DRIVE_BUTTON_IDS }
-            .joinToString(",")
+        val filtered =
+            raw.split(',')
+                .filter { it.trim() in DRIVE_BUTTON_IDS }
+                .joinToString(",")
         return filtered.ifBlank { DRIVE_BUTTONS_DEFAULT }
     }
 
     fun setDriveButtons(ids: List<String>) {
         val filtered = ids.map { it.trim() }.filter { it in DRIVE_BUTTON_IDS }
-        if (filtered.isEmpty()) settings.remove(KEY_DRIVE_BUTTONS)
-        else settings.putString(KEY_DRIVE_BUTTONS, filtered.joinToString(","))
+        if (filtered.isEmpty()) {
+            settings.remove(KEY_DRIVE_BUTTONS)
+        } else {
+            settings.putString(KEY_DRIVE_BUTTONS, filtered.joinToString(","))
+        }
     }
 
     /**
@@ -566,11 +587,20 @@ class SettingsStore(private val settings: Settings) {
      * schedule window closes). True by default — users who forget to tap "exit"
      * shouldn't stay stuck in the enlarged-tap-target layout indefinitely.
      */
-    fun getDriveAutoExit(): Boolean =
-        settings.getBoolean(KEY_DRIVE_AUTO_EXIT, true)
+    fun getDriveAutoExit(): Boolean = settings.getBoolean(KEY_DRIVE_AUTO_EXIT, true)
 
-    fun setDriveAutoExit(value: Boolean) =
-        settings.putBoolean(KEY_DRIVE_AUTO_EXIT, value)
+    fun setDriveAutoExit(value: Boolean) = settings.putBoolean(KEY_DRIVE_AUTO_EXIT, value)
+
+    /** JSON-serialized [com.visorcraft.radioshed.domain.DriveKeyBinding] list. */
+    fun getDriveKeyBindings(): String = settings.getStringOrNull(KEY_DRIVE_KEY_BINDINGS).orEmpty()
+
+    fun setDriveKeyBindings(value: String) {
+        if (value.isEmpty()) {
+            settings.remove(KEY_DRIVE_KEY_BINDINGS)
+        } else {
+            settings.putString(KEY_DRIVE_KEY_BINDINGS, value)
+        }
+    }
 
     /**
      * Wipe every user-portable preference key — used by the Settings
@@ -613,6 +643,7 @@ class SettingsStore(private val settings: Settings) {
             KEY_DJ_FREQUENCY_MINUTES, KEY_DJ_QUIET_START_MIN, KEY_DJ_QUIET_END_MIN,
             KEY_DJ_DUCK_FRACTION, KEY_DJ_TEMPLATES,
             KEY_DRIVE_TRIGGERS, KEY_DRIVE_QUICKLIST, KEY_DRIVE_BUTTONS, KEY_DRIVE_AUTO_EXIT,
+            KEY_DRIVE_KEY_BINDINGS,
         ).forEach { settings.remove(it) }
         // Reset wipes the underlying entries; mirror flows must
         // republish so live consumers (NowPlaying for driveMode /
@@ -635,6 +666,7 @@ class SettingsStore(private val settings: Settings) {
     val driveModeFlow: kotlinx.coroutines.flow.StateFlow<Boolean> = _driveModeFlow
 
     fun getDriveMode(): Boolean = settings.getBoolean(KEY_DRIVE_MODE, false)
+
     fun setDriveMode(enabled: Boolean) {
         settings.putBoolean(KEY_DRIVE_MODE, enabled)
         _driveModeFlow.value = enabled
@@ -643,8 +675,9 @@ class SettingsStore(private val settings: Settings) {
     // ---- Connectivity ----
 
     fun getConnectivityPolicy(): ConnectivityPolicy {
-        val raw = settings.getStringOrNull(KEY_CONNECTIVITY_POLICY)
-            ?: return ConnectivityPolicy.Manual
+        val raw =
+            settings.getStringOrNull(KEY_CONNECTIVITY_POLICY)
+                ?: return ConnectivityPolicy.Manual
         return runCatching { ConnectivityPolicy.valueOf(raw) }.getOrDefault(ConnectivityPolicy.Manual)
     }
 
@@ -662,8 +695,9 @@ class SettingsStore(private val settings: Settings) {
     fun getServicePolicyOverride(
         service: com.visorcraft.radioshed.source.NetworkService,
     ): com.visorcraft.radioshed.source.ServicePolicyOverride {
-        val raw = settings.getStringOrNull(keyForServiceOverride(service))
-            ?: return com.visorcraft.radioshed.source.ServicePolicyOverride.Inherit
+        val raw =
+            settings.getStringOrNull(keyForServiceOverride(service))
+                ?: return com.visorcraft.radioshed.source.ServicePolicyOverride.Inherit
         return com.visorcraft.radioshed.source.ServicePolicyOverride.fromStorage(raw)
     }
 
@@ -681,35 +715,40 @@ class SettingsStore(private val settings: Settings) {
         }
     }
 
-    private fun keyForServiceOverride(
-        service: com.visorcraft.radioshed.source.NetworkService,
-    ): String = when (service) {
-        com.visorcraft.radioshed.source.NetworkService.CoverArt -> KEY_NETPOLICY_OVERRIDE_COVERART
-        com.visorcraft.radioshed.source.NetworkService.Lyrics -> KEY_NETPOLICY_OVERRIDE_LYRICS
-    }
+    private fun keyForServiceOverride(service: com.visorcraft.radioshed.source.NetworkService): String =
+        when (service) {
+            com.visorcraft.radioshed.source.NetworkService.CoverArt -> KEY_NETPOLICY_OVERRIDE_COVERART
+            com.visorcraft.radioshed.source.NetworkService.Lyrics -> KEY_NETPOLICY_OVERRIDE_LYRICS
+        }
 
     // ---- Onboarding state ----
 
     fun isOnboardingComplete(): Boolean = settings.getBoolean(KEY_ONBOARDING_DONE, false)
+
     fun setOnboardingComplete(done: Boolean) = settings.putBoolean(KEY_ONBOARDING_DONE, done)
 
     // ---- Last station ----
 
     fun getLastStationId(): Long? =
-        if (settings.hasKey(KEY_LAST_STATION_ID)) settings.getLong(KEY_LAST_STATION_ID, -1L)
-            .takeIf { it >= 0 } else null
+        if (settings.hasKey(KEY_LAST_STATION_ID)) {
+            settings.getLong(KEY_LAST_STATION_ID, -1L)
+                .takeIf { it >= 0 }
+        } else {
+            null
+        }
 
     fun setLastStationId(id: Long?) {
-        if (id == null) settings.remove(KEY_LAST_STATION_ID)
-        else settings.putLong(KEY_LAST_STATION_ID, id)
+        if (id == null) {
+            settings.remove(KEY_LAST_STATION_ID)
+        } else {
+            settings.putLong(KEY_LAST_STATION_ID, id)
+        }
     }
 
     /** Auto-resume the last station on app launch. Off by default. */
-    fun getAutoResumeLastStation(): Boolean =
-        settings.getBoolean(KEY_AUTO_RESUME_STATION, false)
+    fun getAutoResumeLastStation(): Boolean = settings.getBoolean(KEY_AUTO_RESUME_STATION, false)
 
-    fun setAutoResumeLastStation(enabled: Boolean) =
-        settings.putBoolean(KEY_AUTO_RESUME_STATION, enabled)
+    fun setAutoResumeLastStation(enabled: Boolean) = settings.putBoolean(KEY_AUTO_RESUME_STATION, enabled)
 
     // ---- Auto-backup ----
 
@@ -721,15 +760,15 @@ class SettingsStore(private val settings: Settings) {
      * shouldn't be opt-out.
      */
     fun getAutoBackupEnabled(): Boolean = settings.getBoolean(KEY_AUTO_BACKUP, false)
+
     fun setAutoBackupEnabled(enabled: Boolean) = settings.putBoolean(KEY_AUTO_BACKUP, enabled)
 
     /** When on, App.kt rescans folders whose filesystem mtime
      *  changed since the last scan. Off by default — keeps cold
      *  launches snappy on libraries that don't get edited often. */
-    fun getAutoRescanOnLaunch(): Boolean =
-        settings.getBoolean(KEY_AUTO_RESCAN_ON_LAUNCH, false)
-    fun setAutoRescanOnLaunch(enabled: Boolean) =
-        settings.putBoolean(KEY_AUTO_RESCAN_ON_LAUNCH, enabled)
+    fun getAutoRescanOnLaunch(): Boolean = settings.getBoolean(KEY_AUTO_RESCAN_ON_LAUNCH, false)
+
+    fun setAutoRescanOnLaunch(enabled: Boolean) = settings.putBoolean(KEY_AUTO_RESCAN_ON_LAUNCH, enabled)
 
     /**
      * Lyrics font-size multiplier. 1.0 is the Material baseline; the
@@ -739,8 +778,7 @@ class SettingsStore(private val settings: Settings) {
      * launch. Coerced on read so a corrupted value can't blow up
      * Compose's text-rendering math.
      */
-    fun getLyricsScale(): Float =
-        settings.getFloat(KEY_LYRICS_SCALE, 1f).coerceIn(0.7f, 1.6f)
+    fun getLyricsScale(): Float = settings.getFloat(KEY_LYRICS_SCALE, 1f).coerceIn(0.7f, 1.6f)
 
     fun setLyricsScale(value: Float) {
         settings.putFloat(KEY_LYRICS_SCALE, value.coerceIn(0.7f, 1.6f))
@@ -754,13 +792,14 @@ class SettingsStore(private val settings: Settings) {
      * is Off. Per-station crossfade (with true overlap) is configured
      * in PlaybackRule.crossfade and handled by the audio engine.
      */
-    fun getEndFadeSec(): Int =
-        settings.getInt(KEY_END_FADE_SEC, 0).coerceIn(0, 10)
+    fun getEndFadeSec(): Int = settings.getInt(KEY_END_FADE_SEC, 0).coerceIn(0, 10)
+
     fun setEndFadeSec(seconds: Int) {
         settings.putInt(KEY_END_FADE_SEC, seconds.coerceIn(0, 10))
     }
 
     fun getLastAutoBackupAt(): Long = settings.getLong(KEY_AUTO_BACKUP_LAST, 0L)
+
     fun setLastAutoBackupAt(ts: Long) = settings.putLong(KEY_AUTO_BACKUP_LAST, ts)
 
     // ---- One-shot migrations (set on first run, never re-run) ----
@@ -771,19 +810,19 @@ class SettingsStore(private val settings: Settings) {
      * one canonical "Rock" so the Genres tab doesn't show duplicates.
      */
     fun getGenresCanonicalized(): Boolean = settings.getBoolean(KEY_GENRES_CANON, false)
+
     fun setGenresCanonicalized(done: Boolean) = settings.putBoolean(KEY_GENRES_CANON, done)
 
     // ---- File-mode browser opt-in ----
 
-    fun getFileModeBrowserEnabled(): Boolean =
-        settings.getBoolean(KEY_FILE_MODE_BROWSER, false)
+    fun getFileModeBrowserEnabled(): Boolean = settings.getBoolean(KEY_FILE_MODE_BROWSER, false)
 
-    fun setFileModeBrowserEnabled(enabled: Boolean) =
-        settings.putBoolean(KEY_FILE_MODE_BROWSER, enabled)
+    fun setFileModeBrowserEnabled(enabled: Boolean) = settings.putBoolean(KEY_FILE_MODE_BROWSER, enabled)
 
     // ---- ReplayGain ----
 
     fun getReplayGainEnabled(): Boolean = settings.getBoolean(KEY_REPLAY_GAIN, true)
+
     fun setReplayGainEnabled(enabled: Boolean) = settings.putBoolean(KEY_REPLAY_GAIN, enabled)
 
     /**
@@ -793,19 +832,22 @@ class SettingsStore(private val settings: Settings) {
      * clipping). Untagged tracks ignore this value.
      */
     fun getReplayGainPreampDb(): Float = settings.getFloat(KEY_REPLAY_GAIN_PREAMP, 0f)
+
     fun setReplayGainPreampDb(dB: Float) = settings.putFloat(KEY_REPLAY_GAIN_PREAMP, dB)
 
     // ---- Equalizer ----
 
     fun getEqEnabled(): Boolean = settings.getBoolean(KEY_EQ_ENABLED, false)
+
     fun setEqEnabled(enabled: Boolean) = settings.putBoolean(KEY_EQ_ENABLED, enabled)
 
     /** Per-band gain in dB. Returns 0f for any band that hasn't been set. */
-    fun getEqBandGain(bandIndex: Int): Float =
-        settings.getFloat("$KEY_EQ_BAND_PREFIX$bandIndex", 0f)
+    fun getEqBandGain(bandIndex: Int): Float = settings.getFloat("$KEY_EQ_BAND_PREFIX$bandIndex", 0f)
 
-    fun setEqBandGain(bandIndex: Int, gainDb: Float) =
-        settings.putFloat("$KEY_EQ_BAND_PREFIX$bandIndex", gainDb)
+    fun setEqBandGain(
+        bandIndex: Int,
+        gainDb: Float,
+    ) = settings.putFloat("$KEY_EQ_BAND_PREFIX$bandIndex", gainDb)
 
     /**
      * User-saved EQ presets, stored as a JSON array of
@@ -825,8 +867,11 @@ class SettingsStore(private val settings: Settings) {
                 if (parts.size < 2) return@mapNotNull null
                 val name = parts[0]
                 val gains = parts.drop(1).mapNotNull { it.toFloatOrNull() }
-                if (name.isBlank() || gains.isEmpty()) null
-                else CustomEqPreset(name, gains)
+                if (name.isBlank() || gains.isEmpty()) {
+                    null
+                } else {
+                    CustomEqPreset(name, gains)
+                }
             }
     }
 
@@ -845,19 +890,24 @@ class SettingsStore(private val settings: Settings) {
     }
 
     private fun writeCustomEqPresets(presets: List<CustomEqPreset>) {
-        val raw = presets.joinToString("\n") { p ->
-            buildString {
-                append(p.name)
-                p.gainsDb.forEach { append('|').append(it.toString()) }
+        val raw =
+            presets.joinToString("\n") { p ->
+                buildString {
+                    append(p.name)
+                    p.gainsDb.forEach { append('|').append(it.toString()) }
+                }
             }
+        if (raw.isEmpty()) {
+            settings.remove(KEY_EQ_CUSTOM_PRESETS)
+        } else {
+            settings.putString(KEY_EQ_CUSTOM_PRESETS, raw)
         }
-        if (raw.isEmpty()) settings.remove(KEY_EQ_CUSTOM_PRESETS)
-        else settings.putString(KEY_EQ_CUSTOM_PRESETS, raw)
     }
 
     // ---- Library Browser persisted state ----
 
     /** Tab index restored on entry. 0 = Songs, 1 = Artists, 2 = Albums. */
+
     /**
      * Persisted tab index for the Library Browser. The upper bound
      * was 2 from the original three-tab layout (Songs / Artists /
@@ -869,39 +919,37 @@ class SettingsStore(private val settings: Settings) {
      * or comically-large stored values from blowing up.
      */
     fun getLibraryTabIndex(): Int = settings.getInt(KEY_LIB_TAB, 0).coerceAtLeast(0)
+
     fun setLibraryTabIndex(index: Int) = settings.putInt(KEY_LIB_TAB, index)
 
     /** Songs tab sort order — string-encoded enum name. */
     fun getLibrarySongSort(): String = settings.getStringOrNull(KEY_LIB_SONG_SORT) ?: "TitleAsc"
+
     fun setLibrarySongSort(sort: String) = settings.putString(KEY_LIB_SONG_SORT, sort)
 
     /** Artists tab sort order — string-encoded enum name. */
-    fun getLibraryArtistSort(): String =
-        settings.getStringOrNull(KEY_LIB_ARTIST_SORT) ?: "NameAsc"
-    fun setLibraryArtistSort(sort: String) =
-        settings.putString(KEY_LIB_ARTIST_SORT, sort)
+    fun getLibraryArtistSort(): String = settings.getStringOrNull(KEY_LIB_ARTIST_SORT) ?: "NameAsc"
+
+    fun setLibraryArtistSort(sort: String) = settings.putString(KEY_LIB_ARTIST_SORT, sort)
 
     /** Albums tab sort order — string-encoded enum name. */
-    fun getLibraryAlbumSort(): String =
-        settings.getStringOrNull(KEY_LIB_ALBUM_SORT) ?: "TitleAsc"
-    fun setLibraryAlbumSort(sort: String) =
-        settings.putString(KEY_LIB_ALBUM_SORT, sort)
+    fun getLibraryAlbumSort(): String = settings.getStringOrNull(KEY_LIB_ALBUM_SORT) ?: "TitleAsc"
+
+    fun setLibraryAlbumSort(sort: String) = settings.putString(KEY_LIB_ALBUM_SORT, sort)
 
     /** Genres tab sort order — string-encoded enum name. */
-    fun getLibraryGenreSort(): String =
-        settings.getStringOrNull(KEY_LIB_GENRE_SORT) ?: "NameAsc"
-    fun setLibraryGenreSort(sort: String) =
-        settings.putString(KEY_LIB_GENRE_SORT, sort)
+    fun getLibraryGenreSort(): String = settings.getStringOrNull(KEY_LIB_GENRE_SORT) ?: "NameAsc"
+
+    fun setLibraryGenreSort(sort: String) = settings.putString(KEY_LIB_GENRE_SORT, sort)
 
     /**
      * Sort preference for the in-app File Manager. Persisted so the
      * user's chosen ordering carries between sessions; same shape as
      * [getLibrarySongSort] just under a different key.
      */
-    fun getFileBrowserSort(): String =
-        settings.getStringOrNull(KEY_FILE_BROWSER_SORT) ?: "NameAsc"
-    fun setFileBrowserSort(sort: String) =
-        settings.putString(KEY_FILE_BROWSER_SORT, sort)
+    fun getFileBrowserSort(): String = settings.getStringOrNull(KEY_FILE_BROWSER_SORT) ?: "NameAsc"
+
+    fun setFileBrowserSort(sort: String) = settings.putString(KEY_FILE_BROWSER_SORT, sort)
 
     /**
      * User-pinned folders for the File Manager bookmark bar. Stored as
@@ -915,12 +963,18 @@ class SettingsStore(private val settings: Settings) {
         return raw.split('\n')
             .mapNotNull { line ->
                 val tab = line.indexOf('\t')
-                if (tab <= 0 || tab == line.lastIndex) null
-                else line.substring(0, tab) to line.substring(tab + 1)
+                if (tab <= 0 || tab == line.lastIndex) {
+                    null
+                } else {
+                    line.substring(0, tab) to line.substring(tab + 1)
+                }
             }
     }
 
-    fun pinFileBrowserFolder(name: String, path: String) {
+    fun pinFileBrowserFolder(
+        name: String,
+        path: String,
+    ) {
         if (path.isBlank()) return
         // Sanitize the delimiter chars out of the display name so a
         // folder whose name happens to contain `\t` or `\n` (rare on
@@ -1043,7 +1097,7 @@ class SettingsStore(private val settings: Settings) {
             // Drive Mode trigger/quick-list/button-bar blobs. Each is a
             // plain String; JSON decode lives with callers (same convention
             // as KEY_DJ_TEMPLATES). Absent when unset = use defaults.
-            KEY_DRIVE_TRIGGERS, KEY_DRIVE_QUICKLIST, KEY_DRIVE_BUTTONS,
+            KEY_DRIVE_TRIGGERS, KEY_DRIVE_QUICKLIST, KEY_DRIVE_BUTTONS, KEY_DRIVE_KEY_BINDINGS,
         ).forEach { key ->
             settings.getStringOrNull(key)?.let {
                 out[key] = com.visorcraft.radioshed.source.BackupSettingValue.Str(it)
@@ -1066,22 +1120,26 @@ class SettingsStore(private val settings: Settings) {
             KEY_DRIVE_AUTO_EXIT,
         ).forEach { key ->
             if (settings.hasKey(key)) {
-                out[key] = com.visorcraft.radioshed.source.BackupSettingValue.Bool(
-                    settings.getBoolean(key, false),
-                )
+                out[key] =
+                    com.visorcraft.radioshed.source.BackupSettingValue.Bool(
+                        settings.getBoolean(key, false),
+                    )
             }
         }
         // Floats
         listOf(
-            KEY_USER_VOLUME, KEY_REPLAY_GAIN_PREAMP,
-            KEY_FONT_SCALE, KEY_LYRICS_SCALE,
+            KEY_USER_VOLUME,
+            KEY_REPLAY_GAIN_PREAMP,
+            KEY_FONT_SCALE,
+            KEY_LYRICS_SCALE,
             KEY_PLAYBACK_SPEED,
             KEY_DJ_DUCK_FRACTION,
         ).forEach { key ->
             if (settings.hasKey(key)) {
-                out[key] = com.visorcraft.radioshed.source.BackupSettingValue.FloatValue(
-                    settings.getFloat(key, 0f),
-                )
+                out[key] =
+                    com.visorcraft.radioshed.source.BackupSettingValue.FloatValue(
+                        settings.getFloat(key, 0f),
+                    )
             }
         }
         // Ints
@@ -1097,9 +1155,10 @@ class SettingsStore(private val settings: Settings) {
             KEY_DJ_QUIET_START_MIN, KEY_DJ_QUIET_END_MIN,
         ).forEach { key ->
             if (settings.hasKey(key)) {
-                out[key] = com.visorcraft.radioshed.source.BackupSettingValue.IntValue(
-                    settings.getInt(key, 0),
-                )
+                out[key] =
+                    com.visorcraft.radioshed.source.BackupSettingValue.IntValue(
+                        settings.getInt(key, 0),
+                    )
             }
         }
         return out
@@ -1183,38 +1242,43 @@ class SettingsStore(private val settings: Settings) {
      * known list — those flow through restore as-is so a newer bundle
      * adding a new key isn't dropped on the floor.
      */
-    private fun expectedTypeForKey(key: String): SettingType? = when (key) {
-        KEY_THEME_MODE, KEY_CONNECTIVITY_POLICY,
-        KEY_LIB_ARTIST_SORT, KEY_LIB_ALBUM_SORT, KEY_LIB_GENRE_SORT,
-        KEY_FILE_BROWSER_SORT, KEY_SEARCH_SCOPE,
-        KEY_ALBUM_TRACK_SORT, KEY_ARTIST_TRACK_SORT, KEY_GENRE_TRACK_SORT,
-        KEY_NOW_PLAYING_LAYOUT,
-        KEY_FILE_BROWSER_PINS,
-        KEY_THEME_COLOR_SOURCE,
-        KEY_NETPOLICY_OVERRIDE_COVERART, KEY_NETPOLICY_OVERRIDE_LYRICS,
-        KEY_STATIONS_SORT,
-        KEY_SUBSONIC_URL, KEY_SUBSONIC_USERNAME,
-        KEY_DJ_FREQUENCY, KEY_DJ_TEMPLATES,
-        KEY_DRIVE_TRIGGERS, KEY_DRIVE_QUICKLIST, KEY_DRIVE_BUTTONS -> SettingType.STR
-        KEY_MATERIAL_YOU, KEY_REDUCE_MOTION,
-        KEY_REPLAY_GAIN, KEY_AUTO_RESUME_STATION, KEY_AUTO_BACKUP,
-        KEY_AUTO_RESCAN_ON_LAUNCH, KEY_EQ_ENABLED,
-        KEY_STATIONS_HIDE_BUILTINS, KEY_SLEEP_STOP_ON_EXPIRE,
-        KEY_KEEP_SCREEN_ON, KEY_AUTO_FETCH_LYRICS, KEY_HAPTICS_ENABLED,
-        KEY_LISTENBRAINZ_ENABLED,
-        KEY_DJ_ENABLED,
-        KEY_DRIVE_AUTO_EXIT -> SettingType.BOOL
-        KEY_USER_VOLUME, KEY_REPLAY_GAIN_PREAMP,
-        KEY_FONT_SCALE, KEY_LYRICS_SCALE, KEY_PLAYBACK_SPEED,
-        KEY_DJ_DUCK_FRACTION -> SettingType.FLOAT
-        KEY_END_FADE_SEC, KEY_STATIONS_TILE_SIZE,
-        KEY_LYRICS_SYNC_OFFSET, KEY_STATS_WINDOW_DAYS,
-        KEY_BACKUP_RETENTION,
-        KEY_THEME_SEED, KEY_ACCENT_SEED,
-        KEY_DJ_FREQUENCY_N, KEY_DJ_FREQUENCY_MINUTES,
-        KEY_DJ_QUIET_START_MIN, KEY_DJ_QUIET_END_MIN -> SettingType.INT
-        else -> null
-    }
+    private fun expectedTypeForKey(key: String): SettingType? =
+        when (key) {
+            KEY_THEME_MODE, KEY_CONNECTIVITY_POLICY,
+            KEY_LIB_ARTIST_SORT, KEY_LIB_ALBUM_SORT, KEY_LIB_GENRE_SORT,
+            KEY_FILE_BROWSER_SORT, KEY_SEARCH_SCOPE,
+            KEY_ALBUM_TRACK_SORT, KEY_ARTIST_TRACK_SORT, KEY_GENRE_TRACK_SORT,
+            KEY_NOW_PLAYING_LAYOUT,
+            KEY_FILE_BROWSER_PINS,
+            KEY_THEME_COLOR_SOURCE,
+            KEY_NETPOLICY_OVERRIDE_COVERART, KEY_NETPOLICY_OVERRIDE_LYRICS,
+            KEY_STATIONS_SORT,
+            KEY_SUBSONIC_URL, KEY_SUBSONIC_USERNAME,
+            KEY_DJ_FREQUENCY, KEY_DJ_TEMPLATES,
+            KEY_DRIVE_TRIGGERS, KEY_DRIVE_QUICKLIST, KEY_DRIVE_BUTTONS, KEY_DRIVE_KEY_BINDINGS,
+            -> SettingType.STR
+            KEY_MATERIAL_YOU, KEY_REDUCE_MOTION,
+            KEY_REPLAY_GAIN, KEY_AUTO_RESUME_STATION, KEY_AUTO_BACKUP,
+            KEY_AUTO_RESCAN_ON_LAUNCH, KEY_EQ_ENABLED,
+            KEY_STATIONS_HIDE_BUILTINS, KEY_SLEEP_STOP_ON_EXPIRE,
+            KEY_KEEP_SCREEN_ON, KEY_AUTO_FETCH_LYRICS, KEY_HAPTICS_ENABLED,
+            KEY_LISTENBRAINZ_ENABLED,
+            KEY_DJ_ENABLED,
+            KEY_DRIVE_AUTO_EXIT,
+            -> SettingType.BOOL
+            KEY_USER_VOLUME, KEY_REPLAY_GAIN_PREAMP,
+            KEY_FONT_SCALE, KEY_LYRICS_SCALE, KEY_PLAYBACK_SPEED,
+            KEY_DJ_DUCK_FRACTION,
+            -> SettingType.FLOAT
+            KEY_END_FADE_SEC, KEY_STATIONS_TILE_SIZE,
+            KEY_LYRICS_SYNC_OFFSET, KEY_STATS_WINDOW_DAYS,
+            KEY_BACKUP_RETENTION,
+            KEY_THEME_SEED, KEY_ACCENT_SEED,
+            KEY_DJ_FREQUENCY_N, KEY_DJ_FREQUENCY_MINUTES,
+            KEY_DJ_QUIET_START_MIN, KEY_DJ_QUIET_END_MIN,
+            -> SettingType.INT
+            else -> null
+        }
 
     companion object {
         const val KEY_THEME_MODE = "ui.themeMode"
@@ -1284,6 +1348,7 @@ class SettingsStore(private val settings: Settings) {
         const val KEY_END_FADE_SEC = "audio.endFadeSec"
         const val KEY_LYRICS_SCALE = "ui.lyricsScale"
         const val KEY_DRIVE_MODE = "ui.driveMode"
+
         // ---- DJ ----
         const val KEY_DJ_ENABLED = "dj.enabled"
         const val KEY_DJ_FREQUENCY = "dj.frequency"
@@ -1292,22 +1357,32 @@ class SettingsStore(private val settings: Settings) {
         const val KEY_DJ_QUIET_START_MIN = "dj.quietStartMin"
         const val KEY_DJ_QUIET_END_MIN = "dj.quietEndMin"
         const val KEY_DJ_DUCK_FRACTION = "dj.duckFraction"
+
         /** Empty string = use DEFAULT_DJ_TEMPLATES from stations/DjTemplate.kt. */
         const val KEY_DJ_TEMPLATES = "dj.templates"
+
         /** Valid stored values for KEY_DJ_FREQUENCY. */
         val DJ_FREQUENCY_VALUES = setOf("off", "every", "every_n", "minutes", "station_change")
 
         // ---- Drive Mode ----
         /** JSON-serialized List<DriveModeTrigger>. Empty = no auto triggers. */
         const val KEY_DRIVE_TRIGGERS = "drive.triggers"
+
         /** Comma-joined station ids for Drive Mode quick-access (max 6). */
         const val KEY_DRIVE_QUICKLIST = "drive.quickList"
+
         /** Comma-joined transport action ids for the Drive Mode button bar. */
         const val KEY_DRIVE_BUTTONS = "drive.buttons"
+
         /** When true, Drive Mode exits automatically when no trigger condition is active. */
         const val KEY_DRIVE_AUTO_EXIT = "drive.autoExit"
+
+        /** JSON-serialized steering-wheel / media-key bindings for Drive Mode. */
+        const val KEY_DRIVE_KEY_BINDINGS = "drive.keyBindings"
+
         /** Default Drive Mode button bar ids when none are configured. */
         const val DRIVE_BUTTONS_DEFAULT = "previous,play_pause,next,station_picker"
+
         /**
          * Canonical ordered list of the Drive Mode transport action ids — the
          * single source of truth for both the allowed-id set (below) and the
@@ -1315,18 +1390,27 @@ class SettingsStore(private val settings: Settings) {
          * its own (id → label) lookup, failing fast if any id lacks a label, so
          * adding an id here without a matching label breaks visibly.
          */
-        val DRIVE_BUTTON_ID_ORDER: List<String> = listOf(
-            "previous", "play_pause", "next", "station_picker", "voice_search", "mute",
-        )
+        val DRIVE_BUTTON_ID_ORDER: List<String> =
+            listOf(
+                "previous",
+                "play_pause",
+                "next",
+                "station_picker",
+                "voice_search",
+                "mute",
+            )
+
         /** Allowed action ids for the Drive Mode button bar. Derived from
          *  [DRIVE_BUTTON_ID_ORDER] so the order list stays the one place ids live. */
         val DRIVE_BUTTON_IDS = DRIVE_BUTTON_ID_ORDER.toSet()
+
         /** Cadence for the auto-backup background export. 7 days = once
          *  per week, which matches typical user back-up cadence
          *  expectations (Google's auto-backup, Time Machine, etc.). */
         const val AUTO_BACKUP_INTERVAL_MS = 7L * 24L * 60L * 60L * 1_000L
         const val KEY_SEARCH_HISTORY = "search.recentQueries"
         const val SEARCH_HISTORY_CAP = 10
+
         /** Bookmarks-bar capacity. 12 keeps the row scannable at a
          *  glance — beyond that the user is better off using
          *  "Add as music folder" (which makes the folder a first-class
@@ -1336,23 +1420,24 @@ class SettingsStore(private val settings: Settings) {
         /** Keys we never accept from a backup bundle, even if a
          *  malformed import tries. Per-device state + one-shot
          *  migration flags belong here. */
-        val BLOCKED_RESTORE_KEYS = setOf(
-            // Drive Mode's active flag is per-session runtime state — set by
-            // the BT/schedule triggers or the manual toggle — not a durable
-            // preference. Restoring a bundle captured mid-drive must never
-            // flip a desk-bound device into Drive Mode. (The trigger CONFIG
-            // keys DRIVE_TRIGGERS / QUICKLIST / BUTTONS / AUTO_EXIT ARE
-            // preferences and stay in the dump.)
-            KEY_DRIVE_MODE,
-            KEY_LAST_STATION_ID,
-            KEY_AUTO_BACKUP_LAST,
-            KEY_GENRES_CANON,
-            KEY_LIB_TAB,
-            KEY_LIB_SONG_SORT,
-            KEY_SEARCH_HISTORY,
-            KEY_EQ_CUSTOM_PRESETS,  // restored separately via the EQ presets list
-            KEY_ONBOARDING_DONE,    // user should re-grant permissions on a fresh install
-            KEY_FILE_MODE_BROWSER,
-        )
+        val BLOCKED_RESTORE_KEYS =
+            setOf(
+                // Drive Mode's active flag is per-session runtime state — set by
+                // the BT/schedule triggers or the manual toggle — not a durable
+                // preference. Restoring a bundle captured mid-drive must never
+                // flip a desk-bound device into Drive Mode. (The trigger CONFIG
+                // keys DRIVE_TRIGGERS / QUICKLIST / BUTTONS / AUTO_EXIT ARE
+                // preferences and stay in the dump.)
+                KEY_DRIVE_MODE,
+                KEY_LAST_STATION_ID,
+                KEY_AUTO_BACKUP_LAST,
+                KEY_GENRES_CANON,
+                KEY_LIB_TAB,
+                KEY_LIB_SONG_SORT,
+                KEY_SEARCH_HISTORY,
+                KEY_EQ_CUSTOM_PRESETS, // restored separately via the EQ presets list
+                KEY_ONBOARDING_DONE, // user should re-grant permissions on a fresh install
+                KEY_FILE_MODE_BROWSER,
+            )
     }
 }

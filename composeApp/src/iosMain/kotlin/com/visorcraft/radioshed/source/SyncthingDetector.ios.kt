@@ -9,6 +9,8 @@ package com.visorcraft.radioshed.source
  */
 actual class SyncthingDetector {
     actual fun isInstalled(): Boolean = false
+
     actual fun installedPackage(): String? = null
+
     actual fun launch(): Boolean = false
 }

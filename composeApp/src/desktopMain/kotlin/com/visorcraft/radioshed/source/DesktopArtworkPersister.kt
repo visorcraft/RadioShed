@@ -16,34 +16,35 @@ import java.security.MessageDigest
  * easy to clean by glob.
  */
 class DesktopArtworkPersister : ArtworkPersister {
+    override suspend fun persist(bytes: ByteArray): String? =
+        withContext(IODispatcher) {
+            if (bytes.isEmpty()) return@withContext null
+            runCatching {
+                val dir = appArtworkDir()
+                Files.createDirectories(dir)
+                val hex = sha256Hex(bytes)
+                val path = dir.resolve("$hex.jpg")
+                if (!Files.exists(path)) {
+                    Files.write(path, bytes)
+                }
+                path.toUri().toString()
+            }.getOrNull()
+        }
 
-    override suspend fun persist(bytes: ByteArray): String? = withContext(IODispatcher) {
-        if (bytes.isEmpty()) return@withContext null
-        runCatching {
+    override suspend fun clearAll(): Int =
+        withContext(IODispatcher) {
             val dir = appArtworkDir()
-            Files.createDirectories(dir)
-            val hex = sha256Hex(bytes)
-            val path = dir.resolve("$hex.jpg")
-            if (!Files.exists(path)) {
-                Files.write(path, bytes)
-            }
-            path.toUri().toString()
-        }.getOrNull()
-    }
-
-    override suspend fun clearAll(): Int = withContext(IODispatcher) {
-        val dir = appArtworkDir()
-        if (!Files.exists(dir)) return@withContext 0
-        var count = 0
-        runCatching {
-            Files.list(dir).use { stream ->
-                stream.forEach { file ->
-                    if (Files.deleteIfExists(file)) count++
+            if (!Files.exists(dir)) return@withContext 0
+            var count = 0
+            runCatching {
+                Files.list(dir).use { stream ->
+                    stream.forEach { file ->
+                        if (Files.deleteIfExists(file)) count++
+                    }
                 }
             }
+            count
         }
-        count
-    }
 
     private fun sha256Hex(bytes: ByteArray): String {
         val digest = MessageDigest.getInstance("SHA-256").digest(bytes)

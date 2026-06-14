@@ -8,9 +8,11 @@ import androidx.compose.runtime.remember
  * devices anyway, so the gate reports granted and the request is a no-op.
  */
 @Composable
-actual fun rememberBluetoothConnectGate(): BluetoothConnectGate = remember {
-    object : BluetoothConnectGate {
-        override val granted: Boolean = true
-        override fun request() { /* no-op on desktop */ }
+actual fun rememberBluetoothConnectGate(): BluetoothConnectGate =
+    remember {
+        object : BluetoothConnectGate {
+            override val granted: Boolean = true
+
+            override fun request() { /* no-op on desktop */ }
+        }
     }
-}

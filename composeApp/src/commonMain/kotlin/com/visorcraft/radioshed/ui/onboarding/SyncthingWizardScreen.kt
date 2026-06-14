@@ -3,7 +3,6 @@ package com.visorcraft.radioshed.ui.onboarding
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -19,7 +18,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -115,19 +113,21 @@ fun SyncthingWizardScreen(
                 navigationIcon = {
                     TextButton(onClick = onBack) { Text("Close") }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                ),
+                colors =
+                    TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                    ),
             )
         },
         containerColor = MaterialTheme.colorScheme.background,
     ) { padding ->
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(horizontal = 20.dp)
-                .verticalScroll(rememberScrollState()),
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .padding(horizontal = 20.dp)
+                    .verticalScroll(rememberScrollState()),
         ) {
             Spacer(Modifier.height(8.dp))
             ProgressBar(currentStep = step)
@@ -135,63 +135,69 @@ fun SyncthingWizardScreen(
 
             when (step) {
                 WizardStep.Welcome -> WelcomeBody()
-                WizardStep.InstallPhone -> InstallPhoneBody(
-                    installed = installed,
-                    onRecheck = { installed = detector.isInstalled() },
-                    onLaunch = { detector.launch() },
-                )
+                WizardStep.InstallPhone ->
+                    InstallPhoneBody(
+                        installed = installed,
+                        onRecheck = { installed = detector.isInstalled() },
+                        onLaunch = { detector.launch() },
+                    )
                 WizardStep.InstallPc -> InstallPcBody()
-                WizardStep.PairDevices -> PairDevicesBody(
-                    installed = installed,
-                    onLaunchSyncthing = { detector.launch() },
-                )
-                WizardStep.AddFolder -> AddFolderBody(
-                    installed = installed,
-                    onLaunchSyncthing = { detector.launch() },
-                )
-                WizardStep.PickInRadioShed -> PickInRadioShedBody(
-                    pickedFolder = pickedFolder,
-                    pickedFolderName = pickedFolderName,
-                    scanStatus = scanStatus,
-                    addError = addError,
-                    scanning = scanning,
-                    onPickFolder = { folderPickerOpen = true },
-                    onConfirm = {
-                        val path = pickedFolder ?: return@PickInRadioShedBody
-                        if (scanning) return@PickInRadioShedBody
-                        scanning = true
-                        scope.launch {
-                            runCatching {
-                                // Re-use the existing folder row when the
-                                // user re-runs the wizard against the same
-                                // path. The folder.uri column is UNIQUE,
-                                // so a naked .insert() on the second run
-                                // throws SQLite — same defensive pattern
-                                // as Onboarding.Folder step.
-                                val existing = folderRepo.getByUri(path)
-                                val id = existing?.id ?: folderRepo.insert(
-                                    displayName = pickedFolderName?.ifBlank { null }
-                                        ?: path.substringAfterLast('/').ifBlank { path },
-                                    uri = path,
-                                    recursive = true,
-                                )
-                                scanner.scanFolder(id).collect { ev ->
-                                    scanStatus = ev
-                                    if (ev is ScanProgress.Completed
-                                        || ev is ScanProgress.Failed
-                                    ) {
-                                        // The wizard's last visible state
-                                        // before bouncing back to settings.
-                                        onComplete()
+                WizardStep.PairDevices ->
+                    PairDevicesBody(
+                        installed = installed,
+                        onLaunchSyncthing = { detector.launch() },
+                    )
+                WizardStep.AddFolder ->
+                    AddFolderBody(
+                        installed = installed,
+                        onLaunchSyncthing = { detector.launch() },
+                    )
+                WizardStep.PickInRadioShed ->
+                    PickInRadioShedBody(
+                        pickedFolder = pickedFolder,
+                        pickedFolderName = pickedFolderName,
+                        scanStatus = scanStatus,
+                        addError = addError,
+                        scanning = scanning,
+                        onPickFolder = { folderPickerOpen = true },
+                        onConfirm = {
+                            val path = pickedFolder ?: return@PickInRadioShedBody
+                            if (scanning) return@PickInRadioShedBody
+                            scanning = true
+                            scope.launch {
+                                runCatching {
+                                    // Re-use the existing folder row when the
+                                    // user re-runs the wizard against the same
+                                    // path. The folder.uri column is UNIQUE,
+                                    // so a naked .insert() on the second run
+                                    // throws SQLite — same defensive pattern
+                                    // as Onboarding.Folder step.
+                                    val existing = folderRepo.getByUri(path)
+                                    val id =
+                                        existing?.id ?: folderRepo.insert(
+                                            displayName =
+                                                pickedFolderName?.ifBlank { null }
+                                                    ?: path.substringAfterLast('/').ifBlank { path },
+                                            uri = path,
+                                            recursive = true,
+                                        )
+                                    scanner.scanFolder(id).collect { ev ->
+                                        scanStatus = ev
+                                        if (ev is ScanProgress.Completed ||
+                                            ev is ScanProgress.Failed
+                                        ) {
+                                            // The wizard's last visible state
+                                            // before bouncing back to settings.
+                                            onComplete()
+                                        }
                                     }
+                                }.onFailure {
+                                    addError = it.message ?: "Failed to add folder"
                                 }
-                            }.onFailure {
-                                addError = it.message ?: "Failed to add folder"
+                                scanning = false
                             }
-                            scanning = false
-                        }
-                    },
-                )
+                        },
+                    )
             }
 
             Spacer(Modifier.height(24.dp))
@@ -232,7 +238,8 @@ private enum class WizardStep(val title: String) {
     InstallPc("2. Install on PC"),
     PairDevices("3. Pair your devices"),
     AddFolder("4. Share a folder"),
-    PickInRadioShed("5. Add to RadioShed");
+    PickInRadioShed("5. Add to RadioShed"),
+    ;
 
     fun next(): WizardStep? {
         val ord = ordinal
@@ -257,11 +264,16 @@ private fun ProgressBar(currentStep: WizardStep) {
         repeat(total) { idx ->
             val isFilled = idx <= currentStep.ordinal
             Surface(
-                modifier = Modifier
-                    .height(4.dp)
-                    .weight(1f),
-                color = if (isFilled) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.surfaceVariant,
+                modifier =
+                    Modifier
+                        .height(4.dp)
+                        .weight(1f),
+                color =
+                    if (isFilled) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.surfaceVariant
+                    },
                 shape = RoundedCornerShape(2.dp),
             ) {}
         }
@@ -418,8 +430,9 @@ private fun PairDevicesBody(
         NumberedStep(
             n = 1,
             title = "Open Syncthing on your phone",
-            body = "Tap the button below. If a permissions screen appears first, grant " +
-                "everything it asks for.",
+            body =
+                "Tap the button below. If a permissions screen appears first, grant " +
+                    "everything it asks for.",
         )
         if (installed) {
             Spacer(Modifier.height(8.dp))
@@ -432,17 +445,19 @@ private fun PairDevicesBody(
         NumberedStep(
             n = 2,
             title = "Show this phone's device ID as a QR code",
-            body = "In Syncthing on the phone: top menu → \"Show device ID\" or " +
-                "\"Web GUI\" → \"Actions\" → \"Show ID\". A QR code will appear.",
+            body =
+                "In Syncthing on the phone: top menu → \"Show device ID\" or " +
+                    "\"Web GUI\" → \"Actions\" → \"Show ID\". A QR code will appear.",
         )
         Spacer(Modifier.height(16.dp))
         NumberedStep(
             n = 3,
             title = "On your PC, scan the QR code",
-            body = "Open the Syncthing web UI on your PC (the SyncTrayzor icon, or " +
-                "http://localhost:8384). Click \"Add Remote Device\" → camera icon next " +
-                "to the Device ID field → point your webcam at the phone's QR. " +
-                "Or copy the device ID off the phone manually if scanning fails.",
+            body =
+                "Open the Syncthing web UI on your PC (the SyncTrayzor icon, or " +
+                    "http://localhost:8384). Click \"Add Remote Device\" → camera icon next " +
+                    "to the Device ID field → point your webcam at the phone's QR. " +
+                    "Or copy the device ID off the phone manually if scanning fails.",
         )
         Spacer(Modifier.height(8.dp))
         OutlinedButton(
@@ -453,8 +468,9 @@ private fun PairDevicesBody(
         NumberedStep(
             n = 4,
             title = "Approve the pairing on your phone",
-            body = "After your PC sends the request, your phone shows a notification " +
-                "asking to approve the new device. Tap it and choose \"Add\".",
+            body =
+                "After your PC sends the request, your phone shows a notification " +
+                    "asking to approve the new device. Tap it and choose \"Add\".",
         )
     }
 }
@@ -473,8 +489,9 @@ private fun AddFolderBody(
         NumberedStep(
             n = 1,
             title = "On your PC, add a folder",
-            body = "In the web UI: \"Add Folder\" → pick a Folder Label and the path on " +
-                "your PC. In the \"Sharing\" tab, tick the box for your phone.",
+            body =
+                "In the web UI: \"Add Folder\" → pick a Folder Label and the path on " +
+                    "your PC. In the \"Sharing\" tab, tick the box for your phone.",
         )
         Spacer(Modifier.height(8.dp))
         OutlinedButton(
@@ -485,10 +502,11 @@ private fun AddFolderBody(
         NumberedStep(
             n = 2,
             title = "On your phone, accept the share",
-            body = "Syncthing will post a notification: \"PC wants to share folder X.\" " +
-                "Tap it → \"Add\". You'll be asked where on the phone to put the synced " +
-                "files. Pick somewhere RadioShed can read — `/storage/emulated/0/Music/" +
-                "RadioShed-Sync` is a common choice.",
+            body =
+                "Syncthing will post a notification: \"PC wants to share folder X.\" " +
+                    "Tap it → \"Add\". You'll be asked where on the phone to put the synced " +
+                    "files. Pick somewhere RadioShed can read — `/storage/emulated/0/Music/" +
+                    "RadioShed-Sync` is a common choice.",
         )
         if (installed) {
             Spacer(Modifier.height(8.dp))
@@ -501,9 +519,10 @@ private fun AddFolderBody(
         NumberedStep(
             n = 3,
             title = "Wait for the first sync",
-            body = "Syncthing will copy everything from the PC to the phone. Big libraries " +
-                "can take a while — go grab coffee. You can keep going in this wizard " +
-                "while it runs in the background.",
+            body =
+                "Syncthing will copy everything from the PC to the phone. Big libraries " +
+                    "can take a while — go grab coffee. You can keep going in this wizard " +
+                    "while it runs in the background.",
         )
     }
 }
@@ -570,14 +589,16 @@ private fun PickInRadioShedBody(
         }
         scanStatus?.let { status ->
             Spacer(Modifier.height(12.dp))
-            val (head, sub) = when (status) {
-                is ScanProgress.Started -> "Walking the folder…" to null
-                is ScanProgress.Progress -> "${status.tracksProcessed} tracks scanned" to
-                    status.currentFile.substringAfterLast('/')
-                is ScanProgress.Warning -> "Skipped" to status.message
-                is ScanProgress.Completed -> "Done — ${status.totalTracks} tracks" to null
-                is ScanProgress.Failed -> "Failed" to status.message
-            }
+            val (head, sub) =
+                when (status) {
+                    is ScanProgress.Started -> "Walking the folder…" to null
+                    is ScanProgress.Progress ->
+                        "${status.tracksProcessed} tracks scanned" to
+                            status.currentFile.substringAfterLast('/')
+                    is ScanProgress.Warning -> "Skipped" to status.message
+                    is ScanProgress.Completed -> "Done — ${status.totalTracks} tracks" to null
+                    is ScanProgress.Failed -> "Failed" to status.message
+                }
             Surface(
                 shape = RoundedCornerShape(12.dp),
                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
@@ -616,26 +637,28 @@ private fun NavRow(
         }
         when (step) {
             WizardStep.Welcome -> Button(onClick = onNext) { Text("Get started") }
-            WizardStep.InstallPhone -> Button(
-                onClick = onNext,
-                enabled = installed,
-            ) { Text("Continue") }
+            WizardStep.InstallPhone ->
+                Button(
+                    onClick = onNext,
+                    enabled = installed,
+                ) { Text("Continue") }
             WizardStep.InstallPc -> Button(onClick = onNext) { Text("PC's ready — continue") }
             WizardStep.PairDevices -> Button(onClick = onNext) { Text("Devices paired — continue") }
             WizardStep.AddFolder -> Button(onClick = onNext) { Text("Folder shared — continue") }
-            WizardStep.PickInRadioShed -> Button(
-                // Always allow finishing the wizard from the last
-                // step. The body's "Add and scan now" is the
-                // recommended path when a folder has been picked,
-                // but the user must always have a way out: when
-                // they haven't picked a folder yet they can just
-                // close out, and when they have, they may want to
-                // skip the scan and let the auto-rescan-on-launch
-                // pick it up later.
-                onClick = onFinish,
-            ) {
-                Text(if (pickedFolder == null) "Done" else "Skip scan and finish")
-            }
+            WizardStep.PickInRadioShed ->
+                Button(
+                    // Always allow finishing the wizard from the last
+                    // step. The body's "Add and scan now" is the
+                    // recommended path when a folder has been picked,
+                    // but the user must always have a way out: when
+                    // they haven't picked a folder yet they can just
+                    // close out, and when they have, they may want to
+                    // skip the scan and let the auto-rescan-on-launch
+                    // pick it up later.
+                    onClick = onFinish,
+                ) {
+                    Text(if (pickedFolder == null) "Done" else "Skip scan and finish")
+                }
         }
     }
 }
@@ -666,7 +689,11 @@ private fun Bullet(text: String) {
 }
 
 @Composable
-private fun NumberedStep(n: Int, title: String, body: String) {
+private fun NumberedStep(
+    n: Int,
+    title: String,
+    body: String,
+) {
     Row(verticalAlignment = Alignment.Top) {
         Surface(
             shape = CircleShape,
@@ -708,16 +735,18 @@ private fun StatusBanner(
     subtitle: String,
     tone: StatusTone = if (ok) StatusTone.Success else StatusTone.Warning,
 ) {
-    val container = when (tone) {
-        StatusTone.Success -> MaterialTheme.colorScheme.primaryContainer
-        StatusTone.Warning -> MaterialTheme.colorScheme.errorContainer
-        StatusTone.Info -> MaterialTheme.colorScheme.secondaryContainer
-    }
-    val onContainer = when (tone) {
-        StatusTone.Success -> MaterialTheme.colorScheme.onPrimaryContainer
-        StatusTone.Warning -> MaterialTheme.colorScheme.onErrorContainer
-        StatusTone.Info -> MaterialTheme.colorScheme.onSecondaryContainer
-    }
+    val container =
+        when (tone) {
+            StatusTone.Success -> MaterialTheme.colorScheme.primaryContainer
+            StatusTone.Warning -> MaterialTheme.colorScheme.errorContainer
+            StatusTone.Info -> MaterialTheme.colorScheme.secondaryContainer
+        }
+    val onContainer =
+        when (tone) {
+            StatusTone.Success -> MaterialTheme.colorScheme.onPrimaryContainer
+            StatusTone.Warning -> MaterialTheme.colorScheme.onErrorContainer
+            StatusTone.Info -> MaterialTheme.colorScheme.onSecondaryContainer
+        }
     Surface(
         shape = RoundedCornerShape(12.dp),
         color = container,

@@ -3,11 +3,11 @@ package com.visorcraft.radioshed.ui.player
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculateZoom
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,66 +16,61 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Bedtime
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.Album
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.PlaylistAdd
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Repeat
-import androidx.compose.material.icons.filled.RepeatOne
-import androidx.compose.material.icons.filled.Whatshot
-import androidx.compose.material.icons.filled.Shuffle
-import androidx.compose.material.icons.filled.ShuffleOn
+import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
+import androidx.compose.material.icons.automirrored.filled.QueueMusic
+import androidx.compose.material.icons.automirrored.filled.StarHalf
 import androidx.compose.material.icons.automirrored.filled.VolumeDown
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
-import androidx.compose.material.icons.filled.Lyrics
-import androidx.compose.material.icons.outlined.FavoriteBorder
-import androidx.compose.material.icons.automirrored.filled.QueueMusic
-import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
-import androidx.compose.material.icons.automirrored.filled.StarHalf
+import androidx.compose.material.icons.filled.Album
+import androidx.compose.material.icons.filled.Bedtime
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Forward10
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.Lyrics
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.PlaylistAdd
+import androidx.compose.material.icons.filled.Repeat
+import androidx.compose.material.icons.filled.RepeatOne
 import androidx.compose.material.icons.filled.Replay10
+import androidx.compose.material.icons.filled.Shuffle
+import androidx.compose.material.icons.filled.ShuffleOn
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Whatshot
 import androidx.compose.material.icons.outlined.Bedtime
+import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.StarOutline
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -100,6 +95,7 @@ import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
@@ -112,11 +108,11 @@ import com.visorcraft.radioshed.audio.PlayerState
 import com.visorcraft.radioshed.audio.SleepTimer
 import com.visorcraft.radioshed.data.LibraryRepository
 import com.visorcraft.radioshed.data.RatingRepository
-import com.visorcraft.radioshed.ui.util.dragReorderItem
 import com.visorcraft.radioshed.data.SettingsStore
 import com.visorcraft.radioshed.domain.Track
 import com.visorcraft.radioshed.stations.StationPlayback
 import com.visorcraft.radioshed.ui.playlists.AddToPlaylistSheet
+import com.visorcraft.radioshed.ui.util.dragReorderItem
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
@@ -246,11 +242,12 @@ fun NowPlayingScreen(
         if (queueSheetOpen) {
             upcoming = stationPlayback.upcoming(count = 20)
             priorityCount = stationPlayback.priorityCount()
-            recent = stationPlayback.recentSnapshot().reversed()  // newest first
+            recent = stationPlayback.recentSnapshot().reversed() // newest first
             val albumIds = (upcoming + recent).mapNotNull { it.albumId }.distinct()
-            queueArtwork = albumIds.associateWith { id ->
-                libraryRepo.getAlbumById(id)?.artworkUri
-            }
+            queueArtwork =
+                albumIds.associateWith { id ->
+                    libraryRepo.getAlbumById(id)?.artworkUri
+                }
         }
     }
 
@@ -282,806 +279,853 @@ fun NowPlayingScreen(
     val layoutPref by settings.nowPlayingLayoutFlow.collectAsState()
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val isNarrow = maxWidth < 360.dp
-        val resolvedLayout = when (layoutPref) {
-            "Compact" -> NowPlayingLayoutChoice.Compact
-            "TwoPane" -> NowPlayingLayoutChoice.TwoPane
-            "TriplePane" -> NowPlayingLayoutChoice.TriplePane
-            else -> when {
-                maxWidth < 600.dp -> NowPlayingLayoutChoice.Compact
-                maxWidth >= 1100.dp -> NowPlayingLayoutChoice.TriplePane
-                else -> NowPlayingLayoutChoice.TwoPane
+        val resolvedLayout =
+            when (layoutPref) {
+                "Compact" -> NowPlayingLayoutChoice.Compact
+                "TwoPane" -> NowPlayingLayoutChoice.TwoPane
+                "TriplePane" -> NowPlayingLayoutChoice.TriplePane
+                else ->
+                    when {
+                        maxWidth < 600.dp -> NowPlayingLayoutChoice.Compact
+                        maxWidth >= 1100.dp -> NowPlayingLayoutChoice.TriplePane
+                        else -> NowPlayingLayoutChoice.TwoPane
+                    }
             }
-        }
         val isCompact = resolvedLayout == NowPlayingLayoutChoice.Compact
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        // The TopAppBar title slot gets squeezed by
-                        // the many action icons (Lyrics / Shuffle /
-                        // Repeat / Queue / Sleep / MoreVert) on a
-                        // narrow phone. Without softWrap=false +
-                        // maxLines=1, the default Text wraps per-
-                        // character into "No w Pla yin g" rather
-                        // than ellipsizing. Hiding the title outright
-                        // on isNarrow would also be defensible since
-                        // the user knows they're on Now Playing — but
-                        // ellipsis keeps the affordance consistent
-                        // across breakpoints.
-                        Text(
-                            text = "Now Playing",
-                            style = MaterialTheme.typography.titleSmall,
-                            maxLines = 1,
-                            softWrap = false,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        SleepTimerLabel(sleepState)
-                    }
-                },
-                navigationIcon = {
-                    TextButton(onClick = onClose) {
-                        Icon(
-                            imageVector = Icons.Filled.KeyboardArrowDown,
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp),
-                        )
-                        Spacer(Modifier.width(4.dp))
-                        Text("Close")
-                    }
-                },
-                actions = { /* moved to Scaffold bottomBar — see below */ },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                ),
-            )
-        },
-        bottomBar = {
-            // Action bar — moved from the topBar so users coming from
-            // the main page (where the MiniPlayer lives at the bottom)
-            // don't have their navigation jump to the top mid-flight.
-            // All secondary actions (Volume on desktop, Lyrics,
-            // Shuffle, Repeat, Queue, Sleep, More) right-aligned.
-            androidx.compose.material3.Surface(
-                color = MaterialTheme.colorScheme.surface,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 4.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    if (com.visorcraft.radioshed.isDesktopHost) {
-                        com.visorcraft.radioshed.ui.player.DesktopVolumeControl(
-                            volume = userVolume,
-                            onChange = { stationPlayback.setUserVolume(it) },
-                            sliderWidth = 90.dp,
-                        )
-                    }
-                    com.visorcraft.radioshed.ui.util.TooltipIconButton(
-                        tooltip = "Lyrics",
-                        onClick = onOpenLyrics,
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Lyrics,
-                            contentDescription = "Lyrics",
-                            tint = MaterialTheme.colorScheme.onSurface,
-                        )
-                    }
-                    // Shuffle session toggle. Doesn't persist to the
-                    // station — flips between Sequential and SmartShuffle
-                    // for the in-flight queue only, resets on station
-                    // change. The on-state glyph (ShuffleOn) carries a
-                    // dot indicator so colour-blind users can read it
-                    // without relying on the primary tint alone.
-                    com.visorcraft.radioshed.ui.util.TooltipIconButton(
-                        tooltip = if (shuffleSession) "Shuffle on" else "Shuffle off",
-                        onClick = { stationPlayback.toggleShuffle() },
-                    ) {
-                        Icon(
-                            imageVector = if (shuffleSession) Icons.Filled.ShuffleOn
-                                          else Icons.Filled.Shuffle,
-                            contentDescription = if (shuffleSession) "Shuffle on" else "Shuffle off",
-                            tint = if (shuffleSession) MaterialTheme.colorScheme.primary
-                                   else MaterialTheme.colorScheme.onSurface,
-                        )
-                    }
-                    // Repeat-mode cycler. Tap: Off → All → One → Off.
-                    // Long-press: reverse direction (One → All → Off →
-                    // One). Saves the over-shoot tap when the user
-                    // wants to back out of "Repeat one" without going
-                    // through Off and All again. Surface + combinedClickable
-                    // is the codebase pattern for tap-vs-long-press on
-                    // a single icon (matches the BigIconButton play /
-                    // pause + Stations Home Surprise tile).
-                    val repeatTooltip = when (repeatMode) {
-                        com.visorcraft.radioshed.stations.StationPlayback.RepeatMode.Off -> "Repeat off"
-                        com.visorcraft.radioshed.stations.StationPlayback.RepeatMode.All -> "Repeat all"
-                        com.visorcraft.radioshed.stations.StationPlayback.RepeatMode.One -> "Repeat one"
-                    }
-                    com.visorcraft.radioshed.ui.util.Tooltipped(tooltip = repeatTooltip) {
-                    androidx.compose.material3.Surface(
-                        color = androidx.compose.ui.graphics.Color.Transparent,
-                        modifier = Modifier
-                            .size(48.dp)
-                            .combinedClickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null,
-                                onClick = { stationPlayback.cycleRepeatMode() },
-                                onLongClick = {
-                                    val next = when (repeatMode) {
-                                        com.visorcraft.radioshed.stations.StationPlayback.RepeatMode.Off ->
-                                            com.visorcraft.radioshed.stations.StationPlayback.RepeatMode.One
-                                        com.visorcraft.radioshed.stations.StationPlayback.RepeatMode.All ->
-                                            com.visorcraft.radioshed.stations.StationPlayback.RepeatMode.Off
-                                        com.visorcraft.radioshed.stations.StationPlayback.RepeatMode.One ->
-                                            com.visorcraft.radioshed.stations.StationPlayback.RepeatMode.All
-                                    }
-                                    stationPlayback.setRepeatMode(next)
-                                    hapticTick()
-                                },
-                            ),
-                    ) {
-                        androidx.compose.foundation.layout.Box(
-                            contentAlignment = Alignment.Center,
-                            modifier = Modifier.fillMaxSize(),
-                        ) {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = {
+                        Column {
+                            // The TopAppBar title slot gets squeezed by
+                            // the many action icons (Lyrics / Shuffle /
+                            // Repeat / Queue / Sleep / MoreVert) on a
+                            // narrow phone. Without softWrap=false +
+                            // maxLines=1, the default Text wraps per-
+                            // character into "No w Pla yin g" rather
+                            // than ellipsizing. Hiding the title outright
+                            // on isNarrow would also be defensible since
+                            // the user knows they're on Now Playing — but
+                            // ellipsis keeps the affordance consistent
+                            // across breakpoints.
+                            Text(
+                                text = "Now Playing",
+                                style = MaterialTheme.typography.titleSmall,
+                                maxLines = 1,
+                                softWrap = false,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            SleepTimerLabel(sleepState)
+                        }
+                    },
+                    navigationIcon = {
+                        TextButton(onClick = onClose) {
                             Icon(
-                                imageVector = if (repeatMode == com.visorcraft.radioshed.stations.StationPlayback.RepeatMode.One)
-                                    Icons.Filled.RepeatOne else Icons.Filled.Repeat,
-                                contentDescription = repeatTooltip,
-                                tint = if (repeatMode == com.visorcraft.radioshed.stations.StationPlayback.RepeatMode.Off)
-                                    MaterialTheme.colorScheme.onSurface
-                                else MaterialTheme.colorScheme.primary,
+                                imageVector = Icons.Filled.KeyboardArrowDown,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp),
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text("Close")
+                        }
+                    },
+                    actions = { /* moved to Scaffold bottomBar — see below */ },
+                    colors =
+                        TopAppBarDefaults.topAppBarColors(
+                            containerColor = MaterialTheme.colorScheme.surface,
+                        ),
+                )
+            },
+            bottomBar = {
+                // Action bar — moved from the topBar so users coming from
+                // the main page (where the MiniPlayer lives at the bottom)
+                // don't have their navigation jump to the top mid-flight.
+                // All secondary actions (Volume on desktop, Lyrics,
+                // Shuffle, Repeat, Queue, Sleep, More) right-aligned.
+                androidx.compose.material3.Surface(
+                    color = MaterialTheme.colorScheme.surface,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 4.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        if (com.visorcraft.radioshed.isDesktopHost) {
+                            com.visorcraft.radioshed.ui.player.DesktopVolumeControl(
+                                volume = userVolume,
+                                onChange = { stationPlayback.setUserVolume(it) },
+                                sliderWidth = 90.dp,
                             )
                         }
-                    }
-                    } // close Tooltipped(repeatTooltip)
-                    val priorityBadgeCount by stationPlayback.priorityCountFlow.collectAsState()
-                    androidx.compose.material3.BadgedBox(
-                        badge = {
-                            if (priorityBadgeCount > 0) {
-                                androidx.compose.material3.Badge {
-                                    Text(priorityBadgeCount.toString())
+                        com.visorcraft.radioshed.ui.util.TooltipIconButton(
+                            tooltip = "Lyrics",
+                            onClick = onOpenLyrics,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Lyrics,
+                                contentDescription = "Lyrics",
+                                tint = MaterialTheme.colorScheme.onSurface,
+                            )
+                        }
+                        // Shuffle session toggle. Doesn't persist to the
+                        // station — flips between Sequential and SmartShuffle
+                        // for the in-flight queue only, resets on station
+                        // change. The on-state glyph (ShuffleOn) carries a
+                        // dot indicator so colour-blind users can read it
+                        // without relying on the primary tint alone.
+                        com.visorcraft.radioshed.ui.util.TooltipIconButton(
+                            tooltip = if (shuffleSession) "Shuffle on" else "Shuffle off",
+                            onClick = { stationPlayback.toggleShuffle() },
+                        ) {
+                            Icon(
+                                imageVector =
+                                    if (shuffleSession) {
+                                        Icons.Filled.ShuffleOn
+                                    } else {
+                                        Icons.Filled.Shuffle
+                                    },
+                                contentDescription = if (shuffleSession) "Shuffle on" else "Shuffle off",
+                                tint =
+                                    if (shuffleSession) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurface
+                                    },
+                            )
+                        }
+                        // Repeat-mode cycler. Tap: Off → All → One → Off.
+                        // Long-press: reverse direction (One → All → Off →
+                        // One). Saves the over-shoot tap when the user
+                        // wants to back out of "Repeat one" without going
+                        // through Off and All again. Surface + combinedClickable
+                        // is the codebase pattern for tap-vs-long-press on
+                        // a single icon (matches the BigIconButton play /
+                        // pause + Stations Home Surprise tile).
+                        val repeatTooltip =
+                            when (repeatMode) {
+                                com.visorcraft.radioshed.stations.StationPlayback.RepeatMode.Off -> "Repeat off"
+                                com.visorcraft.radioshed.stations.StationPlayback.RepeatMode.All -> "Repeat all"
+                                com.visorcraft.radioshed.stations.StationPlayback.RepeatMode.One -> "Repeat one"
+                            }
+                        com.visorcraft.radioshed.ui.util.Tooltipped(tooltip = repeatTooltip) {
+                            androidx.compose.material3.Surface(
+                                color = androidx.compose.ui.graphics.Color.Transparent,
+                                modifier =
+                                    Modifier
+                                        .size(48.dp)
+                                        .combinedClickable(
+                                            interactionSource = remember { MutableInteractionSource() },
+                                            indication = null,
+                                            onClick = { stationPlayback.cycleRepeatMode() },
+                                            onLongClick = {
+                                                val next =
+                                                    when (repeatMode) {
+                                                        com.visorcraft.radioshed.stations.StationPlayback.RepeatMode.Off ->
+                                                            com.visorcraft.radioshed.stations.StationPlayback.RepeatMode.One
+                                                        com.visorcraft.radioshed.stations.StationPlayback.RepeatMode.All ->
+                                                            com.visorcraft.radioshed.stations.StationPlayback.RepeatMode.Off
+                                                        com.visorcraft.radioshed.stations.StationPlayback.RepeatMode.One ->
+                                                            com.visorcraft.radioshed.stations.StationPlayback.RepeatMode.All
+                                                    }
+                                                stationPlayback.setRepeatMode(next)
+                                                hapticTick()
+                                            },
+                                        ),
+                            ) {
+                                androidx.compose.foundation.layout.Box(
+                                    contentAlignment = Alignment.Center,
+                                    modifier = Modifier.fillMaxSize(),
+                                ) {
+                                    Icon(
+                                        imageVector =
+                                            if (repeatMode == com.visorcraft.radioshed.stations.StationPlayback.RepeatMode.One) {
+                                                Icons.Filled.RepeatOne
+                                            } else {
+                                                Icons.Filled.Repeat
+                                            },
+                                        contentDescription = repeatTooltip,
+                                        tint =
+                                            if (repeatMode == com.visorcraft.radioshed.stations.StationPlayback.RepeatMode.Off) {
+                                                MaterialTheme.colorScheme.onSurface
+                                            } else {
+                                                MaterialTheme.colorScheme.primary
+                                            },
+                                    )
                                 }
                             }
-                        },
-                        modifier = Modifier
-                            .combinedClickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null,
+                        } // close Tooltipped(repeatTooltip)
+                        val priorityBadgeCount by stationPlayback.priorityCountFlow.collectAsState()
+                        androidx.compose.material3.BadgedBox(
+                            badge = {
+                                if (priorityBadgeCount > 0) {
+                                    androidx.compose.material3.Badge {
+                                        Text(priorityBadgeCount.toString())
+                                    }
+                                }
+                            },
+                            modifier =
+                                Modifier
+                                    .combinedClickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null,
+                                        onClick = { queueSheetOpen = true },
+                                        onLongClick = {
+                                            // Long-press on the queue icon
+                                            // jumps straight to the "Save
+                                            // queue as playlist" dialog —
+                                            // skips the bottom-sheet step
+                                            // when the user already knows
+                                            // they want to save what's
+                                            // queued. Snapshot the upcoming
+                                            // list so it doesn't drift if
+                                            // the queue mutates while the
+                                            // dialog is open.
+                                            val snap = stationPlayback.upcoming(64)
+                                            if (snap.isNotEmpty()) {
+                                                saveQueueDialog = snap
+                                                hapticTick()
+                                            }
+                                        },
+                                    )
+                                    .semantics { contentDescription = "Queue" },
+                        ) {
+                            com.visorcraft.radioshed.ui.util.TooltipIconButton(
+                                tooltip = "Queue",
                                 onClick = { queueSheetOpen = true },
-                                onLongClick = {
-                                    // Long-press on the queue icon
-                                    // jumps straight to the "Save
-                                    // queue as playlist" dialog —
-                                    // skips the bottom-sheet step
-                                    // when the user already knows
-                                    // they want to save what's
-                                    // queued. Snapshot the upcoming
-                                    // list so it doesn't drift if
-                                    // the queue mutates while the
-                                    // dialog is open.
-                                    val snap = stationPlayback.upcoming(64)
-                                    if (snap.isNotEmpty()) {
-                                        saveQueueDialog = snap
-                                        hapticTick()
-                                    }
-                                },
-                            )
-                            .semantics { contentDescription = "Queue" },
-                    ) {
-                        com.visorcraft.radioshed.ui.util.TooltipIconButton(
-                            tooltip = "Queue",
-                            onClick = { queueSheetOpen = true },
-                        ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.QueueMusic,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurface,
-                            )
-                        }
-                    }
-                    Box {
-                        // Long-press shortcut: when idle, arm 30min
-                        // (the median sleep-timer pick); when armed,
-                        // cancel without going through the menu. Tap
-                        // still opens the full menu either way.
-                        Box(
-                            modifier = Modifier.combinedClickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null,
-                                onClick = { sleepMenuOpen = true },
-                                onLongClick = {
-                                    if (sleepState is SleepTimer.State.Idle) {
-                                        sleepTimer.start(30L * 60_000L)
-                                    } else {
-                                        sleepTimer.cancel()
-                                    }
-                                    hapticTick()
-                                },
-                            ),
-                        ) {
-                        com.visorcraft.radioshed.ui.util.TooltipIconButton(
-                            tooltip = "Sleep timer",
-                            onClick = { sleepMenuOpen = true },
-                        ) {
-                            Icon(
-                                imageVector = if (sleepState is SleepTimer.State.Idle)
-                                    Icons.Outlined.Bedtime else Icons.Filled.Bedtime,
-                                contentDescription = "Sleep timer",
-                                tint = if (sleepState is SleepTimer.State.Idle)
-                                    MaterialTheme.colorScheme.onSurface
-                                else MaterialTheme.colorScheme.primary,
-                            )
-                        }
-                        }
-                        SleepTimerMenu(
-                            expanded = sleepMenuOpen,
-                            currentState = sleepState,
-                            onDismiss = { sleepMenuOpen = false },
-                            onPickMinutes = { mins ->
-                                sleepMenuOpen = false
-                                sleepTimer.start(mins * 60_000L)
-                            },
-                            onEndOfTrack = {
-                                sleepMenuOpen = false
-                                sleepTimer.startEndOfTrack()
-                            },
-                            onExtend = { mins ->
-                                sleepMenuOpen = false
-                                sleepTimer.extend(mins * 60_000L)
-                            },
-                            onCancel = {
-                                sleepMenuOpen = false
-                                sleepTimer.cancel()
-                            },
-                        )
-                    }
-                    Box {
-                        com.visorcraft.radioshed.ui.util.TooltipIconButton(
-                            tooltip = "More",
-                            onClick = { overflowMenuOpen = true },
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.MoreVert,
-                                contentDescription = "More",
-                                tint = MaterialTheme.colorScheme.onSurface,
-                            )
-                        }
-                        // Wide screens: classic anchored DropdownMenu.
-                        // Narrow screens get a ModalBottomSheet rendered
-                        // outside the topBar slot (below) — DropdownMenus
-                        // anchored to a tight icon position clip their
-                        // submenu items at <360dp.
-                        if (!isNarrow) {
-                            DropdownMenu(
-                                expanded = overflowMenuOpen,
-                                onDismissRequest = { overflowMenuOpen = false },
                             ) {
-                                val track = nowPlaying
-                                DropdownMenuItem(
-                                    text = { Text("Add to playlist") },
-                                    leadingIcon = { Icon(Icons.AutoMirrored.Filled.PlaylistAdd, null) },
-                                    enabled = track != null,
-                                    onClick = {
-                                        overflowMenuOpen = false
-                                        track?.trackId?.let { addToPlaylistTrackId = it }
-                                    },
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.QueueMusic,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurface,
                                 )
-                                // For Go-to-album / Go-to-artist we use the
-                                // metadata stamped on the Playable rather
-                                // than DB lookups for the enabled state, so
-                                // tracks with no album/artist tags don't
-                                // appear actionable when they aren't.
-                                DropdownMenuItem(
-                                    text = { Text("Go to album") },
-                                    leadingIcon = { Icon(Icons.Filled.Album, null) },
-                                    enabled = track != null && !track.album.isNullOrBlank(),
-                                    onClick = {
-                                        overflowMenuOpen = false
-                                        val tid = track?.trackId ?: return@DropdownMenuItem
-                                        scope.launch {
-                                            libraryRepo.getTrackById(tid)?.albumId?.let { onOpenAlbum(it) }
-                                        }
-                                    },
+                            }
+                        }
+                        Box {
+                            // Long-press shortcut: when idle, arm 30min
+                            // (the median sleep-timer pick); when armed,
+                            // cancel without going through the menu. Tap
+                            // still opens the full menu either way.
+                            Box(
+                                modifier =
+                                    Modifier.combinedClickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null,
+                                        onClick = { sleepMenuOpen = true },
+                                        onLongClick = {
+                                            if (sleepState is SleepTimer.State.Idle) {
+                                                sleepTimer.start(30L * 60_000L)
+                                            } else {
+                                                sleepTimer.cancel()
+                                            }
+                                            hapticTick()
+                                        },
+                                    ),
+                            ) {
+                                com.visorcraft.radioshed.ui.util.TooltipIconButton(
+                                    tooltip = "Sleep timer",
+                                    onClick = { sleepMenuOpen = true },
+                                ) {
+                                    Icon(
+                                        imageVector =
+                                            if (sleepState is SleepTimer.State.Idle) {
+                                                Icons.Outlined.Bedtime
+                                            } else {
+                                                Icons.Filled.Bedtime
+                                            },
+                                        contentDescription = "Sleep timer",
+                                        tint =
+                                            if (sleepState is SleepTimer.State.Idle) {
+                                                MaterialTheme.colorScheme.onSurface
+                                            } else {
+                                                MaterialTheme.colorScheme.primary
+                                            },
+                                    )
+                                }
+                            }
+                            SleepTimerMenu(
+                                expanded = sleepMenuOpen,
+                                currentState = sleepState,
+                                onDismiss = { sleepMenuOpen = false },
+                                onPickMinutes = { mins ->
+                                    sleepMenuOpen = false
+                                    sleepTimer.start(mins * 60_000L)
+                                },
+                                onEndOfTrack = {
+                                    sleepMenuOpen = false
+                                    sleepTimer.startEndOfTrack()
+                                },
+                                onExtend = { mins ->
+                                    sleepMenuOpen = false
+                                    sleepTimer.extend(mins * 60_000L)
+                                },
+                                onCancel = {
+                                    sleepMenuOpen = false
+                                    sleepTimer.cancel()
+                                },
+                            )
+                        }
+                        Box {
+                            com.visorcraft.radioshed.ui.util.TooltipIconButton(
+                                tooltip = "More",
+                                onClick = { overflowMenuOpen = true },
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.MoreVert,
+                                    contentDescription = "More",
+                                    tint = MaterialTheme.colorScheme.onSurface,
                                 )
-                                DropdownMenuItem(
-                                    text = { Text("Go to artist") },
-                                    leadingIcon = { Icon(Icons.Filled.Person, null) },
-                                    enabled = track != null && !track.artist.isNullOrBlank(),
-                                    onClick = {
-                                        overflowMenuOpen = false
-                                        val tid = track?.trackId ?: return@DropdownMenuItem
-                                        scope.launch {
-                                            libraryRepo.artistsForTrack(tid)
-                                                .firstOrNull()?.id?.let { onOpenArtist(it) }
-                                        }
-                                    },
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Go to station") },
-                                    leadingIcon = {
-                                        Icon(Icons.Filled.Whatshot, null)
-                                    },
-                                    enabled = currentStation != null,
-                                    onClick = {
-                                        overflowMenuOpen = false
-                                        currentStation?.id?.let { onOpenStation(it) }
-                                    },
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Track info") },
-                                    leadingIcon = { Icon(Icons.Filled.Info, null) },
-                                    enabled = track != null,
-                                    onClick = {
-                                        overflowMenuOpen = false
-                                        trackInfoOpen = true
-                                    },
-                                )
-                                DropdownMenuItem(
-                                    text = {
-                                        val s = playbackSpeed
-                                        val label = if (s == 1f) "Speed (1×)"
-                                                    else "Speed (${formatSpeed(s)}×)"
-                                        Text(label)
-                                    },
-                                    leadingIcon = { Icon(Icons.Filled.Speed, null) },
-                                    onClick = {
-                                        overflowMenuOpen = false
-                                        speedSheetOpen = true
-                                    },
-                                )
+                            }
+                            // Wide screens: classic anchored DropdownMenu.
+                            // Narrow screens get a ModalBottomSheet rendered
+                            // outside the topBar slot (below) — DropdownMenus
+                            // anchored to a tight icon position clip their
+                            // submenu items at <360dp.
+                            if (!isNarrow) {
+                                DropdownMenu(
+                                    expanded = overflowMenuOpen,
+                                    onDismissRequest = { overflowMenuOpen = false },
+                                ) {
+                                    val track = nowPlaying
+                                    DropdownMenuItem(
+                                        text = { Text("Add to playlist") },
+                                        leadingIcon = { Icon(Icons.AutoMirrored.Filled.PlaylistAdd, null) },
+                                        enabled = track != null,
+                                        onClick = {
+                                            overflowMenuOpen = false
+                                            track?.trackId?.let { addToPlaylistTrackId = it }
+                                        },
+                                    )
+                                    // For Go-to-album / Go-to-artist we use the
+                                    // metadata stamped on the Playable rather
+                                    // than DB lookups for the enabled state, so
+                                    // tracks with no album/artist tags don't
+                                    // appear actionable when they aren't.
+                                    DropdownMenuItem(
+                                        text = { Text("Go to album") },
+                                        leadingIcon = { Icon(Icons.Filled.Album, null) },
+                                        enabled = track != null && !track.album.isNullOrBlank(),
+                                        onClick = {
+                                            overflowMenuOpen = false
+                                            val tid = track?.trackId ?: return@DropdownMenuItem
+                                            scope.launch {
+                                                libraryRepo.getTrackById(tid)?.albumId?.let { onOpenAlbum(it) }
+                                            }
+                                        },
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Go to artist") },
+                                        leadingIcon = { Icon(Icons.Filled.Person, null) },
+                                        enabled = track != null && !track.artist.isNullOrBlank(),
+                                        onClick = {
+                                            overflowMenuOpen = false
+                                            val tid = track?.trackId ?: return@DropdownMenuItem
+                                            scope.launch {
+                                                libraryRepo.artistsForTrack(tid)
+                                                    .firstOrNull()?.id?.let { onOpenArtist(it) }
+                                            }
+                                        },
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Go to station") },
+                                        leadingIcon = {
+                                            Icon(Icons.Filled.Whatshot, null)
+                                        },
+                                        enabled = currentStation != null,
+                                        onClick = {
+                                            overflowMenuOpen = false
+                                            currentStation?.id?.let { onOpenStation(it) }
+                                        },
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Track info") },
+                                        leadingIcon = { Icon(Icons.Filled.Info, null) },
+                                        enabled = track != null,
+                                        onClick = {
+                                            overflowMenuOpen = false
+                                            trackInfoOpen = true
+                                        },
+                                    )
+                                    DropdownMenuItem(
+                                        text = {
+                                            val s = playbackSpeed
+                                            val label =
+                                                if (s == 1f) {
+                                                    "Speed (1×)"
+                                                } else {
+                                                    "Speed (${formatSpeed(s)}×)"
+                                                }
+                                            Text(label)
+                                        },
+                                        leadingIcon = { Icon(Icons.Filled.Speed, null) },
+                                        onClick = {
+                                            overflowMenuOpen = false
+                                            speedSheetOpen = true
+                                        },
+                                    )
+                                }
                             }
                         }
                     }
                 }
-            }
-        },
-        containerColor = MaterialTheme.colorScheme.background,
-    ) { padding ->
-        val playable = nowPlaying
-        // One-line tech summary below the scrubber: format · bitrate ·
-        // sample rate. Lazy-fetched via getTrackById on each track
-        // change. The full breakdown still lives on the Track Info
-        // dialog; this just answers "what am I listening to right
-        // now" at a glance, the way Foobar/Winamp status bars used to.
-        var formatLine by remember { mutableStateOf<String?>(null) }
-        LaunchedEffect(playable?.trackId) {
-            // Clear before the async getTrackById so rapid track
-            // changes (skip-five) don't keep showing the previous
-            // track's format/bitrate while the next read resolves.
-            formatLine = null
-            val tid = playable?.trackId
-            formatLine = if (tid == null) null else {
-                val t = libraryRepo.getTrackById(tid)
-                if (t == null) null else {
-                    val parts = buildList {
-                        if (t.format.isNotBlank()) add(t.format.uppercase())
-                        t.bitrateKbps?.let { add("${it} kbps") }
-                        t.sampleRateHz?.let { add("${"%.1f".format(it / 1000.0)} kHz") }
+            },
+            containerColor = MaterialTheme.colorScheme.background,
+        ) { padding ->
+            val playable = nowPlaying
+            // One-line tech summary below the scrubber: format · bitrate ·
+            // sample rate. Lazy-fetched via getTrackById on each track
+            // change. The full breakdown still lives on the Track Info
+            // dialog; this just answers "what am I listening to right
+            // now" at a glance, the way Foobar/Winamp status bars used to.
+            var formatLine by remember { mutableStateOf<String?>(null) }
+            LaunchedEffect(playable?.trackId) {
+                // Clear before the async getTrackById so rapid track
+                // changes (skip-five) don't keep showing the previous
+                // track's format/bitrate while the next read resolves.
+                formatLine = null
+                val tid = playable?.trackId
+                formatLine =
+                    if (tid == null) {
+                        null
+                    } else {
+                        val t = libraryRepo.getTrackById(tid)
+                        if (t == null) {
+                            null
+                        } else {
+                            val parts =
+                                buildList {
+                                    if (t.format.isNotBlank()) add(t.format.uppercase())
+                                    t.bitrateKbps?.let { add("$it kbps") }
+                                    t.sampleRateHz?.let { add("${"%.1f".format(it / 1000.0)} kHz") }
+                                }
+                            if (parts.isEmpty()) null else parts.joinToString(" · ")
+                        }
                     }
-                    if (parts.isEmpty()) null else parts.joinToString(" · ")
+            }
+            if (playable == null) {
+                Box(
+                    modifier = Modifier.fillMaxSize().padding(padding),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        "Nothing playing.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
+                    )
+                }
+                return@Scaffold
+            }
+
+            if (queueSheetOpen) {
+                QueueBottomSheet(
+                    upcoming = upcoming,
+                    recent = recent,
+                    artworkByAlbumId = queueArtwork,
+                    priorityCount = priorityCount,
+                    isShuffleMode =
+                        currentStation?.playback?.order != com.visorcraft.radioshed.domain.PlayOrder.Sequential &&
+                            currentStation != null,
+                    onDismiss = { queueSheetOpen = false },
+                    onJumpUpcoming = { idx ->
+                        if (upcoming.isNotEmpty()) {
+                            stationPlayback.playTracks(upcoming, startIndex = idx)
+                            queueSheetOpen = false
+                        }
+                    },
+                    onRemoveQueueItem = { idx ->
+                        // Optimistic local update — the UI removes the
+                        // row immediately so rapid taps don't address the
+                        // pre-removal indices. The mutex-protected async
+                        // remove on the queue then persists the change.
+                        // This avoids the off-by-one bug where two quick
+                        // taps would remove rows N and N+1 instead of N
+                        // and N+2 (because the second tap saw the stale
+                        // pre-first-remove list).
+                        if (idx in upcoming.indices && idx < priorityCount) {
+                            upcoming = upcoming.toMutableList().also { it.removeAt(idx) }
+                            priorityCount -= 1
+                            stationPlayback.removeFromQueue(idx)
+                        }
+                    },
+                    onClearQueue = {
+                        // Optimistic: drop all priority items from the
+                        // visible list immediately. Rule-driven peeks
+                        // remain so users still see what's coming up
+                        // from the station. The async clearQueue catches up.
+                        if (priorityCount > 0) {
+                            upcoming = upcoming.drop(priorityCount)
+                            priorityCount = 0
+                            stationPlayback.clearQueue()
+                        }
+                    },
+                    onMoveQueueItem = { from, to ->
+                        // Optimistic local reorder of the displayed list,
+                        // then mutex-protected commit to the queue. Both
+                        // indices must be in priority range — rule-driven
+                        // peeks aren't reorderable (they regenerate every
+                        // peek anyway).
+                        if (from in 0 until priorityCount && to in 0 until priorityCount) {
+                            upcoming =
+                                upcoming.toMutableList().also {
+                                    val item = it.removeAt(from)
+                                    it.add(to, item)
+                                }
+                            stationPlayback.moveQueueItem(from, to)
+                        }
+                    },
+                    onSaveAsPlaylist = {
+                        if (upcoming.isNotEmpty()) {
+                            saveQueueDialog = upcoming.toList()
+                            queueSheetOpen = false
+                        }
+                    },
+                    onReplayPlayed = { track ->
+                        // Re-inject at the head of the priority queue.
+                        // Distinct from "jumpUpcoming" — the played row
+                        // is no longer in `upcoming`, so we route through
+                        // stationPlayback.playNext for a fresh enqueue.
+                        stationPlayback.playNext(track)
+                        hapticTick()
+                    },
+                    onMoveUpcomingToTop = { idx ->
+                        // Optimistic local reorder + mutex-protected
+                        // commit, mirroring onMoveQueueItem. Bail when
+                        // the row is already at position 0 — saves a
+                        // wasted DB round-trip.
+                        if (idx in 1 until priorityCount) {
+                            upcoming =
+                                upcoming.toMutableList().also {
+                                    val item = it.removeAt(idx)
+                                    it.add(0, item)
+                                }
+                            stationPlayback.moveQueueItem(idx, 0)
+                            hapticTick()
+                        }
+                    },
+                )
+            }
+            saveQueueDialog?.let { tracks ->
+                SaveQueueAsPlaylistDialog(
+                    trackCount = tracks.size,
+                    onDismiss = { saveQueueDialog = null },
+                    onConfirm = { name ->
+                        val toSave = tracks
+                        saveQueueDialog = null
+                        scope.launch {
+                            val pid = playlistRepo.insert(name = name, description = null)
+                            toSave.forEachIndexed { idx, t ->
+                                runCatching { playlistRepo.addTrack(pid, t.id, position = idx) }
+                            }
+                        }
+                    },
+                )
+            }
+            addToPlaylistTrackId?.let { id ->
+                AddToPlaylistSheet(
+                    trackId = id,
+                    onDismiss = { addToPlaylistTrackId = null },
+                )
+            }
+            if (trackInfoOpen) {
+                val track = nowPlaying
+                if (track != null) {
+                    TrackInfoDialog(
+                        playable = track,
+                        libraryRepo = libraryRepo,
+                        onDismiss = { trackInfoOpen = false },
+                        onOpenAlbum = onOpenAlbum,
+                        onOpenArtist = onOpenArtist,
+                        onOpenFolder = onOpenFolder,
+                    )
+                } else {
+                    trackInfoOpen = false
                 }
             }
-        }
-        if (playable == null) {
-            Box(
-                modifier = Modifier.fillMaxSize().padding(padding),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    "Nothing playing.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
+            if (speedSheetOpen) {
+                PlaybackSpeedSheet(
+                    current = playbackSpeed,
+                    onPick = { v ->
+                        playbackSpeed = v
+                        settings.setPlaybackSpeed(v)
+                        audioEngine.setPlaybackSpeed(v)
+                        speedSheetOpen = false
+                    },
+                    onDismiss = { speedSheetOpen = false },
                 )
             }
-            return@Scaffold
-        }
-
-        if (queueSheetOpen) {
-            QueueBottomSheet(
-                upcoming = upcoming,
-                recent = recent,
-                artworkByAlbumId = queueArtwork,
-                priorityCount = priorityCount,
-                isShuffleMode = currentStation?.playback?.order != com.visorcraft.radioshed.domain.PlayOrder.Sequential
-                    && currentStation != null,
-                onDismiss = { queueSheetOpen = false },
-                onJumpUpcoming = { idx ->
-                    if (upcoming.isNotEmpty()) {
-                        stationPlayback.playTracks(upcoming, startIndex = idx)
-                        queueSheetOpen = false
-                    }
-                },
-                onRemoveQueueItem = { idx ->
-                    // Optimistic local update — the UI removes the
-                    // row immediately so rapid taps don't address the
-                    // pre-removal indices. The mutex-protected async
-                    // remove on the queue then persists the change.
-                    // This avoids the off-by-one bug where two quick
-                    // taps would remove rows N and N+1 instead of N
-                    // and N+2 (because the second tap saw the stale
-                    // pre-first-remove list).
-                    if (idx in upcoming.indices && idx < priorityCount) {
-                        upcoming = upcoming.toMutableList().also { it.removeAt(idx) }
-                        priorityCount -= 1
-                        stationPlayback.removeFromQueue(idx)
-                    }
-                },
-                onClearQueue = {
-                    // Optimistic: drop all priority items from the
-                    // visible list immediately. Rule-driven peeks
-                    // remain so users still see what's coming up
-                    // from the station. The async clearQueue catches up.
-                    if (priorityCount > 0) {
-                        upcoming = upcoming.drop(priorityCount)
-                        priorityCount = 0
-                        stationPlayback.clearQueue()
-                    }
-                },
-                onMoveQueueItem = { from, to ->
-                    // Optimistic local reorder of the displayed list,
-                    // then mutex-protected commit to the queue. Both
-                    // indices must be in priority range — rule-driven
-                    // peeks aren't reorderable (they regenerate every
-                    // peek anyway).
-                    if (from in 0 until priorityCount && to in 0 until priorityCount) {
-                        upcoming = upcoming.toMutableList().also {
-                            val item = it.removeAt(from)
-                            it.add(to, item)
-                        }
-                        stationPlayback.moveQueueItem(from, to)
-                    }
-                },
-                onSaveAsPlaylist = {
-                    if (upcoming.isNotEmpty()) {
-                        saveQueueDialog = upcoming.toList()
-                        queueSheetOpen = false
-                    }
-                },
-                onReplayPlayed = { track ->
-                    // Re-inject at the head of the priority queue.
-                    // Distinct from "jumpUpcoming" — the played row
-                    // is no longer in `upcoming`, so we route through
-                    // stationPlayback.playNext for a fresh enqueue.
-                    stationPlayback.playNext(track)
-                    hapticTick()
-                },
-                onMoveUpcomingToTop = { idx ->
-                    // Optimistic local reorder + mutex-protected
-                    // commit, mirroring onMoveQueueItem. Bail when
-                    // the row is already at position 0 — saves a
-                    // wasted DB round-trip.
-                    if (idx in 1 until priorityCount) {
-                        upcoming = upcoming.toMutableList().also {
-                            val item = it.removeAt(idx)
-                            it.add(0, item)
-                        }
-                        stationPlayback.moveQueueItem(idx, 0)
-                        hapticTick()
-                    }
-                },
-            )
-        }
-        saveQueueDialog?.let { tracks ->
-            SaveQueueAsPlaylistDialog(
-                trackCount = tracks.size,
-                onDismiss = { saveQueueDialog = null },
-                onConfirm = { name ->
-                    val toSave = tracks
-                    saveQueueDialog = null
-                    scope.launch {
-                        val pid = playlistRepo.insert(name = name, description = null)
-                        toSave.forEachIndexed { idx, t ->
-                            runCatching { playlistRepo.addTrack(pid, t.id, position = idx) }
-                        }
-                    }
-                },
-            )
-        }
-        addToPlaylistTrackId?.let { id ->
-            AddToPlaylistSheet(
-                trackId = id,
-                onDismiss = { addToPlaylistTrackId = null },
-            )
-        }
-        if (trackInfoOpen) {
-            val track = nowPlaying
-            if (track != null) {
-                TrackInfoDialog(
-                    playable = track,
-                    libraryRepo = libraryRepo,
-                    onDismiss = { trackInfoOpen = false },
-                    onOpenAlbum = onOpenAlbum,
-                    onOpenArtist = onOpenArtist,
-                    onOpenFolder = onOpenFolder,
-                )
-            } else {
-                trackInfoOpen = false
-            }
-        }
-        if (speedSheetOpen) {
-            PlaybackSpeedSheet(
-                current = playbackSpeed,
-                onPick = { v ->
-                    playbackSpeed = v
-                    settings.setPlaybackSpeed(v)
-                    audioEngine.setPlaybackSpeed(v)
-                    speedSheetOpen = false
-                },
-                onDismiss = { speedSheetOpen = false },
-            )
-        }
-        if (isNarrow && overflowMenuOpen) {
-            OverflowSheet(
-                track = nowPlaying,
-                stationId = currentStation?.id,
-                playbackSpeed = playbackSpeed,
-                onDismiss = { overflowMenuOpen = false },
-                onAddToPlaylist = { tid ->
-                    overflowMenuOpen = false
-                    addToPlaylistTrackId = tid
-                },
-                onGoToAlbum = { tid ->
-                    overflowMenuOpen = false
-                    scope.launch {
-                        libraryRepo.getTrackById(tid)?.albumId?.let { onOpenAlbum(it) }
-                    }
-                },
-                onGoToArtist = { tid ->
-                    overflowMenuOpen = false
-                    scope.launch {
-                        libraryRepo.artistsForTrack(tid)
-                            .firstOrNull()?.id?.let { onOpenArtist(it) }
-                    }
-                },
-                onGoToStation = { sid ->
-                    overflowMenuOpen = false
-                    onOpenStation(sid)
-                },
-                onTrackInfo = {
-                    overflowMenuOpen = false
-                    trackInfoOpen = true
-                },
-                onSpeedPicker = {
-                    overflowMenuOpen = false
-                    speedSheetOpen = true
-                },
-            )
-        }
-        Box(modifier = Modifier.fillMaxSize().padding(padding)) {
-            val accent = stationAccent(currentStation?.color)
-
-            BlurredBackdrop(
-                artworkUri = playable.artworkUri,
-                reduceMotion = reduceMotion,
-            )
-
-            // Heart toggle handler — flips local state immediately for
-            // snappy UI, then writes through to the repo. The optimistic
-            // flip is safe because the repo is idempotent on like/unlike.
-            val onToggleLike: () -> Unit = {
-                val target = !liked
-                liked = target
-                scope.launch {
-                    if (target) ratingRepo.like(playable.trackId)
-                    else ratingRepo.unlike(playable.trackId)
-                }
-            }
-
-            if (resolvedLayout == NowPlayingLayoutChoice.TriplePane) {
-                TriplePaneLayout(
-                    playable = playable,
-                    state = state,
-                    positionMs = position.currentMs,
-                    durationMs = position.durationMs,
-                    rating = rating,
-                    liked = liked,
-                    volume = userVolume,
-                    accent = accent,
-                    stationName = currentStation?.name,
-                    formatLine = formatLine,
-                    stations = stationsForTriplePane,
-                    currentStationId = currentStation?.id,
-                    // playStation isn't a suspend fun — it launches
-                    // its own internal stationLoadJob. Calling it
-                    // directly avoids a misleading scope.launch
-                    // wrapper that would suggest otherwise.
-                    onStationTap = { id -> stationPlayback.playStation(id) },
-                    onSeek = { audioEngine.seekTo(it) },
-                    onTogglePlayPause = { audioEngine.togglePlayPause() },
-                    onLongPressTogglePlayPause = {
-                        stationPlayback.toggleShuffle()
-                        hapticTick()
+            if (isNarrow && overflowMenuOpen) {
+                OverflowSheet(
+                    track = nowPlaying,
+                    stationId = currentStation?.id,
+                    playbackSpeed = playbackSpeed,
+                    onDismiss = { overflowMenuOpen = false },
+                    onAddToPlaylist = { tid ->
+                        overflowMenuOpen = false
+                        addToPlaylistTrackId = tid
                     },
-                    onPrev = { stationPlayback.skipPrevious() },
-                    onNext = { stationPlayback.skipNext() },
-                    onSkipFive = { repeat(5) { stationPlayback.skipNext() } },
-                    onRate = { stars ->
+                    onGoToAlbum = { tid ->
+                        overflowMenuOpen = false
                         scope.launch {
-                            ratingRepo.setRating(playable.trackId, stars)
-                            rating = stars
+                            libraryRepo.getTrackById(tid)?.albumId?.let { onOpenAlbum(it) }
                         }
                     },
-                    onToggleLike = onToggleLike,
-                    onVolumeLive = { stationPlayback.previewUserVolume(it) },
-                    onVolumeCommit = { stationPlayback.commitUserVolume(it) },
-                    preMuteLevel = preMuteLevel,
-                    onPreMuteLevelChange = { preMuteLevel = it },
-                    onDislikeOnStation = {
-                        val stationId = currentStation?.id ?: return@TriplePaneLayout
+                    onGoToArtist = { tid ->
+                        overflowMenuOpen = false
                         scope.launch {
-                            ratingRepo.dislikeForStation(playable.trackId, stationId)
-                            stationPlayback.skipNext()
-                        }
-                    },
-                    onTapArtwork = { artworkLightboxOpen = true },
-                    onPinchOpenLyrics = onOpenLyrics,
-                    onTapArtist = {
-                        scope.launch {
-                            libraryRepo.artistsForTrack(playable.trackId)
+                            libraryRepo.artistsForTrack(tid)
                                 .firstOrNull()?.id?.let { onOpenArtist(it) }
                         }
                     },
-                    onTapAlbum = {
-                        scope.launch {
-                            libraryRepo.getTrackById(playable.trackId)
-                                ?.albumId?.let { onOpenAlbum(it) }
-                        }
+                    onGoToStation = { sid ->
+                        overflowMenuOpen = false
+                        onOpenStation(sid)
                     },
-                    onTapStation = { currentStation?.id?.let(onOpenStation) },
-                    driveMode = driveMode,
-                    queueProgress = finiteQueueProgress,
-                )
-            } else if (isCompact) {
-                CompactLayout(
-                    playable = playable,
-                    state = state,
-                    positionMs = position.currentMs,
-                    durationMs = position.durationMs,
-                    rating = rating,
-                    liked = liked,
-                    volume = userVolume,
-                    accent = accent,
-                    stationName = currentStation?.name,
-                    formatLine = formatLine,
-                    onSeek = { audioEngine.seekTo(it) },
-                    onTogglePlayPause = { audioEngine.togglePlayPause() },
-                    onLongPressTogglePlayPause = {
-                        stationPlayback.toggleShuffle()
-                        hapticTick()
+                    onTrackInfo = {
+                        overflowMenuOpen = false
+                        trackInfoOpen = true
                     },
-                    onPrev = { stationPlayback.skipPrevious() },
-                    onNext = { stationPlayback.skipNext() },
-                    onSkipFive = {
-                        // Five rapid skipNext() calls. Each advances the
-                        // queue inside StationPlayback's mutex — running
-                        // them in a tight loop is safe because each
-                        // re-acquires the lock; we just want the user
-                        // to see five tracks fly past in their notification
-                        // / now-playing UI without separately tapping.
-                        repeat(5) { stationPlayback.skipNext() }
+                    onSpeedPicker = {
+                        overflowMenuOpen = false
+                        speedSheetOpen = true
                     },
-                    onRate = { stars ->
-                        scope.launch {
-                            ratingRepo.setRating(playable.trackId, stars)
-                            rating = stars
-                        }
-                    },
-                    onToggleLike = onToggleLike,
-                    onVolumeLive = { stationPlayback.previewUserVolume(it) },
-                    onVolumeCommit = { stationPlayback.commitUserVolume(it) },
-                    preMuteLevel = preMuteLevel,
-                    onPreMuteLevelChange = { preMuteLevel = it },
-                    onDislikeOnStation = {
-                        val stationId = currentStation?.id ?: return@CompactLayout
-                        scope.launch {
-                            ratingRepo.dislikeForStation(playable.trackId, stationId)
-                            stationPlayback.skipNext()
-                        }
-                    },
-                    onTapArtwork = { artworkLightboxOpen = true },
-                    onPinchOpenLyrics = onOpenLyrics,
-                    onTapArtist = {
-                        scope.launch {
-                            libraryRepo.artistsForTrack(playable.trackId)
-                                .firstOrNull()?.id?.let { onOpenArtist(it) }
-                        }
-                    },
-                    onTapAlbum = {
-                        scope.launch {
-                            libraryRepo.getTrackById(playable.trackId)
-                                ?.albumId?.let { onOpenAlbum(it) }
-                        }
-                    },
-                    onTapStation = {
-                        currentStation?.id?.let(onOpenStation)
-                    },
-                    driveMode = driveMode,
-                    queueProgress = finiteQueueProgress,
-                )
-            } else {
-                TwoPaneLayout(
-                    playable = playable,
-                    state = state,
-                    positionMs = position.currentMs,
-                    durationMs = position.durationMs,
-                    rating = rating,
-                    liked = liked,
-                    volume = userVolume,
-                    accent = accent,
-                    stationName = currentStation?.name,
-                    formatLine = formatLine,
-                    onSeek = { audioEngine.seekTo(it) },
-                    onTogglePlayPause = { audioEngine.togglePlayPause() },
-                    onLongPressTogglePlayPause = {
-                        stationPlayback.toggleShuffle()
-                        hapticTick()
-                    },
-                    onPrev = { stationPlayback.skipPrevious() },
-                    onNext = { stationPlayback.skipNext() },
-                    onSkipFive = {
-                        // Five rapid skipNext() calls. Each advances the
-                        // queue inside StationPlayback's mutex — running
-                        // them in a tight loop is safe because each
-                        // re-acquires the lock; we just want the user
-                        // to see five tracks fly past in their notification
-                        // / now-playing UI without separately tapping.
-                        repeat(5) { stationPlayback.skipNext() }
-                    },
-                    onRate = { stars ->
-                        scope.launch {
-                            ratingRepo.setRating(playable.trackId, stars)
-                            rating = stars
-                        }
-                    },
-                    onToggleLike = onToggleLike,
-                    onVolumeLive = { stationPlayback.previewUserVolume(it) },
-                    onVolumeCommit = { stationPlayback.commitUserVolume(it) },
-                    preMuteLevel = preMuteLevel,
-                    onPreMuteLevelChange = { preMuteLevel = it },
-                    onDislikeOnStation = {
-                        val stationId = currentStation?.id ?: return@TwoPaneLayout
-                        scope.launch {
-                            ratingRepo.dislikeForStation(playable.trackId, stationId)
-                            stationPlayback.skipNext()
-                        }
-                    },
-                    onTapArtwork = { artworkLightboxOpen = true },
-                    onPinchOpenLyrics = onOpenLyrics,
-                    onTapArtist = {
-                        scope.launch {
-                            libraryRepo.artistsForTrack(playable.trackId)
-                                .firstOrNull()?.id?.let { onOpenArtist(it) }
-                        }
-                    },
-                    onTapAlbum = {
-                        scope.launch {
-                            libraryRepo.getTrackById(playable.trackId)
-                                ?.albumId?.let { onOpenAlbum(it) }
-                        }
-                    },
-                    onTapStation = {
-                        currentStation?.id?.let(onOpenStation)
-                    },
-                    driveMode = driveMode,
-                    queueProgress = finiteQueueProgress,
                 )
             }
-            if (artworkLightboxOpen) {
-                ArtworkLightbox(
+            Box(modifier = Modifier.fillMaxSize().padding(padding)) {
+                val accent = stationAccent(currentStation?.color)
+
+                BlurredBackdrop(
                     artworkUri = playable.artworkUri,
-                    accent = accent,
-                    onDismiss = { artworkLightboxOpen = false },
+                    reduceMotion = reduceMotion,
                 )
+
+                // Heart toggle handler — flips local state immediately for
+                // snappy UI, then writes through to the repo. The optimistic
+                // flip is safe because the repo is idempotent on like/unlike.
+                val onToggleLike: () -> Unit = {
+                    val target = !liked
+                    liked = target
+                    scope.launch {
+                        if (target) {
+                            ratingRepo.like(playable.trackId)
+                        } else {
+                            ratingRepo.unlike(playable.trackId)
+                        }
+                    }
+                }
+
+                if (resolvedLayout == NowPlayingLayoutChoice.TriplePane) {
+                    TriplePaneLayout(
+                        playable = playable,
+                        state = state,
+                        positionMs = position.currentMs,
+                        durationMs = position.durationMs,
+                        rating = rating,
+                        liked = liked,
+                        volume = userVolume,
+                        accent = accent,
+                        stationName = currentStation?.name,
+                        formatLine = formatLine,
+                        stations = stationsForTriplePane,
+                        currentStationId = currentStation?.id,
+                        // playStation isn't a suspend fun — it launches
+                        // its own internal stationLoadJob. Calling it
+                        // directly avoids a misleading scope.launch
+                        // wrapper that would suggest otherwise.
+                        onStationTap = { id -> stationPlayback.playStation(id) },
+                        onSeek = { audioEngine.seekTo(it) },
+                        onTogglePlayPause = { audioEngine.togglePlayPause() },
+                        onLongPressTogglePlayPause = {
+                            stationPlayback.toggleShuffle()
+                            hapticTick()
+                        },
+                        onPrev = { stationPlayback.skipPrevious() },
+                        onNext = { stationPlayback.skipNext() },
+                        onSkipFive = { repeat(5) { stationPlayback.skipNext() } },
+                        onRate = { stars ->
+                            scope.launch {
+                                ratingRepo.setRating(playable.trackId, stars)
+                                rating = stars
+                            }
+                        },
+                        onToggleLike = onToggleLike,
+                        onVolumeLive = { stationPlayback.previewUserVolume(it) },
+                        onVolumeCommit = { stationPlayback.commitUserVolume(it) },
+                        preMuteLevel = preMuteLevel,
+                        onPreMuteLevelChange = { preMuteLevel = it },
+                        onDislikeOnStation = {
+                            val stationId = currentStation?.id ?: return@TriplePaneLayout
+                            scope.launch {
+                                ratingRepo.dislikeForStation(playable.trackId, stationId)
+                                stationPlayback.skipNext()
+                            }
+                        },
+                        onTapArtwork = { artworkLightboxOpen = true },
+                        onPinchOpenLyrics = onOpenLyrics,
+                        onTapArtist = {
+                            scope.launch {
+                                libraryRepo.artistsForTrack(playable.trackId)
+                                    .firstOrNull()?.id?.let { onOpenArtist(it) }
+                            }
+                        },
+                        onTapAlbum = {
+                            scope.launch {
+                                libraryRepo.getTrackById(playable.trackId)
+                                    ?.albumId?.let { onOpenAlbum(it) }
+                            }
+                        },
+                        onTapStation = { currentStation?.id?.let(onOpenStation) },
+                        driveMode = driveMode,
+                        queueProgress = finiteQueueProgress,
+                    )
+                } else if (isCompact) {
+                    CompactLayout(
+                        playable = playable,
+                        state = state,
+                        positionMs = position.currentMs,
+                        durationMs = position.durationMs,
+                        rating = rating,
+                        liked = liked,
+                        volume = userVolume,
+                        accent = accent,
+                        stationName = currentStation?.name,
+                        formatLine = formatLine,
+                        onSeek = { audioEngine.seekTo(it) },
+                        onTogglePlayPause = { audioEngine.togglePlayPause() },
+                        onLongPressTogglePlayPause = {
+                            stationPlayback.toggleShuffle()
+                            hapticTick()
+                        },
+                        onPrev = { stationPlayback.skipPrevious() },
+                        onNext = { stationPlayback.skipNext() },
+                        onSkipFive = {
+                            // Five rapid skipNext() calls. Each advances the
+                            // queue inside StationPlayback's mutex — running
+                            // them in a tight loop is safe because each
+                            // re-acquires the lock; we just want the user
+                            // to see five tracks fly past in their notification
+                            // / now-playing UI without separately tapping.
+                            repeat(5) { stationPlayback.skipNext() }
+                        },
+                        onRate = { stars ->
+                            scope.launch {
+                                ratingRepo.setRating(playable.trackId, stars)
+                                rating = stars
+                            }
+                        },
+                        onToggleLike = onToggleLike,
+                        onVolumeLive = { stationPlayback.previewUserVolume(it) },
+                        onVolumeCommit = { stationPlayback.commitUserVolume(it) },
+                        preMuteLevel = preMuteLevel,
+                        onPreMuteLevelChange = { preMuteLevel = it },
+                        onDislikeOnStation = {
+                            val stationId = currentStation?.id ?: return@CompactLayout
+                            scope.launch {
+                                ratingRepo.dislikeForStation(playable.trackId, stationId)
+                                stationPlayback.skipNext()
+                            }
+                        },
+                        onTapArtwork = { artworkLightboxOpen = true },
+                        onPinchOpenLyrics = onOpenLyrics,
+                        onTapArtist = {
+                            scope.launch {
+                                libraryRepo.artistsForTrack(playable.trackId)
+                                    .firstOrNull()?.id?.let { onOpenArtist(it) }
+                            }
+                        },
+                        onTapAlbum = {
+                            scope.launch {
+                                libraryRepo.getTrackById(playable.trackId)
+                                    ?.albumId?.let { onOpenAlbum(it) }
+                            }
+                        },
+                        onTapStation = {
+                            currentStation?.id?.let(onOpenStation)
+                        },
+                        driveMode = driveMode,
+                        queueProgress = finiteQueueProgress,
+                    )
+                } else {
+                    TwoPaneLayout(
+                        playable = playable,
+                        state = state,
+                        positionMs = position.currentMs,
+                        durationMs = position.durationMs,
+                        rating = rating,
+                        liked = liked,
+                        volume = userVolume,
+                        accent = accent,
+                        stationName = currentStation?.name,
+                        formatLine = formatLine,
+                        onSeek = { audioEngine.seekTo(it) },
+                        onTogglePlayPause = { audioEngine.togglePlayPause() },
+                        onLongPressTogglePlayPause = {
+                            stationPlayback.toggleShuffle()
+                            hapticTick()
+                        },
+                        onPrev = { stationPlayback.skipPrevious() },
+                        onNext = { stationPlayback.skipNext() },
+                        onSkipFive = {
+                            // Five rapid skipNext() calls. Each advances the
+                            // queue inside StationPlayback's mutex — running
+                            // them in a tight loop is safe because each
+                            // re-acquires the lock; we just want the user
+                            // to see five tracks fly past in their notification
+                            // / now-playing UI without separately tapping.
+                            repeat(5) { stationPlayback.skipNext() }
+                        },
+                        onRate = { stars ->
+                            scope.launch {
+                                ratingRepo.setRating(playable.trackId, stars)
+                                rating = stars
+                            }
+                        },
+                        onToggleLike = onToggleLike,
+                        onVolumeLive = { stationPlayback.previewUserVolume(it) },
+                        onVolumeCommit = { stationPlayback.commitUserVolume(it) },
+                        preMuteLevel = preMuteLevel,
+                        onPreMuteLevelChange = { preMuteLevel = it },
+                        onDislikeOnStation = {
+                            val stationId = currentStation?.id ?: return@TwoPaneLayout
+                            scope.launch {
+                                ratingRepo.dislikeForStation(playable.trackId, stationId)
+                                stationPlayback.skipNext()
+                            }
+                        },
+                        onTapArtwork = { artworkLightboxOpen = true },
+                        onPinchOpenLyrics = onOpenLyrics,
+                        onTapArtist = {
+                            scope.launch {
+                                libraryRepo.artistsForTrack(playable.trackId)
+                                    .firstOrNull()?.id?.let { onOpenArtist(it) }
+                            }
+                        },
+                        onTapAlbum = {
+                            scope.launch {
+                                libraryRepo.getTrackById(playable.trackId)
+                                    ?.albumId?.let { onOpenAlbum(it) }
+                            }
+                        },
+                        onTapStation = {
+                            currentStation?.id?.let(onOpenStation)
+                        },
+                        driveMode = driveMode,
+                        queueProgress = finiteQueueProgress,
+                    )
+                }
+                if (artworkLightboxOpen) {
+                    ArtworkLightbox(
+                        artworkUri = playable.artworkUri,
+                        accent = accent,
+                        onDismiss = { artworkLightboxOpen = false },
+                    )
+                }
             }
         }
-    }
-    }  // BoxWithConstraints
+    } // BoxWithConstraints
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -1131,8 +1175,12 @@ private fun OverflowSheet(
             // sheet because the menu was the only entry point.
             OverflowSheetItem(
                 icon = Icons.Filled.Speed,
-                label = if (playbackSpeed == 1f) "Speed (1×)"
-                        else "Speed (${formatSpeed(playbackSpeed)}×)",
+                label =
+                    if (playbackSpeed == 1f) {
+                        "Speed (1×)"
+                    } else {
+                        "Speed (${formatSpeed(playbackSpeed)}×)"
+                    },
                 enabled = true,
                 onClick = onSpeedPicker,
             )
@@ -1155,10 +1203,11 @@ private fun OverflowSheetItem(
 ) {
     val alpha = if (enabled) 1f else 0.4f
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = 20.dp, vertical = 14.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable(enabled = enabled, onClick = onClick)
+                .padding(horizontal = 20.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
@@ -1216,10 +1265,11 @@ private fun CompactLayout(
         AlbumArtPlaceholder(
             accent = accent,
             artworkUri = playable.artworkUri,
-            modifier = Modifier
-                .widthIn(max = 480.dp)
-                .fillMaxWidth()
-                .aspectRatio(1f),
+            modifier =
+                Modifier
+                    .widthIn(max = 480.dp)
+                    .fillMaxWidth()
+                    .aspectRatio(1f),
             onTap = onTapArtwork,
             onPinchOpen = onPinchOpenLyrics,
         )
@@ -1333,18 +1383,20 @@ private fun TwoPaneLayout(
         // 50/50 with the right column; `widthIn(max=)` caps art on
         // ultra-wide displays so it doesn't dominate.
         Box(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxHeight(),
+            modifier =
+                Modifier
+                    .weight(1f)
+                    .fillMaxHeight(),
             contentAlignment = Alignment.Center,
         ) {
             AlbumArtPlaceholder(
                 accent = accent,
                 artworkUri = playable.artworkUri,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .widthIn(max = 560.dp)
-                    .aspectRatio(1f),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .widthIn(max = 560.dp)
+                        .aspectRatio(1f),
                 onTap = onTapArtwork,
                 onPinchOpen = onPinchOpenLyrics,
             )
@@ -1433,7 +1485,10 @@ private fun TwoPaneLayout(
  * the single most expensive paint on Now Playing.
  */
 @Composable
-private fun BlurredBackdrop(artworkUri: String?, reduceMotion: Boolean) {
+private fun BlurredBackdrop(
+    artworkUri: String?,
+    reduceMotion: Boolean,
+) {
     if (artworkUri == null) return
     val scrimColor = MaterialTheme.colorScheme.background.copy(alpha = 0.55f)
     Box(modifier = Modifier.fillMaxSize()) {
@@ -1441,9 +1496,10 @@ private fun BlurredBackdrop(artworkUri: String?, reduceMotion: Boolean) {
             coil3.compose.AsyncImage(
                 model = artworkUri,
                 contentDescription = null,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .blur(radius = 80.dp),
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .blur(radius = 80.dp),
                 contentScale = androidx.compose.ui.layout.ContentScale.Crop,
                 alpha = 0.6f,
             )
@@ -1468,28 +1524,30 @@ private fun ArtworkLightbox(
 ) {
     com.visorcraft.radioshed.nav.PlatformBackHandler(onBack = onDismiss)
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.92f))
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onDismiss,
-            ),
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.92f))
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = onDismiss,
+                ),
         contentAlignment = Alignment.Center,
     ) {
         Box(
-            modifier = Modifier
-                .padding(24.dp)
-                .fillMaxWidth()
-                .widthIn(max = 720.dp)
-                .aspectRatio(1f)
-                .clip(RoundedCornerShape(20.dp))
-                .background(
-                    Brush.linearGradient(
-                        colors = listOf(accent, accent.copy(alpha = 0.55f)),
+            modifier =
+                Modifier
+                    .padding(24.dp)
+                    .fillMaxWidth()
+                    .widthIn(max = 720.dp)
+                    .aspectRatio(1f)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(
+                        Brush.linearGradient(
+                            colors = listOf(accent, accent.copy(alpha = 0.55f)),
+                        ),
                     ),
-                ),
             contentAlignment = Alignment.Center,
         ) {
             if (artworkUri != null) {
@@ -1519,39 +1577,40 @@ private fun AlbumArtPlaceholder(
     onPinchOpen: () -> Unit = {},
 ) {
     Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(16.dp))
-            .background(
-                Brush.linearGradient(
-                    colors = listOf(accent, accent.copy(alpha = 0.55f)),
-                ),
-            )
-            .clickable(onClick = onTap)
-            // Pinch-to-lyrics gesture: a quick outward pinch on the
-            // artwork jumps to the lyrics screen, mirroring the
-            // gestural pattern of "zoom in to see more". Cumulative
-            // zoom threshold of 1.20× avoids accidental triggers and
-            // a `fired` flag inside awaitEachGesture ensures the
-            // navigation only fires once per gesture even though
-            // detectTransformGestures' callback is called per move
-            // event (it would otherwise push Lyrics multiple times
-            // onto the back stack on a fast continuous pinch).
-            .pointerInput(Unit) {
-                awaitEachGesture {
-                    awaitFirstDown(requireUnconsumed = false)
-                    var cumulativeZoom = 1f
-                    var fired = false
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        cumulativeZoom *= event.calculateZoom()
-                        if (!fired && cumulativeZoom > 1.20f) {
-                            fired = true
-                            onPinchOpen()
+        modifier =
+            modifier
+                .clip(RoundedCornerShape(16.dp))
+                .background(
+                    Brush.linearGradient(
+                        colors = listOf(accent, accent.copy(alpha = 0.55f)),
+                    ),
+                )
+                .clickable(onClick = onTap)
+                // Pinch-to-lyrics gesture: a quick outward pinch on the
+                // artwork jumps to the lyrics screen, mirroring the
+                // gestural pattern of "zoom in to see more". Cumulative
+                // zoom threshold of 1.20× avoids accidental triggers and
+                // a `fired` flag inside awaitEachGesture ensures the
+                // navigation only fires once per gesture even though
+                // detectTransformGestures' callback is called per move
+                // event (it would otherwise push Lyrics multiple times
+                // onto the back stack on a fast continuous pinch).
+                .pointerInput(Unit) {
+                    awaitEachGesture {
+                        awaitFirstDown(requireUnconsumed = false)
+                        var cumulativeZoom = 1f
+                        var fired = false
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            cumulativeZoom *= event.calculateZoom()
+                            if (!fired && cumulativeZoom > 1.20f) {
+                                fired = true
+                                onPinchOpen()
+                            }
+                            if (event.changes.none { it.pressed }) break
                         }
-                        if (event.changes.none { it.pressed }) break
                     }
-                }
-            },
+                },
         contentAlignment = Alignment.Center,
     ) {
         if (artworkUri != null) {
@@ -1569,9 +1628,10 @@ private fun AlbumArtPlaceholder(
             coil3.compose.AsyncImage(
                 model = artworkUri,
                 contentDescription = null,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .blur(28.dp),
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .blur(28.dp),
                 contentScale = androidx.compose.ui.layout.ContentScale.Crop,
                 alpha = 0.85f,
             )
@@ -1621,8 +1681,12 @@ private fun TrackInfo(
         if (artist != null || album != null) {
             Spacer(Modifier.height(4.dp))
             Row(
-                horizontalArrangement = if (alignment == Alignment.CenterHorizontally)
-                    Arrangement.Center else Arrangement.Start,
+                horizontalArrangement =
+                    if (alignment == Alignment.CenterHorizontally) {
+                        Arrangement.Center
+                    } else {
+                        Arrangement.Start
+                    },
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth(),
             ) {
@@ -1635,9 +1699,10 @@ private fun TrackInfo(
                         color = subColor,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier
-                            .clickable(onClick = onTapArtist)
-                            .padding(horizontal = 4.dp, vertical = 2.dp),
+                        modifier =
+                            Modifier
+                                .clickable(onClick = onTapArtist)
+                                .padding(horizontal = 4.dp, vertical = 2.dp),
                     )
                 }
                 if (artist != null && album != null) {
@@ -1654,9 +1719,10 @@ private fun TrackInfo(
                         color = subColor,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier
-                            .clickable(onClick = onTapAlbum)
-                            .padding(horizontal = 4.dp, vertical = 2.dp),
+                        modifier =
+                            Modifier
+                                .clickable(onClick = onTapAlbum)
+                                .padding(horizontal = 4.dp, vertical = 2.dp),
                     )
                 }
             }
@@ -1668,9 +1734,10 @@ private fun TrackInfo(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f),
                 textAlign = if (alignment == Alignment.CenterHorizontally) TextAlign.Center else TextAlign.Start,
-                modifier = Modifier
-                    .clickable(onClick = onTapStation)
-                    .padding(horizontal = 4.dp, vertical = 2.dp),
+                modifier =
+                    Modifier
+                        .clickable(onClick = onTapStation)
+                        .padding(horizontal = 4.dp, vertical = 2.dp),
             )
         }
         // Track N of M chip — only shown when we're playing a finite
@@ -1699,8 +1766,12 @@ private fun Scrubber(
     var seekDialogOpen by remember { mutableStateOf(false) }
 
     val durationSafe = durationMs.coerceAtLeast(0L)
-    val currentFraction = if (durationSafe == 0L) 0f
-                          else (positionMs.toFloat() / durationSafe).coerceIn(0f, 1f)
+    val currentFraction =
+        if (durationSafe == 0L) {
+            0f
+        } else {
+            (positionMs.toFloat() / durationSafe).coerceIn(0f, 1f)
+        }
     val displayFraction = if (isUserScrubbing) pendingFraction else currentFraction
 
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -1733,15 +1804,16 @@ private fun Scrubber(
                 style = MaterialTheme.typography.bodySmall,
                 fontFamily = FontFamily.Monospace,
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
-                modifier = Modifier.combinedClickable(
-                    enabled = durationSafe > 0L,
-                    onClick = { seekDialogOpen = true },
-                    onLongClick = {
-                        val elapsed = formatMs(positionMs)
-                        val total = formatMs(durationSafe)
-                        positionClipboard("$elapsed / $total")
-                    },
-                ),
+                modifier =
+                    Modifier.combinedClickable(
+                        enabled = durationSafe > 0L,
+                        onClick = { seekDialogOpen = true },
+                        onLongClick = {
+                            val elapsed = formatMs(positionMs)
+                            val total = formatMs(durationSafe)
+                            positionClipboard("$elapsed / $total")
+                        },
+                    ),
             )
             Text(
                 text = formatMs(durationSafe),
@@ -1801,12 +1873,14 @@ private fun SeekToTimeDialog(
                     label = { Text("Time") },
                     singleLine = true,
                     isError = parsed == null,
-                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                        imeAction = androidx.compose.ui.text.input.ImeAction.Done,
-                    ),
-                    keyboardActions = androidx.compose.foundation.text.KeyboardActions(
-                        onDone = { confirm() },
-                    ),
+                    keyboardOptions =
+                        androidx.compose.foundation.text.KeyboardOptions(
+                            imeAction = androidx.compose.ui.text.input.ImeAction.Done,
+                        ),
+                    keyboardActions =
+                        androidx.compose.foundation.text.KeyboardActions(
+                            onDone = { confirm() },
+                        ),
                 )
             }
         },
@@ -1925,16 +1999,17 @@ private fun TransportRow(
             Box {
                 Surface(
                     color = Color.Transparent,
-                    modifier = Modifier
-                        .size(seekButtonSize)
-                        .clip(RoundedCornerShape(seekButtonSize / 2))
-                        .combinedClickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null,
-                            onClick = { onReplay(10_000L) },
-                            onLongClick = { onReplay(30_000L) },
-                        )
-                        .semantics { contentDescription = "Back 10 seconds (long-press 30)" },
+                    modifier =
+                        Modifier
+                            .size(seekButtonSize)
+                            .clip(RoundedCornerShape(seekButtonSize / 2))
+                            .combinedClickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                                onClick = { onReplay(10_000L) },
+                                onLongClick = { onReplay(30_000L) },
+                            )
+                            .semantics { contentDescription = "Back 10 seconds (long-press 30)" },
                 ) {
                     Box(
                         modifier = Modifier.fillMaxSize(),
@@ -1966,16 +2041,17 @@ private fun TransportRow(
             Box {
                 Surface(
                     color = Color.Transparent,
-                    modifier = Modifier
-                        .size(seekButtonSize)
-                        .clip(RoundedCornerShape(seekButtonSize / 2))
-                        .combinedClickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null,
-                            onClick = { onForward(10_000L) },
-                            onLongClick = { onForward(30_000L) },
-                        )
-                        .semantics { contentDescription = "Forward 10 seconds (long-press 30)" },
+                    modifier =
+                        Modifier
+                            .size(seekButtonSize)
+                            .clip(RoundedCornerShape(seekButtonSize / 2))
+                            .combinedClickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                                onClick = { onForward(10_000L) },
+                                onLongClick = { onForward(30_000L) },
+                            )
+                            .semantics { contentDescription = "Forward 10 seconds (long-press 30)" },
                 ) {
                     Box(
                         modifier = Modifier.fillMaxSize(),
@@ -1996,16 +2072,17 @@ private fun TransportRow(
         Box {
             Surface(
                 color = Color.Transparent,
-                modifier = Modifier
-                    .size(baseSize)
-                    .clip(RoundedCornerShape(baseSize / 2))
-                    .combinedClickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = onNext,
-                        onLongClick = { dislikeMenuOpen = true },
-                    )
-                    .semantics { contentDescription = "Next (long-press for options)" },
+                modifier =
+                    Modifier
+                        .size(baseSize)
+                        .clip(RoundedCornerShape(baseSize / 2))
+                        .combinedClickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                            onClick = onNext,
+                            onLongClick = { dislikeMenuOpen = true },
+                        )
+                        .semantics { contentDescription = "Next (long-press for options)" },
             ) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
@@ -2071,9 +2148,10 @@ private fun BigIconButton(
         com.visorcraft.radioshed.ui.util.TooltipIconButton(
             tooltip = description,
             onClick = onClick,
-            modifier = Modifier
-                .size(buttonSize)
-                .semantics { contentDescription = description },
+            modifier =
+                Modifier
+                    .size(buttonSize)
+                    .semantics { contentDescription = description },
         ) {
             Icon(
                 imageVector = icon,
@@ -2088,29 +2166,30 @@ private fun BigIconButton(
         // hit-target stays the same `buttonSize` so the visual layout
         // doesn't shift when long-press is wired in.
         com.visorcraft.radioshed.ui.util.Tooltipped(tooltip = description) {
-        Surface(
-            color = Color.Transparent,
-            modifier = Modifier
-                .size(buttonSize)
-                .clip(RoundedCornerShape(buttonSize / 2))
-                .combinedClickable(
-                    onClick = onClick,
-                    onLongClick = onLongClick,
-                )
-                .semantics { contentDescription = description },
-        ) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center,
+            Surface(
+                color = Color.Transparent,
+                modifier =
+                    Modifier
+                        .size(buttonSize)
+                        .clip(RoundedCornerShape(buttonSize / 2))
+                        .combinedClickable(
+                            onClick = onClick,
+                            onLongClick = onLongClick,
+                        )
+                        .semantics { contentDescription = description },
             ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    modifier = Modifier.size(iconSize),
-                    tint = MaterialTheme.colorScheme.onBackground,
-                )
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        modifier = Modifier.size(iconSize),
+                        tint = MaterialTheme.colorScheme.onBackground,
+                    )
+                }
             }
-        }
         } // close Tooltipped(description)
     }
 }
@@ -2144,65 +2223,79 @@ private fun RatingRow(
             modifier = Modifier.size(48.dp),
         ) {
             Icon(
-                imageVector = if (liked) Icons.Filled.Favorite
-                              else Icons.Outlined.FavoriteBorder,
+                imageVector =
+                    if (liked) {
+                        Icons.Filled.Favorite
+                    } else {
+                        Icons.Outlined.FavoriteBorder
+                    },
                 contentDescription = if (liked) "Unlike" else "Like",
                 modifier = Modifier.size(28.dp),
-                tint = if (liked) MaterialTheme.colorScheme.primary
-                       else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
+                tint =
+                    if (liked) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
+                    },
             )
         }
         Spacer(Modifier.width(4.dp))
         (1..5).forEach { n ->
             val nDouble = n.toDouble()
             val halfValue = nDouble - 0.5
-            val starState = when {
-                current >= nDouble -> StarState.Full
-                current >= halfValue -> StarState.Half
-                else -> StarState.Empty
-            }
+            val starState =
+                when {
+                    current >= nDouble -> StarState.Full
+                    current >= halfValue -> StarState.Half
+                    else -> StarState.Empty
+                }
             // Each star occupies one 48dp box. Inside, we render the icon
             // centered, then overlay TWO transparent tap zones (left half
             // → half-star value, right half → full-star value). Compose
             // dispatches taps to the topmost composable, so the overlay
             // wins.
             Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .semantics { contentDescription = "Rating star $n" },
+                modifier =
+                    Modifier
+                        .size(48.dp)
+                        .semantics { contentDescription = "Rating star $n" },
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
-                    imageVector = when (starState) {
-                        StarState.Full -> Icons.Filled.Star
-                        StarState.Half -> Icons.AutoMirrored.Filled.StarHalf
-                        StarState.Empty -> Icons.Outlined.StarOutline
-                    },
+                    imageVector =
+                        when (starState) {
+                            StarState.Full -> Icons.Filled.Star
+                            StarState.Half -> Icons.AutoMirrored.Filled.StarHalf
+                            StarState.Empty -> Icons.Outlined.StarOutline
+                        },
                     contentDescription = null,
                     modifier = Modifier.size(32.dp),
-                    tint = when (starState) {
-                        StarState.Empty -> MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f)
-                        else -> MaterialTheme.colorScheme.primary
-                    },
+                    tint =
+                        when (starState) {
+                            StarState.Empty -> MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f)
+                            else -> MaterialTheme.colorScheme.primary
+                        },
                 )
                 Row(modifier = Modifier.fillMaxSize()) {
                     Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight()
-                            .clickable {
-                                val target = if (current == halfValue) 0.0 else halfValue
-                                onRate(target)
-                            },
+                        modifier =
+                            Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .clickable {
+                                    val target = if (current == halfValue) 0.0 else halfValue
+                                    onRate(target)
+                                },
                     )
                     Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight()
-                            .clickable {
-                                val target = if (current == nDouble) 0.0 else nDouble
-                                onRate(target)
-                            },
+                        modifier =
+                            Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .clickable {
+                                    val target = if (current == nDouble) 0.0 else nDouble
+                                    onRate(target)
+                                },
                     )
                 }
             }
@@ -2240,26 +2333,28 @@ private fun VolumeRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
-            imageVector = when {
-                display < 0.02f -> Icons.AutoMirrored.Filled.VolumeOff
-                display < 0.5f -> Icons.AutoMirrored.Filled.VolumeDown
-                else -> Icons.AutoMirrored.Filled.VolumeUp
-            },
-            contentDescription = "Volume",
-            modifier = Modifier
-                .size(20.dp)
-                .clickable {
-                    val muted = volume < 0.02f
-                    if (muted) {
-                        val target = preMuteLevel.coerceAtLeast(0.1f)
-                        onVolumeLive(target)
-                        onVolumeCommit(target)
-                    } else {
-                        onPreMuteLevelChange(volume)
-                        onVolumeLive(0f)
-                        onVolumeCommit(0f)
-                    }
+            imageVector =
+                when {
+                    display < 0.02f -> Icons.AutoMirrored.Filled.VolumeOff
+                    display < 0.5f -> Icons.AutoMirrored.Filled.VolumeDown
+                    else -> Icons.AutoMirrored.Filled.VolumeUp
                 },
+            contentDescription = "Volume",
+            modifier =
+                Modifier
+                    .size(20.dp)
+                    .clickable {
+                        val muted = volume < 0.02f
+                        if (muted) {
+                            val target = preMuteLevel.coerceAtLeast(0.1f)
+                            onVolumeLive(target)
+                            onVolumeCommit(target)
+                        } else {
+                            onPreMuteLevelChange(volume)
+                            onVolumeLive(0f)
+                            onVolumeCommit(0f)
+                        }
+                    },
             tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
         )
         Spacer(Modifier.width(8.dp))
@@ -2330,11 +2425,12 @@ private fun TrackInfoDialog(
     LaunchedEffect(playable.trackId, refreshTick) {
         track = libraryRepo.getTrackById(playable.trackId)
         stats = stationRepo.historyStatsForTrack(playable.trackId)
-        genres = libraryRepo.tagsForTrack(playable.trackId)
-            .filter { it.key.equals("GENRE", ignoreCase = true) }
-            .map { it.value }
-            .filter { it.isNotBlank() }
-            .distinct()
+        genres =
+            libraryRepo.tagsForTrack(playable.trackId)
+                .filter { it.key.equals("GENRE", ignoreCase = true) }
+                .map { it.value }
+                .filter { it.isNotBlank() }
+                .distinct()
         primaryArtistId = libraryRepo.artistsForTrack(playable.trackId).firstOrNull()?.id
         // Auto-fetch Wikipedia lead-paragraph artist bio. Gated by
         // the Connectivity policy + auto-fetch toggle so a user on
@@ -2344,9 +2440,10 @@ private fun TrackInfoDialog(
         artistBio = null
         val artistName = playable.artist?.takeIf { it.isNotBlank() }
         if (artistName != null && networkPolicy.allowAutomaticFetch()) {
-            artistBio = runCatching {
-                wikipediaFetcher.fetchSummary(artistName)
-            }.getOrNull()
+            artistBio =
+                runCatching {
+                    wikipediaFetcher.fetchSummary(artistName)
+                }.getOrNull()
         }
     }
     androidx.compose.material3.AlertDialog(
@@ -2379,8 +2476,9 @@ private fun TrackInfoDialog(
                         // root. (Pre-fix: the substringBeforeLast('/')
                         // path returned the default "/" on Windows
                         // because Windows paths contain no '/'.)
-                        val parent = com.visorcraft.radioshed.source.parentPath(t.path)
-                            .ifBlank { "/" }
+                        val parent =
+                            com.visorcraft.radioshed.source.parentPath(t.path)
+                                .ifBlank { "/" }
                         onDismiss()
                         onOpenFolder(parent)
                     }
@@ -2423,20 +2521,22 @@ private fun TrackInfoDialog(
                             onClick = {
                                 scope.launch {
                                     ringtoneStatus = "Setting ringtone…"
-                                    val result = ringtoneSetter.setAsRingtone(
-                                        absolutePath = t.path,
-                                        displayName = t.title.ifBlank { t.fileName },
-                                    )
-                                    ringtoneStatus = when (result) {
-                                        is com.visorcraft.radioshed.source.RingtoneSetter.Result.Ok ->
-                                            "Set as ringtone."
-                                        is com.visorcraft.radioshed.source.RingtoneSetter.Result.NeedsPermission ->
-                                            "Grant Modify system settings, then tap again."
-                                        is com.visorcraft.radioshed.source.RingtoneSetter.Result.NotSupported ->
-                                            "Not supported on this platform."
-                                        is com.visorcraft.radioshed.source.RingtoneSetter.Result.Failed ->
-                                            "Couldn't set: ${result.reason}"
-                                    }
+                                    val result =
+                                        ringtoneSetter.setAsRingtone(
+                                            absolutePath = t.path,
+                                            displayName = t.title.ifBlank { t.fileName },
+                                        )
+                                    ringtoneStatus =
+                                        when (result) {
+                                            is com.visorcraft.radioshed.source.RingtoneSetter.Result.Ok ->
+                                                "Set as ringtone."
+                                            is com.visorcraft.radioshed.source.RingtoneSetter.Result.NeedsPermission ->
+                                                "Grant Modify system settings, then tap again."
+                                            is com.visorcraft.radioshed.source.RingtoneSetter.Result.NotSupported ->
+                                                "Not supported on this platform."
+                                            is com.visorcraft.radioshed.source.RingtoneSetter.Result.Failed ->
+                                                "Couldn't set: ${result.reason}"
+                                        }
                                 }
                             },
                             modifier = Modifier.weight(1f),
@@ -2446,10 +2546,11 @@ private fun TrackInfoDialog(
                         androidx.compose.material3.OutlinedButton(
                             onClick = {
                                 scope.launch {
-                                    val ok = trackSharer.share(
-                                        absolutePath = t.path,
-                                        displayName = t.title.ifBlank { t.fileName },
-                                    )
+                                    val ok =
+                                        trackSharer.share(
+                                            absolutePath = t.path,
+                                            displayName = t.title.ifBlank { t.fileName },
+                                        )
                                     if (!ok) {
                                         ringtoneStatus = "Couldn't open share sheet."
                                     }
@@ -2478,11 +2579,12 @@ private fun TrackInfoDialog(
                     // when the user wants to share what they're
                     // hearing without sending the actual file.
                     val copyToClipboard = com.visorcraft.radioshed.ui.util.rememberCopyToClipboard()
-                    val combined = remember(playable.artist, t.title, t.fileName) {
-                        val artistPart = playable.artist?.takeIf { it.isNotBlank() }
-                        val titlePart = t.title.ifBlank { t.fileName }
-                        if (artistPart != null) "$artistPart – $titlePart" else titlePart
-                    }
+                    val combined =
+                        remember(playable.artist, t.title, t.fileName) {
+                            val artistPart = playable.artist?.takeIf { it.isNotBlank() }
+                            val titlePart = t.title.ifBlank { t.fileName }
+                            if (artistPart != null) "$artistPart – $titlePart" else titlePart
+                        }
                     androidx.compose.material3.OutlinedButton(
                         onClick = {
                             copyToClipboard(combined)
@@ -2500,23 +2602,24 @@ private fun TrackInfoDialog(
                     // correctly even when the file's path is opaque.
                     androidx.compose.material3.OutlinedButton(
                         onClick = {
-                            val md = buildString {
-                                appendLine("**Track:** ${t.title.ifBlank { t.fileName }}")
-                                playable.artist?.takeIf { it.isNotBlank() }?.let {
-                                    appendLine("**Artist:** $it")
-                                }
-                                playable.album?.takeIf { it.isNotBlank() }?.let {
-                                    appendLine("**Album:** $it")
-                                }
-                                appendLine("**Format:** ${t.format.uppercase()}")
-                                appendLine("**Duration:** ${formatMs(t.durationMs)}")
-                                t.bitrateKbps?.let { appendLine("**Bitrate:** $it kbps") }
-                                t.sampleRateHz?.let {
-                                    appendLine("**Sample rate:** ${"%.1f".format(it / 1000.0)} kHz")
-                                }
-                                t.trackNumber?.let { appendLine("**Track #:** $it") }
-                                t.bpm?.let { appendLine("**BPM:** ${"%.1f".format(it)}") }
-                            }.trimEnd()
+                            val md =
+                                buildString {
+                                    appendLine("**Track:** ${t.title.ifBlank { t.fileName }}")
+                                    playable.artist?.takeIf { it.isNotBlank() }?.let {
+                                        appendLine("**Artist:** $it")
+                                    }
+                                    playable.album?.takeIf { it.isNotBlank() }?.let {
+                                        appendLine("**Album:** $it")
+                                    }
+                                    appendLine("**Format:** ${t.format.uppercase()}")
+                                    appendLine("**Duration:** ${formatMs(t.durationMs)}")
+                                    t.bitrateKbps?.let { appendLine("**Bitrate:** $it kbps") }
+                                    t.sampleRateHz?.let {
+                                        appendLine("**Sample rate:** ${"%.1f".format(it / 1000.0)} kHz")
+                                    }
+                                    t.trackNumber?.let { appendLine("**Track #:** $it") }
+                                    t.bpm?.let { appendLine("**BPM:** ${"%.1f".format(it)}") }
+                                }.trimEnd()
                             copyToClipboard(md)
                             ringtoneStatus = "Copied Track Info as Markdown."
                         },
@@ -2537,23 +2640,25 @@ private fun TrackInfoDialog(
                     // only Ktor consumers and we don't want to pull a
                     // URL-encoder dep into commonMain just for these.
                     val artistForWeb = playable.artist?.takeIf { it.isNotBlank() }
-                    fun encodeForUrl(s: String): String = s
-                        // Order matters: % first (so subsequent escapes
-                        // don't double-encode), then literal + (which
-                        // would otherwise survive into the result and
-                        // be parsed as a space when the URL deserialises),
-                        // then space, then path-significant characters.
-                        // / matters for artists like AC/DC — without
-                        // it the URL path parser splits the artist
-                        // name across segments.
-                        .replace("%", "%25")
-                        .replace("+", "%2B")
-                        .replace(" ", "+")
-                        .replace("&", "%26")
-                        .replace("#", "%23")
-                        .replace("?", "%3F")
-                        .replace("/", "%2F")
-                        .replace("=", "%3D")
+
+                    fun encodeForUrl(s: String): String =
+                        s
+                            // Order matters: % first (so subsequent escapes
+                            // don't double-encode), then literal + (which
+                            // would otherwise survive into the result and
+                            // be parsed as a space when the URL deserialises),
+                            // then space, then path-significant characters.
+                            // / matters for artists like AC/DC — without
+                            // it the URL path parser splits the artist
+                            // name across segments.
+                            .replace("%", "%25")
+                            .replace("+", "%2B")
+                            .replace(" ", "+")
+                            .replace("&", "%26")
+                            .replace("#", "%23")
+                            .replace("?", "%3F")
+                            .replace("/", "%2F")
+                            .replace("=", "%3D")
                     androidx.compose.material3.OutlinedButton(
                         onClick = {
                             artistForWeb?.let { name ->
@@ -2576,11 +2681,12 @@ private fun TrackInfoDialog(
                     if (albumForWeb != null) {
                         androidx.compose.material3.OutlinedButton(
                             onClick = {
-                                val q = if (artistForWeb != null) {
-                                    "$albumForWeb $artistForWeb album"
-                                } else {
-                                    "$albumForWeb album"
-                                }
+                                val q =
+                                    if (artistForWeb != null) {
+                                        "$albumForWeb $artistForWeb album"
+                                    } else {
+                                        "$albumForWeb album"
+                                    }
                                 com.visorcraft.radioshed.source.openWebUrl(
                                     "https://en.wikipedia.org/wiki/Special:Search?search=${encodeForUrl(q)}",
                                 )
@@ -2620,10 +2726,11 @@ private fun TrackInfoDialog(
                     // falls back to the title alone when the track has
                     // no artist tag (still useful for instrumental /
                     // public-domain rips). Always enabled.
-                    val ytQuery = run {
-                        val titlePart = t.title.ifBlank { t.fileName }
-                        if (artistForWeb != null) "$artistForWeb $titlePart" else titlePart
-                    }
+                    val ytQuery =
+                        run {
+                            val titlePart = t.title.ifBlank { t.fileName }
+                            if (artistForWeb != null) "$artistForWeb $titlePart" else titlePart
+                        }
                     androidx.compose.material3.OutlinedButton(
                         onClick = {
                             com.visorcraft.radioshed.source.openWebUrl(
@@ -2715,9 +2822,10 @@ private fun TrackInfoDialog(
                             text = "Wikipedia",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.clickable {
-                                com.visorcraft.radioshed.source.openWebUrl(bio.pageUrl)
-                            },
+                            modifier =
+                                Modifier.clickable {
+                                    com.visorcraft.radioshed.source.openWebUrl(bio.pageUrl)
+                                },
                         )
                         Spacer(Modifier.height(4.dp))
                     }
@@ -2760,19 +2868,20 @@ private fun TrackInfoDialog(
                     t.musicbrainzId?.takeIf { it.isNotBlank() }?.let { mbid ->
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .combinedClickable(
-                                    onClick = {
-                                        com.visorcraft.radioshed.source.openWebUrl(
-                                            "https://musicbrainz.org/recording/$mbid",
-                                        )
-                                    },
-                                    onLongClick = {
-                                        copyToClipboard(mbid)
-                                        ringtoneStatus = "MusicBrainz ID copied to clipboard."
-                                    },
-                                ),
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .combinedClickable(
+                                        onClick = {
+                                            com.visorcraft.radioshed.source.openWebUrl(
+                                                "https://musicbrainz.org/recording/$mbid",
+                                            )
+                                        },
+                                        onLongClick = {
+                                            copyToClipboard(mbid)
+                                            ringtoneStatus = "MusicBrainz ID copied to clipboard."
+                                        },
+                                    ),
                         ) {
                             Box(modifier = Modifier.weight(1f)) {
                                 InfoLine("MusicBrainz ID", mbid, monospace = true)
@@ -2808,23 +2917,24 @@ private fun TrackInfoDialog(
                     }
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .combinedClickable(
-                                onClick = {
-                                    copyToClipboard(t.path)
-                                    ringtoneStatus = "Path copied to clipboard."
-                                },
-                                // Long-press the path row copies just
-                                // the file name (basename). Useful for
-                                // pasting into a tag-fix workflow that
-                                // doesn't want the leading directory
-                                // tree.
-                                onLongClick = {
-                                    copyToClipboard(t.fileName)
-                                    ringtoneStatus = "File name copied to clipboard."
-                                },
-                            ),
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .combinedClickable(
+                                    onClick = {
+                                        copyToClipboard(t.path)
+                                        ringtoneStatus = "Path copied to clipboard."
+                                    },
+                                    // Long-press the path row copies just
+                                    // the file name (basename). Useful for
+                                    // pasting into a tag-fix workflow that
+                                    // doesn't want the leading directory
+                                    // tree.
+                                    onLongClick = {
+                                        copyToClipboard(t.fileName)
+                                        ringtoneStatus = "File name copied to clipboard."
+                                    },
+                                ),
                     ) {
                         Box(modifier = Modifier.weight(1f)) {
                             InfoLine("Path", t.path, monospace = true)
@@ -2876,7 +2986,7 @@ private fun formatRelativeDate(ms: Long): String {
     return when {
         day < 1L -> "Today"
         day < 2L -> "Yesterday"
-        day < 7L -> "${day} days ago"
+        day < 7L -> "$day days ago"
         day < 30L -> "${day / 7L} weeks ago"
         day < 365L -> "${day / 30L} months ago"
         else -> "${day / 365L} years ago"
@@ -2898,7 +3008,11 @@ private fun formatStatDuration(ms: Long): String {
 }
 
 @Composable
-private fun InfoLine(label: String, value: String, monospace: Boolean = false) {
+private fun InfoLine(
+    label: String,
+    value: String,
+    monospace: Boolean = false,
+) {
     Column {
         Text(
             text = label,
@@ -2915,7 +3029,11 @@ private fun InfoLine(label: String, value: String, monospace: Boolean = false) {
 }
 
 @Composable
-private fun InfoLineTappable(label: String, value: String, onClick: () -> Unit) {
+private fun InfoLineTappable(
+    label: String,
+    value: String,
+    onClick: () -> Unit,
+) {
     Column(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
         Text(
             text = label,
@@ -2956,23 +3074,28 @@ private fun QueueBottomSheet(
     // DragReorderState reasons over) and upcoming-list indices
     // (0..upcoming.size). The header offset is the count of
     // non-upcoming items rendered ABOVE the upcoming rows.
-    val headerOffset = remember(recent.size) {
-        if (recent.isEmpty()) 1 // "Up next" header
-        else 1 + recent.size + 1 + 1 + 1 + 1 // played header + recent + spacer + divider + spacer + "Up next"
-    }
-    val dragState = com.visorcraft.radioshed.ui.util.rememberDragReorderState(
-        lazyListState = listState,
-        onMove = { fromAbs, toAbs ->
-            val fromIdx = fromAbs - headerOffset
-            val toIdx = toAbs - headerOffset
-            // Both endpoints must be in priority range — rule-driven
-            // rows aren't reorderable since they regenerate every
-            // peek anyway.
-            if (fromIdx in 0 until priorityCount && toIdx in 0 until priorityCount) {
-                onMoveQueueItem(fromIdx, toIdx)
+    val headerOffset =
+        remember(recent.size) {
+            if (recent.isEmpty()) {
+                1 // "Up next" header
+            } else {
+                1 + recent.size + 1 + 1 + 1 + 1 // played header + recent + spacer + divider + spacer + "Up next"
             }
-        },
-    )
+        }
+    val dragState =
+        com.visorcraft.radioshed.ui.util.rememberDragReorderState(
+            lazyListState = listState,
+            onMove = { fromAbs, toAbs ->
+                val fromIdx = fromAbs - headerOffset
+                val toIdx = toAbs - headerOffset
+                // Both endpoints must be in priority range — rule-driven
+                // rows aren't reorderable since they regenerate every
+                // peek anyway.
+                if (fromIdx in 0 until priorityCount && toIdx in 0 until priorityCount) {
+                    onMoveQueueItem(fromIdx, toIdx)
+                }
+            },
+        )
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
@@ -2980,9 +3103,11 @@ private fun QueueBottomSheet(
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxWidth(),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                horizontal = 16.dp, vertical = 8.dp,
-            ),
+            contentPadding =
+                androidx.compose.foundation.layout.PaddingValues(
+                    horizontal = 16.dp,
+                    vertical = 8.dp,
+                ),
         ) {
             if (recent.isNotEmpty()) {
                 item { QueueSectionHeader("Just played") }
@@ -3005,21 +3130,24 @@ private fun QueueBottomSheet(
                 item { Spacer(Modifier.height(8.dp)) }
             }
             item {
-                val queueHeaderClipboard = com.visorcraft.radioshed.ui.util
-                    .rememberCopyToClipboard()
+                val queueHeaderClipboard =
+                    com.visorcraft.radioshed.ui.util
+                        .rememberCopyToClipboard()
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        // Tap the section header to copy the upcoming
-                        // queue as a numbered text list — paste-friendly
-                        // for "what's queued?" chats. No-op when the
-                        // queue is empty.
-                        .clickable(enabled = upcoming.isNotEmpty()) {
-                            val text = upcoming.mapIndexed { i, t ->
-                                "${i + 1}. ${t.title.ifBlank { t.fileName }}"
-                            }.joinToString("\n")
-                            queueHeaderClipboard(text)
-                        },
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            // Tap the section header to copy the upcoming
+                            // queue as a numbered text list — paste-friendly
+                            // for "what's queued?" chats. No-op when the
+                            // queue is empty.
+                            .clickable(enabled = upcoming.isNotEmpty()) {
+                                val text =
+                                    upcoming.mapIndexed { i, t ->
+                                        "${i + 1}. ${t.title.ifBlank { t.fileName }}"
+                                    }.joinToString("\n")
+                                queueHeaderClipboard(text)
+                            },
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     QueueSectionHeader(
@@ -3049,7 +3177,8 @@ private fun QueueBottomSheet(
                     // legitimately in the priority queue (e.g.,
                     // user "Play next"-ed the same song twice),
                     // and Compose throws on duplicate item keys.
-                    upcoming, key = { idx, _ -> "u:$idx" },
+                    upcoming,
+                    key = { idx, _ -> "u:$idx" },
                 ) { idx, track ->
                     // Only the first `priorityCount` rows are user-
                     // queued items we can actually remove or
@@ -3057,19 +3186,23 @@ private fun QueueBottomSheet(
                     // affordance — peeking them again would just
                     // regenerate the same row.
                     val canRemove = idx < priorityCount
-                    val rowModifier = if (canRemove) {
-                        Modifier.dragReorderItem(dragState, headerOffset + idx)
-                    } else {
-                        Modifier
-                    }
+                    val rowModifier =
+                        if (canRemove) {
+                            Modifier.dragReorderItem(dragState, headerOffset + idx)
+                        } else {
+                            Modifier
+                        }
                     QueueTrackRow(
                         track = track,
                         artworkUri = track.albumId?.let(artworkByAlbumId::get),
                         dim = false,
                         onTap = { onJumpUpcoming(idx) },
-                        onRemove = if (canRemove) {
-                            { onRemoveQueueItem(idx) }
-                        } else null,
+                        onRemove =
+                            if (canRemove) {
+                                { onRemoveQueueItem(idx) }
+                            } else {
+                                null
+                            },
                         // Long-press a priority row to jump it to
                         // the top — same effect as drag-reordering
                         // it to position 0, but discoverable as a
@@ -3077,9 +3210,12 @@ private fun QueueBottomSheet(
                         // drag-reorder. No-op for rule-driven rows
                         // (canRemove=false) since those positions
                         // are regenerated each peek.
-                        onLongPress = if (canRemove && idx > 0) {
-                            { onMoveUpcomingToTop(idx) }
-                        } else null,
+                        onLongPress =
+                            if (canRemove && idx > 0) {
+                                { onMoveUpcomingToTop(idx) }
+                            } else {
+                                null
+                            },
                         modifier = rowModifier,
                     )
                 }
@@ -3111,28 +3247,35 @@ private fun QueueTrackRow(
     onLongPress: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
-    val baseColor = if (dim) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
-                    else MaterialTheme.colorScheme.onSurface
+    val baseColor =
+        if (dim) {
+            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+        } else {
+            MaterialTheme.colorScheme.onSurface
+        }
     // Combine tap + long-press when both are provided. Tap alone
     // keeps the original simple `clickable` for the no-long-press
     // case so we don't pay for combinedClickable's gesture-detector
     // overhead on every Just-played row.
-    val rowMod = when {
-        onTap != null && onLongPress != null -> modifier
-            .fillMaxWidth()
-            .combinedClickable(
-                onClick = onTap,
-                onLongClick = onLongPress,
-            )
-        onTap != null -> modifier.fillMaxWidth().clickable(onClick = onTap)
-        onLongPress != null -> modifier
-            .fillMaxWidth()
-            .combinedClickable(
-                onClick = {},
-                onLongClick = onLongPress,
-            )
-        else -> modifier.fillMaxWidth()
-    }
+    val rowMod =
+        when {
+            onTap != null && onLongPress != null ->
+                modifier
+                    .fillMaxWidth()
+                    .combinedClickable(
+                        onClick = onTap,
+                        onLongClick = onLongPress,
+                    )
+            onTap != null -> modifier.fillMaxWidth().clickable(onClick = onTap)
+            onLongPress != null ->
+                modifier
+                    .fillMaxWidth()
+                    .combinedClickable(
+                        onClick = {},
+                        onLongClick = onLongPress,
+                    )
+            else -> modifier.fillMaxWidth()
+        }
     Row(
         modifier = rowMod.padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -3142,10 +3285,11 @@ private fun QueueTrackRow(
         // to the music-note icon when art is missing or the track's
         // album hasn't been resolved yet.
         Box(
-            modifier = Modifier
-                .size(32.dp)
-                .clip(RoundedCornerShape(4.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant),
+            modifier =
+                Modifier
+                    .size(32.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
             contentAlignment = Alignment.Center,
         ) {
             if (artworkUri != null) {
@@ -3209,11 +3353,12 @@ private fun QueueTrackRow(
  */
 @Composable
 private fun SleepTimerLabel(state: SleepTimer.State) {
-    val text = when (state) {
-        SleepTimer.State.Idle -> null
-        is SleepTimer.State.Running -> "Sleep in ${formatMs(state.remainingMs)}"
-        SleepTimer.State.EndOfTrack -> "Sleep at end of track"
-    } ?: return
+    val text =
+        when (state) {
+            SleepTimer.State.Idle -> null
+            is SleepTimer.State.Running -> "Sleep in ${formatMs(state.remainingMs)}"
+            SleepTimer.State.EndOfTrack -> "Sleep at end of track"
+        } ?: return
     Text(
         text = text,
         style = MaterialTheme.typography.labelSmall,
@@ -3294,16 +3439,17 @@ private fun SaveQueueAsPlaylistDialog(
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit,
 ) {
-    val defaultName = remember {
-        // Compose ms-since-epoch into a stable "Queue · 2026-05-03 14:32"
-        // string. We don't have kotlinx-datetime as a dep so do the
-        // arithmetic by hand. Local timezone offset isn't available
-        // cross-platform either; the year/month/day pieces are derived
-        // from the platform-agnostic nowMillis() clock as if it were
-        // UTC. Off by a few hours from local at the boundary, but the
-        // user can edit the field if it matters.
-        "Queue snapshot"
-    }
+    val defaultName =
+        remember {
+            // Compose ms-since-epoch into a stable "Queue · 2026-05-03 14:32"
+            // string. We don't have kotlinx-datetime as a dep so do the
+            // arithmetic by hand. Local timezone offset isn't available
+            // cross-platform either; the year/month/day pieces are derived
+            // from the platform-agnostic nowMillis() clock as if it were
+            // UTC. Off by a few hours from local at the boundary, but the
+            // user can edit the field if it matters.
+            "Queue snapshot"
+        }
     var name by remember { mutableStateOf(defaultName) }
     val keyboardController = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
     val confirm: () -> Unit = {
@@ -3331,12 +3477,14 @@ private fun SaveQueueAsPlaylistDialog(
                     onValueChange = { name = it },
                     label = { Text("Playlist name") },
                     singleLine = true,
-                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                        imeAction = androidx.compose.ui.text.input.ImeAction.Done,
-                    ),
-                    keyboardActions = androidx.compose.foundation.text.KeyboardActions(
-                        onDone = { confirm() },
-                    ),
+                    keyboardOptions =
+                        androidx.compose.foundation.text.KeyboardOptions(
+                            imeAction = androidx.compose.ui.text.input.ImeAction.Done,
+                        ),
+                    keyboardActions =
+                        androidx.compose.foundation.text.KeyboardActions(
+                            onDone = { confirm() },
+                        ),
                 )
             }
         },
@@ -3385,10 +3533,11 @@ private fun PlaybackSpeedSheet(
             )
             Spacer(Modifier.height(12.dp))
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState())
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 options.forEach { rate ->
@@ -3405,8 +3554,11 @@ private fun PlaybackSpeedSheet(
 }
 
 private fun formatSpeed(value: Float): String =
-    if (value == value.toInt().toFloat()) value.toInt().toString()
-    else value.toString().trimEnd('0').trimEnd('.')
+    if (value == value.toInt().toFloat()) {
+        value.toInt().toString()
+    } else {
+        value.toString().trimEnd('0').trimEnd('.')
+    }
 
 /**
  * The three Now Playing layout shapes. Selected by a combination of
@@ -3475,9 +3627,10 @@ private fun TriplePaneLayout(
         // normally (Center arrangement is a no-op when children
         // already fill the axis).
         Column(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxHeight(),
+            modifier =
+                Modifier
+                    .weight(1f)
+                    .fillMaxHeight(),
             verticalArrangement = Arrangement.Center,
         ) {
             Text(
@@ -3516,10 +3669,11 @@ private fun TriplePaneLayout(
         // Compact layout but vertically centered in the middle column
         // so it reads like the SXM "now playing" centerpiece.
         Column(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxHeight()
-                .padding(horizontal = 8.dp),
+            modifier =
+                Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .padding(horizontal = 8.dp),
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
@@ -3562,8 +3716,12 @@ private fun TriplePaneLayout(
                 compact = true,
                 onReplay = { delta -> onSeek((positionMs - delta).coerceAtLeast(0L)) },
                 onForward = { delta ->
-                    val cap = if (durationMs > 0) (durationMs - 250L).coerceAtLeast(0L)
-                              else Long.MAX_VALUE
+                    val cap =
+                        if (durationMs > 0) {
+                            (durationMs - 250L).coerceAtLeast(0L)
+                        } else {
+                            Long.MAX_VALUE
+                        }
                     onSeek((positionMs + delta).coerceAtMost(cap))
                 },
                 onDislikeOnStation = onDislikeOnStation,
@@ -3593,19 +3751,21 @@ private fun TriplePaneLayout(
         // Right third — large artwork + track / artist below it,
         // mirroring SiriusXM's "what's playing right now" panel.
         Column(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxHeight(),
+            modifier =
+                Modifier
+                    .weight(1f)
+                    .fillMaxHeight(),
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             AlbumArtPlaceholder(
                 accent = accent,
                 artworkUri = playable.artworkUri,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .widthIn(max = 420.dp)
-                    .aspectRatio(1f),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .widthIn(max = 420.dp)
+                        .aspectRatio(1f),
                 onTap = onTapArtwork,
                 onPinchOpen = onPinchOpenLyrics,
             )
@@ -3654,12 +3814,17 @@ private fun TriplePaneStationRow(
     onTap: () -> Unit,
 ) {
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onTap),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onTap),
         shape = RoundedCornerShape(8.dp),
-        color = if (isCurrent) MaterialTheme.colorScheme.primaryContainer
-                else MaterialTheme.colorScheme.surface.copy(alpha = 0.4f),
+        color =
+            if (isCurrent) {
+                MaterialTheme.colorScheme.primaryContainer
+            } else {
+                MaterialTheme.colorScheme.surface.copy(alpha = 0.4f)
+            },
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
@@ -3668,8 +3833,12 @@ private fun TriplePaneStationRow(
                 text = name,
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold,
-                color = if (isCurrent) MaterialTheme.colorScheme.onPrimaryContainer
-                        else MaterialTheme.colorScheme.onBackground,
+                color =
+                    if (isCurrent) {
+                        MaterialTheme.colorScheme.onPrimaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.onBackground
+                    },
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -3677,8 +3846,12 @@ private fun TriplePaneStationRow(
                 Text(
                     text = it,
                     style = MaterialTheme.typography.bodySmall,
-                    color = if (isCurrent) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.75f)
-                            else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.55f),
+                    color =
+                        if (isCurrent) {
+                            MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.75f)
+                        } else {
+                            MaterialTheme.colorScheme.onBackground.copy(alpha = 0.55f)
+                        },
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )

@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
+import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -17,9 +18,10 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.core.content.ContextCompat
 import com.visorcraft.radioshed.audio.AudioEngine
 import com.visorcraft.radioshed.audio.Playable
-import com.visorcraft.radioshed.audio.toPlayable
+import com.visorcraft.radioshed.car.resolveDriveKeyAction
 import com.visorcraft.radioshed.data.LibraryRepository
 import com.visorcraft.radioshed.data.SearchRepository
+import com.visorcraft.radioshed.data.SettingsStore
 import com.visorcraft.radioshed.stations.StationPlayback
 import com.visorcraft.radioshed.widget.WidgetSupport
 import kotlinx.coroutines.CoroutineScope
@@ -30,21 +32,22 @@ import kotlinx.coroutines.launch
 import org.koin.android.ext.android.inject
 
 class MainActivity : ComponentActivity() {
-
     private val audioEngine: AudioEngine by inject()
     private val searchRepo: SearchRepository by inject()
     private val libraryRepo: LibraryRepository by inject()
     private val stationPlayback: StationPlayback by inject()
+    private val settingsStore: SettingsStore by inject()
 
     // Search-intent dispatch runs DB queries; do them off the main
     // thread. Tied to a SupervisorJob so a single search failure
     // doesn't tear down sibling work. crashGuard logs+swallows so a
     // search query that throws (corrupt FTS index, repo bug) doesn't
     // surface as the system "RadioShed keeps stopping" dialog.
-    private val searchScope = CoroutineScope(
-        SupervisorJob() + Dispatchers.Default +
-            com.visorcraft.radioshed.util.crashGuard("MainActivity.search"),
-    )
+    private val searchScope =
+        CoroutineScope(
+            SupervisorJob() + Dispatchers.Default +
+                com.visorcraft.radioshed.util.crashGuard("MainActivity.search"),
+        )
 
     /**
      * On Android 13+ (API 33), the foreground media notification posted by
@@ -90,15 +93,54 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        // Cancel any in-flight voice-search dispatch so the DB query
-        // and the eventual playTracks call can't outlive the activity.
-        // Without this, a fast-rotation right after the user fires
-        // "Hey Google, play X" can leave a coroutine hanging against
-        // a destroyed activity scope, and a re-fired voice command
-        // would queue a second concurrent dispatch on top.
         searchScope.cancel()
         super.onDestroy()
     }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.action == KeyEvent.ACTION_DOWN &&
+            event.repeatCount == 0 &&
+            settingsStore.getDriveMode()
+        ) {
+            val action = resolveDriveKeyAction(settingsStore.getDriveKeyBindings(), event.keyCode)
+            if (action != null && handleDriveKeyAction(action)) return true
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
+    private fun handleDriveKeyAction(actionId: String): Boolean =
+        when (actionId) {
+            "previous" -> {
+                searchScope.launch { stationPlayback.skipPrevious() }
+                true
+            }
+            "next" -> {
+                searchScope.launch { stationPlayback.skipNext() }
+                true
+            }
+            "play_pause" -> {
+                searchScope.launch {
+                    if (audioEngine.state.value == com.visorcraft.radioshed.audio.PlayerState.Playing) {
+                        audioEngine.pause()
+                    } else {
+                        audioEngine.resume()
+                    }
+                }
+                true
+            }
+            "mute" -> {
+                searchScope.launch {
+                    val vol = stationPlayback.userVolume.value
+                    if (vol < 0.02f) {
+                        stationPlayback.commitUserVolume(0.6f)
+                    } else {
+                        stationPlayback.commitUserVolume(0f)
+                    }
+                }
+                true
+            }
+            else -> false
+        }
 
     /**
      * Warm path: RadioShed was already running and the user tapped another
@@ -132,11 +174,12 @@ class MainActivity : ComponentActivity() {
         // Best-effort title from the URI's last path segment, dropping the
         // file extension. Real metadata would require a sync read of the
         // file's tags — skip for ad-hoc playback to keep tap-to-play instant.
-        val title = uri.lastPathSegment
-            ?.substringAfterLast('/')
-            ?.substringBeforeLast('.')
-            ?.takeIf { it.isNotBlank() }
-            ?: "Unknown"
+        val title =
+            uri.lastPathSegment
+                ?.substringAfterLast('/')
+                ?.substringBeforeLast('.')
+                ?.takeIf { it.isNotBlank() }
+                ?: "Unknown"
 
         audioEngine.play(
             Playable(
@@ -157,8 +200,9 @@ class MainActivity : ComponentActivity() {
      * so the behaviour matches tapping a station inside the app.
      */
     private fun handleStationIntent(intent: Intent?) {
-        val stationId = intent?.getLongExtra(WidgetSupport.EXTRA_STATION_ID, -1L)
-            ?.takeIf { it >= 0 } ?: return
+        val stationId =
+            intent?.getLongExtra(WidgetSupport.EXTRA_STATION_ID, -1L)
+                ?.takeIf { it >= 0 } ?: return
         // Consume the extra once handled: onNewIntent calls setIntent(intent),
         // so the activity's sticky intent would otherwise carry the station id
         // into a later process-death restoration and replay the widget launch
@@ -209,21 +253,22 @@ class MainActivity : ComponentActivity() {
 
         searchScope.launch {
             runCatching {
-                val handled = when {
-                    focus == FOCUS_ARTIST && !artistExtra.isNullOrBlank() ->
-                        playArtistByName(artistExtra)
-                    focus == FOCUS_ALBUM && !albumExtra.isNullOrBlank() ->
-                        playAlbumByTitle(albumExtra)
-                    focus == FOCUS_AUDIO && !titleExtra.isNullOrBlank() ->
-                        playTrackByTitle(titleExtra)
-                    focus == FOCUS_GENRE && !genreExtra.isNullOrBlank() ->
-                        playGenre(genreExtra)
-                    !artistExtra.isNullOrBlank() -> playArtistByName(artistExtra)
-                    !albumExtra.isNullOrBlank() -> playAlbumByTitle(albumExtra)
-                    !titleExtra.isNullOrBlank() -> playTrackByTitle(titleExtra)
-                    rawQuery.isNotBlank() -> playFreeText(rawQuery)
-                    else -> false
-                }
+                val handled =
+                    when {
+                        focus == FOCUS_ARTIST && !artistExtra.isNullOrBlank() ->
+                            playArtistByName(artistExtra)
+                        focus == FOCUS_ALBUM && !albumExtra.isNullOrBlank() ->
+                            playAlbumByTitle(albumExtra)
+                        focus == FOCUS_AUDIO && !titleExtra.isNullOrBlank() ->
+                            playTrackByTitle(titleExtra)
+                        focus == FOCUS_GENRE && !genreExtra.isNullOrBlank() ->
+                            playGenre(genreExtra)
+                        !artistExtra.isNullOrBlank() -> playArtistByName(artistExtra)
+                        !albumExtra.isNullOrBlank() -> playAlbumByTitle(albumExtra)
+                        !titleExtra.isNullOrBlank() -> playTrackByTitle(titleExtra)
+                        rawQuery.isNotBlank() -> playFreeText(rawQuery)
+                        else -> false
+                    }
                 if (!handled) {
                     Log.i(TAG, "voice search: no match for query='$rawQuery'")
                 }
@@ -234,8 +279,9 @@ class MainActivity : ComponentActivity() {
     }
 
     private suspend fun playArtistByName(name: String): Boolean {
-        val artist = searchRepo.searchArtists(name, limit = 5).firstOrNull()
-            ?: return false
+        val artist =
+            searchRepo.searchArtists(name, limit = 5).firstOrNull()
+                ?: return false
         val tracks = libraryRepo.tracksForArtist(artist.id)
         if (tracks.isEmpty()) return false
         stationPlayback.playTracks(tracks, startIndex = 0)
@@ -243,8 +289,9 @@ class MainActivity : ComponentActivity() {
     }
 
     private suspend fun playAlbumByTitle(name: String): Boolean {
-        val album = searchRepo.searchAlbums(name, limit = 5).firstOrNull()
-            ?: return false
+        val album =
+            searchRepo.searchAlbums(name, limit = 5).firstOrNull()
+                ?: return false
         val tracks = libraryRepo.tracksForAlbum(album.id)
         if (tracks.isEmpty()) return false
         stationPlayback.playTracks(tracks, startIndex = 0)
@@ -270,13 +317,14 @@ class MainActivity : ComponentActivity() {
         // verbatim — "play a song by Black Pink" carries forward in
         // SearchManager.QUERY as the literal phrase, and the noisy
         // tokens otherwise pollute LIKE matching.
-        val cleaned = listOf(
-            "play", "listen to",
-            "a song by", "song by", "songs by", "music by",
-            "the song", "a song", "song",
-        ).fold(rawQuery) { acc, token -> acc.removePrefixToken(token) }
-            .trim()
-            .ifBlank { rawQuery }
+        val cleaned =
+            listOf(
+                "play", "listen to",
+                "a song by", "song by", "songs by", "music by",
+                "the song", "a song", "song",
+            ).fold(rawQuery) { acc, token -> acc.removePrefixToken(token) }
+                .trim()
+                .ifBlank { rawQuery }
 
         val results = searchRepo.searchAll(cleaned, limitPerCategory = 20L)
         // Artist match first: free-text "Black Pink" without a focus
@@ -314,8 +362,9 @@ class MainActivity : ComponentActivity() {
     private fun requestPostNotificationsIfNeeded() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
         val permission = Manifest.permission.POST_NOTIFICATIONS
-        val alreadyGranted = ContextCompat.checkSelfPermission(this, permission) ==
-            PackageManager.PERMISSION_GRANTED
+        val alreadyGranted =
+            ContextCompat.checkSelfPermission(this, permission) ==
+                PackageManager.PERMISSION_GRANTED
         if (!alreadyGranted) {
             notificationPermissionLauncher.launch(permission)
         }

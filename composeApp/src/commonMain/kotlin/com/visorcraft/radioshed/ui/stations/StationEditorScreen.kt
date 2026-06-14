@@ -95,7 +95,7 @@ import org.koin.compose.koinInject
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StationEditorScreen(
-    stationId: Long?,    // null = creating
+    stationId: Long?, // null = creating
     onClose: () -> Unit,
     folderRepo: FolderRepository = koinInject(),
     stationRepo: StationRepository = koinInject(),
@@ -168,13 +168,14 @@ fun StationEditorScreen(
         // would otherwise throw out of decodeSource inside getById)
         // surfaces as a friendly inline error instead of crashing the
         // editor when the user taps Edit on a broken station.
-        val station = runCatching { stationRepo.getById(stationId) }
-            .onFailure { saveError = "Couldn't load station: ${it.message ?: it::class.simpleName}" }
-            .getOrNull()
-            ?: run {
-                if (saveError == null) saveError = "Station $stationId not found"
-                return@LaunchedEffect
-            }
+        val station =
+            runCatching { stationRepo.getById(stationId) }
+                .onFailure { saveError = "Couldn't load station: ${it.message ?: it::class.simpleName}" }
+                .getOrNull()
+                ?: run {
+                    if (saveError == null) saveError = "Station $stationId not found"
+                    return@LaunchedEffect
+                }
         existing = station
         name = station.name
         subtitle = station.customSubtitle.orEmpty()
@@ -230,16 +231,18 @@ fun StationEditorScreen(
     val isBuiltIn = existing?.isBuiltIn == true
     val isEditing = stationId != null
     val sourceEditable = !isBuiltIn && !sourceLockedAsCompound
-    val canSave = name.isNotBlank() && !saving && when {
-        !sourceEditable -> true   // cosmetic edit; source preserved as-is
-        sourceType == SourceType.Folders ->
-            selectedFolderIds.isNotEmpty() || pendingNewFolderPaths.isNotEmpty()
-        sourceType == SourceType.SmartQuery -> smartLimitText.toIntOrNull()?.let { it > 0 } == true
-        sourceType == SourceType.TagFilter -> tagKey.isNotBlank() && tagValuesText.isNotBlank()
-        sourceType == SourceType.PathPattern -> pathIncludesText.isNotBlank()
-        sourceType == SourceType.MediaSource -> !mediaSourceId.isNullOrBlank()
-        else -> true
-    }
+    val canSave =
+        name.isNotBlank() && !saving &&
+            when {
+                !sourceEditable -> true // cosmetic edit; source preserved as-is
+                sourceType == SourceType.Folders ->
+                    selectedFolderIds.isNotEmpty() || pendingNewFolderPaths.isNotEmpty()
+                sourceType == SourceType.SmartQuery -> smartLimitText.toIntOrNull()?.let { it > 0 } == true
+                sourceType == SourceType.TagFilter -> tagKey.isNotBlank() && tagValuesText.isNotBlank()
+                sourceType == SourceType.PathPattern -> pathIncludesText.isNotBlank()
+                sourceType == SourceType.MediaSource -> !mediaSourceId.isNullOrBlank()
+                else -> true
+            }
 
     Scaffold(
         topBar = {
@@ -254,19 +257,21 @@ fun StationEditorScreen(
                     // button re-enables and the editor closes normally.
                     TextButton(onClick = onClose, enabled = !saving) { Text("Cancel") }
                 },
-                colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                ),
+                colors =
+                    androidx.compose.material3.TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                    ),
             )
         },
         containerColor = MaterialTheme.colorScheme.background,
     ) { padding ->
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
         ) {
             // ---- Identity ----
             SectionHeader("Identity")
@@ -297,15 +302,16 @@ fun StationEditorScreen(
             if (isEditing && supportsImagePicker()) {
                 Spacer(Modifier.height(16.dp))
                 SectionHeader("Artwork")
-                val pickImage = rememberImagePicker { bytes ->
-                    scope.launch {
-                        val uri = artworkPersister.persist(bytes)
-                        if (uri != null) {
-                            artworkUri = uri
-                            existing?.id?.let { stationRepo.setArtwork(it, uri) }
+                val pickImage =
+                    rememberImagePicker { bytes ->
+                        scope.launch {
+                            val uri = artworkPersister.persist(bytes)
+                            if (uri != null) {
+                                artworkUri = uri
+                                existing?.id?.let { stationRepo.setArtwork(it, uri) }
+                            }
                         }
                     }
-                }
                 ArtworkRow(
                     artworkUri = artworkUri,
                     onUpload = pickImage,
@@ -334,11 +340,12 @@ fun StationEditorScreen(
                         "save without changing the rule.",
                 )
             } else {
-                val availableTypes = remember(mediaSources) {
-                    SourceType.entries.filter {
-                        it != SourceType.MediaSource || mediaSources.isNotEmpty()
+                val availableTypes =
+                    remember(mediaSources) {
+                        SourceType.entries.filter {
+                            it != SourceType.MediaSource || mediaSources.isNotEmpty()
+                        }
                     }
-                }
                 SourceTypeTabs(
                     types = availableTypes,
                     selected = sourceType,
@@ -347,41 +354,46 @@ fun StationEditorScreen(
                 )
                 Spacer(Modifier.height(8.dp))
                 when (sourceType) {
-                    SourceType.Folders -> FoldersConfig(
-                        folders = folders,
-                        selectedFolderIds = selectedFolderIds,
-                        pendingNewFolderPaths = pendingNewFolderPaths,
-                        enabled = sourceEditable,
-                    )
-                    SourceType.SmartQuery -> SmartQueryConfig(
-                        kind = smartKind,
-                        onKind = { smartKind = it },
-                        limitText = smartLimitText,
-                        onLimitText = { smartLimitText = it },
-                        enabled = sourceEditable,
-                    )
-                    SourceType.TagFilter -> TagFilterConfig(
-                        key = tagKey,
-                        onKey = { tagKey = it },
-                        valuesText = tagValuesText,
-                        onValuesText = { tagValuesText = it },
-                        matchAll = tagMatchAll,
-                        onMatchAll = { tagMatchAll = it },
-                        enabled = sourceEditable,
-                    )
-                    SourceType.PathPattern -> PathPatternConfig(
-                        includesText = pathIncludesText,
-                        onIncludesText = { pathIncludesText = it },
-                        excludesText = pathExcludesText,
-                        onExcludesText = { pathExcludesText = it },
-                        enabled = sourceEditable,
-                    )
-                    SourceType.MediaSource -> MediaSourceConfig(
-                        sources = mediaSources,
-                        selectedId = mediaSourceId,
-                        onSelect = { mediaSourceId = it },
-                        enabled = sourceEditable,
-                    )
+                    SourceType.Folders ->
+                        FoldersConfig(
+                            folders = folders,
+                            selectedFolderIds = selectedFolderIds,
+                            pendingNewFolderPaths = pendingNewFolderPaths,
+                            enabled = sourceEditable,
+                        )
+                    SourceType.SmartQuery ->
+                        SmartQueryConfig(
+                            kind = smartKind,
+                            onKind = { smartKind = it },
+                            limitText = smartLimitText,
+                            onLimitText = { smartLimitText = it },
+                            enabled = sourceEditable,
+                        )
+                    SourceType.TagFilter ->
+                        TagFilterConfig(
+                            key = tagKey,
+                            onKey = { tagKey = it },
+                            valuesText = tagValuesText,
+                            onValuesText = { tagValuesText = it },
+                            matchAll = tagMatchAll,
+                            onMatchAll = { tagMatchAll = it },
+                            enabled = sourceEditable,
+                        )
+                    SourceType.PathPattern ->
+                        PathPatternConfig(
+                            includesText = pathIncludesText,
+                            onIncludesText = { pathIncludesText = it },
+                            excludesText = pathExcludesText,
+                            onExcludesText = { pathExcludesText = it },
+                            enabled = sourceEditable,
+                        )
+                    SourceType.MediaSource ->
+                        MediaSourceConfig(
+                            sources = mediaSources,
+                            selectedId = mediaSourceId,
+                            onSelect = { mediaSourceId = it },
+                            enabled = sourceEditable,
+                        )
                 }
             }
 
@@ -412,9 +424,10 @@ fun StationEditorScreen(
             Spacer(Modifier.height(12.dp))
             LabelledIntSlider(
                 label = "No-repeat memory",
-                description = "Don't replay the last N picked tracks. " +
-                    "Higher = more variety but smaller libraries can " +
-                    "exhaust the pool and the queue starts re-using.",
+                description =
+                    "Don't replay the last N picked tracks. " +
+                        "Higher = more variety but smaller libraries can " +
+                        "exhaust the pool and the queue starts re-using.",
                 value = noRepeatDepth,
                 range = 0..50,
                 onChange = { noRepeatDepth = it },
@@ -423,8 +436,9 @@ fun StationEditorScreen(
             Spacer(Modifier.height(8.dp))
             LabelledIntSlider(
                 label = "Album spacing",
-                description = "Skip same-album picks for this many tracks. " +
-                    "Larger spacing avoids album-stuffing on small libraries.",
+                description =
+                    "Skip same-album picks for this many tracks. " +
+                        "Larger spacing avoids album-stuffing on small libraries.",
                 value = albumSpacing,
                 range = 0..10,
                 onChange = { albumSpacing = it },
@@ -433,9 +447,10 @@ fun StationEditorScreen(
             Spacer(Modifier.height(8.dp))
             LabelledIntSlider(
                 label = "Artist spacing",
-                description = "Skip same-artist picks for this many tracks. " +
-                    "Smaller window than album spacing because users " +
-                    "notice repeated artists faster.",
+                description =
+                    "Skip same-artist picks for this many tracks. " +
+                        "Smaller window than album spacing because users " +
+                        "notice repeated artists faster.",
                 value = artistSpacing,
                 range = 0..15,
                 onChange = { artistSpacing = it },
@@ -504,19 +519,22 @@ fun StationEditorScreen(
                                 if (sourceType == SourceType.Folders) {
                                     for (path in pendingNewFolderPaths.toList()) {
                                         val existingRow = folderRepo.getByUri(path)
-                                        val id = existingRow?.id ?: folderRepo.insert(
-                                            displayName = path.substringAfterLast('/')
-                                                .ifBlank {
-                                                    path.substringAfterLast('\\').ifBlank { path }
-                                                },
-                                            uri = path,
-                                            recursive = true,
-                                        )
+                                        val id =
+                                            existingRow?.id ?: folderRepo.insert(
+                                                displayName =
+                                                    path.substringAfterLast('/')
+                                                        .ifBlank {
+                                                            path.substringAfterLast('\\').ifBlank { path }
+                                                        },
+                                                uri = path,
+                                                recursive = true,
+                                            )
                                         newlyInsertedIds += id
                                     }
                                 }
-                                val finalFolderIds = (selectedFolderIds.toList() + newlyInsertedIds)
-                                    .distinct()
+                                val finalFolderIds =
+                                    (selectedFolderIds.toList() + newlyInsertedIds)
+                                        .distinct()
 
                                 // Step 2: Write the station.
                                 saveStation(
@@ -697,34 +715,40 @@ private suspend fun saveStation(
     crossfadeSeconds: Int,
     crossfadeCurve: CrossfadeCurve,
 ) {
-    val source: SourceRule = when {
-        sourceLocked && existing != null -> existing.source
-        else -> when (sourceType) {
-            SourceType.Folders -> SourceRule.FolderSelector(selectedFolderIds)
-            SourceType.SmartQuery -> SourceRule.SmartQuery(smartKind, smartLimit.coerceAtLeast(1))
-            SourceType.TagFilter -> SourceRule.TagFilter(tagKey, tagValues, tagMatchAll)
-            SourceType.PathPattern -> SourceRule.PathPattern(pathIncludes, pathExcludes)
-            SourceType.MediaSource -> SourceRule.MediaSourceSelector(
-                mediaSourceId = mediaSourceId.orEmpty(),
-            )
+    val source: SourceRule =
+        when {
+            sourceLocked && existing != null -> existing.source
+            else ->
+                when (sourceType) {
+                    SourceType.Folders -> SourceRule.FolderSelector(selectedFolderIds)
+                    SourceType.SmartQuery -> SourceRule.SmartQuery(smartKind, smartLimit.coerceAtLeast(1))
+                    SourceType.TagFilter -> SourceRule.TagFilter(tagKey, tagValues, tagMatchAll)
+                    SourceType.PathPattern -> SourceRule.PathPattern(pathIncludes, pathExcludes)
+                    SourceType.MediaSource ->
+                        SourceRule.MediaSourceSelector(
+                            mediaSourceId = mediaSourceId.orEmpty(),
+                        )
+                }
         }
-    }
-    val crossfade: Crossfade = when (crossfadeMode) {
-        CrossfadeMode.Off -> Crossfade.Off
-        CrossfadeMode.Timed -> Crossfade.Fixed(
-            seconds = crossfadeSeconds.coerceIn(1, 12),
-            curve = crossfadeCurve,
+    val crossfade: Crossfade =
+        when (crossfadeMode) {
+            CrossfadeMode.Off -> Crossfade.Off
+            CrossfadeMode.Timed ->
+                Crossfade.Fixed(
+                    seconds = crossfadeSeconds.coerceIn(1, 12),
+                    curve = crossfadeCurve,
+                )
+            CrossfadeMode.Smart -> Crossfade.Smart
+        }
+    val playback =
+        (existing?.playback ?: PlaybackRule()).copy(
+            order = playOrder,
+            weighting = weighting,
+            noRepeatDepth = noRepeatDepth.coerceIn(0, 50),
+            artistSpacing = artistSpacing.coerceIn(0, 15),
+            albumSpacing = albumSpacing.coerceIn(0, 10),
+            crossfade = crossfade,
         )
-        CrossfadeMode.Smart -> Crossfade.Smart
-    }
-    val playback = (existing?.playback ?: PlaybackRule()).copy(
-        order = playOrder,
-        weighting = weighting,
-        noRepeatDepth = noRepeatDepth.coerceIn(0, 50),
-        artistSpacing = artistSpacing.coerceIn(0, 15),
-        albumSpacing = albumSpacing.coerceIn(0, 10),
-        crossfade = crossfade,
-    )
     if (existing == null) {
         // Insert path doesn't currently expose artworkUri; the upload
         // button is hidden for new stations (see UI). If we ever want
@@ -766,19 +790,28 @@ private fun SourceTypeTabs(
         types.forEach { type ->
             val isSelected = type == selected
             Surface(
-                modifier = Modifier
-                    .weight(1f)
-                    .clickable(enabled = enabled) { onSelect(type) },
-                color = if (isSelected) MaterialTheme.colorScheme.primaryContainer
-                        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (enabled) 0.3f else 0.15f),
+                modifier =
+                    Modifier
+                        .weight(1f)
+                        .clickable(enabled = enabled) { onSelect(type) },
+                color =
+                    if (isSelected) {
+                        MaterialTheme.colorScheme.primaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (enabled) 0.3f else 0.15f)
+                    },
                 shape = RoundedCornerShape(8.dp),
             ) {
                 Text(
                     text = type.label,
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-                    color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer
-                            else MaterialTheme.colorScheme.onSurface,
+                    color =
+                        if (isSelected) {
+                            MaterialTheme.colorScheme.onPrimaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.onSurface
+                        },
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
                 )
             }
@@ -823,8 +856,9 @@ private fun FoldersConfig(
             // the user knows the save is about to do extra work.
             pendingNewFolderPaths.forEach { path ->
                 SelectedFolderChip(
-                    folderName = path.substringAfterLast('/').ifBlank { path }
-                        .substringAfterLast('\\').ifBlank { path },
+                    folderName =
+                        path.substringAfterLast('/').ifBlank { path }
+                            .substringAfterLast('\\').ifBlank { path },
                     folderPath = path,
                     pending = true,
                     enabled = enabled,
@@ -846,13 +880,14 @@ private fun FoldersConfig(
         // platform default. Lets the user keep browsing in the same
         // tree they last selected from without having to walk back up
         // from the platform root every time.
-        val startPath = remember(folders, selectedFolderIds) {
-            val firstSelected = selectedFolderIds.firstNotNullOfOrNull { foldersById[it]?.uri }
-            val anyFolder = folders.firstOrNull()?.uri
-            (firstSelected ?: anyFolder)?.let {
-                com.visorcraft.radioshed.source.parentPath(it).ifBlank { it }
-            } ?: com.visorcraft.radioshed.source.defaultMusicFolderPath()
-        }
+        val startPath =
+            remember(folders, selectedFolderIds) {
+                val firstSelected = selectedFolderIds.firstNotNullOfOrNull { foldersById[it]?.uri }
+                val anyFolder = folders.firstOrNull()?.uri
+                (firstSelected ?: anyFolder)?.let {
+                    com.visorcraft.radioshed.source.parentPath(it).ifBlank { it }
+                } ?: com.visorcraft.radioshed.source.defaultMusicFolderPath()
+            }
         FolderBrowserDialog(
             initialPath = startPath,
             onSelect = { picked ->
@@ -888,10 +923,18 @@ private fun SelectedFolderChip(
     // user can tell at a glance which selections will trigger a scan
     // on save. Pending uses the primary container; existing uses the
     // neutral surface variant.
-    val container = if (pending) MaterialTheme.colorScheme.primaryContainer
-                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-    val onContainer = if (pending) MaterialTheme.colorScheme.onPrimaryContainer
-                      else MaterialTheme.colorScheme.onSurface
+    val container =
+        if (pending) {
+            MaterialTheme.colorScheme.primaryContainer
+        } else {
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        }
+    val onContainer =
+        if (pending) {
+            MaterialTheme.colorScheme.onPrimaryContainer
+        } else {
+            MaterialTheme.colorScheme.onSurface
+        }
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = container,
@@ -979,11 +1022,12 @@ private fun TagFilterConfig(
     // station whose existing key isn't a preset) we keep the text
     // field visible until they pick a preset again.
     var customMode by remember(key) { mutableStateOf(!isPreset && key.isNotBlank()) }
-    val effectiveSelection = when {
-        customMode -> CUSTOM_SENTINEL
-        isPreset -> key
-        else -> presets.first()
-    }
+    val effectiveSelection =
+        when {
+            customMode -> CUSTOM_SENTINEL
+            isPreset -> key
+            else -> presets.first()
+        }
 
     Text(
         "Filters tracks by a metadata tag. ARTIST / ALBUM_ARTIST match by " +
@@ -1044,8 +1088,11 @@ private fun TagFilterConfig(
     )
     Spacer(Modifier.height(6.dp))
     Text(
-        if (matchAll) "Track must have every listed value for this tag."
-        else "Track needs at least one of the listed values.",
+        if (matchAll) {
+            "Track must have every listed value for this tag."
+        } else {
+            "Track needs at least one of the listed values."
+        },
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
     )
@@ -1055,11 +1102,13 @@ private fun TagFilterConfig(
     // of >1 distinct values is empty by construction — the same
     // trap the original station fell into. Quiet hint, not a block;
     // the user might genuinely want this with a single value.
-    val isArtistKey = key.equals("ALBUM_ARTIST", ignoreCase = true) ||
-        key.equals("ARTIST", ignoreCase = true)
-    val multipleNonBlankValues = valuesText.split(',')
-        .map { it.trim() }
-        .count { it.isNotEmpty() } >= 2
+    val isArtistKey =
+        key.equals("ALBUM_ARTIST", ignoreCase = true) ||
+            key.equals("ARTIST", ignoreCase = true)
+    val multipleNonBlankValues =
+        valuesText.split(',')
+            .map { it.trim() }
+            .count { it.isNotEmpty() } >= 2
     if (matchAll && isArtistKey && multipleNonBlankValues) {
         Spacer(Modifier.height(6.dp))
         Text(
@@ -1115,21 +1164,30 @@ private fun MatchModeOption(
 ) {
     Surface(
         modifier = modifier.clickable(enabled = enabled, onClick = onClick),
-        color = if (selected) MaterialTheme.colorScheme.primaryContainer
-                else MaterialTheme.colorScheme.surfaceVariant.copy(
+        color =
+            if (selected) {
+                MaterialTheme.colorScheme.primaryContainer
+            } else {
+                MaterialTheme.colorScheme.surfaceVariant.copy(
                     alpha = if (enabled) 0.4f else 0.2f,
-                ),
+                )
+            },
         shape = RoundedCornerShape(10.dp),
     ) {
         Text(
             text = label,
             style = MaterialTheme.typography.labelLarge,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-            color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer
-                    else MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 12.dp),
+            color =
+                if (selected) {
+                    MaterialTheme.colorScheme.onPrimaryContainer
+                } else {
+                    MaterialTheme.colorScheme.onSurface
+                },
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 12.dp),
             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
         )
     }
@@ -1226,11 +1284,12 @@ private fun MediaSourceConfig(
         return
     }
     val selectedEntry = sources[selectedId]
-    val displayLabel = when {
-        selectedId == null -> "Choose a source…"
-        selectedEntry != null -> selectedEntry.displayName
-        else -> "$selectedId (unavailable)"
-    }
+    val displayLabel =
+        when {
+            selectedId == null -> "Choose a source…"
+            selectedEntry != null -> selectedEntry.displayName
+            else -> "$selectedId (unavailable)"
+        }
     Text(
         "Play tracks from a registered cloud or remote source.",
         style = MaterialTheme.typography.bodySmall,
@@ -1332,24 +1391,34 @@ private fun CrossfadeControl(
             CrossfadeMode.entries.forEach { entry ->
                 val selected = entry == mode
                 Surface(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clickable(enabled = enabled) { onMode(entry) },
-                    color = if (selected) MaterialTheme.colorScheme.primaryContainer
-                            else MaterialTheme.colorScheme.surfaceVariant.copy(
+                    modifier =
+                        Modifier
+                            .weight(1f)
+                            .clickable(enabled = enabled) { onMode(entry) },
+                    color =
+                        if (selected) {
+                            MaterialTheme.colorScheme.primaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.surfaceVariant.copy(
                                 alpha = if (enabled) 0.4f else 0.2f,
-                            ),
+                            )
+                        },
                     shape = RoundedCornerShape(10.dp),
                 ) {
                     Text(
                         text = entry.label,
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                        color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer
-                                else MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 12.dp),
+                        color =
+                            if (selected) {
+                                MaterialTheme.colorScheme.onPrimaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.onSurface
+                            },
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 12.dp),
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                     )
                 }
@@ -1428,10 +1497,11 @@ private fun ArtworkRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
-            modifier = Modifier
-                .size(72.dp)
-                .clip(RoundedCornerShape(10.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
+            modifier =
+                Modifier
+                    .size(72.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
             contentAlignment = Alignment.Center,
         ) {
             if (artworkUri != null) {
@@ -1476,21 +1546,25 @@ private fun ArtworkRow(
 }
 
 @Composable
-private fun ColorSwatchRow(selected: Int, onPick: (Int) -> Unit) {
+private fun ColorSwatchRow(
+    selected: Int,
+    onPick: (Int) -> Unit,
+) {
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         SWATCHES.forEach { swatch ->
             val isSelected = swatch == selected
             Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(CircleShape)
-                    .background(Color(swatch.toLong() and 0xFFFFFFFFL))
-                    .border(
-                        width = if (isSelected) 3.dp else 0.dp,
-                        color = MaterialTheme.colorScheme.onBackground,
-                        shape = CircleShape,
-                    )
-                    .clickable { onPick(swatch) },
+                modifier =
+                    Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(Color(swatch.toLong() and 0xFFFFFFFFL))
+                        .border(
+                            width = if (isSelected) 3.dp else 0.dp,
+                            color = MaterialTheme.colorScheme.onBackground,
+                            shape = CircleShape,
+                        )
+                        .clickable { onPick(swatch) },
             )
         }
     }
@@ -1534,44 +1608,47 @@ private fun <T> EnumPicker(
     }
 }
 
-private fun PlayOrder.uiLabel(): String = when (this) {
-    PlayOrder.Shuffle -> "Shuffle"
-    PlayOrder.Sequential -> "Sequential"
-    PlayOrder.SmartShuffle -> "Smart shuffle (no-repeat memory)"
-    PlayOrder.WeightedRandom -> "Weighted random"
-}
+private fun PlayOrder.uiLabel(): String =
+    when (this) {
+        PlayOrder.Shuffle -> "Shuffle"
+        PlayOrder.Sequential -> "Sequential"
+        PlayOrder.SmartShuffle -> "Smart shuffle (no-repeat memory)"
+        PlayOrder.WeightedRandom -> "Weighted random"
+    }
 
-private fun Weighting.uiLabel(): String = when (this) {
-    Weighting.Uniform -> "Uniform"
-    Weighting.FavorRecent -> "Favor recently added"
-    Weighting.FavorUnderPlayed -> "Favor under-played"
-    Weighting.FavorHigherRated -> "Favor higher-rated"
-}
+private fun Weighting.uiLabel(): String =
+    when (this) {
+        Weighting.Uniform -> "Uniform"
+        Weighting.FavorRecent -> "Favor recently added"
+        Weighting.FavorUnderPlayed -> "Favor under-played"
+        Weighting.FavorHigherRated -> "Favor higher-rated"
+    }
 
-private fun CrossfadeCurve.uiLabel(): String = when (this) {
-    CrossfadeCurve.EqualPower -> "Equal power"
-    CrossfadeCurve.Linear -> "Linear"
-    CrossfadeCurve.SCurve -> "S-curve"
-}
+private fun CrossfadeCurve.uiLabel(): String =
+    when (this) {
+        CrossfadeCurve.EqualPower -> "Equal power"
+        CrossfadeCurve.Linear -> "Linear"
+        CrossfadeCurve.SCurve -> "S-curve"
+    }
 
-private fun SmartQueryKind.uiLabel(): String = when (this) {
-    SmartQueryKind.NewestN -> "Newest tracks"
-    SmartQueryKind.OldestN -> "Oldest tracks"
-    SmartQueryKind.LeastPlayed -> "Least played"
-    SmartQueryKind.MostPlayed -> "Most played"
-    SmartQueryKind.HighestRated -> "Highest rated"
-    SmartQueryKind.LongestUnheard -> "Longest unheard"
-    SmartQueryKind.RecentlyAdded -> "Recently added"
-    SmartQueryKind.RecentlyRated -> "Recently rated"
-    SmartQueryKind.NeverPlayed -> "Never played"
-    SmartQueryKind.AdaptiveMix -> "Adaptive mix (under-played + favorites)"
-    SmartQueryKind.ForgottenGems -> "Forgotten gems — longest unheard"
-    SmartQueryKind.ForgottenGemsByRating -> "Forgotten gems — highest rated"
-    SmartQueryKind.LikedSongs -> "Liked songs (hearted tracks)"
-}
+private fun SmartQueryKind.uiLabel(): String =
+    when (this) {
+        SmartQueryKind.NewestN -> "Newest tracks"
+        SmartQueryKind.OldestN -> "Oldest tracks"
+        SmartQueryKind.LeastPlayed -> "Least played"
+        SmartQueryKind.MostPlayed -> "Most played"
+        SmartQueryKind.HighestRated -> "Highest rated"
+        SmartQueryKind.LongestUnheard -> "Longest unheard"
+        SmartQueryKind.RecentlyAdded -> "Recently added"
+        SmartQueryKind.RecentlyRated -> "Recently rated"
+        SmartQueryKind.NeverPlayed -> "Never played"
+        SmartQueryKind.AdaptiveMix -> "Adaptive mix (under-played + favorites)"
+        SmartQueryKind.ForgottenGems -> "Forgotten gems — longest unheard"
+        SmartQueryKind.ForgottenGemsByRating -> "Forgotten gems — highest rated"
+        SmartQueryKind.LikedSongs -> "Liked songs (hearted tracks)"
+    }
 
-private fun String.toCsvList(): List<String> =
-    split(',').map { it.trim() }.filter { it.isNotBlank() }
+private fun String.toCsvList(): List<String> = split(',').map { it.trim() }.filter { it.isNotBlank() }
 
 /**
  * Tag keys offered as one-tap options in the Tag Filter editor.
@@ -1585,18 +1662,19 @@ private fun String.toCsvList(): List<String> =
  * cases both and routes them through the artist table so the
  * user-facing semantics ("filter by these artists") work.
  */
-private val COMMON_TAG_KEYS = listOf(
-    "GENRE",
-    "ALBUM_ARTIST",
-    "ARTIST",
-    "MOOD",
-    "LANGUAGE",
-    "LABEL",
-    "GROUPING",
-    "COMPOSER",
-    "YEAR",
-    "COMMENT",
-)
+private val COMMON_TAG_KEYS =
+    listOf(
+        "GENRE",
+        "ALBUM_ARTIST",
+        "ARTIST",
+        "MOOD",
+        "LANGUAGE",
+        "LABEL",
+        "GROUPING",
+        "COMPOSER",
+        "YEAR",
+        "COMMENT",
+    )
 
 /**
  * Sentinel that means "the user picked Custom from the tag-key
@@ -1608,13 +1686,14 @@ private val COMMON_TAG_KEYS = listOf(
 private const val CUSTOM_SENTINEL = "__custom__"
 
 private const val BRAND_AMBER = 0xFFFF7F1A.toInt()
-private val SWATCHES = listOf(
-    BRAND_AMBER,
-    0xFFE53935.toInt(),
-    0xFFFB8C00.toInt(),
-    0xFFFDD835.toInt(),
-    0xFF43A047.toInt(),
-    0xFF00ACC1.toInt(),
-    0xFF1E88E5.toInt(),
-    0xFF8E24AA.toInt(),
-)
+private val SWATCHES =
+    listOf(
+        BRAND_AMBER,
+        0xFFE53935.toInt(),
+        0xFFFB8C00.toInt(),
+        0xFFFDD835.toInt(),
+        0xFF43A047.toInt(),
+        0xFF00ACC1.toInt(),
+        0xFF1E88E5.toInt(),
+        0xFF8E24AA.toInt(),
+    )

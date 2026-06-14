@@ -66,11 +66,12 @@ fun DesktopVolumeControl(
             modifier = Modifier.size(32.dp),
         ) {
             Icon(
-                imageVector = when {
-                    muted -> Icons.AutoMirrored.Filled.VolumeOff
-                    volume < 0.5f -> Icons.AutoMirrored.Filled.VolumeDown
-                    else -> Icons.AutoMirrored.Filled.VolumeUp
-                },
+                imageVector =
+                    when {
+                        muted -> Icons.AutoMirrored.Filled.VolumeOff
+                        volume < 0.5f -> Icons.AutoMirrored.Filled.VolumeDown
+                        else -> Icons.AutoMirrored.Filled.VolumeUp
+                    },
                 contentDescription = if (muted) "Unmute" else "Mute",
                 modifier = Modifier.size(20.dp),
                 tint = MaterialTheme.colorScheme.onSurface,
@@ -81,11 +82,12 @@ fun DesktopVolumeControl(
             onValueChange = onChange,
             valueRange = 0f..1f,
             modifier = Modifier.width(sliderWidth),
-            colors = SliderDefaults.colors(
-                activeTrackColor = MaterialTheme.colorScheme.primary,
-                inactiveTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f),
-                thumbColor = MaterialTheme.colorScheme.primary,
-            ),
+            colors =
+                SliderDefaults.colors(
+                    activeTrackColor = MaterialTheme.colorScheme.primary,
+                    inactiveTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f),
+                    thumbColor = MaterialTheme.colorScheme.primary,
+                ),
         )
     }
 }

@@ -67,11 +67,12 @@ data class DiscoveredTrack(
 )
 
 /** Extensions we recognize as audio. Used by enumerators to pre-filter. */
-internal val SUPPORTED_AUDIO_EXTENSIONS: Set<String> = setOf(
-    "mp3", "m4a", "aac", "flac", "alac", "ogg", "oga", "opus",
-    "wav", "wave", "aiff", "aif", "wma", "ape", "wv", "tta",
-    "dsf", "dff", "mpc", "mp+",
-)
+internal val SUPPORTED_AUDIO_EXTENSIONS: Set<String> =
+    setOf(
+        "mp3", "m4a", "aac", "flac", "alac", "ogg", "oga", "opus",
+        "wav", "wave", "aiff", "aif", "wma", "ape", "wv", "tta",
+        "dsf", "dff", "mpc", "mp+",
+    )
 
 internal val SUPPORTED_CUE_EXTENSIONS: Set<String> = setOf("cue")
 

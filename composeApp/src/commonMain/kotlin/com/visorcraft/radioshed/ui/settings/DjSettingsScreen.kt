@@ -114,26 +114,29 @@ fun DjSettingsScreen(
             TopAppBar(
                 title = { Text("AI DJ") },
                 navigationIcon = { TextButton(onClick = onBack) { Text("Back") } },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                ),
+                colors =
+                    TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                    ),
             )
         },
         containerColor = MaterialTheme.colorScheme.background,
     ) { padding ->
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
         ) {
             SettingsSectionHeader("AI DJ")
             SettingsToggleRow(
                 title = "AI DJ",
-                subtitle = "An automated voice introduces tracks, recaps what just played, " +
-                    "and reads station IDs between songs. Purely decorative — never " +
-                    "interrupts or breaks playback.",
+                subtitle =
+                    "An automated voice introduces tracks, recaps what just played, " +
+                        "and reads station IDs between songs. Purely decorative — never " +
+                        "interrupts or breaks playback.",
                 checked = enabled,
                 enabled = true,
                 onCheckedChange = { v ->
@@ -205,13 +208,14 @@ fun DjSettingsScreen(
                         val prior = audioEngine.volume.value
                         try {
                             runCatching {
-                                val sample = DjTemplate.render(
-                                    DjTemplate.pickVariant(
-                                        DEFAULT_DJ_TEMPLATES[DjSlots.STATION_ID].orEmpty(),
-                                        seed = 0L,
-                                    ),
-                                    SAMPLE_PREVIEW_VARS,
-                                )
+                                val sample =
+                                    DjTemplate.render(
+                                        DjTemplate.pickVariant(
+                                            DEFAULT_DJ_TEMPLATES[DjSlots.STATION_ID].orEmpty(),
+                                            seed = 0L,
+                                        ),
+                                        SAMPLE_PREVIEW_VARS,
+                                    )
                                 val dir = tts.cacheDir() ?: return@runCatching
                                 val outPath = "$dir/dj_preview.wav"
                                 val ok = tts.synthesizeToFile(sample, voice = null, outPath = outPath)
@@ -278,32 +282,35 @@ fun DjSettingsScreen(
 }
 
 /** Fixed sample bag for the voice-preview sentence — no live data needed. */
-private val SAMPLE_PREVIEW_VARS = DjTemplateVars(
-    station = "RadioShed",
-    track = "Midnight Drive",
-    artist = "The Wavelengths",
-    nextTrack = "City Lights",
-    time = "3:45 PM",
-    weather = "clear skies",
-)
+private val SAMPLE_PREVIEW_VARS =
+    DjTemplateVars(
+        station = "RadioShed",
+        track = "Midnight Drive",
+        artist = "The Wavelengths",
+        nextTrack = "City Lights",
+        time = "3:45 PM",
+        weather = "clear skies",
+    )
 
 /** Canonical slot order + human labels for the template editor cards. */
-private val SLOT_ORDER = listOf(
-    DjSlots.STATION_ID to "Station ID",
-    DjSlots.UP_NEXT to "Up next",
-    DjSlots.RECAP to "Recap",
-    DjSlots.TIME to "Time of day",
-)
+private val SLOT_ORDER =
+    listOf(
+        DjSlots.STATION_ID to "Station ID",
+        DjSlots.UP_NEXT to "Up next",
+        DjSlots.RECAP to "Recap",
+        DjSlots.TIME to "Time of day",
+    )
 
 /** Placeholder tokens the edit dialog can insert at the cursor. */
-private val TEMPLATE_TOKENS = listOf(
-    "{station}",
-    "{track}",
-    "{artist}",
-    "{next_track}",
-    "{time}",
-    "{weather}",
-)
+private val TEMPLATE_TOKENS =
+    listOf(
+        "{station}",
+        "{track}",
+        "{artist}",
+        "{next_track}",
+        "{time}",
+        "{weather}",
+    )
 
 @Composable
 private fun FrequencySection(
@@ -315,13 +322,14 @@ private fun FrequencySection(
     frequencyMinutes: Int,
     onFrequencyMinutesChange: (Int) -> Unit,
 ) {
-    val options = listOf(
-        "off" to "Off",
-        "every" to "Every track",
-        "every_n" to "Every N tracks",
-        "minutes" to "Every N minutes",
-        "station_change" to "On station change",
-    )
+    val options =
+        listOf(
+            "off" to "Off",
+            "every" to "Every track",
+            "every_n" to "Every N tracks",
+            "minutes" to "Every N minutes",
+            "station_change" to "On station change",
+        )
     Surface(
         shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
@@ -332,9 +340,10 @@ private fun FrequencySection(
                 "How often the DJ speaks",
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface.copy(
-                    alpha = if (enabledControls) 1f else 0.4f,
-                ),
+                color =
+                    MaterialTheme.colorScheme.onSurface.copy(
+                        alpha = if (enabledControls) 1f else 0.4f,
+                    ),
             )
             Spacer(Modifier.height(10.dp))
             FlowRow(
@@ -402,9 +411,10 @@ private fun StepperRow(
             label,
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.weight(1f),
-            color = MaterialTheme.colorScheme.onSurface.copy(
-                alpha = if (enabledControls) 1f else 0.4f,
-            ),
+            color =
+                MaterialTheme.colorScheme.onSurface.copy(
+                    alpha = if (enabledControls) 1f else 0.4f,
+                ),
         )
         OutlinedButton(
             onClick = onDecrement,
@@ -415,9 +425,10 @@ private fun StepperRow(
             valueLabel,
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onSurface.copy(
-                alpha = if (enabledControls) 1f else 0.4f,
-            ),
+            color =
+                MaterialTheme.colorScheme.onSurface.copy(
+                    alpha = if (enabledControls) 1f else 0.4f,
+                ),
         )
         Spacer(Modifier.size(8.dp))
         OutlinedButton(
@@ -452,9 +463,10 @@ private fun QuietHoursSection(
                 "Quiet hours",
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface.copy(
-                    alpha = if (enabledControls) 1f else 0.4f,
-                ),
+                color =
+                    MaterialTheme.colorScheme.onSurface.copy(
+                        alpha = if (enabledControls) 1f else 0.4f,
+                    ),
             )
             Spacer(Modifier.height(4.dp))
             Text(
@@ -503,9 +515,10 @@ private fun DuckSlider(
                         "Music duck level",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface.copy(
-                            alpha = if (enabledControls) 1f else 0.4f,
-                        ),
+                        color =
+                            MaterialTheme.colorScheme.onSurface.copy(
+                                alpha = if (enabledControls) 1f else 0.4f,
+                            ),
                     )
                     Text(
                         "How far the music drops while the DJ speaks. Lower means " +
@@ -518,9 +531,10 @@ private fun DuckSlider(
                 Text(
                     "${(display * 100).toInt()}%",
                     style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurface.copy(
-                        alpha = if (enabledControls) 1f else 0.4f,
-                    ),
+                    color =
+                        MaterialTheme.colorScheme.onSurface.copy(
+                            alpha = if (enabledControls) 1f else 0.4f,
+                        ),
                 )
             }
             Slider(
@@ -565,12 +579,13 @@ private fun PreviewVoiceRow(
                     color = MaterialTheme.colorScheme.onSurface,
                 )
                 Text(
-                    text = if (ttsAvailable) {
-                        "Speaks a sample station ID, ducking the music just like a " +
-                            "real announcement."
-                    } else {
-                        "No text-to-speech voice is available on this device."
-                    },
+                    text =
+                        if (ttsAvailable) {
+                            "Speaks a sample station ID, ducking the music just like a " +
+                                "real announcement."
+                        } else {
+                            "No text-to-speech voice is available on this device."
+                        },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                 )
@@ -602,9 +617,10 @@ private fun TemplateSlotCard(
                 label,
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface.copy(
-                    alpha = if (enabled) 1f else 0.4f,
-                ),
+                color =
+                    MaterialTheme.colorScheme.onSurface.copy(
+                        alpha = if (enabled) 1f else 0.4f,
+                    ),
             )
             Spacer(Modifier.height(6.dp))
             variants.forEachIndexed { index, variant ->
@@ -615,9 +631,10 @@ private fun TemplateSlotCard(
                     Text(
                         variant,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface.copy(
-                            alpha = if (enabled) 0.85f else 0.4f,
-                        ),
+                        color =
+                            MaterialTheme.colorScheme.onSurface.copy(
+                                alpha = if (enabled) 0.85f else 0.4f,
+                            ),
                         modifier = Modifier.weight(1f),
                     )
                     TextButton(
@@ -723,11 +740,15 @@ private fun VariantEditDialog(
 }
 
 @Composable
-private fun ResetTemplatesRow(enabled: Boolean, onReset: () -> Unit) {
+private fun ResetTemplatesRow(
+    enabled: Boolean,
+    onReset: () -> Unit,
+) {
     var confirmOpen by remember { mutableStateOf(false) }
     Surface(
-        modifier = Modifier.fillMaxWidth()
-            .clickable(enabled = enabled) { confirmOpen = true },
+        modifier =
+            Modifier.fillMaxWidth()
+                .clickable(enabled = enabled) { confirmOpen = true },
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
         shape = RoundedCornerShape(12.dp),
     ) {
@@ -735,17 +756,19 @@ private fun ResetTemplatesRow(enabled: Boolean, onReset: () -> Unit) {
             Text(
                 "Reset templates to defaults",
                 style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.error.copy(
-                    alpha = if (enabled) 1f else 0.4f,
-                ),
+                color =
+                    MaterialTheme.colorScheme.error.copy(
+                        alpha = if (enabled) 1f else 0.4f,
+                    ),
                 fontWeight = FontWeight.Medium,
             )
             Text(
                 "Discards every custom phrasing above and restores the built-in set.",
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onBackground.copy(
-                    alpha = if (enabled) 0.6f else 0.3f,
-                ),
+                color =
+                    MaterialTheme.colorScheme.onBackground.copy(
+                        alpha = if (enabled) 0.6f else 0.3f,
+                    ),
             )
         }
     }
@@ -782,4 +805,3 @@ private fun TextFieldValue.insertAtCursor(token: String): TextFieldValue {
     val caret = start + token.length
     return TextFieldValue(text = newText, selection = TextRange(caret))
 }
-

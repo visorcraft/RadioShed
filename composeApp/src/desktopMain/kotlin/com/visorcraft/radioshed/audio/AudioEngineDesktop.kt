@@ -8,13 +8,13 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelAndJoin
-import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.job
+import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
@@ -44,15 +44,15 @@ import kotlin.math.roundToInt
  * sets are thread-safe, so Compose collects them directly.
  */
 class AudioEngineDesktop : AudioEngine {
-
     // crashGuard so a libvlc-bridge exception (native error during
     // polling, a call racing shutdown, etc.) doesn't bubble to the JVM
     // uncaught-exception handler and pop the Win32 "RadioShed has stopped
     // working" message box.
-    private val scope = CoroutineScope(
-        SupervisorJob() + IODispatcher +
-            com.visorcraft.radioshed.util.crashGuard("AudioEngineDesktop"),
-    )
+    private val scope =
+        CoroutineScope(
+            SupervisorJob() + IODispatcher +
+                com.visorcraft.radioshed.util.crashGuard("AudioEngineDesktop"),
+        )
 
     private val _state = MutableStateFlow<PlayerState>(PlayerState.Idle)
     override val state: StateFlow<PlayerState> = _state.asStateFlow()
@@ -130,9 +130,10 @@ class AudioEngineDesktop : AudioEngine {
         val loaded = NativeLibVlc.lib
         if (loaded == null) {
             libvlcLoadFailed = true
-            _state.value = PlayerState.Error(
-                "libvlc not found — install VLC media player from videolan.org and relaunch.",
-            )
+            _state.value =
+                PlayerState.Error(
+                    "libvlc not found — install VLC media player from videolan.org and relaunch.",
+                )
             return null
         }
         val inst = runCatching { loaded.libvlc_new(0, null) }.getOrNull()
@@ -165,46 +166,51 @@ class AudioEngineDesktop : AudioEngine {
      * emitted on change, position is updated each tick, and the
      * transition into Ended auto-advances the queue exactly once.
      */
-    private fun startPolling(loaded: LibVlc, p: Pointer) {
+    private fun startPolling(
+        loaded: LibVlc,
+        p: Pointer,
+    ) {
         pollJob?.cancel()
         lastPolledState = LibVlcState.NOTHING_SPECIAL
-        pollJob = scope.launch {
-            while (isActive) {
-                delay(POLL_INTERVAL_MS)
-                val nativeState = runCatching { loaded.libvlc_media_player_get_state(p) }
-                    .getOrDefault(LibVlcState.ERROR)
-                val time = runCatching { loaded.libvlc_media_player_get_time(p) }.getOrDefault(0L)
-                val length = runCatching { loaded.libvlc_media_player_get_length(p) }.getOrDefault(0L)
-                _position.value = Position(currentMs = time.coerceAtLeast(0L), durationMs = length.coerceAtLeast(0L))
+        pollJob =
+            scope.launch {
+                while (isActive) {
+                    delay(POLL_INTERVAL_MS)
+                    val nativeState =
+                        runCatching { loaded.libvlc_media_player_get_state(p) }
+                            .getOrDefault(LibVlcState.ERROR)
+                    val time = runCatching { loaded.libvlc_media_player_get_time(p) }.getOrDefault(0L)
+                    val length = runCatching { loaded.libvlc_media_player_get_length(p) }.getOrDefault(0L)
+                    _position.value = Position(currentMs = time.coerceAtLeast(0L), durationMs = length.coerceAtLeast(0L))
 
-                if (nativeState != lastPolledState) {
-                    lastPolledState = nativeState
-                    // Suppress the sub-250 ms "Ended" flicker while a crossfade
-                    // is mid-flight: the OUTGOING player's tail drains during the
-                    // overlap and briefly reaches Ended before the swap completes.
-                    // Let Error and all other states through so real failures are
-                    // always surfaced; only Ended is gated here.
-                    val suppressEnded = nativeState == LibVlcState.ENDED && crossfadeInFlight
-                    if (!suppressEnded) {
-                        mapState(nativeState)?.let { _state.value = it }
-                    }
-                    // Auto-advance on the *transition into* Ended, once
-                    // per track — matches the old VLCJ finished() behavior.
-                    // Suppress it while a crossfade is mid-flight: the OUTGOING
-                    // player's Ended fires as its tail drains during the overlap,
-                    // and the crossfade has ALREADY started the next track, so a
-                    // second advance here would skip a track (mirrors
-                    // StationPlayback's suppressEndedForCrossfade, but guards the
-                    // engine's own playQueue auto-advance path).
-                    if (nativeState == LibVlcState.ENDED && !advancedForThisTrack &&
-                        !crossfadeInFlight
-                    ) {
-                        advancedForThisTrack = true
-                        scope.launch { skipNext() }
+                    if (nativeState != lastPolledState) {
+                        lastPolledState = nativeState
+                        // Suppress the sub-250 ms "Ended" flicker while a crossfade
+                        // is mid-flight: the OUTGOING player's tail drains during the
+                        // overlap and briefly reaches Ended before the swap completes.
+                        // Let Error and all other states through so real failures are
+                        // always surfaced; only Ended is gated here.
+                        val suppressEnded = nativeState == LibVlcState.ENDED && crossfadeInFlight
+                        if (!suppressEnded) {
+                            mapState(nativeState)?.let { _state.value = it }
+                        }
+                        // Auto-advance on the *transition into* Ended, once
+                        // per track — matches the old VLCJ finished() behavior.
+                        // Suppress it while a crossfade is mid-flight: the OUTGOING
+                        // player's Ended fires as its tail drains during the overlap,
+                        // and the crossfade has ALREADY started the next track, so a
+                        // second advance here would skip a track (mirrors
+                        // StationPlayback's suppressEndedForCrossfade, but guards the
+                        // engine's own playQueue auto-advance path).
+                        if (nativeState == LibVlcState.ENDED && !advancedForThisTrack &&
+                            !crossfadeInFlight
+                        ) {
+                            advancedForThisTrack = true
+                            scope.launch { skipNext() }
+                        }
                     }
                 }
             }
-        }
     }
 
     override fun play(playable: Playable) {
@@ -240,14 +246,21 @@ class AudioEngineDesktop : AudioEngine {
      * returned handle and must release it after `set_media` retains its own
      * reference (see [play] / [crossfadeTo]).
      */
-    private fun newMedia(loaded: LibVlc, inst: Pointer, mrl: String): Pointer? =
+    private fun newMedia(
+        loaded: LibVlc,
+        inst: Pointer,
+        mrl: String,
+    ): Pointer? =
         if (hasUriScheme(mrl)) {
             runCatching { loaded.libvlc_media_new_location(inst, mrl) }.getOrNull()
         } else {
             runCatching { loaded.libvlc_media_new_path(inst, mrl) }.getOrNull()
         }
 
-    override fun playQueue(items: List<Playable>, startIndex: Int) {
+    override fun playQueue(
+        items: List<Playable>,
+        startIndex: Int,
+    ) {
         if (items.isEmpty()) return
         queue = items
         queueIndex = startIndex.coerceIn(0, items.lastIndex)
@@ -267,8 +280,11 @@ class AudioEngineDesktop : AudioEngine {
     override fun togglePlayPause() {
         val p = player ?: return
         val loaded = lib ?: return
-        if (_state.value == PlayerState.Playing) loaded.libvlc_media_player_set_pause(p, 1)
-        else loaded.libvlc_media_player_play(p)
+        if (_state.value == PlayerState.Playing) {
+            loaded.libvlc_media_player_set_pause(p, 1)
+        } else {
+            loaded.libvlc_media_player_play(p)
+        }
     }
 
     override fun seekTo(positionMs: Long) {
@@ -318,8 +334,7 @@ class AudioEngineDesktop : AudioEngine {
      * corrupted target can never hand libvlc an out-of-range value. The single
      * conversion every Float gain goes through before it meets the C ABI.
      */
-    private fun toLibVlcVolume(gain: Float): Int =
-        (gain.coerceIn(0f, 1f) * 100f).roundToInt().coerceIn(0, 100)
+    private fun toLibVlcVolume(gain: Float): Int = (gain.coerceIn(0f, 1f) * 100f).roundToInt().coerceIn(0, 100)
 
     override fun setPlaybackSpeed(speed: Float) {
         val clamped = speed.coerceIn(0.25f, 4f)
@@ -369,10 +384,11 @@ class AudioEngineDesktop : AudioEngine {
                     play(playable)
                     return@withLock
                 }
-                val incoming = ensureStandby() ?: run {
-                    play(playable)
-                    return@withLock
-                }
+                val incoming =
+                    ensureStandby() ?: run {
+                        play(playable)
+                        return@withLock
+                    }
 
                 // Open the incoming media BEFORE arming the ramp/swap. If it
                 // fails we abort with the outgoing track untouched (it keeps
@@ -383,9 +399,10 @@ class AudioEngineDesktop : AudioEngine {
                 System.err.println("AudioEngineDesktop: crossfadeTo($mrl)")
                 val media = newMedia(loaded, inst, mrl)
                 if (media == null) {
-                    _state.value = PlayerState.Error(
-                        "Failed to open ${mrl.substringAfterLast('\\').substringAfterLast('/')}.",
-                    )
+                    _state.value =
+                        PlayerState.Error(
+                            "Failed to open ${mrl.substringAfterLast('\\').substringAfterLast('/')}.",
+                        )
                     return@withLock
                 }
 
@@ -602,12 +619,13 @@ private const val STEP_MS = 100L
  * carries no UI-visible change (NothingSpecial / Opening). Buffering covers
  * both Opening-adjacent buffering and the explicit Buffering state.
  */
-internal fun mapState(nativeState: Int): PlayerState? = when (nativeState) {
-    LibVlcState.PLAYING -> PlayerState.Playing
-    LibVlcState.PAUSED -> PlayerState.Paused
-    LibVlcState.OPENING, LibVlcState.BUFFERING -> PlayerState.Buffering
-    LibVlcState.STOPPED -> PlayerState.Idle
-    LibVlcState.ENDED -> PlayerState.Ended
-    LibVlcState.ERROR -> PlayerState.Error("VLC reported a playback error.")
-    else -> null
-}
+internal fun mapState(nativeState: Int): PlayerState? =
+    when (nativeState) {
+        LibVlcState.PLAYING -> PlayerState.Playing
+        LibVlcState.PAUSED -> PlayerState.Paused
+        LibVlcState.OPENING, LibVlcState.BUFFERING -> PlayerState.Buffering
+        LibVlcState.STOPPED -> PlayerState.Idle
+        LibVlcState.ENDED -> PlayerState.Ended
+        LibVlcState.ERROR -> PlayerState.Error("VLC reported a playback error.")
+        else -> null
+    }

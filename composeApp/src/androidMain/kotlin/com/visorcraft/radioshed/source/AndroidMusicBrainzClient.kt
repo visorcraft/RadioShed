@@ -27,27 +27,27 @@ import java.net.URLEncoder
  * one GET per call, not worth dragging in OkHttp/Ktor for ~80 lines.
  */
 class AndroidMusicBrainzClient : MusicBrainzClient {
-
     private val json = Json { ignoreUnknownKeys = true }
 
     override suspend fun lookupReleaseGroup(
         artist: String,
         album: String,
-    ): String? = withContext(IODispatcher) {
-        if (artist.isBlank() || album.isBlank()) return@withContext null
-        // Lucene escape: backslash every special char so a release
-        // titled "Foo!" doesn't break the query parser. The full
-        // syntax also reserves `&&`, `||`, but those don't appear
-        // in real-world tags often enough to bother stripping;
-        // a malformed query just returns no results, no crash.
-        val q = """release:"${escape(album)}" AND artist:"${escape(artist)}""""
-        val params = "query=${urlEncode(q)}&fmt=json&limit=1"
-        val raw = httpGet("$MB_BASE/ws/2/release-group?$params") ?: return@withContext null
-        runCatching {
-            json.decodeFromString(ReleaseGroupSearch.serializer(), raw)
-                .releaseGroups?.firstOrNull()?.id
-        }.getOrNull()
-    }
+    ): String? =
+        withContext(IODispatcher) {
+            if (artist.isBlank() || album.isBlank()) return@withContext null
+            // Lucene escape: backslash every special char so a release
+            // titled "Foo!" doesn't break the query parser. The full
+            // syntax also reserves `&&`, `||`, but those don't appear
+            // in real-world tags often enough to bother stripping;
+            // a malformed query just returns no results, no crash.
+            val q = """release:"${escape(album)}" AND artist:"${escape(artist)}""""
+            val params = "query=${urlEncode(q)}&fmt=json&limit=1"
+            val raw = httpGet("$MB_BASE/ws/2/release-group?$params") ?: return@withContext null
+            runCatching {
+                json.decodeFromString(ReleaseGroupSearch.serializer(), raw)
+                    .releaseGroups?.firstOrNull()?.id
+            }.getOrNull()
+        }
 
     override suspend fun lookupArtist(artist: String): String? =
         withContext(IODispatcher) {
@@ -61,25 +61,27 @@ class AndroidMusicBrainzClient : MusicBrainzClient {
             }.getOrNull()
         }
 
-    private suspend fun httpGet(url: String): String? = withContext(IODispatcher) {
-        val conn = (URI(url).toURL().openConnection() as HttpURLConnection).apply {
-            requestMethod = "GET"
-            instanceFollowRedirects = true
-            connectTimeout = CONNECT_TIMEOUT_MS
-            readTimeout = READ_TIMEOUT_MS
-            setRequestProperty("User-Agent", USER_AGENT)
-            setRequestProperty("Accept", "application/json")
+    private suspend fun httpGet(url: String): String? =
+        withContext(IODispatcher) {
+            val conn =
+                (URI(url).toURL().openConnection() as HttpURLConnection).apply {
+                    requestMethod = "GET"
+                    instanceFollowRedirects = true
+                    connectTimeout = CONNECT_TIMEOUT_MS
+                    readTimeout = READ_TIMEOUT_MS
+                    setRequestProperty("User-Agent", USER_AGENT)
+                    setRequestProperty("Accept", "application/json")
+                }
+            try {
+                val code = conn.responseCode
+                if (code !in 200..299) return@withContext null
+                conn.inputStream.use { it.readBytes() }.decodeToString()
+            } catch (e: java.io.IOException) {
+                null
+            } finally {
+                conn.disconnect()
+            }
         }
-        try {
-            val code = conn.responseCode
-            if (code !in 200..299) return@withContext null
-            conn.inputStream.use { it.readBytes() }.decodeToString()
-        } catch (e: java.io.IOException) {
-            null
-        } finally {
-            conn.disconnect()
-        }
-    }
 
     private fun escape(s: String): String =
         // Lucene reserved chars per
@@ -90,8 +92,7 @@ class AndroidMusicBrainzClient : MusicBrainzClient {
             acc.append(c)
         }.toString()
 
-    private fun urlEncode(s: String): String =
-        URLEncoder.encode(s, "UTF-8").replace("+", "%20")
+    private fun urlEncode(s: String): String = URLEncoder.encode(s, "UTF-8").replace("+", "%20")
 
     @Serializable
     private data class ReleaseGroupSearch(
@@ -114,9 +115,10 @@ class AndroidMusicBrainzClient : MusicBrainzClient {
         const val MB_BASE = "https://musicbrainz.org"
         const val CONNECT_TIMEOUT_MS = 10_000
         const val READ_TIMEOUT_MS = 15_000
-        val LUCENE_SPECIALS = setOf(
-            '\\', '+', '-', '!', '(', ')', '{', '}', '[', ']', '^', '"',
-            '~', '*', '?', ':', '/',
-        )
+        val LUCENE_SPECIALS =
+            setOf(
+                '\\', '+', '-', '!', '(', ')', '{', '}', '[', ']', '^', '"',
+                '~', '*', '?', ':', '/',
+            )
     }
 }

@@ -30,9 +30,10 @@ actual fun rememberFilePicker(onPicked: (ByteArray) -> Unit): (mimeType: String)
     }
 }
 
-private fun mimeToGlob(mimeType: String): String = when {
-    mimeType.contains("json") -> "*.json"
-    mimeType.contains("zip") -> "*.zip"
-    mimeType.contains("text") -> "*.txt;*.md;*.lrc"
-    else -> "*.*"
-}
+private fun mimeToGlob(mimeType: String): String =
+    when {
+        mimeType.contains("json") -> "*.json"
+        mimeType.contains("zip") -> "*.zip"
+        mimeType.contains("text") -> "*.txt;*.md;*.lrc"
+        else -> "*.*"
+    }

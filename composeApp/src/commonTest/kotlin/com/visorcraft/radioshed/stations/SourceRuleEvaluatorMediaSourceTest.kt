@@ -22,7 +22,6 @@ import kotlin.test.assertTrue
  * simulated-latency delays via virtual time).
  */
 class SourceRuleEvaluatorMediaSourceTest {
-
     private lateinit var driver: JdbcSqliteDriver
     private lateinit var evaluator: SourceRuleEvaluator
     private val registry = MediaSourceRegistry()
@@ -32,12 +31,13 @@ class SourceRuleEvaluatorMediaSourceTest {
         driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
         RadioShedDatabase.Schema.create(driver)
         val db = RadioShedDatabase(driver)
-        evaluator = SourceRuleEvaluator(
-            LibraryRepository(db),
-            RatingRepository(db),
-            PlaylistRepository(db),
-            registry,
-        )
+        evaluator =
+            SourceRuleEvaluator(
+                LibraryRepository(db),
+                RatingRepository(db),
+                PlaylistRepository(db),
+                registry,
+            )
     }
 
     @AfterTest
@@ -46,30 +46,33 @@ class SourceRuleEvaluatorMediaSourceTest {
     }
 
     @Test
-    fun registeredSourceTracksConvertToTracks() = runTest {
-        registry.register(MockCloudSource())
+    fun registeredSourceTracksConvertToTracks() =
+        runTest {
+            registry.register(MockCloudSource())
 
-        val tracks = evaluator.evaluate(SourceRule.MediaSourceSelector("mock-cloud"))
+            val tracks = evaluator.evaluate(SourceRule.MediaSourceSelector("mock-cloud"))
 
-        assertEquals(3, tracks.size)
-        assertEquals("https://mock-cloud.com/tracks/1", tracks[0].path)
-        assertEquals("Song One.mp3", tracks[0].fileName)
-        assertEquals("mp3", tracks[0].format)
-        assertEquals(3, tracks.map { it.id }.toSet().size, "Track ids must be distinct")
-    }
-
-    @Test
-    fun unknownSourceIdEvaluatesToEmpty() = runTest {
-        val tracks = evaluator.evaluate(SourceRule.MediaSourceSelector("not-registered"))
-        assertTrue(tracks.isEmpty())
-    }
+            assertEquals(3, tracks.size)
+            assertEquals("https://mock-cloud.com/tracks/1", tracks[0].path)
+            assertEquals("Song One.mp3", tracks[0].fileName)
+            assertEquals("mp3", tracks[0].format)
+            assertEquals(3, tracks.map { it.id }.toSet().size, "Track ids must be distinct")
+        }
 
     @Test
-    fun unregisteredSourceEvaluatesToEmptyAfterRemoval() = runTest {
-        registry.register(MockCloudSource())
-        registry.unregister("mock-cloud")
+    fun unknownSourceIdEvaluatesToEmpty() =
+        runTest {
+            val tracks = evaluator.evaluate(SourceRule.MediaSourceSelector("not-registered"))
+            assertTrue(tracks.isEmpty())
+        }
 
-        val tracks = evaluator.evaluate(SourceRule.MediaSourceSelector("mock-cloud"))
-        assertTrue(tracks.isEmpty())
-    }
+    @Test
+    fun unregisteredSourceEvaluatesToEmptyAfterRemoval() =
+        runTest {
+            registry.register(MockCloudSource())
+            registry.unregister("mock-cloud")
+
+            val tracks = evaluator.evaluate(SourceRule.MediaSourceSelector("mock-cloud"))
+            assertTrue(tracks.isEmpty())
+        }
 }

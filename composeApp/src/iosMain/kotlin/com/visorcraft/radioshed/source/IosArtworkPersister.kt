@@ -7,5 +7,6 @@ package com.visorcraft.radioshed.source
  */
 class IosArtworkPersister : ArtworkPersister {
     override suspend fun persist(bytes: ByteArray): String? = null
+
     override suspend fun clearAll(): Int = 0
 }

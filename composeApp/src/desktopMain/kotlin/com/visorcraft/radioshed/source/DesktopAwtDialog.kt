@@ -27,12 +27,13 @@ import java.awt.Frame
 internal suspend fun showSaveDialog(
     title: String,
     suggestedFileName: String,
-): Pair<String?, String?> = withContext(Dispatchers.Main) {
-    val dialog = FileDialog(null as Frame?, title, FileDialog.SAVE)
-    dialog.file = suggestedFileName
-    dialog.isVisible = true
-    dialog.directory to dialog.file
-}
+): Pair<String?, String?> =
+    withContext(Dispatchers.Main) {
+        val dialog = FileDialog(null as Frame?, title, FileDialog.SAVE)
+        dialog.file = suggestedFileName
+        dialog.isVisible = true
+        dialog.directory to dialog.file
+    }
 
 /** Same EDT contract as [showSaveDialog] but for the LOAD variant. */
 internal suspend fun showLoadDialog(title: String): Pair<String?, String?> =

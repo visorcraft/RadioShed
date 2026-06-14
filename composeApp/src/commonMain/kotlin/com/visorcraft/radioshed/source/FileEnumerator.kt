@@ -11,5 +11,9 @@ interface FileEnumerator {
     // Walk [rootUri] (recursively if the corresponding folder is recursive)
     // and emit each audio file as a [DiscoveredTrack]. Apply [filter]
     // inline so we don't waste cycles on files we'd reject anyway.
-    fun enumerate(rootUri: String, recursive: Boolean = true, filter: SourceFilter = SourceFilter()): Flow<DiscoveredTrack>
+    fun enumerate(
+        rootUri: String,
+        recursive: Boolean = true,
+        filter: SourceFilter = SourceFilter(),
+    ): Flow<DiscoveredTrack>
 }

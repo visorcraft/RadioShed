@@ -113,57 +113,62 @@ fun TrackContextSheet(
         sheetState = sheetState,
     ) {
         when (step) {
-            Step.Main -> MainStep(
-                track = track,
-                liked = liked,
-                navInstalled = navInstalled,
-                primaryArtistId = primaryArtistId,
-                primaryArtistName = primaryArtistName,
-                onDismiss = onDismiss,
-                globallyDisliked = globallyDisliked,
-                onPlayNext = {
-                    track?.let { stationPlayback.playNext(it) }
-                    onDismiss()
-                },
-                onAddToQueue = {
-                    track?.let { stationPlayback.addToQueue(it) }
-                    onDismiss()
-                },
-                onToggleLike = {
-                    val target = !liked
-                    liked = target
-                    scope.launch {
-                        if (target) ratingRepo.like(trackId) else ratingRepo.unlike(trackId)
-                    }
-                },
-                onToggleGlobalDislike = {
-                    val target = !globallyDisliked
-                    globallyDisliked = target
-                    scope.launch {
-                        if (target) ratingRepo.globalDislike(trackId)
-                        else ratingRepo.undoGlobalDislike(trackId)
-                    }
-                },
-                onAddToPlaylist = { step = Step.PlaylistPicker },
-                onGoToAlbum = { id ->
-                    onDismiss()
-                    navToAlbum(id)
-                },
-                onGoToArtist = { id ->
-                    onDismiss()
-                    navToArtist(id)
-                },
-                onViewLyrics = {
-                    onDismiss()
-                    navToLyrics(trackId)
-                },
-                onSelect = onSelect,
-            )
-            Step.PlaylistPicker -> AddToPlaylistInline(
-                trackId = trackId,
-                onDone = onDismiss,
-                onBack = { step = Step.Main },
-            )
+            Step.Main ->
+                MainStep(
+                    track = track,
+                    liked = liked,
+                    navInstalled = navInstalled,
+                    primaryArtistId = primaryArtistId,
+                    primaryArtistName = primaryArtistName,
+                    onDismiss = onDismiss,
+                    globallyDisliked = globallyDisliked,
+                    onPlayNext = {
+                        track?.let { stationPlayback.playNext(it) }
+                        onDismiss()
+                    },
+                    onAddToQueue = {
+                        track?.let { stationPlayback.addToQueue(it) }
+                        onDismiss()
+                    },
+                    onToggleLike = {
+                        val target = !liked
+                        liked = target
+                        scope.launch {
+                            if (target) ratingRepo.like(trackId) else ratingRepo.unlike(trackId)
+                        }
+                    },
+                    onToggleGlobalDislike = {
+                        val target = !globallyDisliked
+                        globallyDisliked = target
+                        scope.launch {
+                            if (target) {
+                                ratingRepo.globalDislike(trackId)
+                            } else {
+                                ratingRepo.undoGlobalDislike(trackId)
+                            }
+                        }
+                    },
+                    onAddToPlaylist = { step = Step.PlaylistPicker },
+                    onGoToAlbum = { id ->
+                        onDismiss()
+                        navToAlbum(id)
+                    },
+                    onGoToArtist = { id ->
+                        onDismiss()
+                        navToArtist(id)
+                    },
+                    onViewLyrics = {
+                        onDismiss()
+                        navToLyrics(trackId)
+                    },
+                    onSelect = onSelect,
+                )
+            Step.PlaylistPicker ->
+                AddToPlaylistInline(
+                    trackId = trackId,
+                    onDone = onDismiss,
+                    onBack = { step = Step.Main },
+                )
         }
     }
 }
@@ -275,16 +280,18 @@ private fun MainStep(
         run {
             val copyToClipboard = com.visorcraft.radioshed.ui.util.rememberCopyToClipboard()
             val displayArtist = primaryArtistName?.takeIf { it.isNotBlank() }
-            val displayTitle = track?.title?.takeIf { it.isNotBlank() }
-                ?: track?.fileName
-            val combined = remember(displayArtist, displayTitle) {
-                when {
-                    displayArtist != null && displayTitle != null ->
-                        "$displayArtist – $displayTitle"
-                    displayTitle != null -> displayTitle
-                    else -> null
+            val displayTitle =
+                track?.title?.takeIf { it.isNotBlank() }
+                    ?: track?.fileName
+            val combined =
+                remember(displayArtist, displayTitle) {
+                    when {
+                        displayArtist != null && displayTitle != null ->
+                            "$displayArtist – $displayTitle"
+                        displayTitle != null -> displayTitle
+                        else -> null
+                    }
                 }
-            }
             ContextActionRow(
                 icon = Icons.Filled.ContentCopy,
                 label = "Copy artist – title",
@@ -341,14 +348,26 @@ private fun MainStep(
         // the per-station "skip on this station". When already
         // banned, the label flips so the user can undo it.
         ContextActionRow(
-            icon = if (globallyDisliked) Icons.Filled.Favorite
-                   else Icons.Filled.Block,
-            label = if (globallyDisliked) "Allow on stations again"
-                    else "Don't play this anywhere",
+            icon =
+                if (globallyDisliked) {
+                    Icons.Filled.Favorite
+                } else {
+                    Icons.Filled.Block
+                },
+            label =
+                if (globallyDisliked) {
+                    "Allow on stations again"
+                } else {
+                    "Don't play this anywhere"
+                },
             enabled = track != null,
             onClick = onToggleGlobalDislike,
-            iconTint = if (globallyDisliked) MaterialTheme.colorScheme.primary
-                       else MaterialTheme.colorScheme.error,
+            iconTint =
+                if (globallyDisliked) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.error
+                },
         )
         Spacer(Modifier.height(8.dp))
     }
@@ -436,12 +455,14 @@ private fun AddToPlaylistInline(
                     onValueChange = { newName = it },
                     label = { Text("Name") },
                     singleLine = true,
-                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                        imeAction = androidx.compose.ui.text.input.ImeAction.Done,
-                    ),
-                    keyboardActions = androidx.compose.foundation.text.KeyboardActions(
-                        onDone = { confirmCreate() },
-                    ),
+                    keyboardOptions =
+                        androidx.compose.foundation.text.KeyboardOptions(
+                            imeAction = androidx.compose.ui.text.input.ImeAction.Done,
+                        ),
+                    keyboardActions =
+                        androidx.compose.foundation.text.KeyboardActions(
+                            onDone = { confirmCreate() },
+                        ),
                 )
             },
             confirmButton = {
@@ -465,13 +486,18 @@ private fun ContextActionRow(
     onClick: () -> Unit,
     iconTint: androidx.compose.ui.graphics.Color? = null,
 ) {
-    val baseTint = if (enabled) MaterialTheme.colorScheme.onSurface
-                   else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+    val baseTint =
+        if (enabled) {
+            MaterialTheme.colorScheme.onSurface
+        } else {
+            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+        }
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable(enabled = enabled, onClick = onClick)
+                .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(16.dp),
     ) {

@@ -2,6 +2,7 @@ package com.visorcraft.radioshed.ui.player
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.awaitTouchSlopOrCancellation
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.horizontalDrag
@@ -33,20 +34,17 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import com.visorcraft.radioshed.isDesktopHost
-import com.visorcraft.radioshed.ui.util.TooltipIconButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.pointer.positionChange
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -54,7 +52,9 @@ import androidx.compose.ui.unit.dp
 import com.visorcraft.radioshed.audio.AudioEngine
 import com.visorcraft.radioshed.audio.PlayerState
 import com.visorcraft.radioshed.audio.SleepTimer
+import com.visorcraft.radioshed.isDesktopHost
 import com.visorcraft.radioshed.stations.StationPlayback
+import com.visorcraft.radioshed.ui.util.TooltipIconButton
 import org.koin.compose.koinInject
 
 /**
@@ -113,75 +113,77 @@ fun MiniPlayer(
         // each receive the raw stream independently and can both fire
         // on a diagonal swipe), so we resolve axis at the first slop
         // crossing and only feed events to the matching channel.
-        modifier = Modifier
-            .fillMaxWidth()
-            .windowInsetsPadding(WindowInsets.navigationBars)
-            .pointerInput(Unit) {
-                detectTapGestures(
-                    onTap = { onExpand() },
-                    // Long-press surfaces the standard Track context
-                    // sheet (heart / play next / add to playlist / …)
-                    // so users don't have to expand to Now Playing
-                    // and dig into the overflow menu just to like
-                    // the current track.
-                    onLongPress = { contextSheetOpen = true },
-                )
-            }
-            .pointerInput(Unit) {
-                // PointerInputScope extends Density, so `.dp.toPx()`
-                // works via the implicit receiver. The threshold is
-                // computed here (rather than from a top-level const)
-                // so it scales with device density: a raw 60-px value
-                // collapses to ~9 dp of perceived movement on a
-                // 420-dpi phone like the Galaxy Fold 7, producing
-                // accidental skips on near-stationary taps.
-                val swipeThresholdPx = 20.dp.toPx()
-                awaitEachGesture {
-                    val down = awaitFirstDown(requireUnconsumed = false)
-                    var horizontal = false
-                    var vertical = false
-                    // First slop crossing decides the axis. The drag
-                    // delta is set on the consumed change so subsequent
-                    // horizontalDrag/verticalDrag accumulators see it.
-                    val slopChange = awaitTouchSlopOrCancellation(down.id) { change, over ->
-                        val absX = kotlin.math.abs(over.x)
-                        val absY = kotlin.math.abs(over.y)
-                        if (absX > absY) horizontal = true else vertical = true
-                        change.consume()
-                    } ?: return@awaitEachGesture
-                    var accum = 0f
-                    if (horizontal) {
-                        accum += slopChange.positionChange().x
-                        horizontalDrag(slopChange.id) { change ->
-                            accum += change.positionChange().x
-                            change.consume()
-                        }
-                        when {
-                            accum < -swipeThresholdPx -> {
-                                stationPlayback.skipNext()
-                                haptics.performHapticFeedback(
-                                    androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove,
-                                )
-                            }
-                            accum > swipeThresholdPx -> {
-                                stationPlayback.skipPrevious()
-                                haptics.performHapticFeedback(
-                                    androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove,
-                                )
-                            }
-                        }
-                    } else if (vertical) {
-                        accum += slopChange.positionChange().y
-                        verticalDrag(slopChange.id) { change ->
-                            accum += change.positionChange().y
-                            change.consume()
-                        }
-                        // Negative accum = upward swipe. 20-dp threshold
-                        // matches Spotify / Apple Music swipe-up feel.
-                        if (accum < -swipeThresholdPx) onExpand()
-                    }
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .windowInsetsPadding(WindowInsets.navigationBars)
+                .pointerInput(Unit) {
+                    detectTapGestures(
+                        onTap = { onExpand() },
+                        // Long-press surfaces the standard Track context
+                        // sheet (heart / play next / add to playlist / …)
+                        // so users don't have to expand to Now Playing
+                        // and dig into the overflow menu just to like
+                        // the current track.
+                        onLongPress = { contextSheetOpen = true },
+                    )
                 }
-            },
+                .pointerInput(Unit) {
+                    // PointerInputScope extends Density, so `.dp.toPx()`
+                    // works via the implicit receiver. The threshold is
+                    // computed here (rather than from a top-level const)
+                    // so it scales with device density: a raw 60-px value
+                    // collapses to ~9 dp of perceived movement on a
+                    // 420-dpi phone like the Galaxy Fold 7, producing
+                    // accidental skips on near-stationary taps.
+                    val swipeThresholdPx = 20.dp.toPx()
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        var horizontal = false
+                        var vertical = false
+                        // First slop crossing decides the axis. The drag
+                        // delta is set on the consumed change so subsequent
+                        // horizontalDrag/verticalDrag accumulators see it.
+                        val slopChange =
+                            awaitTouchSlopOrCancellation(down.id) { change, over ->
+                                val absX = kotlin.math.abs(over.x)
+                                val absY = kotlin.math.abs(over.y)
+                                if (absX > absY) horizontal = true else vertical = true
+                                change.consume()
+                            } ?: return@awaitEachGesture
+                        var accum = 0f
+                        if (horizontal) {
+                            accum += slopChange.positionChange().x
+                            horizontalDrag(slopChange.id) { change ->
+                                accum += change.positionChange().x
+                                change.consume()
+                            }
+                            when {
+                                accum < -swipeThresholdPx -> {
+                                    stationPlayback.skipNext()
+                                    haptics.performHapticFeedback(
+                                        androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove,
+                                    )
+                                }
+                                accum > swipeThresholdPx -> {
+                                    stationPlayback.skipPrevious()
+                                    haptics.performHapticFeedback(
+                                        androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove,
+                                    )
+                                }
+                            }
+                        } else if (vertical) {
+                            accum += slopChange.positionChange().y
+                            verticalDrag(slopChange.id) { change ->
+                                accum += change.positionChange().y
+                                change.consume()
+                            }
+                            // Negative accum = upward swipe. 20-dp threshold
+                            // matches Spotify / Apple Music swipe-up feel.
+                            if (accum < -swipeThresholdPx) onExpand()
+                        }
+                    }
+                },
         color = MaterialTheme.colorScheme.surface,
         tonalElevation = 6.dp,
     ) {
@@ -213,16 +215,22 @@ fun MiniPlayer(
                     // when the queue is empty (e.g., the current
                     // track is the last one in an ad-hoc list) or
                     // when the player is actively playing.
-                    val baseSubtitle = listOfNotNull(playable.artist, playable.album)
-                        .joinToString(" · ")
-                    val pausedNextLabel = if (state == PlayerState.Paused) {
-                        val next = remember(state, playable.trackId, priorityCount) {
-                            stationPlayback.upcoming(1).firstOrNull()
+                    val baseSubtitle =
+                        listOfNotNull(playable.artist, playable.album)
+                            .joinToString(" · ")
+                    val pausedNextLabel =
+                        if (state == PlayerState.Paused) {
+                            val next =
+                                remember(state, playable.trackId, priorityCount) {
+                                    stationPlayback.upcoming(1).firstOrNull()
+                                }
+                            next?.title?.ifBlank { null }?.let { "Next: $it" }
+                        } else {
+                            null
                         }
-                        next?.title?.ifBlank { null }?.let { "Next: $it" }
-                    } else null
-                    val subtitle = pausedNextLabel
-                        ?: baseSubtitle.ifBlank { stateLabel(state) }
+                    val subtitle =
+                        pausedNextLabel
+                            ?: baseSubtitle.ifBlank { stateLabel(state) }
                     Text(
                         text = subtitle,
                         style = MaterialTheme.typography.bodySmall,
@@ -259,8 +267,12 @@ fun MiniPlayer(
                     onClick = { stationPlayback.skipPrevious() },
                 )
                 TransportIconButton(
-                    icon = if (state == PlayerState.Playing) Icons.Filled.Pause
-                           else Icons.Filled.PlayArrow,
+                    icon =
+                        if (state == PlayerState.Playing) {
+                            Icons.Filled.Pause
+                        } else {
+                            Icons.Filled.PlayArrow
+                        },
                     contentDesc = if (state == PlayerState.Playing) "Pause" else "Play",
                     onClick = { audioEngine.togglePlayPause() },
                 )
@@ -284,10 +296,11 @@ fun MiniPlayer(
 @Composable
 private fun ArtworkPlaceholder(artworkUri: String?) {
     Box(
-        modifier = Modifier
-            .size(40.dp)
-            .clip(RoundedCornerShape(6.dp))
-            .background(MaterialTheme.colorScheme.primaryContainer),
+        modifier =
+            Modifier
+                .size(40.dp)
+                .clip(RoundedCornerShape(6.dp))
+                .background(MaterialTheme.colorScheme.primaryContainer),
         contentAlignment = Alignment.Center,
     ) {
         if (artworkUri != null) {
@@ -310,11 +323,12 @@ private fun ArtworkPlaceholder(artworkUri: String?) {
 
 @Composable
 private fun SleepTimerBadge(state: SleepTimer.State) {
-    val label: String = when (state) {
-        SleepTimer.State.Idle -> return
-        is SleepTimer.State.Running -> formatSleepCountdown(state.remainingMs)
-        SleepTimer.State.EndOfTrack -> "EOT"
-    }
+    val label: String =
+        when (state) {
+            SleepTimer.State.Idle -> return
+            is SleepTimer.State.Running -> formatSleepCountdown(state.remainingMs)
+            SleepTimer.State.EndOfTrack -> "EOT"
+        }
     androidx.compose.material3.Surface(
         color = MaterialTheme.colorScheme.primaryContainer,
         shape = RoundedCornerShape(8.dp),
@@ -371,23 +385,25 @@ private fun TransportIconButton(
     TooltipIconButton(
         tooltip = contentDesc,
         onClick = onClick,
-        modifier = Modifier
-            .size(48.dp)
-            .semantics { contentDescription = contentDesc },
+        modifier =
+            Modifier
+                .size(48.dp)
+                .semantics { contentDescription = contentDesc },
     ) {
         Icon(
             imageVector = icon,
-            contentDescription = null,  // outer modifier already labels it
+            contentDescription = null, // outer modifier already labels it
             tint = MaterialTheme.colorScheme.onSurface,
         )
     }
 }
 
-private fun stateLabel(state: PlayerState): String = when (state) {
-    PlayerState.Buffering -> "Buffering…"
-    PlayerState.Playing -> "Playing"
-    PlayerState.Paused -> "Paused"
-    PlayerState.Idle -> "Idle"
-    PlayerState.Ended -> "Ended"
-    is PlayerState.Error -> "Error: ${state.message}"
-}
+private fun stateLabel(state: PlayerState): String =
+    when (state) {
+        PlayerState.Buffering -> "Buffering…"
+        PlayerState.Playing -> "Playing"
+        PlayerState.Paused -> "Paused"
+        PlayerState.Idle -> "Idle"
+        PlayerState.Ended -> "Ended"
+        is PlayerState.Error -> "Error: ${state.message}"
+    }

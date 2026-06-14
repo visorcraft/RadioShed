@@ -13,7 +13,6 @@ import com.visorcraft.radioshed.MainActivity
  * to avoid duplicating PendingIntent construction and artwork bitmap decoding.
  */
 internal object WidgetSupport {
-
     const val ARTWORK_TARGET_PX = 256
 
     /**
@@ -58,12 +57,13 @@ internal object WidgetSupport {
         requestCode: Int,
         stationId: Long? = null,
     ): PendingIntent {
-        val intent = Intent(context, MainActivity::class.java).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-            if (stationId != null) {
-                putExtra(EXTRA_STATION_ID, stationId)
+        val intent =
+            Intent(context, MainActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                if (stationId != null) {
+                    putExtra(EXTRA_STATION_ID, stationId)
+                }
             }
-        }
         return PendingIntent.getActivity(
             context,
             requestCode,

@@ -38,14 +38,15 @@ internal object CrossfadeIpc {
 
     /** Pack a [Playable]'s decode-relevant fields into a [Bundle]. Negative
      *  cue sentinels mean "no clip". */
-    fun bundleForItem(playable: Playable): Bundle = Bundle().apply {
-        putString(EXTRA_ITEM_URI, playable.uri)
-        putLong(EXTRA_ITEM_TRACK_ID, playable.trackId)
-        putString(EXTRA_ITEM_TITLE, playable.title)
-        putString(EXTRA_ITEM_ARTIST, playable.artist)
-        putString(EXTRA_ITEM_ALBUM, playable.album)
-        putString(EXTRA_ITEM_ARTWORK_URI, playable.artworkUri)
-        putLong(EXTRA_ITEM_CUE_START_MS, playable.cueOffsetStartMs ?: -1L)
-        putLong(EXTRA_ITEM_CUE_END_MS, playable.cueOffsetEndMs ?: -1L)
-    }
+    fun bundleForItem(playable: Playable): Bundle =
+        Bundle().apply {
+            putString(EXTRA_ITEM_URI, playable.uri)
+            putLong(EXTRA_ITEM_TRACK_ID, playable.trackId)
+            putString(EXTRA_ITEM_TITLE, playable.title)
+            putString(EXTRA_ITEM_ARTIST, playable.artist)
+            putString(EXTRA_ITEM_ALBUM, playable.album)
+            putString(EXTRA_ITEM_ARTWORK_URI, playable.artworkUri)
+            putLong(EXTRA_ITEM_CUE_START_MS, playable.cueOffsetStartMs ?: -1L)
+            putLong(EXTRA_ITEM_CUE_END_MS, playable.cueOffsetEndMs ?: -1L)
+        }
 }

@@ -23,7 +23,6 @@ import kotlin.test.assertTrue
  * end-to-end (in-memory DB + fake source).
  */
 class SourceRuleEvaluatorTest {
-
     private lateinit var driver: JdbcSqliteDriver
     private lateinit var db: RadioShedDatabase
     private lateinit var library: LibraryRepository
@@ -36,12 +35,13 @@ class SourceRuleEvaluatorTest {
         RadioShedDatabase.Schema.create(driver)
         db = RadioShedDatabase(driver)
         library = LibraryRepository(db)
-        evaluator = SourceRuleEvaluator(
-            library,
-            RatingRepository(db),
-            PlaylistRepository(db),
-            registry,
-        )
+        evaluator =
+            SourceRuleEvaluator(
+                library,
+                RatingRepository(db),
+                PlaylistRepository(db),
+                registry,
+            )
     }
 
     @AfterTest
@@ -50,64 +50,73 @@ class SourceRuleEvaluatorTest {
     }
 
     @Test
-    fun unionOfLocalTagFilterAndMediaSourceYieldsBoth() = runTest {
-        registry.register(MockCloudSource())
-        seedTrackWithGenre("Local Rock Song", "Rock")
+    fun unionOfLocalTagFilterAndMediaSourceYieldsBoth() =
+        runTest {
+            registry.register(MockCloudSource())
+            seedTrackWithGenre("Local Rock Song", "Rock")
 
-        val rule = SourceRule.Union(
-            listOf(
-                SourceRule.TagFilter("GENRE", listOf("Rock")),
-                SourceRule.MediaSourceSelector("mock-cloud"),
-            ),
-        )
+            val rule =
+                SourceRule.Union(
+                    listOf(
+                        SourceRule.TagFilter("GENRE", listOf("Rock")),
+                        SourceRule.MediaSourceSelector("mock-cloud"),
+                    ),
+                )
 
-        val tracks = evaluator.evaluate(rule)
+            val tracks = evaluator.evaluate(rule)
 
-        // 1 local track + 3 mock-cloud tracks
-        assertEquals(4, tracks.size, "Expected 4 tracks (1 local + 3 remote)")
-        val paths = tracks.map { it.path }.toSet()
-        assertTrue(paths.contains("/seed/local-rock-song.flac"), "Local track missing")
-        assertTrue(paths.contains("https://mock-cloud.com/tracks/1"), "Remote track 1 missing")
-        assertTrue(paths.contains("https://mock-cloud.com/tracks/2"), "Remote track 2 missing")
-        assertTrue(paths.contains("https://mock-cloud.com/tracks/3"), "Remote track 3 missing")
-    }
-
-    @Test
-    fun intersectionOfLocalAndMediaSourceRequiresBoth() = runTest {
-        registry.register(MockCloudSource())
-        seedTrackWithGenre("Local Rock Song", "Rock")
-
-        val rule = SourceRule.Intersection(
-            listOf(
-                SourceRule.TagFilter("GENRE", listOf("Rock")),
-                SourceRule.MediaSourceSelector("mock-cloud"),
-            ),
-        )
-
-        val tracks = evaluator.evaluate(rule)
-
-        // Intersection of disjoint sets → empty
-        assertEquals(0, tracks.size, "Intersection of local-only and remote-only should be empty")
-    }
+            // 1 local track + 3 mock-cloud tracks
+            assertEquals(4, tracks.size, "Expected 4 tracks (1 local + 3 remote)")
+            val paths = tracks.map { it.path }.toSet()
+            assertTrue(paths.contains("/seed/local-rock-song.flac"), "Local track missing")
+            assertTrue(paths.contains("https://mock-cloud.com/tracks/1"), "Remote track 1 missing")
+            assertTrue(paths.contains("https://mock-cloud.com/tracks/2"), "Remote track 2 missing")
+            assertTrue(paths.contains("https://mock-cloud.com/tracks/3"), "Remote track 3 missing")
+        }
 
     @Test
-    fun differenceRemovesMediaSourceTracksFromLocalPool() = runTest {
-        registry.register(MockCloudSource())
-        seedTrackWithGenre("Local Rock Song", "Rock")
+    fun intersectionOfLocalAndMediaSourceRequiresBoth() =
+        runTest {
+            registry.register(MockCloudSource())
+            seedTrackWithGenre("Local Rock Song", "Rock")
 
-        val rule = SourceRule.Difference(
-            left = SourceRule.TagFilter("GENRE", listOf("Rock")),
-            right = SourceRule.MediaSourceSelector("mock-cloud"),
-        )
+            val rule =
+                SourceRule.Intersection(
+                    listOf(
+                        SourceRule.TagFilter("GENRE", listOf("Rock")),
+                        SourceRule.MediaSourceSelector("mock-cloud"),
+                    ),
+                )
 
-        val tracks = evaluator.evaluate(rule)
+            val tracks = evaluator.evaluate(rule)
 
-        // Local minus remote (disjoint) → local track survives
-        assertEquals(1, tracks.size, "Expected 1 local track after difference")
-        assertEquals("/seed/local-rock-song.flac", tracks.first().path)
-    }
+            // Intersection of disjoint sets → empty
+            assertEquals(0, tracks.size, "Intersection of local-only and remote-only should be empty")
+        }
 
-    private suspend fun seedTrackWithGenre(title: String, genre: String) {
+    @Test
+    fun differenceRemovesMediaSourceTracksFromLocalPool() =
+        runTest {
+            registry.register(MockCloudSource())
+            seedTrackWithGenre("Local Rock Song", "Rock")
+
+            val rule =
+                SourceRule.Difference(
+                    left = SourceRule.TagFilter("GENRE", listOf("Rock")),
+                    right = SourceRule.MediaSourceSelector("mock-cloud"),
+                )
+
+            val tracks = evaluator.evaluate(rule)
+
+            // Local minus remote (disjoint) → local track survives
+            assertEquals(1, tracks.size, "Expected 1 local track after difference")
+            assertEquals("/seed/local-rock-song.flac", tracks.first().path)
+        }
+
+    private suspend fun seedTrackWithGenre(
+        title: String,
+        genre: String,
+    ) {
         library.upsertTrack(
             folderId = null,
             path = "/seed/${title.lowercase().replace(" ", "-")}.flac",

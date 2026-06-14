@@ -15,26 +15,26 @@ import java.util.zip.ZipOutputStream
  * because it's a real impl, not a stub.
  */
 class DesktopBackupPackager : BackupPackager {
-
     override suspend fun pack(
         manifestJson: ByteArray,
         blobs: Map<String, ByteArray>,
-    ): ByteArray? = withContext(IODispatcher) {
-        runCatching {
-            val out = ByteArrayOutputStream()
-            ZipOutputStream(out).use { zip ->
-                zip.putNextEntry(ZipEntry(MANIFEST_NAME))
-                zip.write(manifestJson)
-                zip.closeEntry()
-                for ((name, bytes) in blobs) {
-                    zip.putNextEntry(ZipEntry(name))
-                    zip.write(bytes)
+    ): ByteArray? =
+        withContext(IODispatcher) {
+            runCatching {
+                val out = ByteArrayOutputStream()
+                ZipOutputStream(out).use { zip ->
+                    zip.putNextEntry(ZipEntry(MANIFEST_NAME))
+                    zip.write(manifestJson)
                     zip.closeEntry()
+                    for ((name, bytes) in blobs) {
+                        zip.putNextEntry(ZipEntry(name))
+                        zip.write(bytes)
+                        zip.closeEntry()
+                    }
                 }
-            }
-            out.toByteArray()
-        }.getOrNull()
-    }
+                out.toByteArray()
+            }.getOrNull()
+        }
 
     override suspend fun unpack(bytes: ByteArray): BackupPackager.Unpacked? =
         withContext(IODispatcher) {

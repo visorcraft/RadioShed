@@ -20,20 +20,22 @@ actual fun rememberBluetoothConnectGate(): BluetoothConnectGate {
     // bonded-device read, so treat it as permanently granted there.
     val needsRuntimeGrant = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
 
-    fun checkGranted(): Boolean = !needsRuntimeGrant ||
-        ContextCompat.checkSelfPermission(
-            context,
-            Manifest.permission.BLUETOOTH_CONNECT,
-        ) == PackageManager.PERMISSION_GRANTED
+    fun checkGranted(): Boolean =
+        !needsRuntimeGrant ||
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.BLUETOOTH_CONNECT,
+            ) == PackageManager.PERMISSION_GRANTED
 
     // Held in a MutableState so the gate object reads it reactively — flipping
     // it on the dialog result recomposes any caller observing gate.granted.
     val grantedState: MutableState<Boolean> = remember { mutableStateOf(checkGranted()) }
-    val launcher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission(),
-    ) { result ->
-        grantedState.value = result || checkGranted()
-    }
+    val launcher =
+        rememberLauncherForActivityResult(
+            ActivityResultContracts.RequestPermission(),
+        ) { result ->
+            grantedState.value = result || checkGranted()
+        }
     return remember(grantedState, launcher, needsRuntimeGrant) {
         object : BluetoothConnectGate {
             override val granted: Boolean get() = grantedState.value

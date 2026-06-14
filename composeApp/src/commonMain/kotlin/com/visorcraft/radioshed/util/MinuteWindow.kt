@@ -19,7 +19,10 @@ package com.visorcraft.radioshed.util
  * The window is half-open on the end so two adjacent windows (…→09:00,
  * 09:00→…) don't both claim minute 540.
  */
-fun Int.isInMinuteWindow(startMin: Int, endMin: Int): Boolean {
+fun Int.isInMinuteWindow(
+    startMin: Int,
+    endMin: Int,
+): Boolean {
     if (startMin == endMin) return false
     return if (startMin < endMin) {
         this in startMin until endMin

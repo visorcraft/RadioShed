@@ -24,28 +24,29 @@ import java.net.URI
  * ourselves keeps us in the well-behaved bucket.
  */
 class AndroidCoverArtFetcher : CoverArtFetcher {
-
-    override suspend fun fetchByReleaseMbid(mbid: String): ByteArray? = withContext(IODispatcher) {
-        if (mbid.isBlank()) return@withContext null
-        val url = URI("$CAA_BASE/release/$mbid/front-$SIZE_PX").toURL()
-        runCatching {
-            val conn = (url.openConnection() as HttpURLConnection).apply {
-                requestMethod = "GET"
-                instanceFollowRedirects = true
-                connectTimeout = CONNECT_TIMEOUT_MS
-                readTimeout = READ_TIMEOUT_MS
-                setRequestProperty("User-Agent", USER_AGENT)
-                setRequestProperty("Accept", "image/*")
-            }
-            try {
-                if (conn.responseCode !in 200..299) return@runCatching null
-                conn.inputStream.use { it.readBytes() }
-                    .takeIf { it.isNotEmpty() }
-            } finally {
-                conn.disconnect()
-            }
-        }.getOrNull()
-    }
+    override suspend fun fetchByReleaseMbid(mbid: String): ByteArray? =
+        withContext(IODispatcher) {
+            if (mbid.isBlank()) return@withContext null
+            val url = URI("$CAA_BASE/release/$mbid/front-$SIZE_PX").toURL()
+            runCatching {
+                val conn =
+                    (url.openConnection() as HttpURLConnection).apply {
+                        requestMethod = "GET"
+                        instanceFollowRedirects = true
+                        connectTimeout = CONNECT_TIMEOUT_MS
+                        readTimeout = READ_TIMEOUT_MS
+                        setRequestProperty("User-Agent", USER_AGENT)
+                        setRequestProperty("Accept", "image/*")
+                    }
+                try {
+                    if (conn.responseCode !in 200..299) return@runCatching null
+                    conn.inputStream.use { it.readBytes() }
+                        .takeIf { it.isNotEmpty() }
+                } finally {
+                    conn.disconnect()
+                }
+            }.getOrNull()
+        }
 
     private companion object {
         const val CAA_BASE = "https://coverartarchive.org"

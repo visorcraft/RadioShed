@@ -8,5 +8,4 @@ import java.nio.file.Paths
  * Windows (`C:\Users\<name>\Music`), macOS (`/Users/<name>/Music`),
  * and Linux (`/home/<name>/Music`) without further branching.
  */
-actual fun defaultMusicFolderPath(): String =
-    Paths.get(System.getProperty("user.home").orEmpty(), "Music").toString()
+actual fun defaultMusicFolderPath(): String = Paths.get(System.getProperty("user.home").orEmpty(), "Music").toString()

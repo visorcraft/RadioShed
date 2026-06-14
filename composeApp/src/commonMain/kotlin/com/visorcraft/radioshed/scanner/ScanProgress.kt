@@ -6,7 +6,6 @@ package com.visorcraft.radioshed.scanner
  * without aborting the whole scan.
  */
 sealed interface ScanProgress {
-
     val folderId: Long
 
     data class Started(override val folderId: Long) : ScanProgress

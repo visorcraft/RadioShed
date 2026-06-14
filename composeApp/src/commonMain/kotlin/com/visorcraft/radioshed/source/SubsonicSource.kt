@@ -67,7 +67,6 @@ class SubsonicSource(
     private val allowNetwork: () -> Boolean,
     private val nowMs: () -> Long = { nowMillis() },
 ) : MediaSource {
-
     /**
      * Fixed id so the registry key is stable across credential edits.
      * The [displayName] still reflects the current host for UI labels.
@@ -76,10 +75,11 @@ class SubsonicSource(
 
     override val displayName: String get() = "Subsonic (${hostOf(settings.getSubsonicUrl())})"
 
-    override val capabilities: SourceCapabilities = SourceCapabilities(
-        supportsStreaming = true,
-        supportsArtwork = true,
-    )
+    override val capabilities: SourceCapabilities =
+        SourceCapabilities(
+            supportsStreaming = true,
+            supportsArtwork = true,
+        )
 
     /** One memoized walk. Guarded by [cacheMutex]; see [cachedOrWalk]. */
     private var cachedWalk: CachedWalk? = null
@@ -103,39 +103,40 @@ class SubsonicSource(
      * cache holds RAW songs (pre-filter), so collections with different
      * filters share the same walk.
      */
-    override fun listTracks(filter: SourceFilter): Flow<DiscoveredTrack> = flow {
-        if (!allowNetwork()) return@flow
+    override fun listTracks(filter: SourceFilter): Flow<DiscoveredTrack> =
+        flow {
+            if (!allowNetwork()) return@flow
 
-        val server = serverOrNull() ?: return@flow
+            val server = serverOrNull() ?: return@flow
 
-        // A failure listing artists leaves nothing to walk — empty flow.
-        val songs = cachedOrWalk(server) ?: return@flow
+            // A failure listing artists leaves nothing to walk — empty flow.
+            val songs = cachedOrWalk(server) ?: return@flow
 
-        for (song in songs) {
-            val suffix = song.suffix.orEmpty().lowercase()
-            if (filter.formats.isNotEmpty() && suffix !in filter.formats) continue
+            for (song in songs) {
+                val suffix = song.suffix.orEmpty().lowercase()
+                if (filter.formats.isNotEmpty() && suffix !in filter.formats) continue
 
-            val durationMs = song.durationSec * 1000L
-            if (filter.minDurationMs != null && durationMs < filter.minDurationMs) continue
-            if (filter.maxDurationMs != null && durationMs > filter.maxDurationMs) continue
+                val durationMs = song.durationSec * 1000L
+                if (filter.minDurationMs != null && durationMs < filter.minDurationMs) continue
+                if (filter.maxDurationMs != null && durationMs > filter.maxDurationMs) continue
 
-            emit(
-                DiscoveredTrack(
-                    uri = client.streamUrl(server, song.id),
-                    // Suffix may be blank if the server omits it;
-                    // keep the bare title rather than a dangling dot.
-                    fileName = if (suffix.isEmpty()) song.title else "${song.title}.$suffix",
-                    // File size is unknown — Subsonic's browse
-                    // responses don't carry it and we don't probe.
-                    fileSize = 0L,
-                    // Remote tracks have no meaningful local ctime/mtime.
-                    fileCtime = 0L,
-                    fileMtime = 0L,
-                    format = suffix,
-                ),
-            )
+                emit(
+                    DiscoveredTrack(
+                        uri = client.streamUrl(server, song.id),
+                        // Suffix may be blank if the server omits it;
+                        // keep the bare title rather than a dangling dot.
+                        fileName = if (suffix.isEmpty()) song.title else "${song.title}.$suffix",
+                        // File size is unknown — Subsonic's browse
+                        // responses don't carry it and we don't probe.
+                        fileSize = 0L,
+                        // Remote tracks have no meaningful local ctime/mtime.
+                        fileCtime = 0L,
+                        fileMtime = 0L,
+                        format = suffix,
+                    ),
+                )
+            }
         }
-    }
 
     /**
      * Serve the song list from the in-memory cache when fresh (same
@@ -160,11 +161,12 @@ class SubsonicSource(
             }
             val walk = walkLibrary(server) ?: return@withLock null
             if (!walk.partial) {
-                cachedWalk = CachedWalk(
-                    fingerprint = fingerprint,
-                    songs = walk.songs,
-                    cachedAtMs = nowMs(),
-                )
+                cachedWalk =
+                    CachedWalk(
+                        fingerprint = fingerprint,
+                        songs = walk.songs,
+                        cachedAtMs = nowMs(),
+                    )
             }
             walk.songs
         }
@@ -178,26 +180,29 @@ class SubsonicSource(
      * are folded into [WalkResult.partial] afterwards — no shared
      * mutable flag for concurrent legs to race on.
      */
-    private suspend fun walkLibrary(server: SubsonicServer): WalkResult? = coroutineScope {
-        val artists = catching { client.getArtists(server) } ?: return@coroutineScope null
+    private suspend fun walkLibrary(server: SubsonicServer): WalkResult? =
+        coroutineScope {
+            val artists = catching { client.getArtists(server) } ?: return@coroutineScope null
 
-        val requests = Semaphore(MAX_CONCURRENT_REQUESTS)
+            val requests = Semaphore(MAX_CONCURRENT_REQUESTS)
 
-        // Per-artist catching: one unreachable artist's albums
-        // can't abort the whole walk (partial-results contract).
-        val albumLists = artists.map { artist ->
-            async { requests.withPermit { catching { client.getAlbumsForArtist(server, artist.id) } } }
-        }.awaitAll()
+            // Per-artist catching: one unreachable artist's albums
+            // can't abort the whole walk (partial-results contract).
+            val albumLists =
+                artists.map { artist ->
+                    async { requests.withPermit { catching { client.getAlbumsForArtist(server, artist.id) } } }
+                }.awaitAll()
 
-        val songLists = albumLists.flatMap { it.orEmpty() }.map { album ->
-            async { requests.withPermit { catching { client.getSongs(server, album.id) } } }
-        }.awaitAll()
+            val songLists =
+                albumLists.flatMap { it.orEmpty() }.map { album ->
+                    async { requests.withPermit { catching { client.getSongs(server, album.id) } } }
+                }.awaitAll()
 
-        WalkResult(
-            songs = songLists.flatMap { it.orEmpty() },
-            partial = albumLists.any { it == null } || songLists.any { it == null },
-        )
-    }
+            WalkResult(
+                songs = songLists.flatMap { it.orEmpty() },
+                partial = albumLists.any { it == null } || songLists.any { it == null },
+            )
+        }
 
     /**
      * Build a [SubsonicServer] from the persisted credentials, or null

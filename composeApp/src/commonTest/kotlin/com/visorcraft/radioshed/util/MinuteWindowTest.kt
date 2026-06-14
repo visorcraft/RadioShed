@@ -11,7 +11,6 @@ import kotlin.test.assertTrue
  * start > end wraps across midnight.
  */
 class MinuteWindowTest {
-
     @Test
     fun sameDayWindowIsHalfOpen() {
         // 09:00 (540) → 17:00 (1020).

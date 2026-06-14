@@ -9,24 +9,26 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 
 class FolderRepository(private val db: RadioShedDatabase) {
-
     fun observeAll(): Flow<List<Folder>> =
         db.foldersQueries.selectAll()
             .asFlow()
             .mapToList(IODispatcher)
             .map { rows -> rows.map { it.toDomain() } }
 
-    suspend fun list(): List<Folder> = withContext(IODispatcher) {
-        db.foldersQueries.selectAll().executeAsList().map { it.toDomain() }
-    }
+    suspend fun list(): List<Folder> =
+        withContext(IODispatcher) {
+            db.foldersQueries.selectAll().executeAsList().map { it.toDomain() }
+        }
 
-    suspend fun getById(id: Long): Folder? = withContext(IODispatcher) {
-        db.foldersQueries.selectById(id).executeAsOneOrNull()?.toDomain()
-    }
+    suspend fun getById(id: Long): Folder? =
+        withContext(IODispatcher) {
+            db.foldersQueries.selectById(id).executeAsOneOrNull()?.toDomain()
+        }
 
-    suspend fun getByUri(uri: String): Folder? = withContext(IODispatcher) {
-        db.foldersQueries.selectByUri(uri).executeAsOneOrNull()?.toDomain()
-    }
+    suspend fun getByUri(uri: String): Folder? =
+        withContext(IODispatcher) {
+            db.foldersQueries.selectByUri(uri).executeAsOneOrNull()?.toDomain()
+        }
 
     suspend fun insert(
         displayName: String,
@@ -34,33 +36,46 @@ class FolderRepository(private val db: RadioShedDatabase) {
         recursive: Boolean = true,
         includeGlobs: List<String> = emptyList(),
         excludeGlobs: List<String> = emptyList(),
-    ): Long = withContext(IODispatcher) {
-        val now = nowMillis()
-        db.foldersQueries.insert(
-            display_name = displayName,
-            uri = uri,
-            recursive = if (recursive) 1L else 0L,
-            include_globs = encodeStringList(includeGlobs),
-            exclude_globs = encodeStringList(excludeGlobs),
-            created_at = now,
-            updated_at = now,
-        ).executeAsOne()
-    }
+    ): Long =
+        withContext(IODispatcher) {
+            val now = nowMillis()
+            db.foldersQueries.insert(
+                display_name = displayName,
+                uri = uri,
+                recursive = if (recursive) 1L else 0L,
+                include_globs = encodeStringList(includeGlobs),
+                exclude_globs = encodeStringList(excludeGlobs),
+                created_at = now,
+                updated_at = now,
+            ).executeAsOne()
+        }
 
-    suspend fun rename(id: Long, displayName: String) = withContext(IODispatcher) {
+    suspend fun rename(
+        id: Long,
+        displayName: String,
+    ) = withContext(IODispatcher) {
         db.foldersQueries.renameDisplayName(displayName, nowMillis(), id)
     }
 
     /** Set or clear the folder's accent color. Pass null to clear. */
-    suspend fun setAccentColor(id: Long, color: Int?) = withContext(IODispatcher) {
+    suspend fun setAccentColor(
+        id: Long,
+        color: Int?,
+    ) = withContext(IODispatcher) {
         db.foldersQueries.setAccentColor(color?.toLong(), nowMillis(), id)
     }
 
-    suspend fun setAvailable(id: Long, available: Boolean) = withContext(IODispatcher) {
+    suspend fun setAvailable(
+        id: Long,
+        available: Boolean,
+    ) = withContext(IODispatcher) {
         db.foldersQueries.setAvailable(if (available) 1L else 0L, nowMillis(), id)
     }
 
-    suspend fun setRecursive(id: Long, recursive: Boolean) = withContext(IODispatcher) {
+    suspend fun setRecursive(
+        id: Long,
+        recursive: Boolean,
+    ) = withContext(IODispatcher) {
         db.foldersQueries.setRecursive(if (recursive) 1L else 0L, nowMillis(), id)
     }
 
@@ -77,14 +92,18 @@ class FolderRepository(private val db: RadioShedDatabase) {
         )
     }
 
-    suspend fun updateScanResult(id: Long, lastScannedAt: Long, trackCount: Long) =
-        withContext(IODispatcher) {
-            db.foldersQueries.updateScanResult(lastScannedAt, trackCount, nowMillis(), id)
-        }
-
-    suspend fun delete(id: Long) = withContext(IODispatcher) {
-        db.foldersQueries.deleteById(id)
+    suspend fun updateScanResult(
+        id: Long,
+        lastScannedAt: Long,
+        trackCount: Long,
+    ) = withContext(IODispatcher) {
+        db.foldersQueries.updateScanResult(lastScannedAt, trackCount, nowMillis(), id)
     }
+
+    suspend fun delete(id: Long) =
+        withContext(IODispatcher) {
+            db.foldersQueries.deleteById(id)
+        }
 
     /**
      * Count of tracks whose path begins with [prefix]. Used by the
@@ -115,18 +134,23 @@ class FolderRepository(private val db: RadioShedDatabase) {
      * No-op if [newUri] equals the folder's current URI. Throws on
      * UNIQUE-constraint collision with another folder's URI.
      */
-    suspend fun moveFolderUri(folderId: Long, newUri: String): Long =
+    suspend fun moveFolderUri(
+        folderId: Long,
+        newUri: String,
+    ): Long =
         withContext(IODispatcher) {
             db.transactionWithResult {
                 val now = nowMillis()
-                val current = db.foldersQueries.selectById(folderId)
-                    .executeAsOneOrNull()
-                    ?: return@transactionWithResult 0L
+                val current =
+                    db.foldersQueries.selectById(folderId)
+                        .executeAsOneOrNull()
+                        ?: return@transactionWithResult 0L
                 val oldUri = current.uri
                 if (oldUri == newUri) return@transactionWithResult 0L
                 val oldPrefixLike = "$oldUri%"
-                val moved = db.libraryQueries
-                    .countTracksWithPathPrefix(oldPrefixLike).executeAsOne()
+                val moved =
+                    db.libraryQueries
+                        .countTracksWithPathPrefix(oldPrefixLike).executeAsOne()
                 // substr() is 1-indexed in SQLite, and we want everything
                 // AFTER the old prefix's last character — so the start
                 // offset is oldUri.length + 1. Passed as a stringified
@@ -145,7 +169,8 @@ class FolderRepository(private val db: RadioShedDatabase) {
             }
         }
 
-    suspend fun count(): Long = withContext(IODispatcher) {
-        db.foldersQueries.count().executeAsOne()
-    }
+    suspend fun count(): Long =
+        withContext(IODispatcher) {
+            db.foldersQueries.count().executeAsOne()
+        }
 }

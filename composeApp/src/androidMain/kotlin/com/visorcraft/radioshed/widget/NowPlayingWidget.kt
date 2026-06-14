@@ -8,7 +8,6 @@ import android.content.Context
 import android.content.Intent
 import android.view.KeyEvent
 import android.widget.RemoteViews
-import com.visorcraft.radioshed.MainActivity
 import com.visorcraft.radioshed.R
 import com.visorcraft.radioshed.audio.AudioEngine
 import com.visorcraft.radioshed.audio.PlayerState
@@ -35,7 +34,6 @@ import org.koin.core.context.GlobalContext
  * controls use, so we don't need to duplicate any business logic.
  */
 class NowPlayingWidget : AppWidgetProvider() {
-
     override fun onUpdate(
         context: Context,
         appWidgetManager: AppWidgetManager,
@@ -58,8 +56,9 @@ class NowPlayingWidget : AppWidgetProvider() {
         fun pushUpdate(context: Context) {
             val mgr = AppWidgetManager.getInstance(context)
             val component = ComponentName(context, NowPlayingWidget::class.java)
-            val ids = runCatching { mgr.getAppWidgetIds(component) }
-                .getOrNull() ?: IntArray(0)
+            val ids =
+                runCatching { mgr.getAppWidgetIds(component) }
+                    .getOrNull() ?: IntArray(0)
             for (id in ids) updateWidget(context, mgr, id)
         }
 
@@ -73,28 +72,34 @@ class NowPlayingWidget : AppWidgetProvider() {
             // Pull live state from the engine via Koin. The widget
             // process IS our app process, so the singletons are the
             // same instances the rest of the app sees.
-            val (title, subtitle, isPlaying, artworkUri) = runCatching {
-                val engine = GlobalContext.get().get<AudioEngine>()
-                val playable = engine.nowPlaying.value
-                val playing = engine.state.value == PlayerState.Playing
-                Snapshot(
-                    title = playable?.title?.takeIf { it.isNotBlank() }
-                        ?: context.getString(R.string.widget_idle_title),
-                    subtitle = playable?.let {
-                        listOfNotNull(it.artist, it.album).joinToString(" · ")
-                            .ifBlank { null }
-                    } ?: context.getString(R.string.widget_idle_subtitle),
-                    isPlaying = playing,
-                    artworkUri = playable?.artworkUri,
-                )
-            }.getOrDefault(idleSnapshot(context))
+            val (title, subtitle, isPlaying, artworkUri) =
+                runCatching {
+                    val engine = GlobalContext.get().get<AudioEngine>()
+                    val playable = engine.nowPlaying.value
+                    val playing = engine.state.value == PlayerState.Playing
+                    Snapshot(
+                        title =
+                            playable?.title?.takeIf { it.isNotBlank() }
+                                ?: context.getString(R.string.widget_idle_title),
+                        subtitle =
+                            playable?.let {
+                                listOfNotNull(it.artist, it.album).joinToString(" · ")
+                                    .ifBlank { null }
+                            } ?: context.getString(R.string.widget_idle_subtitle),
+                        isPlaying = playing,
+                        artworkUri = playable?.artworkUri,
+                    )
+                }.getOrDefault(idleSnapshot(context))
 
             views.setTextViewText(R.id.widget_title, title)
             views.setTextViewText(R.id.widget_subtitle, subtitle)
             views.setImageViewResource(
                 R.id.widget_play_pause,
-                if (isPlaying) R.drawable.ic_radioshed_pause
-                else R.drawable.ic_radioshed_play,
+                if (isPlaying) {
+                    R.drawable.ic_radioshed_pause
+                } else {
+                    R.drawable.ic_radioshed_play
+                },
             )
 
             // Artwork: load from file:// URI to a Bitmap if present;
@@ -159,12 +164,13 @@ class NowPlayingWidget : AppWidgetProvider() {
             artworkBitmap?.recycle()
         }
 
-        private fun idleSnapshot(context: Context): Snapshot = Snapshot(
-            title = context.getString(R.string.widget_idle_title),
-            subtitle = context.getString(R.string.widget_idle_subtitle),
-            isPlaying = false,
-            artworkUri = null,
-        )
+        private fun idleSnapshot(context: Context): Snapshot =
+            Snapshot(
+                title = context.getString(R.string.widget_idle_title),
+                subtitle = context.getString(R.string.widget_idle_subtitle),
+                isPlaying = false,
+                artworkUri = null,
+            )
 
         private fun mediaButtonIntent(
             context: Context,
@@ -176,13 +182,14 @@ class NowPlayingWidget : AppWidgetProvider() {
             // than the system media-button receiver (which routes
             // to whichever foreground media app the system picked,
             // not necessarily us).
-            val intent = Intent(Intent.ACTION_MEDIA_BUTTON).apply {
-                component = ComponentName(context, RadioShedMediaSessionService::class.java)
-                putExtra(
-                    Intent.EXTRA_KEY_EVENT,
-                    KeyEvent(KeyEvent.ACTION_DOWN, keyCode),
-                )
-            }
+            val intent =
+                Intent(Intent.ACTION_MEDIA_BUTTON).apply {
+                    component = ComponentName(context, RadioShedMediaSessionService::class.java)
+                    putExtra(
+                        Intent.EXTRA_KEY_EVENT,
+                        KeyEvent(KeyEvent.ACTION_DOWN, keyCode),
+                    )
+                }
             return PendingIntent.getService(
                 context,
                 requestCode,

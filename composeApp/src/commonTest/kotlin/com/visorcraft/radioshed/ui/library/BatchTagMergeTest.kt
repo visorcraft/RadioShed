@@ -6,13 +6,13 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
 class BatchTagMergeTest {
-
     @Test
     fun uniformFieldShowsCommonValue() {
-        val tracks = listOf(
-            snapshot(title = "Song A", artist = "Artist X"),
-            snapshot(title = "Song B", artist = "Artist X"),
-        )
+        val tracks =
+            listOf(
+                snapshot(title = "Song A", artist = "Artist X"),
+                snapshot(title = "Song B", artist = "Artist X"),
+            )
 
         val merged = BatchTagMerge.merge(tracks)
 
@@ -21,10 +21,11 @@ class BatchTagMergeTest {
 
     @Test
     fun mixedFieldShowsMixedMarker() {
-        val tracks = listOf(
-            snapshot(title = "Song A", artist = "Artist X"),
-            snapshot(title = "Song B", artist = "Artist Y"),
-        )
+        val tracks =
+            listOf(
+                snapshot(title = "Song A", artist = "Artist X"),
+                snapshot(title = "Song B", artist = "Artist Y"),
+            )
 
         val merged = BatchTagMerge.merge(tracks)
 
@@ -33,10 +34,11 @@ class BatchTagMergeTest {
 
     @Test
     fun emptyFieldShowsEmptyMarker() {
-        val tracks = listOf(
-            snapshot(title = "Song A", artist = ""),
-            snapshot(title = "Song B", artist = ""),
-        )
+        val tracks =
+            listOf(
+                snapshot(title = "Song A", artist = ""),
+                snapshot(title = "Song B", artist = ""),
+            )
 
         val merged = BatchTagMerge.merge(tracks)
 
@@ -74,12 +76,13 @@ class BatchTagMergeTest {
 
     @Test
     fun buildPatchParsesYearAndTrackNumberToInt() {
-        val patch = BatchTagMerge.buildPatch(
-            mapOf(
-                TagField.Year to "2021",
-                TagField.TrackNumber to "7",
-            ),
-        )
+        val patch =
+            BatchTagMerge.buildPatch(
+                mapOf(
+                    TagField.Year to "2021",
+                    TagField.TrackNumber to "7",
+                ),
+            )
 
         assertEquals(TagPatch.Update(2021), patch.year)
         assertEquals(TagPatch.Update(7), patch.trackNumber)
@@ -101,14 +104,15 @@ class BatchTagMergeTest {
         year: String = "",
         trackNumber: String = "",
         discNumber: String = "",
-    ): TrackTagSnapshot = TrackTagSnapshot(
-        title = title,
-        artist = artist,
-        album = album,
-        albumArtist = albumArtist,
-        genre = genre,
-        year = year,
-        trackNumber = trackNumber,
-        discNumber = discNumber,
-    )
+    ): TrackTagSnapshot =
+        TrackTagSnapshot(
+            title = title,
+            artist = artist,
+            album = album,
+            albumArtist = albumArtist,
+            genre = genre,
+            year = year,
+            trackNumber = trackNumber,
+            discNumber = discNumber,
+        )
 }

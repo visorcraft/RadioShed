@@ -99,8 +99,12 @@ fun EditArtistDialog(
                         // Skip the call when nothing actually changed
                         // to avoid bumping updated_at for no reason.
                         val nameChanged = trimmed != artist.name
-                        val renameOk = if (!nameChanged) true
-                                       else libraryRepo.renameArtist(artist.id, trimmed)
+                        val renameOk =
+                            if (!nameChanged) {
+                                true
+                            } else {
+                                libraryRepo.renameArtist(artist.id, trimmed)
+                            }
                         if (!renameOk) {
                             saveError = "Another artist already uses that name. " +
                                 "Use Merge instead."
@@ -131,7 +135,10 @@ fun EditArtistDialog(
             Column {
                 OutlinedTextField(
                     value = name,
-                    onValueChange = { name = it; saveError = null },
+                    onValueChange = {
+                        name = it
+                        saveError = null
+                    },
                     label = { Text("Display name") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
@@ -207,7 +214,10 @@ fun EditArtistDialog(
 }
 
 @Composable
-private fun AliasChip(text: String, onRemove: () -> Unit) {
+private fun AliasChip(
+    text: String,
+    onRemove: () -> Unit,
+) {
     Surface(
         modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
@@ -279,144 +289,159 @@ fun MergeArtistDialog(
     }
 
     when {
-        picked == null -> AlertDialog(
-            onDismissRequest = onDismiss,
-            title = { Text("Merge \"${source.name}\" into…") },
-            confirmButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
-            text = {
-                Column {
-                    Text(
-                        "Pick the artist to keep. Tracks linked to " +
-                            "\"${source.name}\" will be relinked to the artist " +
-                            "you choose, and \"${source.name}\" will be removed.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = query,
-                        onValueChange = { query = it },
-                        label = { Text("Search artists") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    val filtered = remember(query, allArtists.size) {
-                        val q = query.trim().lowercase()
-                        if (q.isEmpty()) allArtists.toList()
-                        else allArtists.filter {
-                            it.sortName.contains(q) ||
-                                it.name.lowercase().contains(q)
-                        }
-                    }
-                    if (!loaded) {
+        picked == null ->
+            AlertDialog(
+                onDismissRequest = onDismiss,
+                title = { Text("Merge \"${source.name}\" into…") },
+                confirmButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+                text = {
+                    Column {
                         Text(
-                            "Loading…",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                            "Pick the artist to keep. Tracks linked to " +
+                                "\"${source.name}\" will be relinked to the artist " +
+                                "you choose, and \"${source.name}\" will be removed.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                         )
-                    } else if (filtered.isEmpty()) {
-                        Text(
-                            if (query.isBlank()) "No other artists to merge into."
-                            else "No matches for \"$query\".",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = query,
+                            onValueChange = { query = it },
+                            label = { Text("Search artists") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
                         )
-                    } else {
-                        LazyColumn(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(max = 320.dp),
-                            verticalArrangement = Arrangement.spacedBy(2.dp),
-                        ) {
-                            items(filtered, key = { it.id }) { artist ->
-                                Surface(
-                                    modifier = Modifier
+                        Spacer(Modifier.height(8.dp))
+                        val filtered =
+                            remember(query, allArtists.size) {
+                                val q = query.trim().lowercase()
+                                if (q.isEmpty()) {
+                                    allArtists.toList()
+                                } else {
+                                    allArtists.filter {
+                                        it.sortName.contains(q) ||
+                                            it.name.lowercase().contains(q)
+                                    }
+                                }
+                            }
+                        if (!loaded) {
+                            Text(
+                                "Loading…",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                            )
+                        } else if (filtered.isEmpty()) {
+                            Text(
+                                if (query.isBlank()) {
+                                    "No other artists to merge into."
+                                } else {
+                                    "No matches for \"$query\"."
+                                },
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                            )
+                        } else {
+                            LazyColumn(
+                                modifier =
+                                    Modifier
                                         .fillMaxWidth()
-                                        .clickable { picked = artist },
-                                    color = MaterialTheme.colorScheme.surfaceVariant
-                                        .copy(alpha = 0.3f),
-                                    shape = MaterialTheme.shapes.small,
-                                ) {
-                                    Text(
-                                        artist.name,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        modifier = Modifier
-                                            .padding(horizontal = 12.dp, vertical = 10.dp),
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
+                                        .heightIn(max = 320.dp),
+                                verticalArrangement = Arrangement.spacedBy(2.dp),
+                            ) {
+                                items(filtered, key = { it.id }) { artist ->
+                                    Surface(
+                                        modifier =
+                                            Modifier
+                                                .fillMaxWidth()
+                                                .clickable { picked = artist },
+                                        color =
+                                            MaterialTheme.colorScheme.surfaceVariant
+                                                .copy(alpha = 0.3f),
+                                        shape = MaterialTheme.shapes.small,
+                                    ) {
+                                        Text(
+                                            artist.name,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            modifier =
+                                                Modifier
+                                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
-                }
-            },
-        )
-        else -> AlertDialog(
-            onDismissRequest = { if (!merging) picked = null },
-            title = { Text("Merge artists?") },
-            text = {
-                Column {
-                    Text(
-                        "\"${source.name}\" will be merged into " +
-                            "\"${picked!!.name}\". " +
-                            (sourceTrackCount?.let {
-                                "$it track${if (it == 1) "" else "s"} will be relinked. "
-                            } ?: "") +
-                            "\"${source.name}\" will be removed from your library. " +
-                            "This can't be undone, but future scans of tracks tagged " +
-                            "with \"${source.name}\" will resolve to " +
-                            "\"${picked!!.name}\" automatically.",
-                    )
-                    mergeError?.let {
-                        Spacer(Modifier.height(8.dp))
+                },
+            )
+        else ->
+            AlertDialog(
+                onDismissRequest = { if (!merging) picked = null },
+                title = { Text("Merge artists?") },
+                text = {
+                    Column {
                         Text(
-                            it,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
+                            "\"${source.name}\" will be merged into " +
+                                "\"${picked!!.name}\". " +
+                                (
+                                    sourceTrackCount?.let {
+                                        "$it track${if (it == 1) "" else "s"} will be relinked. "
+                                    } ?: ""
+                                ) +
+                                "\"${source.name}\" will be removed from your library. " +
+                                "This can't be undone, but future scans of tracks tagged " +
+                                "with \"${source.name}\" will resolve to " +
+                                "\"${picked!!.name}\" automatically.",
                         )
-                    }
-                }
-            },
-            confirmButton = {
-                Button(
-                    enabled = !merging,
-                    onClick = {
-                        merging = true
-                        mergeError = null
-                        scope.launch {
-                            // mergeArtists runs an atomic 6-step
-                            // transaction with FK-touching writes; a
-                            // concurrent delete of the target (race
-                            // against another surface that just removed
-                            // it) would surface as a FK violation that
-                            // throws out of the transaction. Wrap in
-                            // runCatching so the dialog doesn't freeze
-                            // with `merging = true` permanently — the
-                            // user sees the error inline and can pick a
-                            // different target.
-                            runCatching {
-                                libraryRepo.mergeArtists(
-                                    sourceArtistId = source.id,
-                                    targetArtistId = picked!!.id,
-                                )
-                            }.onSuccess { onMerged() }
-                                .onFailure {
-                                    merging = false
-                                    mergeError = "Merge failed: " +
-                                        (it.message ?: it::class.simpleName ?: "unknown")
-                                }
+                        mergeError?.let {
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                it,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
+                            )
                         }
-                    },
-                ) { Text(if (merging) "Merging…" else "Merge") }
-            },
-            dismissButton = {
-                TextButton(enabled = !merging, onClick = {
-                    picked = null
-                    mergeError = null
-                }) { Text("Back") }
-            },
-        )
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        enabled = !merging,
+                        onClick = {
+                            merging = true
+                            mergeError = null
+                            scope.launch {
+                                // mergeArtists runs an atomic 6-step
+                                // transaction with FK-touching writes; a
+                                // concurrent delete of the target (race
+                                // against another surface that just removed
+                                // it) would surface as a FK violation that
+                                // throws out of the transaction. Wrap in
+                                // runCatching so the dialog doesn't freeze
+                                // with `merging = true` permanently — the
+                                // user sees the error inline and can pick a
+                                // different target.
+                                runCatching {
+                                    libraryRepo.mergeArtists(
+                                        sourceArtistId = source.id,
+                                        targetArtistId = picked!!.id,
+                                    )
+                                }.onSuccess { onMerged() }
+                                    .onFailure {
+                                        merging = false
+                                        mergeError = "Merge failed: " +
+                                            (it.message ?: it::class.simpleName ?: "unknown")
+                                    }
+                            }
+                        },
+                    ) { Text(if (merging) "Merging…" else "Merge") }
+                },
+                dismissButton = {
+                    TextButton(enabled = !merging, onClick = {
+                        picked = null
+                        mergeError = null
+                    }) { Text("Back") }
+                },
+            )
     }
 }

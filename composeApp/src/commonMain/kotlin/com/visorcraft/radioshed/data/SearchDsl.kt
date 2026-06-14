@@ -29,7 +29,9 @@ package com.visorcraft.radioshed.data
 
 sealed interface SearchTerm {
     data class Free(val text: String) : SearchTerm
+
     data class Field(val key: String, val value: String) : SearchTerm
+
     data class YearRange(val min: Int?, val max: Int?) : SearchTerm
 }
 
@@ -37,17 +39,23 @@ data class ParsedSearchQuery(
     val terms: List<SearchTerm>,
 ) {
     val hasFieldTerms: Boolean = terms.any { it is SearchTerm.Field || it is SearchTerm.YearRange }
-    val freeText: String = terms
-        .filterIsInstance<SearchTerm.Free>()
-        .joinToString(" ") { it.text }
-        .trim()
+    val freeText: String =
+        terms
+            .filterIsInstance<SearchTerm.Free>()
+            .joinToString(" ") { it.text }
+            .trim()
 }
 
 object SearchDsl {
-
-    private val supportedFields = setOf(
-        "title", "artist", "album", "genre", "format", "year",
-    )
+    private val supportedFields =
+        setOf(
+            "title",
+            "artist",
+            "album",
+            "genre",
+            "format",
+            "year",
+        )
 
     fun parse(input: String): ParsedSearchQuery {
         val tokens = tokenize(input)
@@ -121,9 +129,10 @@ object SearchDsl {
         // `year:>` query would match every track. Return an
         // impossible-range YearRange instead so the SQL builder
         // produces "no match", which is what the user expected.
-        val isOperatorOnly = v == ">" || v == "<" || v == ">=" || v == "<=" ||
-            v == "-" || v.startsWith(">") && v.removePrefix(">=").removePrefix(">").trim().isEmpty() ||
-            v.startsWith("<") && v.removePrefix("<=").removePrefix("<").trim().isEmpty()
+        val isOperatorOnly =
+            v == ">" || v == "<" || v == ">=" || v == "<=" ||
+                v == "-" || v.startsWith(">") && v.removePrefix(">=").removePrefix(">").trim().isEmpty() ||
+                v.startsWith("<") && v.removePrefix("<=").removePrefix("<").trim().isEmpty()
         if (isOperatorOnly) {
             return SearchTerm.YearRange(min = Int.MAX_VALUE, max = Int.MIN_VALUE)
         }
@@ -135,21 +144,26 @@ object SearchDsl {
             return SearchTerm.YearRange(min = minOf(a, b), max = maxOf(a, b))
         }
         return when {
-            v.startsWith(">=") -> v.removePrefix(">=").toIntOrNull()?.let {
-                SearchTerm.YearRange(min = it, max = null)
-            }
-            v.startsWith("<=") -> v.removePrefix("<=").toIntOrNull()?.let {
-                SearchTerm.YearRange(min = null, max = it)
-            }
-            v.startsWith(">") -> v.removePrefix(">").toIntOrNull()?.let {
-                SearchTerm.YearRange(min = it + 1, max = null)
-            }
-            v.startsWith("<") -> v.removePrefix("<").toIntOrNull()?.let {
-                SearchTerm.YearRange(min = null, max = it - 1)
-            }
-            else -> v.toIntOrNull()?.let {
-                SearchTerm.YearRange(min = it, max = it)
-            }
+            v.startsWith(">=") ->
+                v.removePrefix(">=").toIntOrNull()?.let {
+                    SearchTerm.YearRange(min = it, max = null)
+                }
+            v.startsWith("<=") ->
+                v.removePrefix("<=").toIntOrNull()?.let {
+                    SearchTerm.YearRange(min = null, max = it)
+                }
+            v.startsWith(">") ->
+                v.removePrefix(">").toIntOrNull()?.let {
+                    SearchTerm.YearRange(min = it + 1, max = null)
+                }
+            v.startsWith("<") ->
+                v.removePrefix("<").toIntOrNull()?.let {
+                    SearchTerm.YearRange(min = null, max = it - 1)
+                }
+            else ->
+                v.toIntOrNull()?.let {
+                    SearchTerm.YearRange(min = it, max = it)
+                }
         }
     }
 }

@@ -11,7 +11,6 @@ import java.io.File
  * errors swallowed to empty lists.
  */
 class DesktopFileBrowser : FileBrowser {
-
     override suspend fun listSubdirectories(path: String): List<DiscoveredFolder> =
         withContext(IODispatcher) {
             // Empty path = synthetic "This PC" / Computer root. Lists
@@ -41,15 +40,17 @@ class DesktopFileBrowser : FileBrowser {
      * which the user pastes into the dialog's path field directly.
      */
     private fun computerRootEntries(): List<DiscoveredFolder> {
-        val isWindows = System.getProperty("os.name").orEmpty().lowercase()
-            .contains("win")
+        val isWindows =
+            System.getProperty("os.name").orEmpty().lowercase()
+                .contains("win")
         return File.listRoots().orEmpty().map { root ->
             val abs = root.absolutePath
-            val label = if (isWindows) {
-                "Drive ${abs.removeSuffix("\\").uppercase()}"
-            } else {
-                abs
-            }
+            val label =
+                if (isWindows) {
+                    "Drive ${abs.removeSuffix("\\").uppercase()}"
+                } else {
+                    abs
+                }
             DiscoveredFolder(name = label, path = abs)
         }
     }
@@ -59,20 +60,21 @@ class DesktopFileBrowser : FileBrowser {
             runCatching {
                 val dir = File(path)
                 if (!dir.isDirectory) return@runCatching emptyList<DirectoryEntry>()
-                val entries = dir.listFiles().orEmpty()
-                    .asSequence()
-                    .filter { !it.name.startsWith('.') }
-                    .map {
-                        DirectoryEntry(
-                            name = it.name,
-                            path = it.absolutePath,
-                            isDirectory = it.isDirectory,
-                            sizeBytes = if (it.isFile) it.length() else 0L,
-                            isAudio = !it.isDirectory && it.name.audioExtensionOrNull() != null,
-                            lastModifiedMs = it.lastModified(),
-                        )
-                    }
-                    .toList()
+                val entries =
+                    dir.listFiles().orEmpty()
+                        .asSequence()
+                        .filter { !it.name.startsWith('.') }
+                        .map {
+                            DirectoryEntry(
+                                name = it.name,
+                                path = it.absolutePath,
+                                isDirectory = it.isDirectory,
+                                sizeBytes = if (it.isFile) it.length() else 0L,
+                                isAudio = !it.isDirectory && it.name.audioExtensionOrNull() != null,
+                                lastModifiedMs = it.lastModified(),
+                            )
+                        }
+                        .toList()
                 entries.sortedWith(
                     compareByDescending<DirectoryEntry> { it.isDirectory }
                         .thenBy { it.name.lowercase() },
@@ -80,7 +82,10 @@ class DesktopFileBrowser : FileBrowser {
             }.getOrDefault(emptyList())
         }
 
-    override suspend fun listAudioRecursive(path: String, limit: Int): List<DirectoryEntry> =
+    override suspend fun listAudioRecursive(
+        path: String,
+        limit: Int,
+    ): List<DirectoryEntry> =
         withContext(IODispatcher) {
             runCatching {
                 val root = File(path)
@@ -106,37 +111,40 @@ class DesktopFileBrowser : FileBrowser {
 
     override suspend fun commonLocations(): List<DiscoveredFolder> {
         val home = File(System.getProperty("user.home").orEmpty())
-        val isWindows = System.getProperty("os.name").orEmpty().lowercase()
-            .contains("win")
+        val isWindows =
+            System.getProperty("os.name").orEmpty().lowercase()
+                .contains("win")
         // Per-user shortcuts come first because they're the highest-
         // hit ratio. We don't probe for existence — if the user's
         // account has no Music folder, tapping the chip just lands
         // them on an empty folder, which is clearer than hiding the
         // chip entirely.
-        val homeBookmarks = listOf(
-            DiscoveredFolder("Home", home.absolutePath),
-            DiscoveredFolder("Music", File(home, "Music").absolutePath),
-            DiscoveredFolder("Downloads", File(home, "Downloads").absolutePath),
-            DiscoveredFolder("Documents", File(home, "Documents").absolutePath),
-            DiscoveredFolder("Desktop", File(home, "Desktop").absolutePath),
-        )
+        val homeBookmarks =
+            listOf(
+                DiscoveredFolder("Home", home.absolutePath),
+                DiscoveredFolder("Music", File(home, "Music").absolutePath),
+                DiscoveredFolder("Downloads", File(home, "Downloads").absolutePath),
+                DiscoveredFolder("Documents", File(home, "Documents").absolutePath),
+                DiscoveredFolder("Desktop", File(home, "Desktop").absolutePath),
+            )
         // Drive / mount roots so the user can hop directly to D:, E:,
         // an external SSD, etc. without clicking Up repeatedly. On
         // Windows `File.listRoots()` returns every drive letter
         // (`C:\`, `D:\`, …) including ejected-ish removable mounts;
         // on POSIX it returns just `/`, which is already implicit
         // via Home, so we skip the chip there.
-        val driveBookmarks = if (isWindows) {
-            File.listRoots().orEmpty().mapNotNull { root ->
-                val abs = root.absolutePath
-                // Trim the trailing backslash for the chip label so
-                // it reads "C:" not "C:\\".
-                val label = abs.removeSuffix("\\").uppercase().ifBlank { abs }
-                DiscoveredFolder(name = label, path = abs)
+        val driveBookmarks =
+            if (isWindows) {
+                File.listRoots().orEmpty().mapNotNull { root ->
+                    val abs = root.absolutePath
+                    // Trim the trailing backslash for the chip label so
+                    // it reads "C:" not "C:\\".
+                    val label = abs.removeSuffix("\\").uppercase().ifBlank { abs }
+                    DiscoveredFolder(name = label, path = abs)
+                }
+            } else {
+                emptyList()
             }
-        } else {
-            emptyList()
-        }
         // "This PC" chip teleports to the synthetic Computer view
         // (path = ""), where the folder list is every drive root
         // and the user can paste a UNC / network path into the

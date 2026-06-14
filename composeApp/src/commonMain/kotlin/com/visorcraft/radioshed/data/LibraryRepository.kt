@@ -23,10 +23,13 @@ import kotlinx.coroutines.withContext
  * can't observe partially applied state or race on UNIQUE-constraint inserts.
  */
 class LibraryRepository(private val db: RadioShedDatabase) {
-
     // ---- Artist ----
 
-    suspend fun upsertArtist(name: String, sortName: String, musicbrainzId: String? = null): Long =
+    suspend fun upsertArtist(
+        name: String,
+        sortName: String,
+        musicbrainzId: String? = null,
+    ): Long =
         withContext(IODispatcher) {
             db.transactionWithResult {
                 // 1. Alias-table check FIRST. If a previous merge or a
@@ -68,32 +71,37 @@ class LibraryRepository(private val db: RadioShedDatabase) {
      * picked a name whose sort_name matches a different existing
      * artist; merge them instead).
      */
-    suspend fun renameArtist(artistId: Long, newName: String): Boolean = withContext(IODispatcher) {
-        val sortName = newName.trim().lowercase()
-        if (sortName.isEmpty()) return@withContext false
-        runCatching {
-            db.libraryQueries.updateArtistName(
-                name = newName.trim(),
-                sort_name = sortName,
-                updated_at = nowMillis(),
-                id = artistId,
-            )
-        }.isSuccess
-    }
+    suspend fun renameArtist(
+        artistId: Long,
+        newName: String,
+    ): Boolean =
+        withContext(IODispatcher) {
+            val sortName = newName.trim().lowercase()
+            if (sortName.isEmpty()) return@withContext false
+            runCatching {
+                db.libraryQueries.updateArtistName(
+                    name = newName.trim(),
+                    sort_name = sortName,
+                    updated_at = nowMillis(),
+                    id = artistId,
+                )
+            }.isSuccess
+        }
 
     // ---- Artist aliases ----
 
-    suspend fun aliasesForArtist(artistId: Long): List<ArtistAlias> = withContext(IODispatcher) {
-        db.libraryQueries.selectAliasesForArtist(artistId).executeAsList().map {
-            ArtistAlias(
-                id = it.id,
-                artistId = it.artist_id,
-                aliasName = it.alias_name,
-                aliasSortName = it.alias_sort_name,
-                createdAt = it.created_at,
-            )
+    suspend fun aliasesForArtist(artistId: Long): List<ArtistAlias> =
+        withContext(IODispatcher) {
+            db.libraryQueries.selectAliasesForArtist(artistId).executeAsList().map {
+                ArtistAlias(
+                    id = it.id,
+                    artistId = it.artist_id,
+                    aliasName = it.alias_name,
+                    aliasSortName = it.alias_sort_name,
+                    createdAt = it.created_at,
+                )
+            }
         }
-    }
 
     /**
      * Add [aliasName] as an alternate name for the given artist.
@@ -102,7 +110,10 @@ class LibraryRepository(private val db: RadioShedDatabase) {
      * surface "this name is already used by another artist; merge
      * those two first" in that case.
      */
-    suspend fun addArtistAlias(artistId: Long, aliasName: String): Boolean =
+    suspend fun addArtistAlias(
+        artistId: Long,
+        aliasName: String,
+    ): Boolean =
         withContext(IODispatcher) {
             val sortName = aliasName.trim().lowercase()
             if (sortName.isEmpty()) return@withContext false
@@ -117,9 +128,10 @@ class LibraryRepository(private val db: RadioShedDatabase) {
                 .executeAsOneOrNull() == artistId
         }
 
-    suspend fun deleteArtistAlias(aliasId: Long) = withContext(IODispatcher) {
-        db.libraryQueries.deleteArtistAlias(aliasId)
-    }
+    suspend fun deleteArtistAlias(aliasId: Long) =
+        withContext(IODispatcher) {
+            db.libraryQueries.deleteArtistAlias(aliasId)
+        }
 
     /**
      * Merge [sourceArtistId] into [targetArtistId]. All tracks /
@@ -137,59 +149,63 @@ class LibraryRepository(private val db: RadioShedDatabase) {
      * not prompt. The destructive-confirmation pattern lives in
      * MergeArtistDialog on the UI side.
      */
-    suspend fun mergeArtists(sourceArtistId: Long, targetArtistId: Long) =
-        withContext(IODispatcher) {
-            if (sourceArtistId == targetArtistId) return@withContext
-            db.transaction {
-                val now = nowMillis()
-                // 1. Move track_artist links (INSERT OR IGNORE drops
-                //    duplicates where target already has same role on
-                //    a shared track — happens when a track was already
-                //    tagged with both names).
-                db.libraryQueries.reassignTrackArtistLinks(
-                    targetArtistId = targetArtistId,
-                    sourceArtistId = sourceArtistId,
-                )
-                // 2. Delete source's original links so the source
-                //    artist row can be dropped without dangling FKs.
-                db.libraryQueries.deleteTrackArtistLinksForArtist(sourceArtistId)
-                // 3. Re-assign albums whose artist_id was the source.
-                db.libraryQueries.reassignAlbumsForArtist(
-                    targetArtistId = targetArtistId,
-                    updatedAt = now,
-                    sourceArtistId = sourceArtistId,
-                )
-                // 4. Re-assign existing aliases from source to target.
-                db.libraryQueries.reassignAliasesForArtist(
-                    targetArtistId = targetArtistId,
-                    sourceArtistId = sourceArtistId,
-                )
-                // 5. Record the source's name as a new alias on the
-                //    target. Read the source row first (still alive at
-                //    this point) so we capture its name + sort_name.
-                //    INSERT OR IGNORE handles the corner case where
-                //    target already had the source's sort_name as an
-                //    alias from a prior merge.
-                val source = db.libraryQueries.selectArtistById(sourceArtistId)
+    suspend fun mergeArtists(
+        sourceArtistId: Long,
+        targetArtistId: Long,
+    ) = withContext(IODispatcher) {
+        if (sourceArtistId == targetArtistId) return@withContext
+        db.transaction {
+            val now = nowMillis()
+            // 1. Move track_artist links (INSERT OR IGNORE drops
+            //    duplicates where target already has same role on
+            //    a shared track — happens when a track was already
+            //    tagged with both names).
+            db.libraryQueries.reassignTrackArtistLinks(
+                targetArtistId = targetArtistId,
+                sourceArtistId = sourceArtistId,
+            )
+            // 2. Delete source's original links so the source
+            //    artist row can be dropped without dangling FKs.
+            db.libraryQueries.deleteTrackArtistLinksForArtist(sourceArtistId)
+            // 3. Re-assign albums whose artist_id was the source.
+            db.libraryQueries.reassignAlbumsForArtist(
+                targetArtistId = targetArtistId,
+                updatedAt = now,
+                sourceArtistId = sourceArtistId,
+            )
+            // 4. Re-assign existing aliases from source to target.
+            db.libraryQueries.reassignAliasesForArtist(
+                targetArtistId = targetArtistId,
+                sourceArtistId = sourceArtistId,
+            )
+            // 5. Record the source's name as a new alias on the
+            //    target. Read the source row first (still alive at
+            //    this point) so we capture its name + sort_name.
+            //    INSERT OR IGNORE handles the corner case where
+            //    target already had the source's sort_name as an
+            //    alias from a prior merge.
+            val source =
+                db.libraryQueries.selectArtistById(sourceArtistId)
                     .executeAsOneOrNull()
-                if (source != null) {
-                    db.libraryQueries.insertArtistAlias(
-                        artist_id = targetArtistId,
-                        alias_name = source.name,
-                        alias_sort_name = source.sort_name,
-                        created_at = now,
-                    )
-                }
-                // 6. Delete the source artist row. Any straggling
-                //    track_artist rows that didn't make it through
-                //    step 1's INSERT OR IGNORE get cascade-deleted.
-                db.libraryQueries.deleteArtistById(sourceArtistId)
+            if (source != null) {
+                db.libraryQueries.insertArtistAlias(
+                    artist_id = targetArtistId,
+                    alias_name = source.name,
+                    alias_sort_name = source.sort_name,
+                    created_at = now,
+                )
             }
+            // 6. Delete the source artist row. Any straggling
+            //    track_artist rows that didn't make it through
+            //    step 1's INSERT OR IGNORE get cascade-deleted.
+            db.libraryQueries.deleteArtistById(sourceArtistId)
         }
-
-    suspend fun getArtistById(id: Long): Artist? = withContext(IODispatcher) {
-        db.libraryQueries.selectArtistById(id).executeAsOneOrNull()?.toDomain()
     }
+
+    suspend fun getArtistById(id: Long): Artist? =
+        withContext(IODispatcher) {
+            db.libraryQueries.selectArtistById(id).executeAsOneOrNull()?.toDomain()
+        }
 
     fun observeArtists(): Flow<List<Artist>> =
         db.libraryQueries.selectAllArtists()
@@ -197,17 +213,24 @@ class LibraryRepository(private val db: RadioShedDatabase) {
             .mapToList(IODispatcher)
             .map { rows -> rows.map { it.toDomain() } }
 
-    suspend fun setArtistImage(id: Long, imageUri: String?) = withContext(IODispatcher) {
+    suspend fun setArtistImage(
+        id: Long,
+        imageUri: String?,
+    ) = withContext(IODispatcher) {
         db.libraryQueries.updateArtistImage(imageUri, nowMillis(), id)
     }
 
-    suspend fun setArtistBio(id: Long, bio: String?) = withContext(IODispatcher) {
+    suspend fun setArtistBio(
+        id: Long,
+        bio: String?,
+    ) = withContext(IODispatcher) {
         db.libraryQueries.updateArtistBio(bio, nowMillis(), id)
     }
 
-    suspend fun countArtists(): Long = withContext(IODispatcher) {
-        db.libraryQueries.countArtists().executeAsOne()
-    }
+    suspend fun countArtists(): Long =
+        withContext(IODispatcher) {
+            db.libraryQueries.countArtists().executeAsOne()
+        }
 
     // ---- Album ----
 
@@ -217,29 +240,31 @@ class LibraryRepository(private val db: RadioShedDatabase) {
         artistId: Long? = null,
         year: Int? = null,
         musicbrainzId: String? = null,
-    ): Long = withContext(IODispatcher) {
-        db.transactionWithResult {
-            val now = nowMillis()
-            // INSERT OR IGNORE handles concurrent upserts colliding on the
-            // (sort_title, artist_id) UNIQUE constraint added in the schema.
-            db.libraryQueries.insertAlbumOrIgnore(
-                title = title,
-                artist_id = artistId,
-                sort_title = sortTitle,
-                year = year?.toLong(),
-                musicbrainz_id = musicbrainzId,
-                artwork_uri = null,
-                track_count = 0,
-                created_at = now,
-                updated_at = now,
-            )
-            db.libraryQueries.selectAlbumIdByTitleAndArtist(sortTitle, artistId).executeAsOne()
+    ): Long =
+        withContext(IODispatcher) {
+            db.transactionWithResult {
+                val now = nowMillis()
+                // INSERT OR IGNORE handles concurrent upserts colliding on the
+                // (sort_title, artist_id) UNIQUE constraint added in the schema.
+                db.libraryQueries.insertAlbumOrIgnore(
+                    title = title,
+                    artist_id = artistId,
+                    sort_title = sortTitle,
+                    year = year?.toLong(),
+                    musicbrainz_id = musicbrainzId,
+                    artwork_uri = null,
+                    track_count = 0,
+                    created_at = now,
+                    updated_at = now,
+                )
+                db.libraryQueries.selectAlbumIdByTitleAndArtist(sortTitle, artistId).executeAsOne()
+            }
         }
-    }
 
-    suspend fun getAlbumById(id: Long): Album? = withContext(IODispatcher) {
-        db.libraryQueries.selectAlbumById(id).executeAsOneOrNull()?.toDomain()
-    }
+    suspend fun getAlbumById(id: Long): Album? =
+        withContext(IODispatcher) {
+            db.libraryQueries.selectAlbumById(id).executeAsOneOrNull()?.toDomain()
+        }
 
     fun observeAlbums(): Flow<List<Album>> =
         db.libraryQueries.selectAllAlbums()
@@ -247,7 +272,10 @@ class LibraryRepository(private val db: RadioShedDatabase) {
             .mapToList(IODispatcher)
             .map { rows -> rows.map { it.toDomain() } }
 
-    suspend fun setAlbumArtwork(id: Long, artworkUri: String?) = withContext(IODispatcher) {
+    suspend fun setAlbumArtwork(
+        id: Long,
+        artworkUri: String?,
+    ) = withContext(IODispatcher) {
         db.libraryQueries.updateAlbumArtwork(artworkUri, nowMillis(), id)
     }
 
@@ -258,37 +286,45 @@ class LibraryRepository(private val db: RadioShedDatabase) {
      * flicker-changing as enumeration order surfaces different
      * embedded covers across rescans.
      */
-    suspend fun setAlbumArtworkIfMissing(id: Long, artworkUri: String) =
-        withContext(IODispatcher) {
-            db.libraryQueries.updateAlbumArtworkIfMissing(artworkUri, nowMillis(), id)
-        }
+    suspend fun setAlbumArtworkIfMissing(
+        id: Long,
+        artworkUri: String,
+    ) = withContext(IODispatcher) {
+        db.libraryQueries.updateAlbumArtworkIfMissing(artworkUri, nowMillis(), id)
+    }
 
     /**
      * Albums that have a MusicBrainz Release ID embedded in their tags
      * but no artwork on disk yet. Used by Cover Art Archive sync.
      * Returns (albumId, mbid) pairs.
      */
-    suspend fun albumsMissingArtwork(): List<Pair<Long, String>> = withContext(IODispatcher) {
-        // The SQL query already filters out NULL/blank mbids so the column
-        // comes back non-null, but we still drop pure-whitespace defensively.
-        db.libraryQueries.selectAlbumsMissingArtwork().executeAsList()
-            .mapNotNull { row ->
-                val mbid = row.musicbrainz_id.takeIf { it.isNotBlank() } ?: return@mapNotNull null
-                row.id to mbid
-            }
-    }
+    suspend fun albumsMissingArtwork(): List<Pair<Long, String>> =
+        withContext(IODispatcher) {
+            // The SQL query already filters out NULL/blank mbids so the column
+            // comes back non-null, but we still drop pure-whitespace defensively.
+            db.libraryQueries.selectAlbumsMissingArtwork().executeAsList()
+                .mapNotNull { row ->
+                    val mbid = row.musicbrainz_id.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                    row.id to mbid
+                }
+        }
 
-    suspend fun countAlbumsMissingArtwork(): Long = withContext(IODispatcher) {
-        db.libraryQueries.countAlbumsMissingArtwork().executeAsOne()
-    }
+    suspend fun countAlbumsMissingArtwork(): Long =
+        withContext(IODispatcher) {
+            db.libraryQueries.countAlbumsMissingArtwork().executeAsOne()
+        }
 
-    suspend fun setAlbumTrackCount(id: Long, trackCount: Long) = withContext(IODispatcher) {
+    suspend fun setAlbumTrackCount(
+        id: Long,
+        trackCount: Long,
+    ) = withContext(IODispatcher) {
         db.libraryQueries.updateAlbumTrackCount(trackCount, nowMillis(), id)
     }
 
-    suspend fun countAlbums(): Long = withContext(IODispatcher) {
-        db.libraryQueries.countAlbums().executeAsOne()
-    }
+    suspend fun countAlbums(): Long =
+        withContext(IODispatcher) {
+            db.libraryQueries.countAlbums().executeAsOne()
+        }
 
     // ---- Track ----
 
@@ -299,6 +335,7 @@ class LibraryRepository(private val db: RadioShedDatabase) {
      * is expected to call [setArtistsForTrack], [setTagsForTrack], etc. afterwards
      * to refresh metadata that may have changed in the underlying file.
      */
+
     /**
      * Upsert a track and (optionally) link it to [folderId] in one
      * transaction. Pass folderId=null to upsert the track without
@@ -343,78 +380,82 @@ class LibraryRepository(private val db: RadioShedDatabase) {
         artistIdsAndRoles: List<Pair<Long, String>>? = null,
         customTags: List<Tag>? = null,
         personnel: List<Personnel>? = null,
-    ): Long = withContext(IODispatcher) {
-        db.transactionWithResult {
-            val now = nowMillis()
-            db.libraryQueries.upsertTrack(
-                path = path,
-                file_name = fileName,
-                file_size = fileSize,
-                file_ctime = fileCtime,
-                file_mtime = fileMtime,
-                title = title,
-                album_id = albumId,
-                track_number = trackNumber?.toLong(),
-                disc_number = discNumber?.toLong(),
-                duration_ms = durationMs,
-                bitrate_kbps = bitrateKbps?.toLong(),
-                sample_rate_hz = sampleRateHz?.toLong(),
-                channels = channels?.toLong(),
-                format = format,
-                replay_gain_track = replayGainTrack,
-                replay_gain_album = replayGainAlbum,
-                replay_gain_track_peak = replayGainTrackPeak,
-                bpm = bpm,
-                musicbrainz_id = musicbrainzId,
-                acoustid_fingerprint = acoustidFingerprint,
-                cue_offset_start_ms = cueOffsetStartMs,
-                cue_offset_end_ms = cueOffsetEndMs,
-                added_at = now,
-                updated_at = now,
-            )
-            val trackId = db.libraryQueries.selectTrackIdByPath(path).executeAsOne()
-            if (folderId != null) {
-                db.libraryQueries.addTrackToFolder(trackId, folderId)
-            }
-            if (artistIdsAndRoles != null) {
-                db.libraryQueries.unlinkAllArtistsFromTrack(trackId)
-                artistIdsAndRoles.forEachIndexed { index, (artistId, role) ->
-                    db.libraryQueries.linkTrackArtist(
-                        trackId,
-                        artistId,
-                        role,
-                        index.toLong(),
-                    )
+    ): Long =
+        withContext(IODispatcher) {
+            db.transactionWithResult {
+                val now = nowMillis()
+                db.libraryQueries.upsertTrack(
+                    path = path,
+                    file_name = fileName,
+                    file_size = fileSize,
+                    file_ctime = fileCtime,
+                    file_mtime = fileMtime,
+                    title = title,
+                    album_id = albumId,
+                    track_number = trackNumber?.toLong(),
+                    disc_number = discNumber?.toLong(),
+                    duration_ms = durationMs,
+                    bitrate_kbps = bitrateKbps?.toLong(),
+                    sample_rate_hz = sampleRateHz?.toLong(),
+                    channels = channels?.toLong(),
+                    format = format,
+                    replay_gain_track = replayGainTrack,
+                    replay_gain_album = replayGainAlbum,
+                    replay_gain_track_peak = replayGainTrackPeak,
+                    bpm = bpm,
+                    musicbrainz_id = musicbrainzId,
+                    acoustid_fingerprint = acoustidFingerprint,
+                    cue_offset_start_ms = cueOffsetStartMs,
+                    cue_offset_end_ms = cueOffsetEndMs,
+                    added_at = now,
+                    updated_at = now,
+                )
+                val trackId = db.libraryQueries.selectTrackIdByPath(path).executeAsOne()
+                if (folderId != null) {
+                    db.libraryQueries.addTrackToFolder(trackId, folderId)
                 }
-            }
-            if (customTags != null) {
-                db.libraryQueries.deleteAllTagsForTrack(trackId)
-                customTags.forEach { tag ->
-                    db.libraryQueries.insertTrackTag(
-                        trackId,
-                        tag.key,
-                        tag.value,
-                        tag.position.toLong(),
-                    )
+                if (artistIdsAndRoles != null) {
+                    db.libraryQueries.unlinkAllArtistsFromTrack(trackId)
+                    artistIdsAndRoles.forEachIndexed { index, (artistId, role) ->
+                        db.libraryQueries.linkTrackArtist(
+                            trackId,
+                            artistId,
+                            role,
+                            index.toLong(),
+                        )
+                    }
                 }
-            }
-            if (personnel != null) {
-                db.libraryQueries.deleteAllPersonnelForTrack(trackId)
-                personnel.forEach { p ->
-                    db.libraryQueries.insertTrackPersonnel(
-                        trackId,
-                        p.role,
-                        p.name,
-                        p.position.toLong(),
-                    )
+                if (customTags != null) {
+                    db.libraryQueries.deleteAllTagsForTrack(trackId)
+                    customTags.forEach { tag ->
+                        db.libraryQueries.insertTrackTag(
+                            trackId,
+                            tag.key,
+                            tag.value,
+                            tag.position.toLong(),
+                        )
+                    }
                 }
+                if (personnel != null) {
+                    db.libraryQueries.deleteAllPersonnelForTrack(trackId)
+                    personnel.forEach { p ->
+                        db.libraryQueries.insertTrackPersonnel(
+                            trackId,
+                            p.role,
+                            p.name,
+                            p.position.toLong(),
+                        )
+                    }
+                }
+                trackId
             }
-            trackId
         }
-    }
 
     /** Add a track ↔ folder membership. INSERT OR IGNORE; safe to re-run. */
-    suspend fun addTrackToFolder(trackId: Long, folderId: Long) = withContext(IODispatcher) {
+    suspend fun addTrackToFolder(
+        trackId: Long,
+        folderId: Long,
+    ) = withContext(IODispatcher) {
         db.libraryQueries.addTrackToFolder(trackId, folderId)
     }
 
@@ -425,20 +466,24 @@ class LibraryRepository(private val db: RadioShedDatabase) {
      * we want to claim tracks the file walker discovered without re-
      * upserting their full metadata.
      */
-    suspend fun addTracksToFolder(trackIds: Collection<Long>, folderId: Long) =
+    suspend fun addTracksToFolder(
+        trackIds: Collection<Long>,
+        folderId: Long,
+    ) = withContext(IODispatcher) {
+        db.transaction {
+            trackIds.forEach { db.libraryQueries.addTrackToFolder(it, folderId) }
+        }
+    }
+
+    suspend fun getTrackById(id: Long): Track? =
         withContext(IODispatcher) {
-            db.transaction {
-                trackIds.forEach { db.libraryQueries.addTrackToFolder(it, folderId) }
-            }
+            db.libraryQueries.selectTrackById(id).executeAsOneOrNull()?.toDomain()
         }
 
-    suspend fun getTrackById(id: Long): Track? = withContext(IODispatcher) {
-        db.libraryQueries.selectTrackById(id).executeAsOneOrNull()?.toDomain()
-    }
-
-    suspend fun getTrackByPath(path: String): Track? = withContext(IODispatcher) {
-        db.libraryQueries.selectTrackByPath(path).executeAsOneOrNull()?.toDomain()
-    }
+    suspend fun getTrackByPath(path: String): Track? =
+        withContext(IODispatcher) {
+            db.libraryQueries.selectTrackByPath(path).executeAsOneOrNull()?.toDomain()
+        }
 
     /**
      * Resilient path lookup for backup restore. Tries an exact match
@@ -449,55 +494,63 @@ class LibraryRepository(private val db: RadioShedDatabase) {
      * the requested path — a reasonable tie-breaker for users who
      * reorganized their library between export and import.
      */
-    suspend fun getTrackByPathOrSuffix(path: String): Track? = withContext(IODispatcher) {
-        val exact = db.libraryQueries.selectTrackByPath(path).executeAsOneOrNull()
-        if (exact != null) return@withContext exact.toDomain()
+    suspend fun getTrackByPathOrSuffix(path: String): Track? =
+        withContext(IODispatcher) {
+            val exact = db.libraryQueries.selectTrackByPath(path).executeAsOneOrNull()
+            if (exact != null) return@withContext exact.toDomain()
 
-        val sep = if (path.contains('\\')) '\\' else '/'
-        val parts = path.split(sep).filter { it.isNotBlank() }
-        if (parts.isEmpty()) return@withContext null
+            val sep = if (path.contains('\\')) '\\' else '/'
+            val parts = path.split(sep).filter { it.isNotBlank() }
+            if (parts.isEmpty()) return@withContext null
 
-        // Try increasingly less specific suffixes:
-        //   1. last 2 segments ("/Music/Song.mp3")
-        //   2. just the filename ("Song.mp3")
-        // LIKE wildcard is %, escape any user-supplied % / _ in the
-        // path before composing.
-        val candidates = listOf(
-            if (parts.size >= 2) parts.takeLast(2).joinToString("/") else null,
-            parts.last(),
-        ).filterNotNull().distinct()
+            // Try increasingly less specific suffixes:
+            //   1. last 2 segments ("/Music/Song.mp3")
+            //   2. just the filename ("Song.mp3")
+            // LIKE wildcard is %, escape any user-supplied % / _ in the
+            // path before composing.
+            val candidates =
+                listOf(
+                    if (parts.size >= 2) parts.takeLast(2).joinToString("/") else null,
+                    parts.last(),
+                ).filterNotNull().distinct()
 
-        for (suffix in candidates) {
-            val escaped = suffix
-                .replace("\\", "\\\\")
-                .replace("%", "\\%")
-                .replace("_", "\\_")
-            val pattern = "%$escaped"
-            val matches = db.libraryQueries.selectTracksByPathSuffix(pattern).executeAsList()
-            if (matches.isEmpty()) continue
-            // Prefer the candidate whose path length is closest to
-            // the originally-requested path — same depth = same
-            // directory layout = most likely the moved-but-same
-            // file. Fall back to the first hit when lengths tie.
-            val best = matches.minByOrNull { kotlin.math.abs(it.path.length - path.length) }
-            if (best != null) return@withContext best.toDomain()
+            for (suffix in candidates) {
+                val escaped =
+                    suffix
+                        .replace("\\", "\\\\")
+                        .replace("%", "\\%")
+                        .replace("_", "\\_")
+                val pattern = "%$escaped"
+                val matches = db.libraryQueries.selectTracksByPathSuffix(pattern).executeAsList()
+                if (matches.isEmpty()) continue
+                // Prefer the candidate whose path length is closest to
+                // the originally-requested path — same depth = same
+                // directory layout = most likely the moved-but-same
+                // file. Fall back to the first hit when lengths tie.
+                val best = matches.minByOrNull { kotlin.math.abs(it.path.length - path.length) }
+                if (best != null) return@withContext best.toDomain()
+            }
+            null
         }
-        null
-    }
 
-    suspend fun listTracksByFolder(folderId: Long): List<Track> = withContext(IODispatcher) {
-        db.libraryQueries.selectTracksByFolder(folderId).executeAsList().map { it.toDomain() }
-    }
+    suspend fun listTracksByFolder(folderId: Long): List<Track> =
+        withContext(IODispatcher) {
+            db.libraryQueries.selectTracksByFolder(folderId).executeAsList().map { it.toDomain() }
+        }
 
-    suspend fun listAvailableTracks(limit: Long, offset: Long): List<Track> =
+    suspend fun listAvailableTracks(
+        limit: Long,
+        offset: Long,
+    ): List<Track> =
         withContext(IODispatcher) {
             db.libraryQueries.selectAvailableTracks(limit, offset).executeAsList()
                 .map { it.toDomain() }
         }
 
-    suspend fun newestTracks(limit: Long): List<Track> = withContext(IODispatcher) {
-        db.libraryQueries.selectNewestTracks(limit).executeAsList().map { it.toDomain() }
-    }
+    suspend fun newestTracks(limit: Long): List<Track> =
+        withContext(IODispatcher) {
+            db.libraryQueries.selectNewestTracks(limit).executeAsList().map { it.toDomain() }
+        }
 
     /**
      * Pick one available track uniformly at random — used by the
@@ -505,9 +558,10 @@ class LibraryRepository(private val db: RadioShedDatabase) {
      * Returns null only when the library is empty (or every track is
      * marked unavailable).
      */
-    suspend fun randomAvailableTrack(): Track? = withContext(IODispatcher) {
-        db.libraryQueries.selectRandomTrack().executeAsOneOrNull()?.toDomain()
-    }
+    suspend fun randomAvailableTrack(): Track? =
+        withContext(IODispatcher) {
+            db.libraryQueries.selectRandomTrack().executeAsOneOrNull()?.toDomain()
+        }
 
     /**
      * [count] random available tracks. The result list is already
@@ -520,14 +574,19 @@ class LibraryRepository(private val db: RadioShedDatabase) {
             db.libraryQueries.selectRandomTracks(count).executeAsList().map { it.toDomain() }
         }
 
-    suspend fun setTrackAvailable(id: Long, available: Boolean) = withContext(IODispatcher) {
+    suspend fun setTrackAvailable(
+        id: Long,
+        available: Boolean,
+    ) = withContext(IODispatcher) {
         db.libraryQueries.setTrackAvailable(if (available) 1L else 0L, nowMillis(), id)
     }
 
-    suspend fun setTracksAvailableByFolder(folderId: Long, available: Boolean) =
-        withContext(IODispatcher) {
-            db.libraryQueries.setTracksAvailableByFolder(if (available) 1L else 0L, nowMillis(), folderId)
-        }
+    suspend fun setTracksAvailableByFolder(
+        folderId: Long,
+        available: Boolean,
+    ) = withContext(IODispatcher) {
+        db.libraryQueries.setTracksAvailableByFolder(if (available) 1L else 0L, nowMillis(), folderId)
+    }
 
     /**
      * Mark every track in [folderId] as `is_available = 0` EXCEPT
@@ -561,17 +620,20 @@ class LibraryRepository(private val db: RadioShedDatabase) {
         }
     }
 
-    suspend fun deleteTrack(id: Long) = withContext(IODispatcher) {
-        db.libraryQueries.deleteTrackById(id)
-    }
+    suspend fun deleteTrack(id: Long) =
+        withContext(IODispatcher) {
+            db.libraryQueries.deleteTrackById(id)
+        }
 
-    suspend fun deleteTracksByFolder(folderId: Long) = withContext(IODispatcher) {
-        db.libraryQueries.deleteTracksByFolder(folderId)
-    }
+    suspend fun deleteTracksByFolder(folderId: Long) =
+        withContext(IODispatcher) {
+            db.libraryQueries.deleteTracksByFolder(folderId)
+        }
 
-    suspend fun countTracks(): Long = withContext(IODispatcher) {
-        db.libraryQueries.countTracks().executeAsOne()
-    }
+    suspend fun countTracks(): Long =
+        withContext(IODispatcher) {
+            db.libraryQueries.countTracks().executeAsOne()
+        }
 
     /**
      * Total runtime of every indexed track in ms. Surfaced by
@@ -579,9 +641,10 @@ class LibraryRepository(private val db: RadioShedDatabase) {
      * stat alongside the count tile. Cheap aggregate — `duration_ms`
      * is non-null on the table.
      */
-    suspend fun totalLibraryDurationMs(): Long = withContext(IODispatcher) {
-        db.libraryQueries.totalLibraryDurationMs().executeAsOne()
-    }
+    suspend fun totalLibraryDurationMs(): Long =
+        withContext(IODispatcher) {
+            db.libraryQueries.totalLibraryDurationMs().executeAsOne()
+        }
 
     /**
      * Album IDs in `[minYear, maxYear]` inclusive. Albums with NULL
@@ -589,7 +652,10 @@ class LibraryRepository(private val db: RadioShedDatabase) {
      * year-less rips that may or may not actually belong there.
      * Used by the Generate-decade-stations action.
      */
-    suspend fun albumIdsByYearRange(minYear: Int, maxYear: Int): List<Long> =
+    suspend fun albumIdsByYearRange(
+        minYear: Int,
+        maxYear: Int,
+    ): List<Long> =
         withContext(IODispatcher) {
             db.libraryQueries.selectAlbumIdsByYearRange(
                 minYear.toLong(),
@@ -617,15 +683,17 @@ class LibraryRepository(private val db: RadioShedDatabase) {
      * first entry's role defaults to "primary"; later entries default to "featured".
      * Caller can override roles by providing pairs of (artistId, role).
      */
-    suspend fun setArtistsForTrack(trackId: Long, artistIdsAndRoles: List<Pair<Long, String>>) =
-        withContext(IODispatcher) {
-            db.transaction {
-                db.libraryQueries.unlinkAllArtistsFromTrack(trackId)
-                artistIdsAndRoles.forEachIndexed { index, (artistId, role) ->
-                    db.libraryQueries.linkTrackArtist(trackId, artistId, role, index.toLong())
-                }
+    suspend fun setArtistsForTrack(
+        trackId: Long,
+        artistIdsAndRoles: List<Pair<Long, String>>,
+    ) = withContext(IODispatcher) {
+        db.transaction {
+            db.libraryQueries.unlinkAllArtistsFromTrack(trackId)
+            artistIdsAndRoles.forEachIndexed { index, (artistId, role) ->
+                db.libraryQueries.linkTrackArtist(trackId, artistId, role, index.toLong())
             }
         }
+    }
 
     suspend fun linkTrackToArtist(
         trackId: Long,
@@ -636,13 +704,15 @@ class LibraryRepository(private val db: RadioShedDatabase) {
         db.libraryQueries.linkTrackArtist(trackId, artistId, role, position.toLong())
     }
 
-    suspend fun artistsForTrack(trackId: Long): List<Artist> = withContext(IODispatcher) {
-        db.libraryQueries.selectArtistsByTrack(trackId).executeAsList().map { it.toDomain() }
-    }
+    suspend fun artistsForTrack(trackId: Long): List<Artist> =
+        withContext(IODispatcher) {
+            db.libraryQueries.selectArtistsByTrack(trackId).executeAsList().map { it.toDomain() }
+        }
 
-    suspend fun tracksForArtist(artistId: Long): List<Track> = withContext(IODispatcher) {
-        db.libraryQueries.selectTracksByArtist(artistId).executeAsList().map { it.toDomain() }
-    }
+    suspend fun tracksForArtist(artistId: Long): List<Track> =
+        withContext(IODispatcher) {
+            db.libraryQueries.selectTracksByArtist(artistId).executeAsList().map { it.toDomain() }
+        }
 
     /**
      * Batched (trackId → primaryArtistId) lookup. Returns only tracks
@@ -670,22 +740,28 @@ class LibraryRepository(private val db: RadioShedDatabase) {
                 .associate { it.track_id to it.name }
         }
 
-    suspend fun tracksForAlbum(albumId: Long): List<Track> = withContext(IODispatcher) {
-        db.libraryQueries.selectTracksByAlbum(albumId).executeAsList().map { it.toDomain() }
-    }
+    suspend fun tracksForAlbum(albumId: Long): List<Track> =
+        withContext(IODispatcher) {
+            db.libraryQueries.selectTracksByAlbum(albumId).executeAsList().map { it.toDomain() }
+        }
 
-    suspend fun albumsForArtist(artistId: Long): List<Album> = withContext(IODispatcher) {
-        db.libraryQueries.selectAlbumsByArtist(artistId).executeAsList().map { it.toDomain() }
-    }
+    suspend fun albumsForArtist(artistId: Long): List<Album> =
+        withContext(IODispatcher) {
+            db.libraryQueries.selectAlbumsByArtist(artistId).executeAsList().map { it.toDomain() }
+        }
 
-    suspend fun unlinkAllArtistsFromTrack(trackId: Long) = withContext(IODispatcher) {
-        db.libraryQueries.unlinkAllArtistsFromTrack(trackId)
-    }
+    suspend fun unlinkAllArtistsFromTrack(trackId: Long) =
+        withContext(IODispatcher) {
+            db.libraryQueries.unlinkAllArtistsFromTrack(trackId)
+        }
 
     // ---- Tags ----
 
     /** Atomically replaces all tags for the given track. */
-    suspend fun setTagsForTrack(trackId: Long, tags: List<Tag>) = withContext(IODispatcher) {
+    suspend fun setTagsForTrack(
+        trackId: Long,
+        tags: List<Tag>,
+    ) = withContext(IODispatcher) {
         db.transaction {
             db.libraryQueries.deleteAllTagsForTrack(trackId)
             tags.forEach { tag ->
@@ -694,13 +770,18 @@ class LibraryRepository(private val db: RadioShedDatabase) {
         }
     }
 
-    suspend fun tagsForTrack(trackId: Long): List<Tag> = withContext(IODispatcher) {
-        db.libraryQueries.selectTagsByTrack(trackId).executeAsList().map { it.toDomain() }
-    }
+    suspend fun tagsForTrack(trackId: Long): List<Tag> =
+        withContext(IODispatcher) {
+            db.libraryQueries.selectTagsByTrack(trackId).executeAsList().map { it.toDomain() }
+        }
 
-    suspend fun tracksByTag(key: String, value: String): List<Track> = withContext(IODispatcher) {
-        db.libraryQueries.selectTracksByTag(key, value).executeAsList().map { it.toDomain() }
-    }
+    suspend fun tracksByTag(
+        key: String,
+        value: String,
+    ): List<Track> =
+        withContext(IODispatcher) {
+            db.libraryQueries.selectTracksByTag(key, value).executeAsList().map { it.toDomain() }
+        }
 
     /**
      * Case-insensitive variant of [tracksByTag]. Used by station rules
@@ -711,7 +792,10 @@ class LibraryRepository(private val db: RadioShedDatabase) {
      * for callers that rely on exact match (genre canonicalization,
      * the auto-station generator, etc.).
      */
-    suspend fun tracksByTagCaseInsensitive(key: String, value: String): List<Track> =
+    suspend fun tracksByTagCaseInsensitive(
+        key: String,
+        value: String,
+    ): List<Track> =
         withContext(IODispatcher) {
             db.libraryQueries.selectTracksByTagCi(key, value).executeAsList().map { it.toDomain() }
         }
@@ -725,16 +809,21 @@ class LibraryRepository(private val db: RadioShedDatabase) {
      * stored as 'primary' only — see Scanner) and explicit
      * album-artist links on compilation tracks.
      */
-    suspend fun tracksByArtistName(name: String): List<Track> = withContext(IODispatcher) {
-        val sortName = name.trim().lowercase()
-        if (sortName.isEmpty()) emptyList()
-        else db.libraryQueries.selectTracksByArtistSortName(sortName)
-            .executeAsList().map { it.toDomain() }
-    }
+    suspend fun tracksByArtistName(name: String): List<Track> =
+        withContext(IODispatcher) {
+            val sortName = name.trim().lowercase()
+            if (sortName.isEmpty()) {
+                emptyList()
+            } else {
+                db.libraryQueries.selectTracksByArtistSortName(sortName)
+                    .executeAsList().map { it.toDomain() }
+            }
+        }
 
-    suspend fun distinctTagValues(key: String): List<String> = withContext(IODispatcher) {
-        db.libraryQueries.distinctTagValues(key).executeAsList()
-    }
+    suspend fun distinctTagValues(key: String): List<String> =
+        withContext(IODispatcher) {
+            db.libraryQueries.distinctTagValues(key).executeAsList()
+        }
 
     /**
      * Single-query (tag value → track count) for a tag key. Used by
@@ -743,10 +832,11 @@ class LibraryRepository(private val db: RadioShedDatabase) {
      * previous N+1 pattern stalled cold-start on libraries with
      * dozens of distinct genres).
      */
-    suspend fun tagValueTrackCounts(key: String): Map<String, Long> = withContext(IODispatcher) {
-        db.libraryQueries.selectTagValueTrackCounts(key).executeAsList()
-            .associate { it.value_ to it.track_count }
-    }
+    suspend fun tagValueTrackCounts(key: String): Map<String, Long> =
+        withContext(IODispatcher) {
+            db.libraryQueries.selectTagValueTrackCounts(key).executeAsList()
+                .associate { it.value_ to it.track_count }
+        }
 
     /**
      * Clear every album's artwork pointer. Used by the Settings →
@@ -754,9 +844,10 @@ class LibraryRepository(private val db: RadioShedDatabase) {
      * separately via `ArtworkPersister.clearAll()`; this just nulls
      * the URI columns so the UI stops trying to load deleted files.
      */
-    suspend fun clearAllAlbumArtwork() = withContext(IODispatcher) {
-        db.libraryQueries.clearAllAlbumArtwork(nowMillis())
-    }
+    suspend fun clearAllAlbumArtwork() =
+        withContext(IODispatcher) {
+            db.libraryQueries.clearAllAlbumArtwork(nowMillis())
+        }
 
     /**
      * One-shot pass that consolidates GENRE tag values that differ
@@ -770,55 +861,63 @@ class LibraryRepository(private val db: RadioShedDatabase) {
      * Returns the number of distinct genres collapsed (i.e. how many
      * groups had >1 case variant, not the number of rows touched).
      */
-    suspend fun canonicalizeGenreTags(): Int = withContext(IODispatcher) {
-        val all = db.libraryQueries.distinctTagValues("GENRE").executeAsList()
-        val groups = all.groupBy { it.lowercase() }
-        var collapsed = 0
-        db.transaction {
-            for ((lower, variants) in groups) {
-                if (lower.isBlank() || variants.size <= 1) continue
-                // Pick the canonical: title-case of the lowercased
-                // form, regardless of input variants. Predictable +
-                // matches typical music-app conventions.
-                val canonical = lower.titleCaseSimple()
-                // SQLDelight names duplicate `?` parameters value /
-                // value_ / value__. The two ? for the canonical string
-                // are positional 1 and 3; the lowercase comparison key
-                // is positional 2.
-                db.libraryQueries.canonicalizeGenreCase(
-                    value = canonical,
-                    value_ = lower,
-                    value__ = canonical,
-                )
-                collapsed += 1
+    suspend fun canonicalizeGenreTags(): Int =
+        withContext(IODispatcher) {
+            val all = db.libraryQueries.distinctTagValues("GENRE").executeAsList()
+            val groups = all.groupBy { it.lowercase() }
+            var collapsed = 0
+            db.transaction {
+                for ((lower, variants) in groups) {
+                    if (lower.isBlank() || variants.size <= 1) continue
+                    // Pick the canonical: title-case of the lowercased
+                    // form, regardless of input variants. Predictable +
+                    // matches typical music-app conventions.
+                    val canonical = lower.titleCaseSimple()
+                    // SQLDelight names duplicate `?` parameters value /
+                    // value_ / value__. The two ? for the canonical string
+                    // are positional 1 and 3; the lowercase comparison key
+                    // is positional 2.
+                    db.libraryQueries.canonicalizeGenreCase(
+                        value = canonical,
+                        value_ = lower,
+                        value__ = canonical,
+                    )
+                    collapsed += 1
+                }
             }
+            collapsed
         }
-        collapsed
-    }
 
     /** Title-case a string by capitalizing each whitespace-separated word.
      *  Cheap; doesn't handle Unicode case-folding edge cases (Greek final
      *  sigma, Turkish dotted I) — fine for genre tags. */
-    private fun String.titleCaseSimple(): String = split(' ')
-        .joinToString(" ") { word ->
-            if (word.isEmpty()) word
-            else word[0].uppercaseChar() + word.substring(1).lowercase()
-        }
+    private fun String.titleCaseSimple(): String =
+        split(' ')
+            .joinToString(" ") { word ->
+                if (word.isEmpty()) {
+                    word
+                } else {
+                    word[0].uppercaseChar() + word.substring(1).lowercase()
+                }
+            }
 
     // ---- Personnel ----
 
     /** Atomically replaces all personnel for the given track. */
-    suspend fun setPersonnelForTrack(trackId: Long, personnel: List<Personnel>) =
-        withContext(IODispatcher) {
-            db.transaction {
-                db.libraryQueries.deleteAllPersonnelForTrack(trackId)
-                personnel.forEach { p ->
-                    db.libraryQueries.insertTrackPersonnel(trackId, p.role, p.name, p.position.toLong())
-                }
+    suspend fun setPersonnelForTrack(
+        trackId: Long,
+        personnel: List<Personnel>,
+    ) = withContext(IODispatcher) {
+        db.transaction {
+            db.libraryQueries.deleteAllPersonnelForTrack(trackId)
+            personnel.forEach { p ->
+                db.libraryQueries.insertTrackPersonnel(trackId, p.role, p.name, p.position.toLong())
             }
         }
-
-    suspend fun personnelForTrack(trackId: Long): List<Personnel> = withContext(IODispatcher) {
-        db.libraryQueries.selectPersonnelByTrack(trackId).executeAsList().map { it.toDomain() }
     }
+
+    suspend fun personnelForTrack(trackId: Long): List<Personnel> =
+        withContext(IODispatcher) {
+            db.libraryQueries.selectPersonnelByTrack(trackId).executeAsList().map { it.toDomain() }
+        }
 }

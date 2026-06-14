@@ -41,24 +41,27 @@ internal fun stationColor(station: Station): Color {
  */
 internal fun stationGradient(accent: Color): Brush {
     // Slightly darken/lighten via alpha + black/white mix at the stops.
-    val darker = Color(
-        red = accent.red * 0.55f,
-        green = accent.green * 0.55f,
-        blue = accent.blue * 0.65f,
-        alpha = 1f,
-    )
-    val lighter = Color(
-        red = (accent.red + 0.1f).coerceAtMost(1f),
-        green = (accent.green + 0.1f).coerceAtMost(1f),
-        blue = (accent.blue + 0.1f).coerceAtMost(1f),
-        alpha = 0.85f,
-    )
+    val darker =
+        Color(
+            red = accent.red * 0.55f,
+            green = accent.green * 0.55f,
+            blue = accent.blue * 0.65f,
+            alpha = 1f,
+        )
+    val lighter =
+        Color(
+            red = (accent.red + 0.1f).coerceAtMost(1f),
+            green = (accent.green + 0.1f).coerceAtMost(1f),
+            blue = (accent.blue + 0.1f).coerceAtMost(1f),
+            alpha = 0.85f,
+        )
     return Brush.linearGradient(
-        colorStops = arrayOf(
-            0f to accent,
-            0.55f to darker,
-            1f to lighter,
-        ),
+        colorStops =
+            arrayOf(
+                0f to accent,
+                0.55f to darker,
+                1f to lighter,
+            ),
     )
 }
 
@@ -79,9 +82,10 @@ internal fun stationGradient(accent: Color): Brush {
 internal fun StationArtwork(
     station: Station?,
     modifier: Modifier = Modifier,
-    background: Brush = SolidColor(
-        station?.let { stationColor(it) } ?: MaterialTheme.colorScheme.surfaceVariant,
-    ),
+    background: Brush =
+        SolidColor(
+            station?.let { stationColor(it) } ?: MaterialTheme.colorScheme.surfaceVariant,
+        ),
     fallbackIconTint: Color = MaterialTheme.colorScheme.onSurfaceVariant,
     fallbackIconSize: Dp? = null,
 ) {

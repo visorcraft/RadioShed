@@ -12,7 +12,6 @@ import kotlin.test.assertTrue
  * new_path) and the `libvlc_state_t` int → [PlayerState] mapping.
  */
 class LibVlcMappingTest {
-
     @Test
     fun schemeBearingMrlsUseLocation() {
         assertTrue(hasUriScheme("http://stream.example/radio.mp3"))

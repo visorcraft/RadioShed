@@ -48,16 +48,16 @@ object DjSlots {
  * treated as a single sentence.
  */
 object DjTemplate {
-
     /** All known placeholder names mapped to their [DjTemplateVars] accessor. */
-    private val KNOWN_VARS = mapOf(
-        "station" to DjTemplateVars::station,
-        "track" to DjTemplateVars::track,
-        "artist" to DjTemplateVars::artist,
-        "next_track" to DjTemplateVars::nextTrack,
-        "time" to DjTemplateVars::time,
-        "weather" to DjTemplateVars::weather,
-    )
+    private val KNOWN_VARS =
+        mapOf(
+            "station" to DjTemplateVars::station,
+            "track" to DjTemplateVars::track,
+            "artist" to DjTemplateVars::artist,
+            "next_track" to DjTemplateVars::nextTrack,
+            "time" to DjTemplateVars::time,
+            "weather" to DjTemplateVars::weather,
+        )
 
     private val SENTENCE_SPLIT_REGEX = Regex("""(?<=[.!?])\s+""")
     private val TOKEN_REGEX = Regex("""\{([^}]+)}""")
@@ -71,22 +71,26 @@ object DjTemplate {
      *
      * @param template  The template string, may contain `{token}` placeholders.
      * @param vars      The runtime values to substitute.
-     * @return          The rendered string with no unresolved null placeholders.
+     * @return The rendered string with no unresolved null placeholders.
      */
-    fun render(template: String, vars: DjTemplateVars): String {
+    fun render(
+        template: String,
+        vars: DjTemplateVars,
+    ): String {
         val sentences = splitSentences(template)
-        val kept = sentences.filter { sentence ->
-            // Drop sentence if it contains a known token whose value is null.
-            val tokens = TOKEN_REGEX.findAll(sentence).map { it.groupValues[1] }.toList()
-            tokens.none { name -> KNOWN_VARS[name]?.let { it(vars) == null } == true }
-        }.map { sentence ->
-            // Substitute all known tokens that have non-null values.
-            TOKEN_REGEX.replace(sentence) { match ->
-                val name = match.groupValues[1]
-                val accessor = KNOWN_VARS[name]
-                if (accessor != null) accessor.invoke(vars) ?: match.value else match.value
+        val kept =
+            sentences.filter { sentence ->
+                // Drop sentence if it contains a known token whose value is null.
+                val tokens = TOKEN_REGEX.findAll(sentence).map { it.groupValues[1] }.toList()
+                tokens.none { name -> KNOWN_VARS[name]?.let { it(vars) == null } == true }
+            }.map { sentence ->
+                // Substitute all known tokens that have non-null values.
+                TOKEN_REGEX.replace(sentence) { match ->
+                    val name = match.groupValues[1]
+                    val accessor = KNOWN_VARS[name]
+                    if (accessor != null) accessor.invoke(vars) ?: match.value else match.value
+                }
             }
-        }
         return kept.joinToString(" ")
     }
 
@@ -104,10 +108,14 @@ object DjTemplate {
      * @param seed      Seed for the random number generator.
      * @param avoid     Optional string to avoid picking (e.g. the last variant
      *                  shown on air).
-     * @return          A string from [variants], differing from [avoid] when
+     * @return A string from [variants], differing from [avoid] when
      *                  possible.
      */
-    fun pickVariant(variants: List<String>, seed: Long, avoid: String? = null): String {
+    fun pickVariant(
+        variants: List<String>,
+        seed: Long,
+        avoid: String? = null,
+    ): String {
         require(variants.isNotEmpty()) { "variants must not be empty" }
         val rng = Random(seed)
         val index = rng.nextInt(variants.size)
@@ -134,31 +142,36 @@ object DjTemplate {
  * when the weather value is null the weather sentence is dropped, leaving a
  * shorter but still coherent line.
  */
-val DEFAULT_DJ_TEMPLATES: Map<String, List<String>> = mapOf(
-    DjSlots.STATION_ID to listOf(
-        "You're locked in to {station}.",
-        "This is {station}, your soundtrack for the day.",
-        "Stay tuned — you're listening to {station}.",
-        "It's {time}, and you're with {station}.",
-    ),
-    DjSlots.UP_NEXT to listOf(
-        "Coming up: {next_track}.",
-        "Up next on {station}: {next_track}.",
-        "Don't go anywhere — next up is {next_track}. Outside it's {weather}.",
-        "Stay with us — {next_track} is coming right up.",
-    ),
-    DjSlots.RECAP to listOf(
-        "That was {track} by {artist}.",
-        "You just heard {track} — {artist}, right here on {station}.",
-        "That was {track} by {artist}. It's {weather} out there, so keep it warm in here.",
-        "{artist} with {track} — classic.",
-    ),
-    DjSlots.TIME to listOf(
-        "It's {time}.",
-        "The time is {time} — you're on {station}.",
-        "Just gone {time} here on {station}.",
-    ),
-)
+val DEFAULT_DJ_TEMPLATES: Map<String, List<String>> =
+    mapOf(
+        DjSlots.STATION_ID to
+            listOf(
+                "You're locked in to {station}.",
+                "This is {station}, your soundtrack for the day.",
+                "Stay tuned — you're listening to {station}.",
+                "It's {time}, and you're with {station}.",
+            ),
+        DjSlots.UP_NEXT to
+            listOf(
+                "Coming up: {next_track}.",
+                "Up next on {station}: {next_track}.",
+                "Don't go anywhere — next up is {next_track}. Outside it's {weather}.",
+                "Stay with us — {next_track} is coming right up.",
+            ),
+        DjSlots.RECAP to
+            listOf(
+                "That was {track} by {artist}.",
+                "You just heard {track} — {artist}, right here on {station}.",
+                "That was {track} by {artist}. It's {weather} out there, so keep it warm in here.",
+                "{artist} with {track} — classic.",
+            ),
+        DjSlots.TIME to
+            listOf(
+                "It's {time}.",
+                "The time is {time} — you're on {station}.",
+                "Just gone {time} here on {station}.",
+            ),
+    )
 
 /** Serializer for the persisted slot → variants template map. */
 private val DJ_TEMPLATES_SERIALIZER =

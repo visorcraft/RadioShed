@@ -17,7 +17,10 @@ package com.visorcraft.radioshed.source
  * has no `File` class, and we want one path-joining contract that
  * works everywhere RadioShed renders a path string for the user.
  */
-internal fun joinPath(parent: String, child: String): String {
+internal fun joinPath(
+    parent: String,
+    child: String,
+): String {
     if (parent.isEmpty()) return child
     if (child.isEmpty()) return parent
     val separator = if (parent.contains('\\') && !parent.contains('/')) "\\" else "/"

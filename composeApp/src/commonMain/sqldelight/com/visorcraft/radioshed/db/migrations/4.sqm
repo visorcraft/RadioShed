@@ -1,5 +1,9 @@
 -- Migration v4 → v5: lyrics query override.
 --
+CREATE TABLE IF NOT EXISTS track (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT
+);
+
 -- Adds user-supplied (artist, title) override for lyrics lookups.
 -- Used when LRClib's auto-fallback chain misses but the user knows
 -- the correct metadata — they can edit the search query manually

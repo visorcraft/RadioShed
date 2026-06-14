@@ -17,13 +17,15 @@ class MediaSourceRegistry {
     val sources = _sources.asStateFlow()
     private val mutex = Mutex()
 
-    suspend fun register(source: MediaSource) = mutex.withLock {
-        _sources.value += (source.id to source)
-    }
+    suspend fun register(source: MediaSource) =
+        mutex.withLock {
+            _sources.value += (source.id to source)
+        }
 
-    suspend fun unregister(id: String) = mutex.withLock {
-        _sources.value -= id
-    }
+    suspend fun unregister(id: String) =
+        mutex.withLock {
+            _sources.value -= id
+        }
 
     fun getById(id: String): MediaSource? = _sources.value[id]
 }

@@ -32,9 +32,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import com.visorcraft.radioshed.ui.util.TooltipIconButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -60,6 +58,7 @@ import com.visorcraft.radioshed.data.LibraryRepository
 import com.visorcraft.radioshed.domain.Track
 import com.visorcraft.radioshed.stations.StationPlayback
 import com.visorcraft.radioshed.ui.playlists.TrackContextSheet
+import com.visorcraft.radioshed.ui.util.TooltipIconButton
 import org.koin.compose.koinInject
 
 /**
@@ -179,9 +178,10 @@ fun GenreDetailScreen(
                         }
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                ),
+                colors =
+                    TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                    ),
             )
         },
         containerColor = MaterialTheme.colorScheme.background,
@@ -199,9 +199,10 @@ fun GenreDetailScreen(
                 genreSummary,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
-                modifier = Modifier.clickable {
-                    copySummary("$genre — $genreSummary")
-                },
+                modifier =
+                    Modifier.clickable {
+                        copySummary("$genre — $genreSummary")
+                    },
             )
             Spacer(Modifier.height(12.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -222,9 +223,10 @@ fun GenreDetailScreen(
                     },
                     enabled = tracks.isNotEmpty(),
                     modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = MaterialTheme.colorScheme.primary,
-                    ),
+                    colors =
+                        ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.primary,
+                        ),
                 ) {
                     Icon(Icons.Filled.Shuffle, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.size(6.dp))
@@ -255,9 +257,10 @@ fun GenreDetailScreen(
                     )
                 }
             } else {
-                val sortedTracks = remember(tracks, trackSort, playCounts) {
-                    sortGenreTracks(tracks, trackSort, playCounts)
-                }
+                val sortedTracks =
+                    remember(tracks, trackSort, playCounts) {
+                        sortGenreTracks(tracks, trackSort, playCounts)
+                    }
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(vertical = 4.dp),
@@ -295,9 +298,10 @@ private fun GenreTrackRow(
     onLongPress: () -> Unit,
 ) {
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .combinedClickable(onClick = onTap, onLongClick = onLongPress),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .combinedClickable(onClick = onTap, onLongClick = onLongPress),
         color = Color.Transparent,
     ) {
         Row(
@@ -305,10 +309,11 @@ private fun GenreTrackRow(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                modifier =
+                    Modifier
+                        .size(36.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
@@ -324,8 +329,12 @@ private fun GenreTrackRow(
                     text = track.title.ifBlank { track.fileName },
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.Medium,
-                    color = if (isCurrent) MaterialTheme.colorScheme.primary
-                            else MaterialTheme.colorScheme.onBackground,
+                    color =
+                        if (isCurrent) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onBackground
+                        },
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f, fill = false),
@@ -352,9 +361,10 @@ private fun sortGenreTracks(
     tracks: List<com.visorcraft.radioshed.domain.Track>,
     sort: GenreTrackSort,
     playCounts: Map<Long, Long>,
-): List<com.visorcraft.radioshed.domain.Track> = when (sort) {
-    GenreTrackSort.TitleAsc -> tracks.sortedBy { it.title.lowercase() }
-    GenreTrackSort.DurationAsc -> tracks.sortedBy { it.durationMs }
-    GenreTrackSort.DurationDesc -> tracks.sortedByDescending { it.durationMs }
-    GenreTrackSort.MostPlayed -> tracks.sortedByDescending { playCounts[it.id] ?: 0L }
-}
+): List<com.visorcraft.radioshed.domain.Track> =
+    when (sort) {
+        GenreTrackSort.TitleAsc -> tracks.sortedBy { it.title.lowercase() }
+        GenreTrackSort.DurationAsc -> tracks.sortedBy { it.durationMs }
+        GenreTrackSort.DurationDesc -> tracks.sortedByDescending { it.durationMs }
+        GenreTrackSort.MostPlayed -> tracks.sortedByDescending { playCounts[it.id] ?: 0L }
+    }

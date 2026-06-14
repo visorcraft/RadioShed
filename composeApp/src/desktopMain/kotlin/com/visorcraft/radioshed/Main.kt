@@ -95,9 +95,10 @@ fun main() {
  */
 @Composable
 private fun FrameWindowScope.RepairWindowOnMonitorChange() {
-    val enabled = remember {
-        System.getProperty("os.name").orEmpty().lowercase().contains("linux")
-    }
+    val enabled =
+        remember {
+            System.getProperty("os.name").orEmpty().lowercase().contains("linux")
+        }
     if (!enabled) return
     LaunchedEffect(Unit) {
         fun screenId(): String? = window.graphicsConfiguration?.device?.iDstring
@@ -143,11 +144,13 @@ private fun FrameWindowScope.RepairWindowOnMonitorChange() {
  * in `composeApp/build.gradle.kts`.
  */
 private fun renderAppIcon(): BitmapPainter {
-    val stream = Thread.currentThread().contextClassLoader
-        .getResourceAsStream(APP_ICON_RESOURCE)
-        ?: error("$APP_ICON_RESOURCE not on the classpath")
-    val img = stream.use { ImageIO.read(it) }
-        ?: error("$APP_ICON_RESOURCE failed to decode")
+    val stream =
+        Thread.currentThread().contextClassLoader
+            .getResourceAsStream(APP_ICON_RESOURCE)
+            ?: error("$APP_ICON_RESOURCE not on the classpath")
+    val img =
+        stream.use { ImageIO.read(it) }
+            ?: error("$APP_ICON_RESOURCE failed to decode")
     return BitmapPainter(img.toComposeImageBitmap())
 }
 

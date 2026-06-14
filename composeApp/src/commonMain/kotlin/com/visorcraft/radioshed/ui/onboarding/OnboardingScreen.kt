@@ -12,15 +12,15 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material3.Button
@@ -58,7 +58,11 @@ import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
 private enum class OnboardingStep {
-    Welcome, Permissions, Folder, Scan, Done
+    Welcome,
+    Permissions,
+    Folder,
+    Scan,
+    Done,
 }
 
 /**
@@ -122,17 +126,19 @@ fun OnboardingScreen(
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
             val isCompact = maxWidth < 600.dp
             val isWide = maxWidth >= 840.dp
-            val horizontalPadding = when {
-                isWide -> 64.dp
-                isCompact -> 24.dp
-                else -> 40.dp
-            }
+            val horizontalPadding =
+                when {
+                    isWide -> 64.dp
+                    isCompact -> 24.dp
+                    else -> 40.dp
+                }
             val verticalPadding = if (isCompact) 24.dp else 40.dp
 
             Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = horizontalPadding, vertical = verticalPadding),
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = horizontalPadding, vertical = verticalPadding),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 ProgressDots(
@@ -148,26 +154,28 @@ fun OnboardingScreen(
                     when (step) {
                         OnboardingStep.Welcome -> WelcomeStep(isCompact = isCompact, isWide = isWide)
 
-                        OnboardingStep.Permissions -> PermissionsStep(
-                            isWide = isWide,
-                            granted = permissionGranted,
-                            onRequest = { permissions.requestAllFilesAccess() },
-                            onRefresh = { permissionGranted = permissions.hasAllFilesAccess() },
-                        )
+                        OnboardingStep.Permissions ->
+                            PermissionsStep(
+                                isWide = isWide,
+                                granted = permissionGranted,
+                                onRequest = { permissions.requestAllFilesAccess() },
+                                onRefresh = { permissionGranted = permissions.hasAllFilesAccess() },
+                            )
 
-                        OnboardingStep.Folder -> FolderStep(
-                            isWide = isWide,
-                            folderPath = folderPath,
-                            folderName = folderName,
-                            folderNameEdited = folderNameEdited,
-                            onFolderPathChange = { folderPath = it },
-                            onFolderNameChange = {
-                                folderName = it
-                                folderNameEdited = true
-                            },
-                            onAutoFillFolderName = { folderName = it },
-                            error = addError,
-                        )
+                        OnboardingStep.Folder ->
+                            FolderStep(
+                                isWide = isWide,
+                                folderPath = folderPath,
+                                folderName = folderName,
+                                folderNameEdited = folderNameEdited,
+                                onFolderPathChange = { folderPath = it },
+                                onFolderNameChange = {
+                                    folderName = it
+                                    folderNameEdited = true
+                                },
+                                onAutoFillFolderName = { folderName = it },
+                                error = addError,
+                            )
 
                         OnboardingStep.Scan -> ScanStep(isWide = isWide, progress = scanStatus)
 
@@ -200,51 +208,54 @@ fun OnboardingScreen(
                                 if (scanJob?.isActive == true) return@NavButtons
                                 addError = null
                                 step = OnboardingStep.Scan
-                                scanJob = scope.launch {
-                                    try {
-                                        // Re-use the existing folder row when the
-                                        // user comes back to this step after a
-                                        // failed scan (or just bounces Back +
-                                        // Scan-now). The folder.uri column has a
-                                        // UNIQUE index, so a naked .insert() would
-                                        // throw a SQLite constraint exception on
-                                        // the second attempt and trap the user in
-                                        // an unrecoverable error loop.
-                                        val existing = folderRepo.getByUri(folderPath)
-                                        val id = existing?.id ?: folderRepo.insert(
-                                            displayName = folderName.ifBlank {
-                                                folderPath.substringAfterLast('/').ifBlank { folderPath }
-                                            },
-                                            uri = folderPath,
-                                            recursive = true,
-                                        )
-                                        scanFolderId = id
-                                        scanner.scanFolder(id).collect { ev ->
-                                            // Back-press during scan calls
-                                            // scanJob.cancel() AND mutates `step`
-                                            // directly; without this guard a
-                                            // late-arriving Completed/Failed
-                                            // would override the user's Back
-                                            // and pop UI to Done.
-                                            if (!isActive) return@collect
-                                            scanStatus = ev
-                                            if (ev is ScanProgress.Completed) {
-                                                runCatching { presetSeeder.seedIfEmpty() }
-                                                step = OnboardingStep.Done
-                                            } else if (ev is ScanProgress.Failed) {
-                                                step = OnboardingStep.Done
+                                scanJob =
+                                    scope.launch {
+                                        try {
+                                            // Re-use the existing folder row when the
+                                            // user comes back to this step after a
+                                            // failed scan (or just bounces Back +
+                                            // Scan-now). The folder.uri column has a
+                                            // UNIQUE index, so a naked .insert() would
+                                            // throw a SQLite constraint exception on
+                                            // the second attempt and trap the user in
+                                            // an unrecoverable error loop.
+                                            val existing = folderRepo.getByUri(folderPath)
+                                            val id =
+                                                existing?.id ?: folderRepo.insert(
+                                                    displayName =
+                                                        folderName.ifBlank {
+                                                            folderPath.substringAfterLast('/').ifBlank { folderPath }
+                                                        },
+                                                    uri = folderPath,
+                                                    recursive = true,
+                                                )
+                                            scanFolderId = id
+                                            scanner.scanFolder(id).collect { ev ->
+                                                // Back-press during scan calls
+                                                // scanJob.cancel() AND mutates `step`
+                                                // directly; without this guard a
+                                                // late-arriving Completed/Failed
+                                                // would override the user's Back
+                                                // and pop UI to Done.
+                                                if (!isActive) return@collect
+                                                scanStatus = ev
+                                                if (ev is ScanProgress.Completed) {
+                                                    runCatching { presetSeeder.seedIfEmpty() }
+                                                    step = OnboardingStep.Done
+                                                } else if (ev is ScanProgress.Failed) {
+                                                    step = OnboardingStep.Done
+                                                }
                                             }
+                                        } catch (ce: CancellationException) {
+                                            // User pressed Back / Skip — the
+                                            // handlers already moved `step`. Don't
+                                            // surface this as an error.
+                                            throw ce
+                                        } catch (t: Throwable) {
+                                            addError = t.message ?: "Failed to add folder"
+                                            step = OnboardingStep.Folder
                                         }
-                                    } catch (ce: CancellationException) {
-                                        // User pressed Back / Skip — the
-                                        // handlers already moved `step`. Don't
-                                        // surface this as an error.
-                                        throw ce
-                                    } catch (t: Throwable) {
-                                        addError = t.message ?: "Failed to add folder"
-                                        step = OnboardingStep.Folder
-                                    }
-                                }.also { it.invokeOnCompletion { scanJob = null } }
+                                    }.also { it.invokeOnCompletion { scanJob = null } }
                             }
                             OnboardingStep.Scan -> {
                                 // No-op — auto-advances on completion.
@@ -252,40 +263,41 @@ fun OnboardingScreen(
                             OnboardingStep.Done -> onComplete()
                         }
                     },
-                    onSkip = when (step) {
-                        // Skipping permissions is fine — user can grant later from Library Settings.
-                        OnboardingStep.Permissions -> {
-                            { step = nextStep(step, initiallyGranted) }
-                        }
-                        // Skipping folder = no folders to scan, so jump straight
-                        // to Done. Going to Scan would strand the user on
-                        // "Starting…" forever because there's no scan to run.
-                        OnboardingStep.Folder -> {
-                            { step = OnboardingStep.Done }
-                        }
-                        // Welcome: returning users (re-installs, fresh
-                        // device) usually don't want a re-tour — Skip
-                        // tour drops them straight into the app. Library
-                        // Manage covers the folder add later.
-                        OnboardingStep.Welcome -> {
-                            { onComplete() }
-                        }
-                        // Scan: for users who tapped Scan now and then
-                        // realised they don't want to wait. Cancels the
-                        // in-flight scan and exits onboarding —
-                        // partial progress is harmless because the
-                        // folder row is already inserted; a future
-                        // Library Manage rescan picks up where this
-                        // one left off.
-                        OnboardingStep.Scan -> {
-                            {
-                                scanJob?.cancel()
-                                scanJob = null
-                                onComplete()
+                    onSkip =
+                        when (step) {
+                            // Skipping permissions is fine — user can grant later from Library Settings.
+                            OnboardingStep.Permissions -> {
+                                { step = nextStep(step, initiallyGranted) }
                             }
-                        }
-                        else -> null
-                    },
+                            // Skipping folder = no folders to scan, so jump straight
+                            // to Done. Going to Scan would strand the user on
+                            // "Starting…" forever because there's no scan to run.
+                            OnboardingStep.Folder -> {
+                                { step = OnboardingStep.Done }
+                            }
+                            // Welcome: returning users (re-installs, fresh
+                            // device) usually don't want a re-tour — Skip
+                            // tour drops them straight into the app. Library
+                            // Manage covers the folder add later.
+                            OnboardingStep.Welcome -> {
+                                { onComplete() }
+                            }
+                            // Scan: for users who tapped Scan now and then
+                            // realised they don't want to wait. Cancels the
+                            // in-flight scan and exits onboarding —
+                            // partial progress is harmless because the
+                            // folder row is already inserted; a future
+                            // Library Manage rescan picks up where this
+                            // one left off.
+                            OnboardingStep.Scan -> {
+                                {
+                                    scanJob?.cancel()
+                                    scanJob = null
+                                    onComplete()
+                                }
+                            }
+                            else -> null
+                        },
                 )
             }
         }
@@ -293,19 +305,26 @@ fun OnboardingScreen(
 }
 
 @Composable
-private fun ProgressDots(current: Int, total: Int) {
+private fun ProgressDots(
+    current: Int,
+    total: Int,
+) {
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         repeat(total) { i ->
             val active = i <= current
             Box(
-                modifier = Modifier
-                    .height(6.dp)
-                    .widthIn(min = 24.dp)
-                    .background(
-                        if (active) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.15f),
-                        shape = RoundedCornerShape(3.dp),
-                    ),
+                modifier =
+                    Modifier
+                        .height(6.dp)
+                        .widthIn(min = 24.dp)
+                        .background(
+                            if (active) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onBackground.copy(alpha = 0.15f)
+                            },
+                            shape = RoundedCornerShape(3.dp),
+                        ),
             )
         }
     }
@@ -360,9 +379,10 @@ private fun TwoPaneStep(
         Spacer(Modifier.width(48.dp))
         Card(
             modifier = Modifier.weight(1f).widthIn(max = 520.dp).fillMaxHeight(0.7f),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-            ),
+            colors =
+                CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                ),
         ) {
             Box(
                 modifier = Modifier.fillMaxSize().padding(32.dp),
@@ -375,7 +395,10 @@ private fun TwoPaneStep(
 }
 
 @Composable
-private fun WelcomeStep(isCompact: Boolean, isWide: Boolean) {
+private fun WelcomeStep(
+    isCompact: Boolean,
+    isWide: Boolean,
+) {
     if (isWide) {
         TwoPaneStep(
             title = "RadioShed",
@@ -411,8 +434,12 @@ private fun WelcomeStep(isCompact: Boolean, isWide: Boolean) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
             text = "RadioShed",
-            style = if (isCompact) MaterialTheme.typography.displaySmall
-                    else MaterialTheme.typography.displayMedium,
+            style =
+                if (isCompact) {
+                    MaterialTheme.typography.displaySmall
+                } else {
+                    MaterialTheme.typography.displayMedium
+                },
             color = MaterialTheme.colorScheme.primary,
             fontWeight = FontWeight.Bold,
         )
@@ -568,8 +595,9 @@ private fun FolderStep(
     error: String?,
 ) {
     var browserOpen by remember { mutableStateOf(false) }
-    val bodyCopy = "Tap Browse to pick a folder, or type a path manually if you know it. " +
-        "Most music libraries live in your Music folder."
+    val bodyCopy =
+        "Tap Browse to pick a folder, or type a path manually if you know it. " +
+            "Most music libraries live in your Music folder."
 
     if (isWide) {
         TwoPaneStep(
@@ -667,8 +695,9 @@ private fun FolderStep(
         // Windows path like `C:\Music\Foo` opens the browser at
         // `C:\Music`. Falls back to the platform-aware default music
         // folder when the user hasn't typed anything resolvable yet.
-        val startPath = com.visorcraft.radioshed.source.parentPath(folderPath)
-            .ifBlank { com.visorcraft.radioshed.source.defaultMusicFolderPath() }
+        val startPath =
+            com.visorcraft.radioshed.source.parentPath(folderPath)
+                .ifBlank { com.visorcraft.radioshed.source.defaultMusicFolderPath() }
         FolderBrowserDialog(
             initialPath = startPath,
             onSelect = { picked ->
@@ -692,22 +721,26 @@ private fun FolderStep(
 }
 
 @Composable
-private fun ScanStep(isWide: Boolean, progress: ScanProgress?) {
+private fun ScanStep(
+    isWide: Boolean,
+    progress: ScanProgress?,
+) {
     // Two-line status: a "headline" with the count + state, and a
     // "subline" with the currently-scanning filename. The previous
     // single-line form ran a long full path off the right edge on
     // narrow screens AND hid the track count behind the basename.
-    val (headline, subline) = when (val p = progress) {
-        null -> "Starting…" to null
-        is ScanProgress.Started -> "Walking the folder…" to null
-        is ScanProgress.Progress -> {
-            val count = "${p.tracksProcessed} track${if (p.tracksProcessed == 1) "" else "s"} scanned"
-            count to baseFileName(p.currentFile)
+    val (headline, subline) =
+        when (val p = progress) {
+            null -> "Starting…" to null
+            is ScanProgress.Started -> "Walking the folder…" to null
+            is ScanProgress.Progress -> {
+                val count = "${p.tracksProcessed} track${if (p.tracksProcessed == 1) "" else "s"} scanned"
+                count to baseFileName(p.currentFile)
+            }
+            is ScanProgress.Warning -> "Skipped" to p.message
+            is ScanProgress.Completed -> "Done — ${p.totalTracks} tracks" to null
+            is ScanProgress.Failed -> "Failed" to p.message
         }
-        is ScanProgress.Warning -> "Skipped" to p.message
-        is ScanProgress.Completed -> "Done — ${p.totalTracks} tracks" to null
-        is ScanProgress.Failed -> "Failed" to p.message
-    }
 
     if (isWide) {
         TwoPaneStep(
@@ -723,9 +756,10 @@ private fun ScanStep(isWide: Boolean, progress: ScanProgress?) {
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     LinearProgressIndicator(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 6.dp),
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 6.dp),
                     )
                     ScanStatusLines(
                         headline = headline,
@@ -744,10 +778,11 @@ private fun ScanStep(isWide: Boolean, progress: ScanProgress?) {
         )
         Spacer(Modifier.height(16.dp))
         LinearProgressIndicator(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 6.dp)
-                .widthIn(max = 480.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 6.dp)
+                    .widthIn(max = 480.dp),
         )
         Spacer(Modifier.height(12.dp))
         ScanStatusLines(
@@ -798,17 +833,25 @@ private fun baseFileName(path: String): String {
 }
 
 @Composable
-private fun DoneStep(isWide: Boolean, scanStatus: ScanProgress?) {
+private fun DoneStep(
+    isWide: Boolean,
+    scanStatus: ScanProgress?,
+) {
     val isFailed = scanStatus is ScanProgress.Failed
     val title = if (isFailed) "Setup incomplete" else "You're set up"
-    val titleColor = if (isFailed) MaterialTheme.colorScheme.error
-                     else MaterialTheme.colorScheme.primary
-    val body = when (scanStatus) {
-        is ScanProgress.Failed -> scanStatus.message
-        is ScanProgress.Completed ->
-            "Indexed ${scanStatus.totalTracks} tracks. Six built-in stations are seeded and ready to play; you can edit any of them or build your own."
-        else -> "Setup complete."
-    }
+    val titleColor =
+        if (isFailed) {
+            MaterialTheme.colorScheme.error
+        } else {
+            MaterialTheme.colorScheme.primary
+        }
+    val body =
+        when (scanStatus) {
+            is ScanProgress.Failed -> scanStatus.message
+            is ScanProgress.Completed ->
+                "Indexed ${scanStatus.totalTracks} tracks. Six built-in stations are seeded and ready to play; you can edit any of them or build your own."
+            else -> "Setup complete."
+        }
 
     if (isFailed) {
         // Failed setups skip the tour — keep the screen focused on the
@@ -861,8 +904,12 @@ private fun DoneStep(isWide: Boolean, scanStatus: ScanProgress?) {
     // single-line "tap Open RadioShed" message with feature-discovery
     // copy that surfaces the three things newcomers ask about most:
     // built-in stations, Drive Mode, and the AI DJ teaser.
-    val tourTitle = if (isWide) MaterialTheme.typography.displayMedium
-                    else MaterialTheme.typography.headlineSmall
+    val tourTitle =
+        if (isWide) {
+            MaterialTheme.typography.displayMedium
+        } else {
+            MaterialTheme.typography.headlineSmall
+        }
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(title, style = tourTitle, color = titleColor)
         Spacer(Modifier.height(12.dp))
@@ -877,23 +924,26 @@ private fun DoneStep(isWide: Boolean, scanStatus: ScanProgress?) {
         TourCard(
             icon = Icons.Filled.LibraryMusic,
             title = "Stations, not playlists",
-            body = "Each tile on the Home grid is a generative station — Latest Hits, " +
-                "Top Rated, Forgotten Gems, or one you build yourself. Tap to play, " +
-                "long-press to edit.",
+            body =
+                "Each tile on the Home grid is a generative station — Latest Hits, " +
+                    "Top Rated, Forgotten Gems, or one you build yourself. Tap to play, " +
+                    "long-press to edit.",
         )
         Spacer(Modifier.height(10.dp))
         TourCard(
             icon = Icons.Filled.DirectionsCar,
             title = "Drive Mode",
-            body = "Settings → Accessibility → Drive Mode bumps every transport button " +
-                "by 25% so they're glance-safe in the car. Try it before your next drive.",
+            body =
+                "Settings → Accessibility → Drive Mode bumps every transport button " +
+                    "by 25% so they're glance-safe in the car. Try it before your next drive.",
         )
         Spacer(Modifier.height(10.dp))
         TourCard(
             icon = Icons.Filled.CloudOff,
             title = "AI DJ — coming later",
-            body = "Optional radio-style voice between tracks. Not in this build; once " +
-                "it ships you'll find it in Settings under each station's voice config.",
+            body =
+                "Optional radio-style voice between tracks. Not in this build; once " +
+                    "it ships you'll find it in Settings under each station's voice config.",
         )
     }
 }
@@ -907,9 +957,10 @@ private fun TourCard(
     Card(
         modifier = Modifier.fillMaxWidth().widthIn(max = 560.dp),
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
-        ),
+        colors =
+            CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+            ),
     ) {
         Row(
             modifier = Modifier.padding(14.dp),
@@ -958,10 +1009,11 @@ private fun NavButtons(
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             onSkip?.let {
-                val label = when (step) {
-                    OnboardingStep.Welcome, OnboardingStep.Scan -> "Skip tour"
-                    else -> "Skip"
-                }
+                val label =
+                    when (step) {
+                        OnboardingStep.Welcome, OnboardingStep.Scan -> "Skip tour"
+                        else -> "Skip"
+                    }
                 TextButton(onClick = it) { Text(label) }
             }
             Button(onClick = onNext, enabled = canProceed) {
@@ -984,30 +1036,41 @@ private fun canProceed(
     permissionGranted: Boolean,
     folderPath: String,
     scanStatus: ScanProgress?,
-): Boolean = when (step) {
-    OnboardingStep.Welcome -> true
-    // Permissions step: the primary "Next" path is gated on the
-    // user actually granting permission. The Skip button (separate)
-    // is the explicit escape hatch that proceeds without it. Before
-    // this gate, Next and Skip were functionally identical, which
-    // was confusing and let users blow past the permission ask
-    // without realising it was meaningful.
-    OnboardingStep.Permissions -> permissionGranted
-    OnboardingStep.Folder -> folderPath.isNotBlank()
-    OnboardingStep.Scan -> false
-    OnboardingStep.Done -> true
-}
+): Boolean =
+    when (step) {
+        OnboardingStep.Welcome -> true
+        // Permissions step: the primary "Next" path is gated on the
+        // user actually granting permission. The Skip button (separate)
+        // is the explicit escape hatch that proceeds without it. Before
+        // this gate, Next and Skip were functionally identical, which
+        // was confusing and let users blow past the permission ask
+        // without realising it was meaningful.
+        OnboardingStep.Permissions -> permissionGranted
+        OnboardingStep.Folder -> folderPath.isNotBlank()
+        OnboardingStep.Scan -> false
+        OnboardingStep.Done -> true
+    }
 
-private fun nextStep(current: OnboardingStep, skipPermissions: Boolean): OnboardingStep {
+private fun nextStep(
+    current: OnboardingStep,
+    skipPermissions: Boolean,
+): OnboardingStep {
     val candidate = OnboardingStep.entries.getOrNull(current.ordinal + 1) ?: current
     return if (candidate == OnboardingStep.Permissions && skipPermissions) {
         OnboardingStep.entries.getOrNull(candidate.ordinal + 1) ?: candidate
-    } else candidate
+    } else {
+        candidate
+    }
 }
 
-private fun previousStep(current: OnboardingStep, skipPermissions: Boolean): OnboardingStep {
+private fun previousStep(
+    current: OnboardingStep,
+    skipPermissions: Boolean,
+): OnboardingStep {
     val candidate = OnboardingStep.entries.getOrNull(current.ordinal - 1) ?: current
     return if (candidate == OnboardingStep.Permissions && skipPermissions) {
         OnboardingStep.entries.getOrNull(candidate.ordinal - 1) ?: candidate
-    } else candidate
+    } else {
+        candidate
+    }
 }

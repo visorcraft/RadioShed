@@ -2,18 +2,13 @@ package com.visorcraft.radioshed.ui.player
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowDownward
-import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -25,6 +20,10 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -47,6 +46,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -123,9 +123,13 @@ fun LyricsScreen(
         // accidental matches in the new song.
         findQuery = ""
         findBarOpen = false
-        val id = nowPlaying?.trackId ?: run {
-            lyrics = null; notFound = false; loading = false; return@LaunchedEffect
-        }
+        val id =
+            nowPlaying?.trackId ?: run {
+                lyrics = null
+                notFound = false
+                loading = false
+                return@LaunchedEffect
+            }
         loading = true
         notFound = false
         val resolved = lyricsService.resolve(id)
@@ -159,24 +163,27 @@ fun LyricsScreen(
                         // sidecar, "lrclib" means the network fetch.
                         val artistName = nowPlaying?.artist
                         val sourceLabel = lyrics?.let { sourceLabelFor(it.source) }
-                        val subtitle = listOfNotNull(artistName, sourceLabel)
-                            .joinToString(" · ")
+                        val subtitle =
+                            listOfNotNull(artistName, sourceLabel)
+                                .joinToString(" · ")
                         if (subtitle.isNotBlank()) {
                             // Tap-to-copy the subtitle so users can
                             // share "{artist} · from LRClib" or
                             // similar attribution into a chat or
                             // bug report. Single-tap is fine here —
                             // attribution is purely informational.
-                            val attributionClipboard = com.visorcraft
-                                .radioshed.ui.util.rememberCopyToClipboard()
+                            val attributionClipboard =
+                                com.visorcraft
+                                    .radioshed.ui.util.rememberCopyToClipboard()
                             Text(
                                 subtitle,
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                                 maxLines = 1,
-                                modifier = Modifier.clickable {
-                                    attributionClipboard(subtitle)
-                                },
+                                modifier =
+                                    Modifier.clickable {
+                                        attributionClipboard(subtitle)
+                                    },
                             )
                         }
                     }
@@ -222,11 +229,12 @@ fun LyricsScreen(
                             // users want the words, not the timestamps.
                             // If both formats are missing it's an
                             // instrumental and we already returned above.
-                            val text = l.plain
-                                ?: l.synced
-                                    ?.joinToString("\n") { it.text }
-                                    ?.takeIf { it.isNotBlank() }
-                                ?: ""
+                            val text =
+                                l.plain
+                                    ?: l.synced
+                                        ?.joinToString("\n") { it.text }
+                                        ?.takeIf { it.isNotBlank() }
+                                    ?: ""
                             if (text.isNotBlank()) {
                                 copyToClipboard(text)
                             }
@@ -255,9 +263,10 @@ fun LyricsScreen(
                         }
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                ),
+                colors =
+                    TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                    ),
             )
         },
         containerColor = MaterialTheme.colorScheme.background,
@@ -272,60 +281,71 @@ fun LyricsScreen(
                     singleLine = true,
                     leadingIcon = {
                         androidx.compose.material3.Icon(
-                            Icons.Filled.Search, contentDescription = null,
+                            Icons.Filled.Search,
+                            contentDescription = null,
                         )
                     },
-                    trailingIcon = if (findQuery.isNotEmpty()) {
-                        {
-                            com.visorcraft.radioshed.ui.util.TooltipIconButton(
-                                tooltip = "Clear",
-                                onClick = { findQuery = "" },
-                            ) {
-                                androidx.compose.material3.Icon(
-                                    Icons.Filled.Close, contentDescription = "Clear",
-                                )
+                    trailingIcon =
+                        if (findQuery.isNotEmpty()) {
+                            {
+                                com.visorcraft.radioshed.ui.util.TooltipIconButton(
+                                    tooltip = "Clear",
+                                    onClick = { findQuery = "" },
+                                ) {
+                                    androidx.compose.material3.Icon(
+                                        Icons.Filled.Close,
+                                        contentDescription = "Clear",
+                                    )
+                                }
                             }
-                        }
-                    } else null,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                        } else {
+                            null
+                        },
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 4.dp),
                 )
             }
             when {
-            loading -> CenteredLoading(modifier = Modifier.fillMaxSize())
-            l != null && l.instrumental -> InstrumentalState(
-                modifier = Modifier.fillMaxSize(),
-            )
-            l != null && !l.synced.isNullOrEmpty() -> SyncedLyrics(
-                lines = l.synced,
-                positionMs = position.currentMs,
-                onSeek = { ms -> audioEngine.seekTo(ms) },
-                fontScale = fontScale,
-                syncOffsetMs = syncOffsetMs,
-                onCopyLine = { copyToClipboard(it) },
-                findQuery = findQuery,
-                modifier = Modifier.fillMaxSize(),
-            )
-            l != null && !l.plain.isNullOrBlank() -> PlainLyrics(
-                text = l.plain,
-                fontScale = fontScale,
-                onCopyLine = { copyToClipboard(it) },
-                modifier = Modifier.fillMaxSize(),
-            )
-            notFound -> NotFoundState(
-                modifier = Modifier.fillMaxSize(),
-                onEditSearch = { editSearchOpen = true },
-            )
-            else -> Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    "Pick a track to see its lyrics.",
-                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
-                )
-            }
+                loading -> CenteredLoading(modifier = Modifier.fillMaxSize())
+                l != null && l.instrumental ->
+                    InstrumentalState(
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                l != null && !l.synced.isNullOrEmpty() ->
+                    SyncedLyrics(
+                        lines = l.synced,
+                        positionMs = position.currentMs,
+                        onSeek = { ms -> audioEngine.seekTo(ms) },
+                        fontScale = fontScale,
+                        syncOffsetMs = syncOffsetMs,
+                        onCopyLine = { copyToClipboard(it) },
+                        findQuery = findQuery,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                l != null && !l.plain.isNullOrBlank() ->
+                    PlainLyrics(
+                        text = l.plain,
+                        fontScale = fontScale,
+                        onCopyLine = { copyToClipboard(it) },
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                notFound ->
+                    NotFoundState(
+                        modifier = Modifier.fillMaxSize(),
+                        onEditSearch = { editSearchOpen = true },
+                    )
+                else ->
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            "Pick a track to see its lyrics.",
+                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                        )
+                    }
             }
         }
     }
@@ -378,10 +398,11 @@ fun LyricsScreen(
     }
 
     if (editSearchOpen) {
-        val track = nowPlaying ?: run {
-            editSearchOpen = false
-            return
-        }
+        val track =
+            nowPlaying ?: run {
+                editSearchOpen = false
+                return
+            }
         EditLyricsSearchDialog(
             initialArtist = track.artist.orEmpty(),
             initialTitle = track.title,
@@ -442,9 +463,10 @@ private fun EditLyricsSearchDialog(
                     label = { Text("Artist") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                        imeAction = androidx.compose.ui.text.input.ImeAction.Next,
-                    ),
+                    keyboardOptions =
+                        androidx.compose.foundation.text.KeyboardOptions(
+                            imeAction = androidx.compose.ui.text.input.ImeAction.Next,
+                        ),
                 )
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
@@ -453,12 +475,14 @@ private fun EditLyricsSearchDialog(
                     label = { Text("Title") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                        imeAction = androidx.compose.ui.text.input.ImeAction.Search,
-                    ),
-                    keyboardActions = androidx.compose.foundation.text.KeyboardActions(
-                        onSearch = { confirmSearch() },
-                    ),
+                    keyboardOptions =
+                        androidx.compose.foundation.text.KeyboardOptions(
+                            imeAction = androidx.compose.ui.text.input.ImeAction.Search,
+                        ),
+                    keyboardActions =
+                        androidx.compose.foundation.text.KeyboardActions(
+                            onSearch = { confirmSearch() },
+                        ),
                 )
             }
         },
@@ -492,14 +516,15 @@ private fun SyncedLyrics(
     // (we subtract from positionMs when matching), negative = lyrics
     // show earlier. Linear scan is fine — typical songs have <200
     // lines and this runs at ~2 Hz with the position flow.
-    val activeIndex = remember(lines, positionMs, syncOffsetMs) {
-        val adjusted = (positionMs - syncOffsetMs).coerceAtLeast(0L)
-        var idx = -1
-        for (i in lines.indices) {
-            if (lines[i].timeMs <= adjusted) idx = i else break
+    val activeIndex =
+        remember(lines, positionMs, syncOffsetMs) {
+            val adjusted = (positionMs - syncOffsetMs).coerceAtLeast(0L)
+            var idx = -1
+            for (i in lines.indices) {
+                if (lines[i].timeMs <= adjusted) idx = i else break
+            }
+            idx
         }
-        idx
-    }
 
     val listState = rememberLazyListState()
     // Distinguishes user-driven scrolls from our own
@@ -522,8 +547,9 @@ private fun SyncedLyrics(
     // off layoutInfo, which is cheap.
     val activeOffscreen by remember(activeIndex) {
         derivedStateOf {
-            if (activeIndex < 0) false
-            else {
+            if (activeIndex < 0) {
+                false
+            } else {
                 val info = listState.layoutInfo.visibleItemsInfo
                 info.none { it.index == activeIndex }
             }
@@ -557,12 +583,16 @@ private fun SyncedLyrics(
     // Compute matching line indices once per (lines, query) — used
     // both to drive the scroll-to-first-match LaunchedEffect and to
     // tint matching rows so the user can see the rest at a glance.
-    val matchingIndices = remember(lines, findQuery) {
-        if (findQuery.isBlank()) emptyList()
-        else lines.mapIndexedNotNull { idx, l ->
-            if (l.text.contains(findQuery, ignoreCase = true)) idx else null
+    val matchingIndices =
+        remember(lines, findQuery) {
+            if (findQuery.isBlank()) {
+                emptyList()
+            } else {
+                lines.mapIndexedNotNull { idx, l ->
+                    if (l.text.contains(findQuery, ignoreCase = true)) idx else null
+                }
+            }
         }
-    }
     LaunchedEffect(matchingIndices.firstOrNull()) {
         val first = matchingIndices.firstOrNull() ?: return@LaunchedEffect
         animatingProgrammatically = true
@@ -589,32 +619,42 @@ private fun SyncedLyrics(
                 // people instinctively tap a lyric line they want to
                 // start from. Lines with no text (instrumental gaps in
                 // the LRC) still seek; that's the right behavior.
-                val baseStyle = if (isActive) MaterialTheme.typography.headlineSmall
-                                else MaterialTheme.typography.titleMedium
-                val rowMod = Modifier
-                    .fillMaxWidth()
-                    .let { mod ->
-                        if (isFindMatch) mod.background(
-                            MaterialTheme.colorScheme.tertiary.copy(alpha = 0.15f),
-                            shape = androidx.compose.foundation.shape.RoundedCornerShape(6.dp),
-                        ) else mod
+                val baseStyle =
+                    if (isActive) {
+                        MaterialTheme.typography.headlineSmall
+                    } else {
+                        MaterialTheme.typography.titleMedium
                     }
-                    .combinedClickable(
-                        onClick = { onSeek(line.timeMs) },
-                        onLongClick = {
-                            if (line.text.isNotBlank()) onCopyLine(line.text)
-                        },
-                    )
-                    .padding(vertical = 4.dp, horizontal = if (isFindMatch) 6.dp else 0.dp)
+                val rowMod =
+                    Modifier
+                        .fillMaxWidth()
+                        .let { mod ->
+                            if (isFindMatch) {
+                                mod.background(
+                                    MaterialTheme.colorScheme.tertiary.copy(alpha = 0.15f),
+                                    shape = androidx.compose.foundation.shape.RoundedCornerShape(6.dp),
+                                )
+                            } else {
+                                mod
+                            }
+                        }
+                        .combinedClickable(
+                            onClick = { onSeek(line.timeMs) },
+                            onLongClick = {
+                                if (line.text.isNotBlank()) onCopyLine(line.text)
+                            },
+                        )
+                        .padding(vertical = 4.dp, horizontal = if (isFindMatch) 6.dp else 0.dp)
                 Text(
-                    text = line.text.ifBlank { " " },  // preserve breath gaps
+                    text = line.text.ifBlank { " " }, // preserve breath gaps
                     style = baseStyle.copy(fontSize = baseStyle.fontSize * fontScale),
                     fontWeight = if (isActive) FontWeight.Bold else FontWeight.Medium,
-                    color = when {
-                        isActive -> MaterialTheme.colorScheme.primary
-                        isPast -> MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
-                        else -> MaterialTheme.colorScheme.onBackground.copy(alpha = 0.85f)
-                    },
+                    color =
+                        when {
+                            isActive -> MaterialTheme.colorScheme.primary
+                            isPast -> MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
+                            else -> MaterialTheme.colorScheme.onBackground.copy(alpha = 0.85f)
+                        },
                     modifier = rowMod,
                     textAlign = TextAlign.Start,
                 )
@@ -628,28 +668,29 @@ private fun SyncedLyrics(
         // list way past the song's start to read ahead).
         if (activeOffscreen && activeIndex >= 0) {
             Box(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 16.dp)
-                    .size(56.dp)
-                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(28.dp))
-                    .background(MaterialTheme.colorScheme.primary)
-                    .combinedClickable(
-                        onClick = {
-                            lastUserScrollAt = 0L
-                            coroutineScope.launch {
-                                runCatching {
-                                    listState.animateScrollToItem(activeIndex, -120)
+                modifier =
+                    Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 16.dp)
+                        .size(56.dp)
+                        .clip(androidx.compose.foundation.shape.RoundedCornerShape(28.dp))
+                        .background(MaterialTheme.colorScheme.primary)
+                        .combinedClickable(
+                            onClick = {
+                                lastUserScrollAt = 0L
+                                coroutineScope.launch {
+                                    runCatching {
+                                        listState.animateScrollToItem(activeIndex, -120)
+                                    }
                                 }
-                            }
-                        },
-                        onLongClick = {
-                            lastUserScrollAt = nowMillis()
-                            coroutineScope.launch {
-                                runCatching { listState.animateScrollToItem(0) }
-                            }
-                        },
-                    ),
+                            },
+                            onLongClick = {
+                                lastUserScrollAt = nowMillis()
+                                coroutineScope.launch {
+                                    runCatching { listState.animateScrollToItem(0) }
+                                }
+                            },
+                        ),
                 contentAlignment = Alignment.Center,
             ) {
                 androidx.compose.material3.Icon(
@@ -677,18 +718,23 @@ private fun PlainLyrics(
     // visible breath gaps but don't get a copy handler.
     val lines = remember(text) { text.split('\n') }
     Column(
-        modifier = modifier
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 24.dp, vertical = 24.dp),
+        modifier =
+            modifier
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp, vertical = 24.dp),
     ) {
         val base = MaterialTheme.typography.bodyLarge
         lines.forEach { line ->
             val rendered = line.ifBlank { " " }
-            val rowMod = if (line.isBlank()) Modifier.fillMaxWidth()
-                         else Modifier.fillMaxWidth().combinedClickable(
-                             onClick = {},
-                             onLongClick = { onCopyLine(line) },
-                         )
+            val rowMod =
+                if (line.isBlank()) {
+                    Modifier.fillMaxWidth()
+                } else {
+                    Modifier.fillMaxWidth().combinedClickable(
+                        onClick = {},
+                        onLongClick = { onCopyLine(line) },
+                    )
+                }
             Text(
                 text = rendered,
                 style = base.copy(fontSize = base.fontSize * fontScale),
@@ -730,16 +776,20 @@ private fun InstrumentalState(modifier: Modifier = Modifier) {
  * label. Falls back to the raw value for anything we don't know
  * about so future fetcher additions surface visibly.
  */
-private fun sourceLabelFor(source: String): String? = when {
-    source.isBlank() -> null
-    source == "local" -> "from local .lrc"
-    source == "embedded" -> "from file tags"
-    source.startsWith("lrclib") -> "from LRClib"
-    else -> "from $source"
-}
+private fun sourceLabelFor(source: String): String? =
+    when {
+        source.isBlank() -> null
+        source == "local" -> "from local .lrc"
+        source == "embedded" -> "from file tags"
+        source.startsWith("lrclib") -> "from LRClib"
+        else -> "from $source"
+    }
 
 @Composable
-private fun NotFoundState(modifier: Modifier = Modifier, onEditSearch: () -> Unit) {
+private fun NotFoundState(
+    modifier: Modifier = Modifier,
+    onEditSearch: () -> Unit,
+) {
     Box(modifier = modifier, contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(

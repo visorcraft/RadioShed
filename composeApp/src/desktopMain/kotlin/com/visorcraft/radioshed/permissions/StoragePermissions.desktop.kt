@@ -7,5 +7,6 @@ package com.visorcraft.radioshed.permissions
  */
 actual class StoragePermissions {
     actual fun hasAllFilesAccess(): Boolean = true
+
     actual fun requestAllFilesAccess() { /* no-op on desktop */ }
 }

@@ -5,6 +5,7 @@ import com.visorcraft.radioshed.domain.ConnectivityPolicy
 
 interface ConnectivityChecker {
     fun isOnline(): Boolean
+
     fun isUnmetered(): Boolean
 }
 
@@ -16,6 +17,7 @@ interface ConnectivityChecker {
  */
 interface PolicySettingsSource {
     fun getConnectivityPolicy(): ConnectivityPolicy
+
     fun getServicePolicyOverride(service: NetworkService): ServicePolicyOverride
 }
 
@@ -38,30 +40,35 @@ class NetworkPolicyGate(
      */
     constructor(settingsStore: SettingsStore, checker: ConnectivityChecker) :
         this(adaptSettings(settingsStore), checker)
-    fun allowAutomaticFetch(): Boolean = allow(
-        policy = settings.getConnectivityPolicy(),
-        userInitiated = false,
-    )
 
-    fun allowUserInitiatedFetch(): Boolean = allow(
-        policy = settings.getConnectivityPolicy(),
-        userInitiated = true,
-    )
+    fun allowAutomaticFetch(): Boolean =
+        allow(
+            policy = settings.getConnectivityPolicy(),
+            userInitiated = false,
+        )
+
+    fun allowUserInitiatedFetch(): Boolean =
+        allow(
+            policy = settings.getConnectivityPolicy(),
+            userInitiated = true,
+        )
 
     /**
      * Service-aware check. Resolves the per-service override (if
      * the user set one) against the global policy via
      * [resolveEffectivePolicy], then evaluates connectivity.
      */
-    fun allowAutomaticFetch(service: NetworkService): Boolean = allow(
-        policy = resolveEffectivePolicy(service),
-        userInitiated = false,
-    )
+    fun allowAutomaticFetch(service: NetworkService): Boolean =
+        allow(
+            policy = resolveEffectivePolicy(service),
+            userInitiated = false,
+        )
 
-    fun allowUserInitiatedFetch(service: NetworkService): Boolean = allow(
-        policy = resolveEffectivePolicy(service),
-        userInitiated = true,
-    )
+    fun allowUserInitiatedFetch(service: NetworkService): Boolean =
+        allow(
+            policy = resolveEffectivePolicy(service),
+            userInitiated = true,
+        )
 
     /**
      * The effective policy for [service] after applying the per-
@@ -78,14 +85,18 @@ class NetworkPolicyGate(
         }
     }
 
-    private fun allow(policy: ConnectivityPolicy, userInitiated: Boolean): Boolean = when (policy) {
-        ConnectivityPolicy.Always -> checker.isOnline()
-        ConnectivityPolicy.WiFiOnly -> checker.isOnline() && checker.isUnmetered()
-        ConnectivityPolicy.Never -> false
-        // Manual blocks background/automatic fetches but the user
-        // explicitly tapping a "fetch now" affordance is allowed.
-        ConnectivityPolicy.Manual -> userInitiated && checker.isOnline()
-    }
+    private fun allow(
+        policy: ConnectivityPolicy,
+        userInitiated: Boolean,
+    ): Boolean =
+        when (policy) {
+            ConnectivityPolicy.Always -> checker.isOnline()
+            ConnectivityPolicy.WiFiOnly -> checker.isOnline() && checker.isUnmetered()
+            ConnectivityPolicy.Never -> false
+            // Manual blocks background/automatic fetches but the user
+            // explicitly tapping a "fetch now" affordance is allowed.
+            ConnectivityPolicy.Manual -> userInitiated && checker.isOnline()
+        }
 }
 
 /**
@@ -117,8 +128,7 @@ enum class ServicePolicyOverride {
     ;
 
     companion object {
-        fun fromStorage(value: String): ServicePolicyOverride =
-            entries.firstOrNull { it.name == value } ?: Inherit
+        fun fromStorage(value: String): ServicePolicyOverride = entries.firstOrNull { it.name == value } ?: Inherit
     }
 }
 
@@ -130,9 +140,8 @@ enum class ServicePolicyOverride {
  */
 private fun adaptSettings(store: SettingsStore): PolicySettingsSource =
     object : PolicySettingsSource {
-        override fun getConnectivityPolicy(): ConnectivityPolicy =
-            store.getConnectivityPolicy()
-        override fun getServicePolicyOverride(
-            service: NetworkService,
-        ): ServicePolicyOverride = store.getServicePolicyOverride(service)
+        override fun getConnectivityPolicy(): ConnectivityPolicy = store.getConnectivityPolicy()
+
+        override fun getServicePolicyOverride(service: NetworkService): ServicePolicyOverride =
+            store.getServicePolicyOverride(service)
     }

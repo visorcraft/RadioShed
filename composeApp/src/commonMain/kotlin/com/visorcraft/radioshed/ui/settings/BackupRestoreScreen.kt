@@ -26,12 +26,10 @@ import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import com.visorcraft.radioshed.ui.util.TooltipIconButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -55,6 +53,7 @@ import com.visorcraft.radioshed.data.nowMillis
 import com.visorcraft.radioshed.source.BackupFile
 import com.visorcraft.radioshed.source.BackupService
 import com.visorcraft.radioshed.source.BackupSharer
+import com.visorcraft.radioshed.ui.util.TooltipIconButton
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
@@ -170,9 +169,10 @@ fun BackupRestoreScreen(
                         }
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                ),
+                colors =
+                    TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                    ),
             )
         },
         containerColor = MaterialTheme.colorScheme.background,
@@ -192,13 +192,14 @@ fun BackupRestoreScreen(
                         scope.launch {
                             working = true
                             val result = backupService.export()
-                            status = when (result) {
-                                is BackupService.ExportResult.Saved ->
-                                    "Saved ${result.stationCount} stations, " +
-                                        "${result.playlistCount} playlists, " +
-                                        "${result.ratingCount} ratings."
-                                is BackupService.ExportResult.Failed -> "Export failed: ${result.reason}"
-                            }
+                            status =
+                                when (result) {
+                                    is BackupService.ExportResult.Saved ->
+                                        "Saved ${result.stationCount} stations, " +
+                                            "${result.playlistCount} playlists, " +
+                                            "${result.ratingCount} ratings."
+                                    is BackupService.ExportResult.Failed -> "Export failed: ${result.reason}"
+                                }
                             reload()
                             working = false
                         }
@@ -215,28 +216,31 @@ fun BackupRestoreScreen(
                 // Reuses the same restore logic as in-app backups; the
                 // bytes are read from the picked content URI directly
                 // rather than via our private storage layer.
-                val pickFile = com.visorcraft.radioshed.ui.util.rememberFilePicker { bytes ->
-                    scope.launch {
-                        working = true
-                        val result = backupService.restoreFromBytes(bytes)
-                        status = when (result) {
-                            is BackupService.RestoreResult.Done -> buildString {
-                                append("Imported: ")
-                                append("${result.stationsAdded} stations, ")
-                                append("${result.playlistsAdded} playlists, ")
-                                append("${result.ratingsApplied} ratings")
-                                if (result.likedApplied > 0) append(", ${result.likedApplied} liked")
-                                if (result.settingsApplied > 0) append(", ${result.settingsApplied} settings")
-                                if (result.eqPresetsApplied > 0) append(", ${result.eqPresetsApplied} EQ presets")
-                                val skipped = result.ratingsSkipped + result.likedSkipped
-                                if (skipped > 0) append(" ($skipped skipped — tracks not in library)")
-                            }
-                            is BackupService.RestoreResult.Failed -> "Import failed: ${result.reason}"
+                val pickFile =
+                    com.visorcraft.radioshed.ui.util.rememberFilePicker { bytes ->
+                        scope.launch {
+                            working = true
+                            val result = backupService.restoreFromBytes(bytes)
+                            status =
+                                when (result) {
+                                    is BackupService.RestoreResult.Done ->
+                                        buildString {
+                                            append("Imported: ")
+                                            append("${result.stationsAdded} stations, ")
+                                            append("${result.playlistsAdded} playlists, ")
+                                            append("${result.ratingsApplied} ratings")
+                                            if (result.likedApplied > 0) append(", ${result.likedApplied} liked")
+                                            if (result.settingsApplied > 0) append(", ${result.settingsApplied} settings")
+                                            if (result.eqPresetsApplied > 0) append(", ${result.eqPresetsApplied} EQ presets")
+                                            val skipped = result.ratingsSkipped + result.likedSkipped
+                                            if (skipped > 0) append(" ($skipped skipped — tracks not in library)")
+                                        }
+                                    is BackupService.RestoreResult.Failed -> "Import failed: ${result.reason}"
+                                }
+                            reload()
+                            working = false
                         }
-                        reload()
-                        working = false
                     }
-                }
                 OutlinedButton(
                     // `*/*` lets the picker show both `.json` (legacy)
                     // and `.rsbak` (zipped, with artwork). Restricting to
@@ -285,14 +289,15 @@ fun BackupRestoreScreen(
                     )
                 }
             } else {
-                val sortedFiles = remember(files, sortMode) {
-                    when (sortMode) {
-                        BackupSortMode.NewestFirst -> files.sortedByDescending { it.createdAt }
-                        BackupSortMode.OldestFirst -> files.sortedBy { it.createdAt }
-                        BackupSortMode.LargestFirst -> files.sortedByDescending { it.sizeBytes }
-                        BackupSortMode.SmallestFirst -> files.sortedBy { it.sizeBytes }
+                val sortedFiles =
+                    remember(files, sortMode) {
+                        when (sortMode) {
+                            BackupSortMode.NewestFirst -> files.sortedByDescending { it.createdAt }
+                            BackupSortMode.OldestFirst -> files.sortedBy { it.createdAt }
+                            BackupSortMode.LargestFirst -> files.sortedByDescending { it.sizeBytes }
+                            BackupSortMode.SmallestFirst -> files.sortedBy { it.sizeBytes }
+                        }
                     }
-                }
                 LazyColumn(
                     contentPadding = PaddingValues(vertical = 4.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -343,14 +348,19 @@ fun BackupRestoreScreen(
                             style = MaterialTheme.typography.bodyMedium,
                         )
                         Spacer(Modifier.height(6.dp))
-                        val parts = buildList {
-                            add("${p.stationCount} station${if (p.stationCount == 1) "" else "s"}")
-                            add("${p.playlistCount} playlist${if (p.playlistCount == 1) "" else "s"}")
-                            add("${p.ratingCount} rating${if (p.ratingCount == 1) "" else "s"}")
-                            if (p.likedCount > 0) add("${p.likedCount} liked")
-                            if (p.settingsCount > 0) add("${p.settingsCount} settings")
-                            if (p.eqPresetCount > 0) add("${p.eqPresetCount} EQ preset${if (p.eqPresetCount == 1) "" else "s"}")
-                        }
+                        val parts =
+                            buildList {
+                                add("${p.stationCount} station${if (p.stationCount == 1) "" else "s"}")
+                                add("${p.playlistCount} playlist${if (p.playlistCount == 1) "" else "s"}")
+                                add("${p.ratingCount} rating${if (p.ratingCount == 1) "" else "s"}")
+                                if (p.likedCount > 0) add("${p.likedCount} liked")
+                                if (p.settingsCount > 0) add("${p.settingsCount} settings")
+                                if (p.eqPresetCount > 0) {
+                                    add(
+                                        "${p.eqPresetCount} EQ preset${if (p.eqPresetCount == 1) "" else "s"}",
+                                    )
+                                }
+                            }
                         Text(
                             text = parts.joinToString(" · "),
                             style = MaterialTheme.typography.bodySmall,
@@ -398,48 +408,50 @@ fun BackupRestoreScreen(
                 TextButton(
                     enabled = previewLoaded,
                     onClick = {
-                    val toRestore = file
-                    restoreConfirm = null
-                    scope.launch {
-                        working = true
-                        val result = backupService.restore(toRestore.uri)
-                        status = when (result) {
-                            is BackupService.RestoreResult.Done -> buildString {
-                                append("Restored: ")
-                                append("${result.stationsAdded} stations, ")
-                                append("${result.playlistsAdded} playlists, ")
-                                append("${result.ratingsApplied} ratings")
-                                if (result.likedApplied > 0) {
-                                    append(", ${result.likedApplied} liked")
+                        val toRestore = file
+                        restoreConfirm = null
+                        scope.launch {
+                            working = true
+                            val result = backupService.restore(toRestore.uri)
+                            status =
+                                when (result) {
+                                    is BackupService.RestoreResult.Done ->
+                                        buildString {
+                                            append("Restored: ")
+                                            append("${result.stationsAdded} stations, ")
+                                            append("${result.playlistsAdded} playlists, ")
+                                            append("${result.ratingsApplied} ratings")
+                                            if (result.likedApplied > 0) {
+                                                append(", ${result.likedApplied} liked")
+                                            }
+                                            if (result.settingsApplied > 0) {
+                                                append(", ${result.settingsApplied} settings")
+                                            }
+                                            if (result.eqPresetsApplied > 0) {
+                                                append(", ${result.eqPresetsApplied} EQ presets")
+                                            }
+                                            val totalSkipped = result.ratingsSkipped + result.likedSkipped
+                                            if (totalSkipped > 0) {
+                                                append(" ($totalSkipped skipped — tracks not in library)")
+                                            }
+                                            if (result.errors > 0) {
+                                                append(" — ${result.errors} row")
+                                                if (result.errors != 1) append("s")
+                                                append(" failed during import")
+                                            }
+                                        }
+                                    is BackupService.RestoreResult.Failed -> "Restore failed: ${result.reason}"
                                 }
-                                if (result.settingsApplied > 0) {
-                                    append(", ${result.settingsApplied} settings")
-                                }
-                                if (result.eqPresetsApplied > 0) {
-                                    append(", ${result.eqPresetsApplied} EQ presets")
-                                }
-                                val totalSkipped = result.ratingsSkipped + result.likedSkipped
-                                if (totalSkipped > 0) {
-                                    append(" ($totalSkipped skipped — tracks not in library)")
-                                }
-                                if (result.errors > 0) {
-                                    append(" — ${result.errors} row")
-                                    if (result.errors != 1) append("s")
-                                    append(" failed during import")
-                                }
-                            }
-                            is BackupService.RestoreResult.Failed -> "Restore failed: ${result.reason}"
+                            working = false
                         }
-                        working = false
-                    }
-                }) { Text("Restore") }
+                    },
+                ) { Text("Restore") }
             },
             dismissButton = {
                 TextButton(onClick = { restoreConfirm = null }) { Text("Cancel") }
             },
         )
     }
-
 
     deleteConfirm?.let { file ->
         AlertDialog(
@@ -488,13 +500,14 @@ fun BackupRestoreScreen(
                             runCatching { backupService.delete(f.uri) }
                                 .onFailure { failed += 1 }
                         }
-                        status = if (failed == 0) {
-                            "Deleted ${toDelete.size} backup file" +
-                                (if (toDelete.size == 1) "" else "s") + "."
-                        } else {
-                            "Deleted ${toDelete.size - failed} of " +
-                                "${toDelete.size} (${failed} failed)."
-                        }
+                        status =
+                            if (failed == 0) {
+                                "Deleted ${toDelete.size} backup file" +
+                                    (if (toDelete.size == 1) "" else "s") + "."
+                            } else {
+                                "Deleted ${toDelete.size - failed} of " +
+                                    "${toDelete.size} ($failed failed)."
+                            }
                         reload()
                         working = false
                     }
@@ -534,8 +547,16 @@ fun BackupRestoreScreen(
                         Text("${p.playlistCount} playlist${if (p.playlistCount == 1) "" else "s"}")
                         Text("${p.ratingCount} rating${if (p.ratingCount == 1) "" else "s"}")
                         if (p.likedCount > 0) Text("${p.likedCount} liked")
-                        if (p.settingsCount > 0) Text("${p.settingsCount} setting${if (p.settingsCount == 1) "" else "s"}")
-                        if (p.eqPresetCount > 0) Text("${p.eqPresetCount} EQ preset${if (p.eqPresetCount == 1) "" else "s"}")
+                        if (p.settingsCount > 0) {
+                            Text(
+                                "${p.settingsCount} setting${if (p.settingsCount == 1) "" else "s"}",
+                            )
+                        }
+                        if (p.eqPresetCount > 0) {
+                            Text(
+                                "${p.eqPresetCount} EQ preset${if (p.eqPresetCount == 1) "" else "s"}",
+                            )
+                        }
                         if (p.exportedAtMs > 0L) {
                             Spacer(Modifier.height(8.dp))
                             Text(
@@ -578,9 +599,10 @@ private fun BackupRow(
     enabled: Boolean,
 ) {
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(enabled = enabled, onClick = onTap),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable(enabled = enabled, onClick = onTap),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
         shape = RoundedCornerShape(12.dp),
     ) {
@@ -589,10 +611,11 @@ private fun BackupRow(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(MaterialTheme.colorScheme.primaryContainer),
+                modifier =
+                    Modifier
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(MaterialTheme.colorScheme.primaryContainer),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
@@ -662,11 +685,12 @@ private fun formatTimestamp(ms: Long): String {
     }
 }
 
-private fun formatBytes(bytes: Long): String = when {
-    bytes < 1024 -> "$bytes B"
-    bytes < 1024 * 1024 -> "${bytes / 1024} KB"
-    else -> "${bytes / (1024 * 1024)} MB"
-}
+private fun formatBytes(bytes: Long): String =
+    when {
+        bytes < 1024 -> "$bytes B"
+        bytes < 1024 * 1024 -> "${bytes / 1024} KB"
+        else -> "${bytes / (1024 * 1024)} MB"
+    }
 
 private enum class BackupSortMode {
     NewestFirst,

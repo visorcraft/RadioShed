@@ -2,7 +2,6 @@ package com.visorcraft.radioshed.ui.playlists
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,28 +17,30 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.runtime.derivedStateOf
-import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Shuffle
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import com.visorcraft.radioshed.ui.util.TooltipIconButton
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -48,6 +49,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -60,17 +62,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material.icons.filled.MoreVert
 import com.visorcraft.radioshed.audio.AudioEngine
 import com.visorcraft.radioshed.data.PlaylistRepository
 import com.visorcraft.radioshed.data.RatingRepository
 import com.visorcraft.radioshed.domain.Track
 import com.visorcraft.radioshed.stations.StationPlayback
 import com.visorcraft.radioshed.ui.util.NowPlayingIndicator
+import com.visorcraft.radioshed.ui.util.TooltipIconButton
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
@@ -185,9 +183,10 @@ fun LikedSongsScreen(
                         }
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                ),
+                colors =
+                    TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                    ),
             )
         },
         containerColor = MaterialTheme.colorScheme.background,
@@ -196,22 +195,23 @@ fun LikedSongsScreen(
             Spacer(Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
-                    modifier = Modifier
-                        .size(56.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(MaterialTheme.colorScheme.primaryContainer)
-                        // Long-press the header heart for the
-                        // save-as-playlist shortcut, mirroring the
-                        // overflow menu's "Save as playlist…" action
-                        // — useful for keyboard-averse users who
-                        // already know the gesture pattern from
-                        // station tiles + history rows.
-                        .combinedClickable(
-                            onClick = {},
-                            onLongClick = {
-                                if (tracks.isNotEmpty()) saveAsPlaylistOpen = true
-                            },
-                        ),
+                    modifier =
+                        Modifier
+                            .size(56.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(MaterialTheme.colorScheme.primaryContainer)
+                            // Long-press the header heart for the
+                            // save-as-playlist shortcut, mirroring the
+                            // overflow menu's "Save as playlist…" action
+                            // — useful for keyboard-averse users who
+                            // already know the gesture pattern from
+                            // station tiles + history rows.
+                            .combinedClickable(
+                                onClick = {},
+                                onLongClick = {
+                                    if (tracks.isNotEmpty()) saveAsPlaylistOpen = true
+                                },
+                            ),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
@@ -233,18 +233,20 @@ fun LikedSongsScreen(
                     // having to do shoebox math from the row count.
                     // formatTotalRuntime omits the runtime when sum is
                     // zero (e.g. cold-start with no liked tracks yet).
-                    val totalDurationMs = remember(tracks) {
-                        tracks.sumOf { it.durationMs }
-                    }
+                    val totalDurationMs =
+                        remember(tracks) {
+                            tracks.sumOf { it.durationMs }
+                        }
                     Text(
-                        text = buildString {
-                            append(tracks.size)
-                            append(if (tracks.size == 1) " track" else " tracks")
-                            if (totalDurationMs > 0L) {
-                                append(" · ")
-                                append(formatLikedTotalRuntime(totalDurationMs))
-                            }
-                        },
+                        text =
+                            buildString {
+                                append(tracks.size)
+                                append(if (tracks.size == 1) " track" else " tracks")
+                                if (totalDurationMs > 0L) {
+                                    append(" · ")
+                                    append(formatLikedTotalRuntime(totalDurationMs))
+                                }
+                            },
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
                     )
@@ -269,9 +271,10 @@ fun LikedSongsScreen(
                     },
                     enabled = tracks.isNotEmpty(),
                     modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = MaterialTheme.colorScheme.primary,
-                    ),
+                    colors =
+                        ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.primary,
+                        ),
                 ) {
                     Icon(Icons.Filled.Shuffle, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.size(6.dp))
@@ -285,34 +288,41 @@ fun LikedSongsScreen(
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
-                        text = "No liked songs yet — tap the heart on Now Playing or " +
-                            "long-press any track to add it.",
+                        text =
+                            "No liked songs yet — tap the heart on Now Playing or " +
+                                "long-press any track to add it.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                     )
                 }
             } else {
-                val sortedTracks = remember(tracks, sortOrder, searchQuery) {
-                    val base = when (sortOrder) {
-                        LikedSort.RecentlyLiked -> tracks
-                        LikedSort.TitleAsc -> tracks.sortedBy { it.title.lowercase() }
-                        LikedSort.AlbumAsc -> tracks.sortedBy {
-                            (it.albumId?.toString() ?: it.title).lowercase()
+                val sortedTracks =
+                    remember(tracks, sortOrder, searchQuery) {
+                        val base =
+                            when (sortOrder) {
+                                LikedSort.RecentlyLiked -> tracks
+                                LikedSort.TitleAsc -> tracks.sortedBy { it.title.lowercase() }
+                                LikedSort.AlbumAsc ->
+                                    tracks.sortedBy {
+                                        (it.albumId?.toString() ?: it.title).lowercase()
+                                    }
+                                LikedSort.DurationAsc -> tracks.sortedBy { it.durationMs }
+                                LikedSort.DurationDesc -> tracks.sortedByDescending { it.durationMs }
+                            }
+                        if (searchQuery.isBlank()) {
+                            base
+                        } else {
+                            base.filter {
+                                // Match on the displayed title (or file name
+                                // for tracks with empty title tags) so a user
+                                // searching for "ramble" still finds rips
+                                // that have only the filename to identify them.
+                                it.title.contains(searchQuery, ignoreCase = true) ||
+                                    it.fileName.contains(searchQuery, ignoreCase = true)
+                            }
                         }
-                        LikedSort.DurationAsc -> tracks.sortedBy { it.durationMs }
-                        LikedSort.DurationDesc -> tracks.sortedByDescending { it.durationMs }
                     }
-                    if (searchQuery.isBlank()) base
-                    else base.filter {
-                        // Match on the displayed title (or file name
-                        // for tracks with empty title tags) so a user
-                        // searching for "ramble" still finds rips
-                        // that have only the filename to identify them.
-                        it.title.contains(searchQuery, ignoreCase = true) ||
-                            it.fileName.contains(searchQuery, ignoreCase = true)
-                    }
-                }
                 Column(modifier = Modifier.fillMaxSize()) {
                     if (tracks.size >= 6) {
                         androidx.compose.material3.OutlinedTextField(
@@ -326,22 +336,26 @@ fun LikedSongsScreen(
                                     contentDescription = null,
                                 )
                             },
-                            trailingIcon = if (searchQuery.isNotEmpty()) {
-                                {
-                                    TooltipIconButton(
-                                        tooltip = "Clear",
-                                        onClick = { searchQuery = "" },
-                                    ) {
-                                        Icon(
-                                            Icons.Filled.Close,
-                                            contentDescription = "Clear",
-                                        )
+                            trailingIcon =
+                                if (searchQuery.isNotEmpty()) {
+                                    {
+                                        TooltipIconButton(
+                                            tooltip = "Clear",
+                                            onClick = { searchQuery = "" },
+                                        ) {
+                                            Icon(
+                                                Icons.Filled.Close,
+                                                contentDescription = "Clear",
+                                            )
+                                        }
                                     }
-                                }
-                            } else null,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 4.dp),
+                                } else {
+                                    null
+                                },
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 4.dp),
                         )
                     }
                     val listState = rememberLazyListState()
@@ -349,57 +363,58 @@ fun LikedSongsScreen(
                         derivedStateOf { listState.firstVisibleItemIndex > 8 }
                     }
                     Box(modifier = Modifier.fillMaxSize()) {
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        state = listState,
-                        contentPadding = PaddingValues(vertical = 4.dp),
-                    ) {
-                        items(sortedTracks, key = { it.id }) { track ->
-                            LikedSongRow(
-                                track = track,
-                                isCurrent = track.id == currentTrackId,
-                                onTap = {
-                                    val idx = sortedTracks.indexOf(track).coerceAtLeast(0)
-                                    stationPlayback.playTracks(sortedTracks, startIndex = idx)
-                                },
-                                onLongPress = { contextTrackId = track.id },
-                                onUnlike = {
-                                    // Quick-tap unlike used to fire
-                                    // immediately, which was a one-tap
-                                    // mistake away from losing a row
-                                    // with no undo. Now we route through
-                                    // a confirm dialog.
-                                    unlikeConfirm = track
-                                },
-                            )
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            state = listState,
+                            contentPadding = PaddingValues(vertical = 4.dp),
+                        ) {
+                            items(sortedTracks, key = { it.id }) { track ->
+                                LikedSongRow(
+                                    track = track,
+                                    isCurrent = track.id == currentTrackId,
+                                    onTap = {
+                                        val idx = sortedTracks.indexOf(track).coerceAtLeast(0)
+                                        stationPlayback.playTracks(sortedTracks, startIndex = idx)
+                                    },
+                                    onLongPress = { contextTrackId = track.id },
+                                    onUnlike = {
+                                        // Quick-tap unlike used to fire
+                                        // immediately, which was a one-tap
+                                        // mistake away from losing a row
+                                        // with no undo. Now we route through
+                                        // a confirm dialog.
+                                        unlikeConfirm = track
+                                    },
+                                )
+                            }
+                            if (sortedTracks.isEmpty() && searchQuery.isNotBlank()) {
+                                item(key = "no-match") {
+                                    Text(
+                                        "No liked songs match \"$searchQuery\".",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                                        modifier = Modifier.padding(16.dp),
+                                    )
+                                }
+                            }
                         }
-                        if (sortedTracks.isEmpty() && searchQuery.isNotBlank()) {
-                            item(key = "no-match") {
-                                Text(
-                                    "No liked songs match \"$searchQuery\".",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
-                                    modifier = Modifier.padding(16.dp),
+                        if (showScrollTop) {
+                            SmallFloatingActionButton(
+                                onClick = {
+                                    scope.launch { listState.animateScrollToItem(0) }
+                                },
+                                modifier =
+                                    Modifier
+                                        .align(Alignment.BottomEnd)
+                                        .padding(end = 16.dp, bottom = 16.dp),
+                                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.KeyboardArrowUp,
+                                    contentDescription = "Scroll to top",
                                 )
                             }
                         }
-                    }
-                    if (showScrollTop) {
-                        SmallFloatingActionButton(
-                            onClick = {
-                                scope.launch { listState.animateScrollToItem(0) }
-                            },
-                            modifier = Modifier
-                                .align(Alignment.BottomEnd)
-                                .padding(end = 16.dp, bottom = 16.dp),
-                            containerColor = MaterialTheme.colorScheme.primaryContainer,
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.KeyboardArrowUp,
-                                contentDescription = "Scroll to top",
-                            )
-                        }
-                    }
                     }
                 }
             }
@@ -460,29 +475,31 @@ fun LikedSongsScreen(
                         onValueChange = { name = it },
                         label = { Text("Playlist name") },
                         singleLine = true,
-                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                            imeAction = androidx.compose.ui.text.input.ImeAction.Done,
-                        ),
-                        keyboardActions = androidx.compose.foundation.text.KeyboardActions(
-                            onDone = {
-                                if (name.isNotBlank()) {
-                                    val cleanName = name.trim()
-                                    val snapshot = tracks
-                                    saveAsPlaylistOpen = false
-                                    scope.launch {
-                                        val playlistId = playlistRepo.insert(name = cleanName)
-                                        snapshot.forEachIndexed { idx, track ->
-                                            playlistRepo.addTrack(
-                                                playlistId,
-                                                track.id,
-                                                position = idx,
-                                            )
+                        keyboardOptions =
+                            androidx.compose.foundation.text.KeyboardOptions(
+                                imeAction = androidx.compose.ui.text.input.ImeAction.Done,
+                            ),
+                        keyboardActions =
+                            androidx.compose.foundation.text.KeyboardActions(
+                                onDone = {
+                                    if (name.isNotBlank()) {
+                                        val cleanName = name.trim()
+                                        val snapshot = tracks
+                                        saveAsPlaylistOpen = false
+                                        scope.launch {
+                                            val playlistId = playlistRepo.insert(name = cleanName)
+                                            snapshot.forEachIndexed { idx, track ->
+                                                playlistRepo.addTrack(
+                                                    playlistId,
+                                                    track.id,
+                                                    position = idx,
+                                                )
+                                            }
+                                            savedPlaylistName = cleanName
                                         }
-                                        savedPlaylistName = cleanName
                                     }
-                                }
-                            },
-                        ),
+                                },
+                            ),
                     )
                 }
             },
@@ -530,9 +547,10 @@ private fun LikedSongRow(
     onUnlike: () -> Unit,
 ) {
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .combinedClickable(onClick = onTap, onLongClick = onLongPress),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .combinedClickable(onClick = onTap, onLongClick = onLongPress),
         color = Color.Transparent,
     ) {
         Row(
@@ -540,10 +558,11 @@ private fun LikedSongRow(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                modifier =
+                    Modifier
+                        .size(36.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
@@ -559,8 +578,12 @@ private fun LikedSongRow(
                     text = track.title.ifBlank { track.fileName },
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.Medium,
-                    color = if (isCurrent) MaterialTheme.colorScheme.primary
-                            else MaterialTheme.colorScheme.onBackground,
+                    color =
+                        if (isCurrent) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onBackground
+                        },
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f, fill = false),

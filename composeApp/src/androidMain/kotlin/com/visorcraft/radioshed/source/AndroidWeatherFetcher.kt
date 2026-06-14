@@ -38,7 +38,6 @@ class AndroidWeatherFetcher(
     private val context: Context,
     private val networkGate: NetworkPolicyGate,
 ) : WeatherFetcher {
-
     private val json = Json { ignoreUnknownKeys = true }
 
     // 15-minute in-memory cache. A single mutex guards both reads (TTL check)
@@ -48,24 +47,25 @@ class AndroidWeatherFetcher(
     private var cached: WeatherSnapshot? = null
     private var cachedAtMs: Long = 0L
 
-    override suspend fun current(): WeatherSnapshot? = withContext(IODispatcher) {
-        runCatching {
-            cacheMutex.withLock {
-                val now = System.currentTimeMillis()
-                cached?.let { if (now - cachedAtMs < CACHE_TTL_MS) return@withLock it }
+    override suspend fun current(): WeatherSnapshot? =
+        withContext(IODispatcher) {
+            runCatching {
+                cacheMutex.withLock {
+                    val now = System.currentTimeMillis()
+                    cached?.let { if (now - cachedAtMs < CACHE_TTL_MS) return@withLock it }
 
-                // Honour the user's connectivity preference before touching the
-                // network — same gate every other automatic fetcher consults.
-                if (!networkGate.allowAutomaticFetch()) return@withLock null
+                    // Honour the user's connectivity preference before touching the
+                    // network — same gate every other automatic fetcher consults.
+                    if (!networkGate.allowAutomaticFetch()) return@withLock null
 
-                val location = lastKnownCoarseLocation() ?: return@withLock null
-                val snapshot = fetchSnapshot(location.first, location.second) ?: return@withLock null
-                cached = snapshot
-                cachedAtMs = now
-                snapshot
-            }
-        }.getOrNull()
-    }
+                    val location = lastKnownCoarseLocation() ?: return@withLock null
+                    val snapshot = fetchSnapshot(location.first, location.second) ?: return@withLock null
+                    cached = snapshot
+                    cachedAtMs = now
+                    snapshot
+                }
+            }.getOrNull()
+        }
 
     /**
      * Coarse last-known position as (latitude, longitude), or null. Reads only
@@ -74,50 +74,59 @@ class AndroidWeatherFetcher(
      * fallback for devices/sessions where only GPS has a cached fix.
      */
     private fun lastKnownCoarseLocation(): Pair<Double, Double>? {
-        val granted = ContextCompat.checkSelfPermission(
-            context,
-            Manifest.permission.ACCESS_COARSE_LOCATION,
-        ) == PackageManager.PERMISSION_GRANTED
+        val granted =
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.ACCESS_COARSE_LOCATION,
+            ) == PackageManager.PERMISSION_GRANTED
         if (!granted) return null
-        val manager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
-            ?: return null
+        val manager =
+            context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+                ?: return null
         // Guard the check-then-use race: permission can be revoked between our
         // checkSelfPermission call above and getLastKnownLocation.
-        val fix = try {
-            manager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
-                ?: manager.getLastKnownLocation(LocationManager.GPS_PROVIDER)
-        } catch (e: SecurityException) {
-            return null
-        } ?: return null
+        val fix =
+            try {
+                manager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
+                    ?: manager.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+            } catch (e: SecurityException) {
+                return null
+            } ?: return null
         return fix.latitude to fix.longitude
     }
 
-    private fun fetchSnapshot(latitude: Double, longitude: Double): WeatherSnapshot? = runCatching {
-        val url = URI(
-            "$OPEN_METEO_BASE/v1/forecast" +
-                "?latitude=$latitude&longitude=$longitude&current_weather=true",
-        ).toURL()
-        val conn = (url.openConnection() as HttpURLConnection).apply {
-            requestMethod = "GET"
-            instanceFollowRedirects = true
-            connectTimeout = CONNECT_TIMEOUT_MS
-            readTimeout = READ_TIMEOUT_MS
-            setRequestProperty("User-Agent", USER_AGENT)
-            setRequestProperty("Accept", "application/json")
-        }
-        try {
-            if (conn.responseCode !in 200..299) return@runCatching null
-            val body = conn.inputStream.use { it.readBytes() }.decodeToString()
-            val parsed = json.decodeFromString(ForecastResponse.serializer(), body)
-            val current = parsed.currentWeather ?: return@runCatching null
-            WeatherSnapshot(
-                tempC = current.temperature,
-                condition = describeWmoCode(current.weathercode),
-            )
-        } finally {
-            conn.disconnect()
-        }
-    }.getOrNull()
+    private fun fetchSnapshot(
+        latitude: Double,
+        longitude: Double,
+    ): WeatherSnapshot? =
+        runCatching {
+            val url =
+                URI(
+                    "$OPEN_METEO_BASE/v1/forecast" +
+                        "?latitude=$latitude&longitude=$longitude&current_weather=true",
+                ).toURL()
+            val conn =
+                (url.openConnection() as HttpURLConnection).apply {
+                    requestMethod = "GET"
+                    instanceFollowRedirects = true
+                    connectTimeout = CONNECT_TIMEOUT_MS
+                    readTimeout = READ_TIMEOUT_MS
+                    setRequestProperty("User-Agent", USER_AGENT)
+                    setRequestProperty("Accept", "application/json")
+                }
+            try {
+                if (conn.responseCode !in 200..299) return@runCatching null
+                val body = conn.inputStream.use { it.readBytes() }.decodeToString()
+                val parsed = json.decodeFromString(ForecastResponse.serializer(), body)
+                val current = parsed.currentWeather ?: return@runCatching null
+                WeatherSnapshot(
+                    tempC = current.temperature,
+                    condition = describeWmoCode(current.weathercode),
+                )
+            } finally {
+                conn.disconnect()
+            }
+        }.getOrNull()
 
     @Serializable
     private data class ForecastResponse(

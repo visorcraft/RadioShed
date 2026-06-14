@@ -7,15 +7,14 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class NetworkPolicyGateTest {
-
     private class FakeSettings(
         var policy: ConnectivityPolicy = ConnectivityPolicy.Always,
         val overrides: MutableMap<NetworkService, ServicePolicyOverride> = mutableMapOf(),
     ) : PolicySettingsSource {
         override fun getConnectivityPolicy(): ConnectivityPolicy = policy
-        override fun getServicePolicyOverride(
-            service: NetworkService,
-        ): ServicePolicyOverride = overrides[service] ?: ServicePolicyOverride.Inherit
+
+        override fun getServicePolicyOverride(service: NetworkService): ServicePolicyOverride =
+            overrides[service] ?: ServicePolicyOverride.Inherit
     }
 
     private class FakeChecker(
@@ -23,6 +22,7 @@ class NetworkPolicyGateTest {
         var unmetered: Boolean = true,
     ) : ConnectivityChecker {
         override fun isOnline(): Boolean = online
+
         override fun isUnmetered(): Boolean = unmetered
     }
 
@@ -30,50 +30,55 @@ class NetworkPolicyGateTest {
 
     @Test
     fun always_allowsBothFetchKinds_whenOnline() {
-        val gate = NetworkPolicyGate(
-            FakeSettings(policy = ConnectivityPolicy.Always),
-            FakeChecker(online = true),
-        )
+        val gate =
+            NetworkPolicyGate(
+                FakeSettings(policy = ConnectivityPolicy.Always),
+                FakeChecker(online = true),
+            )
         assertTrue(gate.allowAutomaticFetch())
         assertTrue(gate.allowUserInitiatedFetch())
     }
 
     @Test
     fun always_blocksBothFetchKinds_whenOffline() {
-        val gate = NetworkPolicyGate(
-            FakeSettings(policy = ConnectivityPolicy.Always),
-            FakeChecker(online = false),
-        )
+        val gate =
+            NetworkPolicyGate(
+                FakeSettings(policy = ConnectivityPolicy.Always),
+                FakeChecker(online = false),
+            )
         assertFalse(gate.allowAutomaticFetch())
         assertFalse(gate.allowUserInitiatedFetch())
     }
 
     @Test
     fun wifiOnly_blocksMeteredConnections() {
-        val gate = NetworkPolicyGate(
-            FakeSettings(policy = ConnectivityPolicy.WiFiOnly),
-            FakeChecker(online = true, unmetered = false),
-        )
+        val gate =
+            NetworkPolicyGate(
+                FakeSettings(policy = ConnectivityPolicy.WiFiOnly),
+                FakeChecker(online = true, unmetered = false),
+            )
         assertFalse(gate.allowAutomaticFetch())
         assertFalse(gate.allowUserInitiatedFetch())
     }
 
     @Test
     fun wifiOnly_allowsWhenUnmetered() {
-        val gate = NetworkPolicyGate(
-            FakeSettings(policy = ConnectivityPolicy.WiFiOnly),
-            FakeChecker(online = true, unmetered = true),
-        )
+        val gate =
+            NetworkPolicyGate(
+                FakeSettings(policy = ConnectivityPolicy.WiFiOnly),
+                FakeChecker(online = true, unmetered = true),
+            )
         assertTrue(gate.allowAutomaticFetch())
         assertTrue(gate.allowUserInitiatedFetch())
     }
 
     @Test
     fun never_blocksEverything() {
-        val gate = NetworkPolicyGate(
-            FakeSettings(policy = ConnectivityPolicy.Never),
-            FakeChecker(online = true, unmetered = true),
-        )
+        val gate =
+            NetworkPolicyGate(
+                FakeSettings(policy = ConnectivityPolicy.Never),
+                FakeChecker(online = true, unmetered = true),
+            )
         assertFalse(gate.allowAutomaticFetch())
         assertFalse(gate.allowUserInitiatedFetch())
     }
@@ -85,20 +90,22 @@ class NetworkPolicyGateTest {
         // refresh button should go through. This was a regression
         // path before the per-service work — the old code blocked
         // both equally.
-        val gate = NetworkPolicyGate(
-            FakeSettings(policy = ConnectivityPolicy.Manual),
-            FakeChecker(online = true),
-        )
+        val gate =
+            NetworkPolicyGate(
+                FakeSettings(policy = ConnectivityPolicy.Manual),
+                FakeChecker(online = true),
+            )
         assertFalse(gate.allowAutomaticFetch())
         assertTrue(gate.allowUserInitiatedFetch())
     }
 
     @Test
     fun manual_blocksUserInitiated_whenOffline() {
-        val gate = NetworkPolicyGate(
-            FakeSettings(policy = ConnectivityPolicy.Manual),
-            FakeChecker(online = false),
-        )
+        val gate =
+            NetworkPolicyGate(
+                FakeSettings(policy = ConnectivityPolicy.Manual),
+                FakeChecker(online = false),
+            )
         assertFalse(gate.allowAutomaticFetch())
         assertFalse(gate.allowUserInitiatedFetch())
     }
@@ -109,15 +116,17 @@ class NetworkPolicyGateTest {
     fun coverArtOverride_neverBlocksCoverArt_evenWhenGlobalAllows() {
         // Global says fetch everything, but the user has
         // explicitly capped CoverArt with a Never override.
-        val gate = NetworkPolicyGate(
-            FakeSettings(
-                policy = ConnectivityPolicy.Always,
-                overrides = mutableMapOf(
-                    NetworkService.CoverArt to ServicePolicyOverride.Never,
+        val gate =
+            NetworkPolicyGate(
+                FakeSettings(
+                    policy = ConnectivityPolicy.Always,
+                    overrides =
+                        mutableMapOf(
+                            NetworkService.CoverArt to ServicePolicyOverride.Never,
+                        ),
                 ),
-            ),
-            FakeChecker(online = true),
-        )
+                FakeChecker(online = true),
+            )
         assertFalse(gate.allowUserInitiatedFetch(NetworkService.CoverArt))
         assertFalse(gate.allowAutomaticFetch(NetworkService.CoverArt))
         // Lyrics still inherits the global policy so it's allowed.
@@ -128,15 +137,17 @@ class NetworkPolicyGateTest {
     fun lyricsOverride_alwaysBypassesGlobalNever() {
         // Global Never, but the user wants lyrics specifically.
         // Override should win.
-        val gate = NetworkPolicyGate(
-            FakeSettings(
-                policy = ConnectivityPolicy.Never,
-                overrides = mutableMapOf(
-                    NetworkService.Lyrics to ServicePolicyOverride.Always,
+        val gate =
+            NetworkPolicyGate(
+                FakeSettings(
+                    policy = ConnectivityPolicy.Never,
+                    overrides =
+                        mutableMapOf(
+                            NetworkService.Lyrics to ServicePolicyOverride.Always,
+                        ),
                 ),
-            ),
-            FakeChecker(online = true),
-        )
+                FakeChecker(online = true),
+            )
         assertTrue(gate.allowUserInitiatedFetch(NetworkService.Lyrics))
         assertTrue(gate.allowAutomaticFetch(NetworkService.Lyrics))
         // CoverArt still inherits the Never global.
@@ -145,12 +156,14 @@ class NetworkPolicyGateTest {
 
     @Test
     fun inheritOverride_followsGlobalPolicy() {
-        val settings = FakeSettings(
-            policy = ConnectivityPolicy.WiFiOnly,
-            overrides = mutableMapOf(
-                NetworkService.CoverArt to ServicePolicyOverride.Inherit,
-            ),
-        )
+        val settings =
+            FakeSettings(
+                policy = ConnectivityPolicy.WiFiOnly,
+                overrides =
+                    mutableMapOf(
+                        NetworkService.CoverArt to ServicePolicyOverride.Inherit,
+                    ),
+            )
         val gate = NetworkPolicyGate(settings, FakeChecker(online = true, unmetered = false))
         assertFalse(gate.allowUserInitiatedFetch(NetworkService.CoverArt))
         // Switch global to Always — inherit should reflect it.
@@ -160,15 +173,17 @@ class NetworkPolicyGateTest {
 
     @Test
     fun resolveEffectivePolicy_returnsOverride_whenSet() {
-        val gate = NetworkPolicyGate(
-            FakeSettings(
-                policy = ConnectivityPolicy.Always,
-                overrides = mutableMapOf(
-                    NetworkService.CoverArt to ServicePolicyOverride.WiFiOnly,
+        val gate =
+            NetworkPolicyGate(
+                FakeSettings(
+                    policy = ConnectivityPolicy.Always,
+                    overrides =
+                        mutableMapOf(
+                            NetworkService.CoverArt to ServicePolicyOverride.WiFiOnly,
+                        ),
                 ),
-            ),
-            FakeChecker(),
-        )
+                FakeChecker(),
+            )
         assertEquals(
             ConnectivityPolicy.WiFiOnly,
             gate.resolveEffectivePolicy(NetworkService.CoverArt),

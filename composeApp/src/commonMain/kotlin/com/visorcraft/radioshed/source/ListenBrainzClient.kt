@@ -55,5 +55,6 @@ interface ListenBrainzClient {
 /** Stub for platforms with no HTTP wiring. */
 class NullListenBrainzClient : ListenBrainzClient {
     override suspend fun submit(listen: ListenBrainzClient.Listen): Boolean = false
+
     override suspend fun validateToken(token: String): Boolean = false
 }

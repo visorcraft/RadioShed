@@ -34,15 +34,16 @@ class NullWeatherFetcher : WeatherFetcher {
  * table Open-Meteo documents for `current_weather.weathercode`. Anything
  * outside the known buckets falls back to "unsettled".
  */
-internal fun describeWmoCode(code: Int): String = when (code) {
-    0 -> "clear" // clear sky
-    in 1..3 -> "partly cloudy" // mainly clear / partly cloudy / overcast
-    45, 48 -> "foggy" // fog and depositing rime fog
-    in 51..67, in 80..82 -> "rainy" // drizzle, rain (incl. freezing), and rain showers (slight/moderate/violent)
-    in 71..77, in 85..86 -> "snowy" // snow fall, snow grains, and snow showers
-    in 95..99 -> "stormy" // thunderstorm, with or without hail
-    else -> "unsettled"
-}
+internal fun describeWmoCode(code: Int): String =
+    when (code) {
+        0 -> "clear" // clear sky
+        in 1..3 -> "partly cloudy" // mainly clear / partly cloudy / overcast
+        45, 48 -> "foggy" // fog and depositing rime fog
+        in 51..67, in 80..82 -> "rainy" // drizzle, rain (incl. freezing), and rain showers (slight/moderate/violent)
+        in 71..77, in 85..86 -> "snowy" // snow fall, snow grains, and snow showers
+        in 95..99 -> "stormy" // thunderstorm, with or without hail
+        else -> "unsettled"
+    }
 
 /**
  * Formats a [WeatherSnapshot] into DJ copy like "12 degrees and clear". The

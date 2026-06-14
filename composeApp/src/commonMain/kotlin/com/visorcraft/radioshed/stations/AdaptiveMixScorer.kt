@@ -56,20 +56,23 @@ fun scoreAdaptiveMix(
     return candidates
         .map { c ->
             val playPenalty = (c.playCount.toDouble() / maxPlays).coerceIn(0.0, 1.0)
-            val daysSince = if (c.lastPlayedAtMs == null) {
-                Double.POSITIVE_INFINITY
-            } else {
-                (nowMs - c.lastPlayedAtMs).coerceAtLeast(0L) / MS_PER_DAY.toDouble()
-            }
+            val daysSince =
+                if (c.lastPlayedAtMs == null) {
+                    Double.POSITIVE_INFINITY
+                } else {
+                    (nowMs - c.lastPlayedAtMs).coerceAtLeast(0L) / MS_PER_DAY.toDouble()
+                }
             val recencyBoost = (daysSince / RECENCY_NORMALISE_DAYS).coerceIn(0.0, 1.0)
-            val ratingBoost = (c.rating / 5.0).coerceIn(0.0, 1.0)
-                .let { if (c.rating <= 0.0) 0.2 else it }
+            val ratingBoost =
+                (c.rating / 5.0).coerceIn(0.0, 1.0)
+                    .let { if (c.rating <= 0.0) 0.2 else it }
             val jitter = rng.nextDouble(-0.05, 0.05)
 
-            val score = (1.0 - playPenalty) * 0.4 +
-                recencyBoost * 0.3 +
-                ratingBoost * 0.3 +
-                jitter
+            val score =
+                (1.0 - playPenalty) * 0.4 +
+                    recencyBoost * 0.3 +
+                    ratingBoost * 0.3 +
+                    jitter
             c.track to score
         }
         .sortedByDescending { it.second }

@@ -16,7 +16,6 @@ import kotlinx.coroutines.flow.StateFlow
  * work to the appropriate dispatcher internally.
  */
 interface AudioEngine {
-
     /** Current playback state — Idle / Buffering / Playing / Paused / Ended / Error. */
     val state: StateFlow<PlayerState>
 
@@ -37,14 +36,23 @@ interface AudioEngine {
     fun play(playable: Playable)
 
     /** Replace the queue with [items] and start at [startIndex]. */
-    fun playQueue(items: List<Playable>, startIndex: Int = 0)
+    fun playQueue(
+        items: List<Playable>,
+        startIndex: Int = 0,
+    )
 
     fun pause()
+
     fun resume()
+
     fun togglePlayPause()
+
     fun seekTo(positionMs: Long)
+
     fun skipNext()
+
     fun skipPrevious()
+
     fun stop()
 
     /**
@@ -141,10 +149,15 @@ data class Playable(
 
 sealed interface PlayerState {
     data object Idle : PlayerState
+
     data object Buffering : PlayerState
+
     data object Playing : PlayerState
+
     data object Paused : PlayerState
+
     data object Ended : PlayerState
+
     data class Error(val message: String) : PlayerState
 }
 
@@ -166,14 +179,15 @@ fun Track.toPlayable(
     artistName: String? = null,
     albumTitle: String? = null,
     artworkUri: String? = null,
-): Playable = Playable(
-    trackId = id,
-    uri = path,
-    title = title,
-    artist = artistName,
-    album = albumTitle,
-    durationMs = durationMs,
-    artworkUri = artworkUri,
-    cueOffsetStartMs = cueOffsetStartMs,
-    cueOffsetEndMs = cueOffsetEndMs,
-)
+): Playable =
+    Playable(
+        trackId = id,
+        uri = path,
+        title = title,
+        artist = artistName,
+        album = albumTitle,
+        durationMs = durationMs,
+        artworkUri = artworkUri,
+        cueOffsetStartMs = cueOffsetStartMs,
+        cueOffsetEndMs = cueOffsetEndMs,
+    )

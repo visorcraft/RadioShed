@@ -81,7 +81,6 @@ import org.koin.core.context.GlobalContext
  * `automotive_app_desc.xml` meta-data declaration on the application.
  */
 class RadioShedMediaSessionService : MediaLibraryService() {
-
     private var librarySession: MediaLibrarySession? = null
 
     /**
@@ -162,35 +161,36 @@ class RadioShedMediaSessionService : MediaLibraryService() {
      * MediaController / notification / Auto state consistent with what the
      * user sees.
      */
-    private val audioFocusListener = AudioManager.OnAudioFocusChangeListener { change ->
-        val player = librarySession?.player
-        when (change) {
-            AudioManager.AUDIOFOCUS_LOSS -> {
-                // Permanent loss (another media app took over): pause and
-                // drop the request entirely. No auto-resume — the user must
-                // explicitly restart playback, per platform convention.
-                resumeOnFocusGain = false
-                player?.pause()
-                abandonAudioFocus()
-            }
-            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
-                // Short interruption (phone call, alarm): pause but KEEP the
-                // request registered and remember to resume — the system
-                // delivers AUDIOFOCUS_GAIN when the interruption ends.
-                resumeOnFocusGain = true
-                player?.pause()
-            }
-            AudioManager.AUDIOFOCUS_GAIN -> {
-                if (resumeOnFocusGain) {
+    private val audioFocusListener =
+        AudioManager.OnAudioFocusChangeListener { change ->
+            val player = librarySession?.player
+            when (change) {
+                AudioManager.AUDIOFOCUS_LOSS -> {
+                    // Permanent loss (another media app took over): pause and
+                    // drop the request entirely. No auto-resume — the user must
+                    // explicitly restart playback, per platform convention.
                     resumeOnFocusGain = false
-                    player?.play()
+                    player?.pause()
+                    abandonAudioFocus()
                 }
+                AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
+                    // Short interruption (phone call, alarm): pause but KEEP the
+                    // request registered and remember to resume — the system
+                    // delivers AUDIOFOCUS_GAIN when the interruption ends.
+                    resumeOnFocusGain = true
+                    player?.pause()
+                }
+                AudioManager.AUDIOFOCUS_GAIN -> {
+                    if (resumeOnFocusGain) {
+                        resumeOnFocusGain = false
+                        player?.play()
+                    }
+                }
+                // AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK: deliberately unhandled —
+                // setWillPauseWhenDucked(false) on the request tells the system
+                // to duck our streams itself and restore them afterwards.
             }
-            // AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK: deliberately unhandled —
-            // setWillPauseWhenDucked(false) on the request tells the system
-            // to duck our streams itself and restore them afterwards.
         }
-    }
 
     /**
      * Request audio focus for the whole service (idempotent — see
@@ -202,27 +202,28 @@ class RadioShedMediaSessionService : MediaLibraryService() {
     private fun requestAudioFocus(): Boolean {
         if (hasAudioFocus) return true
         val audioManager = getSystemService(AudioManager::class.java) ?: return false
-        val request = audioFocusRequest ?: AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
-            .setAudioAttributes(
-                // Platform (not Media3) attributes; must mirror the
-                // USAGE_MEDIA / CONTENT_TYPE_MUSIC the players are built
-                // with so the focus stack classifies us the same way the
-                // audio routing does.
-                android.media.AudioAttributes.Builder()
-                    .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
-                    .setContentType(android.media.AudioAttributes.CONTENT_TYPE_MUSIC)
-                    .build(),
-            )
-            // A delayed grant would mean "stay silent now, start later on
-            // GAIN" — wrong for playback the user just explicitly started;
-            // they should see it either play or stay visibly paused.
-            .setAcceptsDelayedFocusGain(false)
-            // Let the system duck us on CAN_DUCK events (navigation
-            // prompts, notifications) instead of forcing a hard pause.
-            .setWillPauseWhenDucked(false)
-            .setOnAudioFocusChangeListener(audioFocusListener, Handler(Looper.getMainLooper()))
-            .build()
-            .also { audioFocusRequest = it }
+        val request =
+            audioFocusRequest ?: AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+                .setAudioAttributes(
+                    // Platform (not Media3) attributes; must mirror the
+                    // USAGE_MEDIA / CONTENT_TYPE_MUSIC the players are built
+                    // with so the focus stack classifies us the same way the
+                    // audio routing does.
+                    android.media.AudioAttributes.Builder()
+                        .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
+                        .setContentType(android.media.AudioAttributes.CONTENT_TYPE_MUSIC)
+                        .build(),
+                )
+                // A delayed grant would mean "stay silent now, start later on
+                // GAIN" — wrong for playback the user just explicitly started;
+                // they should see it either play or stay visibly paused.
+                .setAcceptsDelayedFocusGain(false)
+                // Let the system duck us on CAN_DUCK events (navigation
+                // prompts, notifications) instead of forcing a hard pause.
+                .setWillPauseWhenDucked(false)
+                .setOnAudioFocusChangeListener(audioFocusListener, Handler(Looper.getMainLooper()))
+                .build()
+                .also { audioFocusRequest = it }
         val result = audioManager.requestAudioFocus(request)
         hasAudioFocus = result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
         if (!hasAudioFocus) {
@@ -254,10 +255,11 @@ class RadioShedMediaSessionService : MediaLibraryService() {
      * via Android's uncaught-exception handler — without it, the
      * head unit loses media-session connectivity entirely.
      */
-    private val scope = CoroutineScope(
-        SupervisorJob() + Dispatchers.Main +
-            com.visorcraft.radioshed.util.crashGuard("MediaSessionService"),
-    )
+    private val scope =
+        CoroutineScope(
+            SupervisorJob() + Dispatchers.Main +
+                com.visorcraft.radioshed.util.crashGuard("MediaSessionService"),
+        )
 
     /**
      * The library/session callback. Held as a field (rather than
@@ -271,10 +273,11 @@ class RadioShedMediaSessionService : MediaLibraryService() {
     override fun onCreate() {
         Log.i(TAG, "onCreate: starting service pid=${android.os.Process.myPid()}")
         super.onCreate()
-        val attributes = AudioAttributes.Builder()
-            .setUsage(C.USAGE_MEDIA)
-            .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
-            .build()
+        val attributes =
+            AudioAttributes.Builder()
+                .setUsage(C.USAGE_MEDIA)
+                .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+                .build()
 
         // handleAudioFocus = false on BOTH players: audio focus is owned
         // ONCE at the service level (see [audioFocusRequest]). With
@@ -284,20 +287,22 @@ class RadioShedMediaSessionService : MediaLibraryService() {
         // has no same-app exemption — would deliver AUDIOFOCUS_LOSS to the
         // outgoing player and pause it on the spot, turning every
         // crossfade into a hard cut instead of an overlap.
-        fun buildExoPlayer(): ExoPlayer = ExoPlayer.Builder(this)
-            .setAudioAttributes(attributes, /* handleAudioFocus = */ false)
-            .setHandleAudioBecomingNoisy(true)
-            .build()
-            .also { attachEffectsAndWidgetListeners(it) }
+        fun buildExoPlayer(): ExoPlayer =
+            ExoPlayer.Builder(this)
+                .setAudioAttributes(attributes, /* handleAudioFocus = */ false)
+                .setHandleAudioBecomingNoisy(true)
+                .build()
+                .also { attachEffectsAndWidgetListeners(it) }
 
         // Two players: one audible (active), one standby for the crossfade /
         // gapless preload. The pair re-points the MediaSession at whichever is
         // active when a crossfade swap completes.
-        val pair = CrossfadePlayerPair(
-            primary = buildExoPlayer(),
-            secondary = buildExoPlayer(),
-            onActivePlayerChanged = { newActive -> swapSessionPlayer(newActive) },
-        )
+        val pair =
+            CrossfadePlayerPair(
+                primary = buildExoPlayer(),
+                secondary = buildExoPlayer(),
+                onActivePlayerChanged = { newActive -> swapSessionPlayer(newActive) },
+            )
         playerPair = pair
 
         // Wrap the active ExoPlayer in StationAwarePlayer so external surfaces
@@ -309,8 +314,9 @@ class RadioShedMediaSessionService : MediaLibraryService() {
         val player = wrapAsStationPlayer(pair.active)
 
         Log.i(TAG, "onCreate: building MediaLibrarySession")
-        librarySession = MediaLibrarySession.Builder(this, player, libraryCallback)
-            .build()
+        librarySession =
+            MediaLibrarySession.Builder(this, player, libraryCallback)
+                .build()
         Log.i(TAG, "onCreate: MediaLibrarySession built; token=${librarySession?.token}")
         // Hand the live session back to the callback so it can update
         // the custom layout (heart state, repeat/shuffle glyph) when
@@ -328,14 +334,15 @@ class RadioShedMediaSessionService : MediaLibraryService() {
         // rather than the system-default media-playback icon (which
         // is generic across all media apps and looks unprofessional).
         // Default channel id / name / button order are preserved.
-        val notificationProvider = DefaultMediaNotificationProvider.Builder(this)
-            .setNotificationId(NOTIFICATION_ID)
-            .setChannelId(NOTIFICATION_CHANNEL_ID)
-            .setChannelName(R.string.notification_channel_playback)
-            .build()
-            .apply {
-                setSmallIcon(R.drawable.ic_radioshed_notification)
-            }
+        val notificationProvider =
+            DefaultMediaNotificationProvider.Builder(this)
+                .setNotificationId(NOTIFICATION_ID)
+                .setChannelId(NOTIFICATION_CHANNEL_ID)
+                .setChannelName(R.string.notification_channel_playback)
+                .build()
+                .apply {
+                    setSmallIcon(R.drawable.ic_radioshed_notification)
+                }
         setMediaNotificationProvider(notificationProvider)
     }
 
@@ -352,58 +359,60 @@ class RadioShedMediaSessionService : MediaLibraryService() {
      * session id to the equalizer explicitly on every swap.
      */
     private fun attachEffectsAndWidgetListeners(exoPlayer: ExoPlayer) {
-        exoPlayer.addListener(object : androidx.media3.common.Player.Listener {
-            override fun onAudioSessionIdChanged(audioSessionId: Int) {
-                // Only the active player should own the global AudioEffect
-                // chain; a standby player's session id (it preloads silently)
-                // must not steal the equalizer away from what's audible.
-                if (exoPlayer !== playerPair?.active) return
-                forwardAudioSessionToEqualizer(audioSessionId)
-            }
-
-            override fun onMediaItemTransition(
-                mediaItem: androidx.media3.common.MediaItem?,
-                reason: Int,
-            ) {
-                if (exoPlayer !== playerPair?.active) return
-                // Push a fresh paint to any home-screen widget
-                // instances so they catch up to the new track.
-                // Cheap (no-op when zero widgets exist).
-                runCatching {
-                    com.visorcraft.radioshed.widget.NowPlayingWidget
-                        .pushUpdate(this@RadioShedMediaSessionService)
+        exoPlayer.addListener(
+            object : androidx.media3.common.Player.Listener {
+                override fun onAudioSessionIdChanged(audioSessionId: Int) {
+                    // Only the active player should own the global AudioEffect
+                    // chain; a standby player's session id (it preloads silently)
+                    // must not steal the equalizer away from what's audible.
+                    if (exoPlayer !== playerPair?.active) return
+                    forwardAudioSessionToEqualizer(audioSessionId)
                 }
-            }
 
-            override fun onIsPlayingChanged(isPlaying: Boolean) {
-                if (exoPlayer !== playerPair?.active) return
-                if (isPlaying) {
-                    // The active player just became audible: take the
-                    // service-level focus (idempotent; see
-                    // [audioFocusRequest] for why it lives here and not
-                    // inside each player). A denial — e.g. an ongoing call
-                    // with a strict focus policy — must not leave us playing
-                    // unfocused, so pause through the session-facing player
-                    // so the controller / notification reflect the truth.
-                    if (!requestAudioFocus()) {
-                        librarySession?.player?.pause()
+                override fun onMediaItemTransition(
+                    mediaItem: androidx.media3.common.MediaItem?,
+                    reason: Int,
+                ) {
+                    if (exoPlayer !== playerPair?.active) return
+                    // Push a fresh paint to any home-screen widget
+                    // instances so they catch up to the new track.
+                    // Cheap (no-op when zero widgets exist).
+                    runCatching {
+                        com.visorcraft.radioshed.widget.NowPlayingWidget
+                            .pushUpdate(this@RadioShedMediaSessionService)
                     }
-                } else if (!exoPlayer.playWhenReady && !resumeOnFocusGain) {
-                    // User-initiated pause/stop: playWhenReady dropped AND
-                    // this isn't a transient-focus-loss pause (which must
-                    // keep the request registered to receive the later
-                    // AUDIOFOCUS_GAIN). Release the focus so other apps see
-                    // us leave the stack as soon as we go silent.
-                    abandonAudioFocus()
                 }
-                // Same reason as onMediaItemTransition — flip the
-                // widget's play/pause glyph when state changes.
-                runCatching {
-                    com.visorcraft.radioshed.widget.NowPlayingWidget
-                        .pushUpdate(this@RadioShedMediaSessionService)
+
+                override fun onIsPlayingChanged(isPlaying: Boolean) {
+                    if (exoPlayer !== playerPair?.active) return
+                    if (isPlaying) {
+                        // The active player just became audible: take the
+                        // service-level focus (idempotent; see
+                        // [audioFocusRequest] for why it lives here and not
+                        // inside each player). A denial — e.g. an ongoing call
+                        // with a strict focus policy — must not leave us playing
+                        // unfocused, so pause through the session-facing player
+                        // so the controller / notification reflect the truth.
+                        if (!requestAudioFocus()) {
+                            librarySession?.player?.pause()
+                        }
+                    } else if (!exoPlayer.playWhenReady && !resumeOnFocusGain) {
+                        // User-initiated pause/stop: playWhenReady dropped AND
+                        // this isn't a transient-focus-loss pause (which must
+                        // keep the request registered to receive the later
+                        // AUDIOFOCUS_GAIN). Release the focus so other apps see
+                        // us leave the stack as soon as we go silent.
+                        abandonAudioFocus()
+                    }
+                    // Same reason as onMediaItemTransition — flip the
+                    // widget's play/pause glyph when state changes.
+                    runCatching {
+                        com.visorcraft.radioshed.widget.NowPlayingWidget
+                            .pushUpdate(this@RadioShedMediaSessionService)
+                    }
                 }
-            }
-        })
+            },
+        )
     }
 
     /**
@@ -416,8 +425,9 @@ class RadioShedMediaSessionService : MediaLibraryService() {
      */
     private fun forwardAudioSessionToEqualizer(audioSessionId: Int) {
         runCatching {
-            val ctrl = GlobalContext.get()
-                .get<com.visorcraft.radioshed.audio.EqualizerController>()
+            val ctrl =
+                GlobalContext.get()
+                    .get<com.visorcraft.radioshed.audio.EqualizerController>()
             if (ctrl is com.visorcraft.radioshed.audio.AndroidEqualizerController) {
                 ctrl.onAudioSessionIdChanged(audioSessionId)
             }
@@ -443,43 +453,46 @@ class RadioShedMediaSessionService : MediaLibraryService() {
      * underlying ExoPlayer for the service lifetime.
      */
     private fun createStationPlayer(exoPlayer: ExoPlayer): StationAwarePlayer {
-        val player = StationAwarePlayer(
-            underlying = exoPlayer,
-            onSkipNext = {
-                runCatching {
-                    GlobalContext.get().get<StationPlayback>().skipNext()
+        val player =
+            StationAwarePlayer(
+                underlying = exoPlayer,
+                onSkipNext = {
+                    runCatching {
+                        GlobalContext.get().get<StationPlayback>().skipNext()
+                    }
+                },
+                onSkipPrevious = {
+                    // Route through StationPlayback for full Spotify-style
+                    // semantics: > 3s into the track restarts; otherwise pops
+                    // history. Previously this was a `seekTo(0)` shortcut
+                    // that broke "back to actually previous" on Auto / lock
+                    // screen / Bluetooth — they got a restart-only behaviour
+                    // that didn't match the in-app NowPlaying experience.
+                    runCatching {
+                        GlobalContext.get().get<StationPlayback>().skipPrevious()
+                    }
+                },
+            )
+        player.addListener(
+            object : Player.Listener {
+                override fun onRepeatModeChanged(repeatMode: Int) {
+                    libraryCallback.refreshCustomLayout()
                 }
-            },
-            onSkipPrevious = {
-                // Route through StationPlayback for full Spotify-style
-                // semantics: > 3s into the track restarts; otherwise pops
-                // history. Previously this was a `seekTo(0)` shortcut
-                // that broke "back to actually previous" on Auto / lock
-                // screen / Bluetooth — they got a restart-only behaviour
-                // that didn't match the in-app NowPlaying experience.
-                runCatching {
-                    GlobalContext.get().get<StationPlayback>().skipPrevious()
+
+                override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) {
+                    libraryCallback.refreshCustomLayout()
+                }
+
+                override fun onMediaItemTransition(
+                    mediaItem: androidx.media3.common.MediaItem?,
+                    reason: Int,
+                ) {
+                    // New track → re-fetch its like state so the heart
+                    // glyph isn't stuck on the previous track's value.
+                    libraryCallback.refreshCustomLayout()
                 }
             },
         )
-        player.addListener(object : Player.Listener {
-            override fun onRepeatModeChanged(repeatMode: Int) {
-                libraryCallback.refreshCustomLayout()
-            }
-
-            override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) {
-                libraryCallback.refreshCustomLayout()
-            }
-
-            override fun onMediaItemTransition(
-                mediaItem: androidx.media3.common.MediaItem?,
-                reason: Int,
-            ) {
-                // New track → re-fetch its like state so the heart
-                // glyph isn't stuck on the previous track's value.
-                libraryCallback.refreshCustomLayout()
-            }
-        })
         return player
     }
 
@@ -613,7 +626,6 @@ class RadioShedMediaSessionService : MediaLibraryService() {
      * call into this to populate their UI and to request playback.
      */
     private inner class RadioShedLibraryCallback : MediaLibrarySession.Callback {
-
         // Multi-click state for Bluetooth headset button. Standard Media3
         // ships single-click (play/pause) and double-click (next), but
         // triple-click (previous) is non-standard and must be implemented
@@ -663,9 +675,8 @@ class RadioShedMediaSessionService : MediaLibraryService() {
         private val pendingSearchResults: MutableMap<String, List<MediaItem>> =
             java.util.Collections.synchronizedMap(
                 object : LinkedHashMap<String, List<MediaItem>>(8, 0.75f, true) {
-                    override fun removeEldestEntry(
-                        eldest: MutableMap.MutableEntry<String, List<MediaItem>>,
-                    ): Boolean = size > MAX_PENDING_SEARCH_RESULTS
+                    override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, List<MediaItem>>): Boolean =
+                        size > MAX_PENDING_SEARCH_RESULTS
                 },
             )
 
@@ -720,12 +731,14 @@ class RadioShedMediaSessionService : MediaLibraryService() {
             controllerInfo: MediaSession.ControllerInfo,
             intent: Intent,
         ): Boolean {
-            val key = intent.getParcelableExtra<KeyEvent>(Intent.EXTRA_KEY_EVENT)
-                ?: return false
+            val key =
+                intent.getParcelableExtra<KeyEvent>(Intent.EXTRA_KEY_EVENT)
+                    ?: return false
             if (key.action != KeyEvent.ACTION_DOWN || key.repeatCount != 0) return false
             return when (key.keyCode) {
                 KeyEvent.KEYCODE_HEADSETHOOK,
-                KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
+                KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE,
+                -> {
                     handleMultiClick()
                     true
                 }
@@ -736,27 +749,30 @@ class RadioShedMediaSessionService : MediaLibraryService() {
         private fun handleMultiClick() {
             clickCount += 1
             clickRunnable?.let { clickHandler.removeCallbacks(it) }
-            val nextRunnable = Runnable {
-                val resolved = clickCount
-                clickCount = 0
-                clickRunnable = null
-                when (resolved) {
-                    1 -> {
-                        val player = librarySession?.player ?: return@Runnable
-                        if (player.isPlaying) player.pause() else player.play()
-                    }
-                    2 -> runCatching {
-                        GlobalContext.get().get<StationPlayback>().skipNext()
-                    }
-                    else -> runCatching {
-                        // 3+ clicks: treat as previous. Power-users sometimes
-                        // tap fast enough to trigger >3, but mapping them all
-                        // to "previous" is more useful than dropping the
-                        // event silently.
-                        GlobalContext.get().get<StationPlayback>().skipPrevious()
+            val nextRunnable =
+                Runnable {
+                    val resolved = clickCount
+                    clickCount = 0
+                    clickRunnable = null
+                    when (resolved) {
+                        1 -> {
+                            val player = librarySession?.player ?: return@Runnable
+                            if (player.isPlaying) player.pause() else player.play()
+                        }
+                        2 ->
+                            runCatching {
+                                GlobalContext.get().get<StationPlayback>().skipNext()
+                            }
+                        else ->
+                            runCatching {
+                                // 3+ clicks: treat as previous. Power-users sometimes
+                                // tap fast enough to trigger >3, but mapping them all
+                                // to "previous" is more useful than dropping the
+                                // event silently.
+                                GlobalContext.get().get<StationPlayback>().skipPrevious()
+                            }
                     }
                 }
-            }
             clickRunnable = nextRunnable
             clickHandler.postDelayed(nextRunnable, clickWindowMs)
         }
@@ -788,13 +804,14 @@ class RadioShedMediaSessionService : MediaLibraryService() {
                 "onConnect: caller=${controller.packageName} uid=${controller.uid} " +
                     "controllerType=${controller.controllerVersion}",
             )
-            val playerCommands = MediaSession.ConnectionResult.DEFAULT_PLAYER_COMMANDS
-                .buildUpon()
-                .add(Player.COMMAND_SEEK_TO_NEXT)
-                .add(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)
-                .add(Player.COMMAND_SEEK_TO_PREVIOUS)
-                .add(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)
-                .build()
+            val playerCommands =
+                MediaSession.ConnectionResult.DEFAULT_PLAYER_COMMANDS
+                    .buildUpon()
+                    .add(Player.COMMAND_SEEK_TO_NEXT)
+                    .add(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)
+                    .add(Player.COMMAND_SEEK_TO_PREVIOUS)
+                    .add(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)
+                    .build()
 
             // Custom session commands: rating + dislike + like + repeat
             // + shuffle, surfaced in Android Auto's Now Playing template
@@ -812,25 +829,27 @@ class RadioShedMediaSessionService : MediaLibraryService() {
             // working right now" — the framework returned "No root for
             // client com.google.android.projection.gearhead" without
             // ever calling our callback.
-            val sessionCommands = MediaSession.ConnectionResult.DEFAULT_SESSION_AND_LIBRARY_COMMANDS
-                .buildUpon()
-                .add(SessionCommand(ACTION_TOGGLE_STAR, Bundle.EMPTY))
-                .add(SessionCommand(ACTION_DISLIKE_ON_STATION, Bundle.EMPTY))
-                .add(SessionCommand(ACTION_TOGGLE_LIKE, Bundle.EMPTY))
-                .add(SessionCommand(ACTION_CYCLE_REPEAT, Bundle.EMPTY))
-                .add(SessionCommand(ACTION_TOGGLE_SHUFFLE, Bundle.EMPTY))
-                // Crossfade / gapless control channel (PLAN 3.2). The in-app
-                // AudioEngineAndroid proxy forwards setUpNext / crossfadeTo down
-                // to this service via these custom commands, since the real
-                // ExoPlayer pair lives here, not in the proxy.
-                .add(SessionCommand(CrossfadeIpc.ACTION_SET_UP_NEXT, Bundle.EMPTY))
-                .add(SessionCommand(CrossfadeIpc.ACTION_CROSSFADE_TO, Bundle.EMPTY))
-                .add(SessionCommand(CrossfadeIpc.ACTION_CANCEL_CROSSFADE, Bundle.EMPTY))
-                .build()
+            val sessionCommands =
+                MediaSession.ConnectionResult.DEFAULT_SESSION_AND_LIBRARY_COMMANDS
+                    .buildUpon()
+                    .add(SessionCommand(ACTION_TOGGLE_STAR, Bundle.EMPTY))
+                    .add(SessionCommand(ACTION_DISLIKE_ON_STATION, Bundle.EMPTY))
+                    .add(SessionCommand(ACTION_TOGGLE_LIKE, Bundle.EMPTY))
+                    .add(SessionCommand(ACTION_CYCLE_REPEAT, Bundle.EMPTY))
+                    .add(SessionCommand(ACTION_TOGGLE_SHUFFLE, Bundle.EMPTY))
+                    // Crossfade / gapless control channel (PLAN 3.2). The in-app
+                    // AudioEngineAndroid proxy forwards setUpNext / crossfadeTo down
+                    // to this service via these custom commands, since the real
+                    // ExoPlayer pair lives here, not in the proxy.
+                    .add(SessionCommand(CrossfadeIpc.ACTION_SET_UP_NEXT, Bundle.EMPTY))
+                    .add(SessionCommand(CrossfadeIpc.ACTION_CROSSFADE_TO, Bundle.EMPTY))
+                    .add(SessionCommand(CrossfadeIpc.ACTION_CANCEL_CROSSFADE, Bundle.EMPTY))
+                    .build()
 
-            val layout = runCatching { buildCustomLayout() }
-                .onFailure { Log.e(TAG, "onConnect: buildCustomLayout failed", it) }
-                .getOrDefault(ImmutableList.of())
+            val layout =
+                runCatching { buildCustomLayout() }
+                    .onFailure { Log.e(TAG, "onConnect: buildCustomLayout failed", it) }
+                    .getOrDefault(ImmutableList.of())
             Log.i(TAG, "onConnect: accepting with ${layout.size} custom layout buttons")
             return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
                 .setAvailablePlayerCommands(playerCommands)
@@ -852,8 +871,12 @@ class RadioShedMediaSessionService : MediaLibraryService() {
          * without having to dismiss & reopen the notification.
          */
         private fun buildCustomLayout(): ImmutableList<CommandButton> {
-            val heartIcon = if (currentTrackLiked) R.drawable.ic_radioshed_heart
-                            else R.drawable.ic_radioshed_heart_outline
+            val heartIcon =
+                if (currentTrackLiked) {
+                    R.drawable.ic_radioshed_heart
+                } else {
+                    R.drawable.ic_radioshed_heart_outline
+                }
             // Conservative 3-button layout — Android Auto's NowPlaying
             // template renders 2-3 secondary actions reliably; pushing
             // 5 (heart + shuffle + repeat + star + dislike) was
@@ -866,11 +889,12 @@ class RadioShedMediaSessionService : MediaLibraryService() {
             // functionality on the car screen — only the explicit
             // glyph slots we owned in the notification.
 
-            val heartButton = CommandButton.Builder()
-                .setSessionCommand(SessionCommand(ACTION_TOGGLE_LIKE, Bundle.EMPTY))
-                .setDisplayName(if (currentTrackLiked) "Unlike" else "Like")
-                .setIconResId(heartIcon)
-                .build()
+            val heartButton =
+                CommandButton.Builder()
+                    .setSessionCommand(SessionCommand(ACTION_TOGGLE_LIKE, Bundle.EMPTY))
+                    .setDisplayName(if (currentTrackLiked) "Unlike" else "Like")
+                    .setIconResId(heartIcon)
+                    .build()
             // Filled-vs-outline star is the cheap way to give visible
             // feedback for the cycling rating without shipping six
             // per-rating drawables. The displayName carries the
@@ -878,26 +902,30 @@ class RadioShedMediaSessionService : MediaLibraryService() {
             // surface labels, but most AA NowPlaying renders only the
             // icon — so the binary filled/outline state is what
             // actually communicates "your tap registered".
-            val starIcon = if (currentTrackRating > 0) {
-                R.drawable.ic_radioshed_star
-            } else {
-                R.drawable.ic_radioshed_star_outline
-            }
-            val starLabel = if (currentTrackRating <= 0) {
-                "Rate"
-            } else {
-                "★ $currentTrackRating/5"
-            }
-            val starButton = CommandButton.Builder()
-                .setSessionCommand(SessionCommand(ACTION_TOGGLE_STAR, Bundle.EMPTY))
-                .setDisplayName(starLabel)
-                .setIconResId(starIcon)
-                .build()
-            val dislikeButton = CommandButton.Builder()
-                .setSessionCommand(SessionCommand(ACTION_DISLIKE_ON_STATION, Bundle.EMPTY))
-                .setDisplayName("Dislike")
-                .setIconResId(R.drawable.ic_radioshed_thumb_down)
-                .build()
+            val starIcon =
+                if (currentTrackRating > 0) {
+                    R.drawable.ic_radioshed_star
+                } else {
+                    R.drawable.ic_radioshed_star_outline
+                }
+            val starLabel =
+                if (currentTrackRating <= 0) {
+                    "Rate"
+                } else {
+                    "★ $currentTrackRating/5"
+                }
+            val starButton =
+                CommandButton.Builder()
+                    .setSessionCommand(SessionCommand(ACTION_TOGGLE_STAR, Bundle.EMPTY))
+                    .setDisplayName(starLabel)
+                    .setIconResId(starIcon)
+                    .build()
+            val dislikeButton =
+                CommandButton.Builder()
+                    .setSessionCommand(SessionCommand(ACTION_DISLIKE_ON_STATION, Bundle.EMPTY))
+                    .setDisplayName("Dislike")
+                    .setIconResId(R.drawable.ic_radioshed_thumb_down)
+                    .build()
 
             // Order matters: Auto's Now Playing template caps the
             // visible custom buttons at 2-3 depending on the head
@@ -1000,11 +1028,12 @@ class RadioShedMediaSessionService : MediaLibraryService() {
             // so they still work between songs.
             when (customCommand.customAction) {
                 ACTION_CYCLE_REPEAT -> {
-                    val nextMode = when (player.repeatMode) {
-                        Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
-                        Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
-                        else -> Player.REPEAT_MODE_OFF
-                    }
+                    val nextMode =
+                        when (player.repeatMode) {
+                            Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
+                            Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
+                            else -> Player.REPEAT_MODE_OFF
+                        }
                     player.repeatMode = nextMode
                     // The Player.Listener registered in onCreate fires
                     // refreshCustomLayout, but pushing one synchronously
@@ -1047,17 +1076,19 @@ class RadioShedMediaSessionService : MediaLibraryService() {
                     // Effective volume the incoming track should land at (user ×
                     // ReplayGain, computed by StationPlayback). Default 1f when
                     // absent so a legacy / unattenuated caller still plays.
-                    val targetVolume = args.getFloat(
-                        CrossfadeIpc.EXTRA_CROSSFADE_TARGET_VOLUME,
-                        1f,
-                    )
+                    val targetVolume =
+                        args.getFloat(
+                            CrossfadeIpc.EXTRA_CROSSFADE_TARGET_VOLUME,
+                            1f,
+                        )
                     val pair = playerPair
                     if (item != null && pair != null && durationMs > 0L) {
-                        val curve = runCatching {
-                            com.visorcraft.radioshed.domain.CrossfadeCurve.valueOf(
-                                curveName ?: "EqualPower",
-                            )
-                        }.getOrDefault(com.visorcraft.radioshed.domain.CrossfadeCurve.EqualPower)
+                        val curve =
+                            runCatching {
+                                com.visorcraft.radioshed.domain.CrossfadeCurve.valueOf(
+                                    curveName ?: "EqualPower",
+                                )
+                            }.getOrDefault(com.visorcraft.radioshed.domain.CrossfadeCurve.EqualPower)
                         // Launch on the service scope (Main) — ExoPlayer needs
                         // its single app thread, and crashGuard keeps a ramp
                         // failure from killing the session.
@@ -1069,10 +1100,11 @@ class RadioShedMediaSessionService : MediaLibraryService() {
                     return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
                 }
             }
-            val trackId = player.currentMediaItem?.mediaId?.toLongOrNull()
-                ?: return Futures.immediateFuture(
-                    SessionResult(SessionResult.RESULT_ERROR_INVALID_STATE),
-                )
+            val trackId =
+                player.currentMediaItem?.mediaId?.toLongOrNull()
+                    ?: return Futures.immediateFuture(
+                        SessionResult(SessionResult.RESULT_ERROR_INVALID_STATE),
+                    )
             return when (customCommand.customAction) {
                 ACTION_TOGGLE_STAR -> {
                     scope.launch {
@@ -1148,8 +1180,11 @@ class RadioShedMediaSessionService : MediaLibraryService() {
                     scope.launch {
                         runCatching {
                             val ratingRepo = GlobalContext.get().get<RatingRepository>()
-                            if (nextLiked) ratingRepo.like(trackId)
-                            else ratingRepo.unlike(trackId)
+                            if (nextLiked) {
+                                ratingRepo.like(trackId)
+                            } else {
+                                ratingRepo.unlike(trackId)
+                            }
                         }.onFailure {
                             // DB write failed — roll the cache back so
                             // the visual state matches the persisted
@@ -1161,9 +1196,10 @@ class RadioShedMediaSessionService : MediaLibraryService() {
                     }
                     Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
                 }
-                else -> Futures.immediateFuture(
-                    SessionResult(SessionResult.RESULT_ERROR_NOT_SUPPORTED),
-                )
+                else ->
+                    Futures.immediateFuture(
+                        SessionResult(SessionResult.RESULT_ERROR_NOT_SUPPORTED),
+                    )
             }
         }
 
@@ -1179,10 +1215,11 @@ class RadioShedMediaSessionService : MediaLibraryService() {
                     "isSuggested=${params?.isSuggested}",
             )
             return runCatching {
-                val root = browseableItem(
-                    mediaId = MEDIA_ID_ROOT,
-                    title = "RadioShed",
-                )
+                val root =
+                    browseableItem(
+                        mediaId = MEDIA_ID_ROOT,
+                        title = "RadioShed",
+                    )
                 // Declare to Auto / Google Assistant that voice search
                 // works against this library. Without
                 // SEARCH_SUPPORTED=true Assistant decides up-front
@@ -1193,16 +1230,18 @@ class RadioShedMediaSessionService : MediaLibraryService() {
                 // flags advertise support for the related
                 // browse-/search-style features so AA picks the right
                 // surface chrome.
-                val rootExtras = android.os.Bundle().apply {
-                    putBoolean("android.media.browse.SEARCH_SUPPORTED", true)
-                    putBoolean("android.media.browse.CONTENT_STYLE_SUPPORTED", true)
-                }
-                val outParams = MediaLibraryService.LibraryParams.Builder()
-                    .setExtras(rootExtras)
-                    .setRecent(params?.isRecent == true)
-                    .setOffline(params?.isOffline == true)
-                    .setSuggested(params?.isSuggested == true)
-                    .build()
+                val rootExtras =
+                    android.os.Bundle().apply {
+                        putBoolean("android.media.browse.SEARCH_SUPPORTED", true)
+                        putBoolean("android.media.browse.CONTENT_STYLE_SUPPORTED", true)
+                    }
+                val outParams =
+                    MediaLibraryService.LibraryParams.Builder()
+                        .setExtras(rootExtras)
+                        .setRecent(params?.isRecent == true)
+                        .setOffline(params?.isOffline == true)
+                        .setSuggested(params?.isSuggested == true)
+                        .build()
                 Futures.immediateFuture(LibraryResult.ofItem(root, outParams))
             }.getOrElse {
                 Log.e(TAG, "onGetLibraryRoot: failed", it)
@@ -1233,232 +1272,251 @@ class RadioShedMediaSessionService : MediaLibraryService() {
             page: Int,
             pageSize: Int,
             params: LibraryParams?,
-        ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> = when (parentId) {
-            MEDIA_ID_ROOT -> {
-                // Three top-level browse buckets, mirroring the
-                // phone app's mental model as closely as a flat
-                // browse tree allows: Stations (the curated mixes
-                // the app is built around), Library (the raw
-                // collection — songs / albums / artists), and
-                // Recently Played (the just-listened list pulled
-                // from station_history).
-                //
-                // Search is intentionally NOT a separate browse
-                // category — Android Auto routes voice queries
-                // through Google Assistant which fires
-                // onSearch(query) on the MediaLibrarySession.
-                // Surfacing a redundant "Search" tile would clutter
-                // the surface for no functional gain. Settings
-                // also doesn't appear: head-unit users configure
-                // RadioShed on the phone, not behind the wheel.
-                val stations = browseableItem(MEDIA_ID_STATIONS, "Stations")
-                val library = browseableItem(MEDIA_ID_LIBRARY, "Library")
-                val recents = browseableItem(MEDIA_ID_RECENTLY_PLAYED, "Recently Played")
-                Futures.immediateFuture(
-                    LibraryResult.ofItemList(
-                        ImmutableList.of(stations, library, recents),
-                        params,
-                    ),
-                )
-            }
-            MEDIA_ID_LIBRARY -> {
-                // Library subcategories. Each is a browseable folder
-                // the user drills into. Songs lists tracks
-                // alphabetically; Albums and Artists list collections
-                // that, when tapped, play the whole album / discography
-                // (no drill-down — head-unit users want one tap to
-                // music, not three).
-                val songs = browseableItem(MEDIA_ID_LIBRARY_SONGS, "Songs")
-                val albums = browseableItem(MEDIA_ID_LIBRARY_ALBUMS, "Albums")
-                val artists = browseableItem(MEDIA_ID_LIBRARY_ARTISTS, "Artists")
-                Futures.immediateFuture(
-                    LibraryResult.ofItemList(
-                        ImmutableList.of(songs, albums, artists),
-                        params,
-                    ),
-                )
-            }
-            MEDIA_ID_LIBRARY_SONGS -> {
-                // First N tracks alphabetically. Capped because AA's
-                // browse list isn't the right surface for a 10k-track
-                // library — large libraries should reach for
-                // Stations or Recently Played instead, where the
-                // smart-query filtering keeps things bounded.
-                val future = SettableFuture.create<LibraryResult<ImmutableList<MediaItem>>>()
-                scope.launch {
-                    runCatching {
-                        val libraryRepo = GlobalContext.get().get<
-                            com.visorcraft.radioshed.data.LibraryRepository
-                        >()
-                        val tracks = libraryRepo.listAvailableTracks(
-                            limit = AA_BROWSE_TRACK_LIMIT,
-                            offset = 0L,
-                        ).sortedBy { it.title.lowercase() }
-                        val items = tracks.map { track ->
-                            playableItem(
-                                mediaId = MEDIA_ID_TRACK_PREFIX + track.id,
-                                title = track.title.ifBlank { track.fileName },
-                                subtitle = null,
-                            )
-                        }
-                        future.set(LibraryResult.ofItemList(
-                            ImmutableList.copyOf(items),
+        ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> =
+            when (parentId) {
+                MEDIA_ID_ROOT -> {
+                    // Three top-level browse buckets, mirroring the
+                    // phone app's mental model as closely as a flat
+                    // browse tree allows: Stations (the curated mixes
+                    // the app is built around), Library (the raw
+                    // collection — songs / albums / artists), and
+                    // Recently Played (the just-listened list pulled
+                    // from station_history).
+                    //
+                    // Search is intentionally NOT a separate browse
+                    // category — Android Auto routes voice queries
+                    // through Google Assistant which fires
+                    // onSearch(query) on the MediaLibrarySession.
+                    // Surfacing a redundant "Search" tile would clutter
+                    // the surface for no functional gain. Settings
+                    // also doesn't appear: head-unit users configure
+                    // RadioShed on the phone, not behind the wheel.
+                    val stations = browseableItem(MEDIA_ID_STATIONS, "Stations")
+                    val library = browseableItem(MEDIA_ID_LIBRARY, "Library")
+                    val recents = browseableItem(MEDIA_ID_RECENTLY_PLAYED, "Recently Played")
+                    Futures.immediateFuture(
+                        LibraryResult.ofItemList(
+                            ImmutableList.of(stations, library, recents),
                             params,
-                        ))
-                    }.onFailure {
-                        Log.e(TAG, "onGetChildren songs: failed", it)
-                        future.set(LibraryResult.ofError(LibraryResult.RESULT_ERROR_UNKNOWN))
-                    }
+                        ),
+                    )
                 }
-                future
-            }
-            MEDIA_ID_LIBRARY_ALBUMS -> {
-                // Each album is a single playable row — tap plays the
-                // whole album from track 1 (alphabetical-by-disc-or-
-                // track-number ordering owned by tracksForAlbum). No
-                // drill-down: AA's UX guideline is to keep "tap → music"
-                // to one gesture so the user can keep eyes on the road.
-                val future = SettableFuture.create<LibraryResult<ImmutableList<MediaItem>>>()
-                scope.launch {
-                    runCatching {
-                        val libraryRepo = GlobalContext.get().get<
-                            com.visorcraft.radioshed.data.LibraryRepository
-                        >()
-                        // Sort + cap on the IO dispatcher rather than
-                        // the session callback's Main thread — for a
-                        // 2k-album library, the lowercase()/compare
-                        // sort is O(n log n) on a thread that also
-                        // services UI input. Move it off-Main to
-                        // pre-empt an ANR on the Galaxy Fold class
-                        // of devices.
-                        val items = withContext(
-                            com.visorcraft.radioshed.data.IODispatcher,
-                        ) {
-                            libraryRepo.observeAlbums().first()
-                                .sortedBy { it.title.lowercase() }
-                                .take(AA_BROWSE_TRACK_LIMIT.toInt())
-                                .map { album ->
+                MEDIA_ID_LIBRARY -> {
+                    // Library subcategories. Each is a browseable folder
+                    // the user drills into. Songs lists tracks
+                    // alphabetically; Albums and Artists list collections
+                    // that, when tapped, play the whole album / discography
+                    // (no drill-down — head-unit users want one tap to
+                    // music, not three).
+                    val songs = browseableItem(MEDIA_ID_LIBRARY_SONGS, "Songs")
+                    val albums = browseableItem(MEDIA_ID_LIBRARY_ALBUMS, "Albums")
+                    val artists = browseableItem(MEDIA_ID_LIBRARY_ARTISTS, "Artists")
+                    Futures.immediateFuture(
+                        LibraryResult.ofItemList(
+                            ImmutableList.of(songs, albums, artists),
+                            params,
+                        ),
+                    )
+                }
+                MEDIA_ID_LIBRARY_SONGS -> {
+                    // First N tracks alphabetically. Capped because AA's
+                    // browse list isn't the right surface for a 10k-track
+                    // library — large libraries should reach for
+                    // Stations or Recently Played instead, where the
+                    // smart-query filtering keeps things bounded.
+                    val future = SettableFuture.create<LibraryResult<ImmutableList<MediaItem>>>()
+                    scope.launch {
+                        runCatching {
+                            val libraryRepo =
+                                GlobalContext.get().get<
+                                    com.visorcraft.radioshed.data.LibraryRepository,
+                                    >()
+                            val tracks =
+                                libraryRepo.listAvailableTracks(
+                                    limit = AA_BROWSE_TRACK_LIMIT,
+                                    offset = 0L,
+                                ).sortedBy { it.title.lowercase() }
+                            val items =
+                                tracks.map { track ->
                                     playableItem(
-                                        mediaId = MEDIA_ID_ALBUM_PREFIX + album.id,
-                                        title = album.title.ifBlank { "Unknown album" },
+                                        mediaId = MEDIA_ID_TRACK_PREFIX + track.id,
+                                        title = track.title.ifBlank { track.fileName },
                                         subtitle = null,
                                     )
                                 }
+                            future.set(
+                                LibraryResult.ofItemList(
+                                    ImmutableList.copyOf(items),
+                                    params,
+                                ),
+                            )
+                        }.onFailure {
+                            Log.e(TAG, "onGetChildren songs: failed", it)
+                            future.set(LibraryResult.ofError(LibraryResult.RESULT_ERROR_UNKNOWN))
                         }
-                        future.set(LibraryResult.ofItemList(
-                            ImmutableList.copyOf(items),
-                            params,
-                        ))
-                    }.onFailure {
-                        Log.e(TAG, "onGetChildren albums: failed", it)
-                        future.set(LibraryResult.ofError(LibraryResult.RESULT_ERROR_UNKNOWN))
                     }
+                    future
                 }
-                future
-            }
-            MEDIA_ID_LIBRARY_ARTISTS -> {
-                // Each artist is a single playable row — tap plays
-                // every available track tagged to that artist. Same
-                // single-tap rationale as albums.
-                val future = SettableFuture.create<LibraryResult<ImmutableList<MediaItem>>>()
-                scope.launch {
-                    runCatching {
-                        val libraryRepo = GlobalContext.get().get<
-                            com.visorcraft.radioshed.data.LibraryRepository
-                        >()
-                        val items = withContext(
-                            com.visorcraft.radioshed.data.IODispatcher,
-                        ) {
-                            libraryRepo.observeArtists().first()
-                                .sortedBy { it.name.lowercase() }
-                                .take(AA_BROWSE_TRACK_LIMIT.toInt())
-                                .map { artist ->
+                MEDIA_ID_LIBRARY_ALBUMS -> {
+                    // Each album is a single playable row — tap plays the
+                    // whole album from track 1 (alphabetical-by-disc-or-
+                    // track-number ordering owned by tracksForAlbum). No
+                    // drill-down: AA's UX guideline is to keep "tap → music"
+                    // to one gesture so the user can keep eyes on the road.
+                    val future = SettableFuture.create<LibraryResult<ImmutableList<MediaItem>>>()
+                    scope.launch {
+                        runCatching {
+                            val libraryRepo =
+                                GlobalContext.get().get<
+                                    com.visorcraft.radioshed.data.LibraryRepository,
+                                    >()
+                            // Sort + cap on the IO dispatcher rather than
+                            // the session callback's Main thread — for a
+                            // 2k-album library, the lowercase()/compare
+                            // sort is O(n log n) on a thread that also
+                            // services UI input. Move it off-Main to
+                            // pre-empt an ANR on the Galaxy Fold class
+                            // of devices.
+                            val items =
+                                withContext(
+                                    com.visorcraft.radioshed.data.IODispatcher,
+                                ) {
+                                    libraryRepo.observeAlbums().first()
+                                        .sortedBy { it.title.lowercase() }
+                                        .take(AA_BROWSE_TRACK_LIMIT.toInt())
+                                        .map { album ->
+                                            playableItem(
+                                                mediaId = MEDIA_ID_ALBUM_PREFIX + album.id,
+                                                title = album.title.ifBlank { "Unknown album" },
+                                                subtitle = null,
+                                            )
+                                        }
+                                }
+                            future.set(
+                                LibraryResult.ofItemList(
+                                    ImmutableList.copyOf(items),
+                                    params,
+                                ),
+                            )
+                        }.onFailure {
+                            Log.e(TAG, "onGetChildren albums: failed", it)
+                            future.set(LibraryResult.ofError(LibraryResult.RESULT_ERROR_UNKNOWN))
+                        }
+                    }
+                    future
+                }
+                MEDIA_ID_LIBRARY_ARTISTS -> {
+                    // Each artist is a single playable row — tap plays
+                    // every available track tagged to that artist. Same
+                    // single-tap rationale as albums.
+                    val future = SettableFuture.create<LibraryResult<ImmutableList<MediaItem>>>()
+                    scope.launch {
+                        runCatching {
+                            val libraryRepo =
+                                GlobalContext.get().get<
+                                    com.visorcraft.radioshed.data.LibraryRepository,
+                                    >()
+                            val items =
+                                withContext(
+                                    com.visorcraft.radioshed.data.IODispatcher,
+                                ) {
+                                    libraryRepo.observeArtists().first()
+                                        .sortedBy { it.name.lowercase() }
+                                        .take(AA_BROWSE_TRACK_LIMIT.toInt())
+                                        .map { artist ->
+                                            playableItem(
+                                                mediaId = MEDIA_ID_ARTIST_PREFIX + artist.id,
+                                                title = artist.name.ifBlank { "Unknown artist" },
+                                                subtitle = null,
+                                            )
+                                        }
+                                }
+                            future.set(
+                                LibraryResult.ofItemList(
+                                    ImmutableList.copyOf(items),
+                                    params,
+                                ),
+                            )
+                        }.onFailure {
+                            Log.e(TAG, "onGetChildren artists: failed", it)
+                            future.set(LibraryResult.ofError(LibraryResult.RESULT_ERROR_UNKNOWN))
+                        }
+                    }
+                    future
+                }
+                MEDIA_ID_RECENTLY_PLAYED -> {
+                    // Newest-first, dedup'd by trackId. Pulls from
+                    // station_history (covers any in-app or AA
+                    // playback) and resolves each id against
+                    // LibraryRepository so we render the live track
+                    // metadata, not a stale snapshot from history.
+                    val future = SettableFuture.create<LibraryResult<ImmutableList<MediaItem>>>()
+                    scope.launch {
+                        runCatching {
+                            val stationRepo = GlobalContext.get().get<StationRepository>()
+                            val libraryRepo =
+                                GlobalContext.get().get<
+                                    com.visorcraft.radioshed.data.LibraryRepository,
+                                    >()
+                            val history = stationRepo.allHistory(limit = 60L)
+                            val seen = mutableSetOf<Long>()
+                            val tracks = mutableListOf<com.visorcraft.radioshed.domain.Track>()
+                            for (entry in history) {
+                                if (!seen.add(entry.trackId)) continue
+                                libraryRepo.getTrackById(entry.trackId)?.let { tracks += it }
+                                if (tracks.size >= AA_RECENTLY_PLAYED_LIMIT) break
+                            }
+                            val items =
+                                tracks.map { track ->
                                     playableItem(
-                                        mediaId = MEDIA_ID_ARTIST_PREFIX + artist.id,
-                                        title = artist.name.ifBlank { "Unknown artist" },
+                                        mediaId = MEDIA_ID_TRACK_PREFIX + track.id,
+                                        title = track.title.ifBlank { track.fileName },
                                         subtitle = null,
                                     )
                                 }
-                        }
-                        future.set(LibraryResult.ofItemList(
-                            ImmutableList.copyOf(items),
-                            params,
-                        ))
-                    }.onFailure {
-                        Log.e(TAG, "onGetChildren artists: failed", it)
-                        future.set(LibraryResult.ofError(LibraryResult.RESULT_ERROR_UNKNOWN))
-                    }
-                }
-                future
-            }
-            MEDIA_ID_RECENTLY_PLAYED -> {
-                // Newest-first, dedup'd by trackId. Pulls from
-                // station_history (covers any in-app or AA
-                // playback) and resolves each id against
-                // LibraryRepository so we render the live track
-                // metadata, not a stale snapshot from history.
-                val future = SettableFuture.create<LibraryResult<ImmutableList<MediaItem>>>()
-                scope.launch {
-                    runCatching {
-                        val stationRepo = GlobalContext.get().get<StationRepository>()
-                        val libraryRepo = GlobalContext.get().get<
-                            com.visorcraft.radioshed.data.LibraryRepository
-                        >()
-                        val history = stationRepo.allHistory(limit = 60L)
-                        val seen = mutableSetOf<Long>()
-                        val tracks = mutableListOf<com.visorcraft.radioshed.domain.Track>()
-                        for (entry in history) {
-                            if (!seen.add(entry.trackId)) continue
-                            libraryRepo.getTrackById(entry.trackId)?.let { tracks += it }
-                            if (tracks.size >= AA_RECENTLY_PLAYED_LIMIT) break
-                        }
-                        val items = tracks.map { track ->
-                            playableItem(
-                                mediaId = MEDIA_ID_TRACK_PREFIX + track.id,
-                                title = track.title.ifBlank { track.fileName },
-                                subtitle = null,
+                            future.set(
+                                LibraryResult.ofItemList(
+                                    ImmutableList.copyOf(items),
+                                    params,
+                                ),
                             )
+                        }.onFailure {
+                            Log.e(TAG, "onGetChildren recently played: failed", it)
+                            future.set(LibraryResult.ofError(LibraryResult.RESULT_ERROR_UNKNOWN))
                         }
-                        future.set(LibraryResult.ofItemList(
-                            ImmutableList.copyOf(items),
-                            params,
-                        ))
-                    }.onFailure {
-                        Log.e(TAG, "onGetChildren recently played: failed", it)
-                        future.set(LibraryResult.ofError(LibraryResult.RESULT_ERROR_UNKNOWN))
                     }
+                    future
                 }
-                future
-            }
-            MEDIA_ID_STATIONS -> {
-                // Snapshot the station list from the repo. observeAll() is a
-                // Flow; .first() takes one snapshot which is enough — Auto
-                // re-queries onGetChildren when the user re-enters the
-                // category, so live-updating isn't required for v1.
-                val future = SettableFuture.create<LibraryResult<ImmutableList<MediaItem>>>()
-                scope.launch {
-                    runCatching {
-                        val repo = GlobalContext.get().get<StationRepository>()
-                        val stations = repo.observeAll().first()
-                        val items = stations.map { station ->
-                            playableItem(
-                                mediaId = MEDIA_ID_STATION_PREFIX + station.id,
-                                title = station.name,
-                                subtitle = station.customSubtitle,
-                            )
+                MEDIA_ID_STATIONS -> {
+                    // Snapshot the station list from the repo. observeAll() is a
+                    // Flow; .first() takes one snapshot which is enough — Auto
+                    // re-queries onGetChildren when the user re-enters the
+                    // category, so live-updating isn't required for v1.
+                    val future = SettableFuture.create<LibraryResult<ImmutableList<MediaItem>>>()
+                    scope.launch {
+                        runCatching {
+                            val repo = GlobalContext.get().get<StationRepository>()
+                            val stations = repo.observeAll().first()
+                            val items =
+                                stations.map { station ->
+                                    playableItem(
+                                        mediaId = MEDIA_ID_STATION_PREFIX + station.id,
+                                        title = station.name,
+                                        subtitle = station.customSubtitle,
+                                    )
+                                }
+                            future.set(LibraryResult.ofItemList(ImmutableList.copyOf(items), params))
+                        }.onFailure {
+                            future.set(LibraryResult.ofError(LibraryResult.RESULT_ERROR_UNKNOWN))
                         }
-                        future.set(LibraryResult.ofItemList(ImmutableList.copyOf(items), params))
-                    }.onFailure {
-                        future.set(LibraryResult.ofError(LibraryResult.RESULT_ERROR_UNKNOWN))
                     }
+                    future
                 }
-                future
+                else ->
+                    Futures.immediateFuture(
+                        LibraryResult.ofError(LibraryResult.RESULT_ERROR_BAD_VALUE),
+                    )
             }
-            else ->
-                Futures.immediateFuture(
-                    LibraryResult.ofError(LibraryResult.RESULT_ERROR_BAD_VALUE),
-                )
-        }
 
         /**
          * Voice search. Android Auto / Google Assistant fires this
@@ -1486,9 +1544,10 @@ class RadioShedMediaSessionService : MediaLibraryService() {
             val future = SettableFuture.create<LibraryResult<Void>>()
             scope.launch {
                 runCatching {
-                    val searchRepo = GlobalContext.get().get<
-                        com.visorcraft.radioshed.data.SearchRepository
-                    >()
+                    val searchRepo =
+                        GlobalContext.get().get<
+                            com.visorcraft.radioshed.data.SearchRepository,
+                            >()
                     val results = searchRepo.searchAll(query, limitPerCategory = 20L)
                     val items = buildSearchMediaItems(results)
                     // Cache so the immediately-following onGetSearchResult
@@ -1534,15 +1593,18 @@ class RadioShedMediaSessionService : MediaLibraryService() {
             val future = SettableFuture.create<LibraryResult<ImmutableList<MediaItem>>>()
             scope.launch {
                 runCatching {
-                    val searchRepo = GlobalContext.get().get<
-                        com.visorcraft.radioshed.data.SearchRepository
-                    >()
+                    val searchRepo =
+                        GlobalContext.get().get<
+                            com.visorcraft.radioshed.data.SearchRepository,
+                            >()
                     val results = searchRepo.searchAll(query, limitPerCategory = 20L)
                     val items = buildSearchMediaItems(results)
-                    future.set(LibraryResult.ofItemList(
-                        ImmutableList.copyOf(items),
-                        params,
-                    ))
+                    future.set(
+                        LibraryResult.ofItemList(
+                            ImmutableList.copyOf(items),
+                            params,
+                        ),
+                    )
                 }.onFailure {
                     Log.e(TAG, "onGetSearchResult: failed", it)
                     future.set(LibraryResult.ofError(LibraryResult.RESULT_ERROR_UNKNOWN))
@@ -1556,30 +1618,31 @@ class RadioShedMediaSessionService : MediaLibraryService() {
          * Tracks first (most common voice-search target — "play X"
          * autoplays the first hit), then albums, then artists.
          */
-        private fun buildSearchMediaItems(
-            results: com.visorcraft.radioshed.data.SearchResults,
-        ): List<MediaItem> {
+        private fun buildSearchMediaItems(results: com.visorcraft.radioshed.data.SearchResults): List<MediaItem> {
             val items = mutableListOf<MediaItem>()
             for (track in results.tracks) {
-                items += playableItem(
-                    mediaId = MEDIA_ID_TRACK_PREFIX + track.id,
-                    title = track.title.ifBlank { track.fileName },
-                    subtitle = null,
-                )
+                items +=
+                    playableItem(
+                        mediaId = MEDIA_ID_TRACK_PREFIX + track.id,
+                        title = track.title.ifBlank { track.fileName },
+                        subtitle = null,
+                    )
             }
             for (album in results.albums) {
-                items += playableItem(
-                    mediaId = MEDIA_ID_ALBUM_PREFIX + album.id,
-                    title = "Album: ${album.title}",
-                    subtitle = null,
-                )
+                items +=
+                    playableItem(
+                        mediaId = MEDIA_ID_ALBUM_PREFIX + album.id,
+                        title = "Album: ${album.title}",
+                        subtitle = null,
+                    )
             }
             for (artist in results.artists) {
-                items += playableItem(
-                    mediaId = MEDIA_ID_ARTIST_PREFIX + artist.id,
-                    title = "Artist: ${artist.name}",
-                    subtitle = null,
-                )
+                items +=
+                    playableItem(
+                        mediaId = MEDIA_ID_ARTIST_PREFIX + artist.id,
+                        title = "Artist: ${artist.name}",
+                        subtitle = null,
+                    )
             }
             return items
         }
@@ -1631,9 +1694,10 @@ class RadioShedMediaSessionService : MediaLibraryService() {
             // and intercepting those broke the MediaController's
             // expected flow → Assistant surfaced "can't play music
             // on Radio Shed because it's not a supported platform".
-            val voiceItem = mediaItems.firstOrNull { item ->
-                !item.requestMetadata.searchQuery.isNullOrBlank()
-            }
+            val voiceItem =
+                mediaItems.firstOrNull { item ->
+                    !item.requestMetadata.searchQuery.isNullOrBlank()
+                }
             if (voiceItem != null) {
                 val rm = voiceItem.requestMetadata
                 val rawQuery = rm.searchQuery?.toString().orEmpty()
@@ -1653,12 +1717,14 @@ class RadioShedMediaSessionService : MediaLibraryService() {
                 )
                 scope.launch {
                     runCatching {
-                        val searchRepo = GlobalContext.get().get<
-                            com.visorcraft.radioshed.data.SearchRepository
-                        >()
-                        val libraryRepo = GlobalContext.get().get<
-                            com.visorcraft.radioshed.data.LibraryRepository
-                        >()
+                        val searchRepo =
+                            GlobalContext.get().get<
+                                com.visorcraft.radioshed.data.SearchRepository,
+                                >()
+                        val libraryRepo =
+                            GlobalContext.get().get<
+                                com.visorcraft.radioshed.data.LibraryRepository,
+                                >()
                         val playback = GlobalContext.get().get<StationPlayback>()
 
                         // Focus-driven dispatch. The MIME-type strings
@@ -1673,6 +1739,7 @@ class RadioShedMediaSessionService : MediaLibraryService() {
                             playback.playTracks(tracks, startIndex = 0)
                             return true
                         }
+
                         suspend fun playAlbumByTitle(name: String): Boolean {
                             val albums = searchRepo.searchAlbums(name, limit = 5)
                             val album = albums.firstOrNull() ?: return false
@@ -1681,6 +1748,7 @@ class RadioShedMediaSessionService : MediaLibraryService() {
                             playback.playTracks(tracks, startIndex = 0)
                             return true
                         }
+
                         suspend fun playTrackByTitle(name: String): Boolean {
                             val tracks = searchRepo.searchTracks(name, limit = 5)
                             if (tracks.isEmpty()) return false
@@ -1688,92 +1756,102 @@ class RadioShedMediaSessionService : MediaLibraryService() {
                             return true
                         }
 
-                        val handled = when {
-                            // Artist focus: ignore the noisy
-                            // free-text query and use the structured
-                            // artist name directly.
-                            focus == FOCUS_ARTIST && !artistExtra.isNullOrBlank() ->
-                                playArtistByName(artistExtra)
-                            focus == FOCUS_ALBUM && !albumExtra.isNullOrBlank() ->
-                                playAlbumByTitle(albumExtra)
-                            // Title focus often comes paired with an
-                            // artist hint — searchTracks already
-                            // searches across title/artist/album so
-                            // a combined phrase still works, but the
-                            // bare title is the most precise input.
-                            focus == FOCUS_AUDIO && !titleExtra.isNullOrBlank() ->
-                                playTrackByTitle(titleExtra)
-                            // Genre focus: pick a few tracks tagged
-                            // with the genre via the DSL path.
-                            focus == FOCUS_GENRE && !genreExtra.isNullOrBlank() -> {
-                                val tracks = searchRepo
-                                    .searchTracks("genre:${'$'}genreExtra", limit = 50)
-                                if (tracks.isEmpty()) {
-                                    false
-                                } else {
-                                    playback.playTracks(tracks, startIndex = 0)
-                                    true
-                                }
-                            }
-                            // Common case: structured extras present
-                            // even without a focus (e.g. "play music
-                            // by X" sometimes only fills artistExtra).
-                            !artistExtra.isNullOrBlank() ->
-                                playArtistByName(artistExtra)
-                            !albumExtra.isNullOrBlank() ->
-                                playAlbumByTitle(albumExtra)
-                            !titleExtra.isNullOrBlank() ->
-                                playTrackByTitle(titleExtra)
-                            // Plain free-text fallback. This is the
-                            // path that lit up the wrong-artist bug
-                            // when "play a song by Black Pink" came
-                            // through verbatim. Strip the leading
-                            // verb/article tokens before searching so
-                            // `searchAll` LIKE-matches against
-                            // meaningful nouns only. The list mirrors
-                            // the prefixes Assistant transcribes.
-                            rawQuery.isNotBlank() -> {
-                                val cleaned = rawQuery
-                                    .removePrefixToken("play")
-                                    .removePrefixToken("listen to")
-                                    .removePrefixToken("a song by")
-                                    .removePrefixToken("song by")
-                                    .removePrefixToken("songs by")
-                                    .removePrefixToken("music by")
-                                    .removePrefixToken("the song")
-                                    .removePrefixToken("a song")
-                                    .removePrefixToken("song")
-                                    .trim()
-                                val results = searchRepo.searchAll(
-                                    cleaned.ifBlank { rawQuery },
-                                    limitPerCategory = 20L,
-                                )
-                                when {
-                                    results.artists.isNotEmpty() -> {
-                                        val tracks = libraryRepo
-                                            .tracksForArtist(results.artists.first().id)
-                                        if (tracks.isNotEmpty()) {
-                                            playback.playTracks(tracks, startIndex = 0)
-                                            true
-                                        } else false
-                                    }
-                                    results.tracks.isNotEmpty() -> {
-                                        playback.playTracks(results.tracks, startIndex = 0)
+                        val handled =
+                            when {
+                                // Artist focus: ignore the noisy
+                                // free-text query and use the structured
+                                // artist name directly.
+                                focus == FOCUS_ARTIST && !artistExtra.isNullOrBlank() ->
+                                    playArtistByName(artistExtra)
+                                focus == FOCUS_ALBUM && !albumExtra.isNullOrBlank() ->
+                                    playAlbumByTitle(albumExtra)
+                                // Title focus often comes paired with an
+                                // artist hint — searchTracks already
+                                // searches across title/artist/album so
+                                // a combined phrase still works, but the
+                                // bare title is the most precise input.
+                                focus == FOCUS_AUDIO && !titleExtra.isNullOrBlank() ->
+                                    playTrackByTitle(titleExtra)
+                                // Genre focus: pick a few tracks tagged
+                                // with the genre via the DSL path.
+                                focus == FOCUS_GENRE && !genreExtra.isNullOrBlank() -> {
+                                    val tracks =
+                                        searchRepo
+                                            .searchTracks("genre:${'$'}genreExtra", limit = 50)
+                                    if (tracks.isEmpty()) {
+                                        false
+                                    } else {
+                                        playback.playTracks(tracks, startIndex = 0)
                                         true
                                     }
-                                    results.albums.isNotEmpty() -> {
-                                        val tracks = libraryRepo
-                                            .tracksForAlbum(results.albums.first().id)
-                                        if (tracks.isNotEmpty()) {
-                                            playback.playTracks(tracks, startIndex = 0)
-                                            true
-                                        } else false
-                                    }
-                                    else -> false
                                 }
+                                // Common case: structured extras present
+                                // even without a focus (e.g. "play music
+                                // by X" sometimes only fills artistExtra).
+                                !artistExtra.isNullOrBlank() ->
+                                    playArtistByName(artistExtra)
+                                !albumExtra.isNullOrBlank() ->
+                                    playAlbumByTitle(albumExtra)
+                                !titleExtra.isNullOrBlank() ->
+                                    playTrackByTitle(titleExtra)
+                                // Plain free-text fallback. This is the
+                                // path that lit up the wrong-artist bug
+                                // when "play a song by Black Pink" came
+                                // through verbatim. Strip the leading
+                                // verb/article tokens before searching so
+                                // `searchAll` LIKE-matches against
+                                // meaningful nouns only. The list mirrors
+                                // the prefixes Assistant transcribes.
+                                rawQuery.isNotBlank() -> {
+                                    val cleaned =
+                                        rawQuery
+                                            .removePrefixToken("play")
+                                            .removePrefixToken("listen to")
+                                            .removePrefixToken("a song by")
+                                            .removePrefixToken("song by")
+                                            .removePrefixToken("songs by")
+                                            .removePrefixToken("music by")
+                                            .removePrefixToken("the song")
+                                            .removePrefixToken("a song")
+                                            .removePrefixToken("song")
+                                            .trim()
+                                    val results =
+                                        searchRepo.searchAll(
+                                            cleaned.ifBlank { rawQuery },
+                                            limitPerCategory = 20L,
+                                        )
+                                    when {
+                                        results.artists.isNotEmpty() -> {
+                                            val tracks =
+                                                libraryRepo
+                                                    .tracksForArtist(results.artists.first().id)
+                                            if (tracks.isNotEmpty()) {
+                                                playback.playTracks(tracks, startIndex = 0)
+                                                true
+                                            } else {
+                                                false
+                                            }
+                                        }
+                                        results.tracks.isNotEmpty() -> {
+                                            playback.playTracks(results.tracks, startIndex = 0)
+                                            true
+                                        }
+                                        results.albums.isNotEmpty() -> {
+                                            val tracks =
+                                                libraryRepo
+                                                    .tracksForAlbum(results.albums.first().id)
+                                            if (tracks.isNotEmpty()) {
+                                                playback.playTracks(tracks, startIndex = 0)
+                                                true
+                                            } else {
+                                                false
+                                            }
+                                        }
+                                        else -> false
+                                    }
+                                }
+                                else -> false
                             }
-                            else -> false
-                        }
                         if (!handled) {
                             Log.i(
                                 TAG,
@@ -1798,11 +1876,12 @@ class RadioShedMediaSessionService : MediaLibraryService() {
                 )
             }
 
-            val firstStationId = mediaItems
-                .firstOrNull { it.mediaId.startsWith(MEDIA_ID_STATION_PREFIX) }
-                ?.mediaId
-                ?.removePrefix(MEDIA_ID_STATION_PREFIX)
-                ?.toLongOrNull()
+            val firstStationId =
+                mediaItems
+                    .firstOrNull { it.mediaId.startsWith(MEDIA_ID_STATION_PREFIX) }
+                    ?.mediaId
+                    ?.removePrefix(MEDIA_ID_STATION_PREFIX)
+                    ?.toLongOrNull()
 
             if (firstStationId != null) {
                 scope.launch {
@@ -1826,20 +1905,23 @@ class RadioShedMediaSessionService : MediaLibraryService() {
             // queue, and route through StationPlayback so the
             // existing queue / shuffle / repeat machinery owns the
             // session — same intercept pattern as stations above.
-            val firstTrackId = mediaItems
-                .firstOrNull { it.mediaId.startsWith(MEDIA_ID_TRACK_PREFIX) }
-                ?.mediaId
-                ?.removePrefix(MEDIA_ID_TRACK_PREFIX)
-                ?.toLongOrNull()
+            val firstTrackId =
+                mediaItems
+                    .firstOrNull { it.mediaId.startsWith(MEDIA_ID_TRACK_PREFIX) }
+                    ?.mediaId
+                    ?.removePrefix(MEDIA_ID_TRACK_PREFIX)
+                    ?.toLongOrNull()
 
             if (firstTrackId != null) {
                 scope.launch {
                     runCatching {
-                        val libraryRepo = GlobalContext.get().get<
-                            com.visorcraft.radioshed.data.LibraryRepository
-                        >()
-                        val track = libraryRepo.getTrackById(firstTrackId)
-                            ?: return@runCatching
+                        val libraryRepo =
+                            GlobalContext.get().get<
+                                com.visorcraft.radioshed.data.LibraryRepository,
+                                >()
+                        val track =
+                            libraryRepo.getTrackById(firstTrackId)
+                                ?: return@runCatching
                         GlobalContext.get().get<StationPlayback>()
                             .playTracks(listOf(track), startIndex = 0)
                     }
@@ -1855,18 +1937,20 @@ class RadioShedMediaSessionService : MediaLibraryService() {
 
             // Album row tap → load every track on the album and
             // play them in their natural disc / track order.
-            val firstAlbumId = mediaItems
-                .firstOrNull { it.mediaId.startsWith(MEDIA_ID_ALBUM_PREFIX) }
-                ?.mediaId
-                ?.removePrefix(MEDIA_ID_ALBUM_PREFIX)
-                ?.toLongOrNull()
+            val firstAlbumId =
+                mediaItems
+                    .firstOrNull { it.mediaId.startsWith(MEDIA_ID_ALBUM_PREFIX) }
+                    ?.mediaId
+                    ?.removePrefix(MEDIA_ID_ALBUM_PREFIX)
+                    ?.toLongOrNull()
 
             if (firstAlbumId != null) {
                 scope.launch {
                     runCatching {
-                        val libraryRepo = GlobalContext.get().get<
-                            com.visorcraft.radioshed.data.LibraryRepository
-                        >()
+                        val libraryRepo =
+                            GlobalContext.get().get<
+                                com.visorcraft.radioshed.data.LibraryRepository,
+                                >()
                         val tracks = libraryRepo.tracksForAlbum(firstAlbumId)
                         if (tracks.isNotEmpty()) {
                             GlobalContext.get().get<StationPlayback>()
@@ -1888,18 +1972,20 @@ class RadioShedMediaSessionService : MediaLibraryService() {
             // canonical sort (album → disc → track number); good
             // enough for an artist-level shuffle replacement
             // without us having to ship a "play artist" station.
-            val firstArtistId = mediaItems
-                .firstOrNull { it.mediaId.startsWith(MEDIA_ID_ARTIST_PREFIX) }
-                ?.mediaId
-                ?.removePrefix(MEDIA_ID_ARTIST_PREFIX)
-                ?.toLongOrNull()
+            val firstArtistId =
+                mediaItems
+                    .firstOrNull { it.mediaId.startsWith(MEDIA_ID_ARTIST_PREFIX) }
+                    ?.mediaId
+                    ?.removePrefix(MEDIA_ID_ARTIST_PREFIX)
+                    ?.toLongOrNull()
 
             if (firstArtistId != null) {
                 scope.launch {
                     runCatching {
-                        val libraryRepo = GlobalContext.get().get<
-                            com.visorcraft.radioshed.data.LibraryRepository
-                        >()
+                        val libraryRepo =
+                            GlobalContext.get().get<
+                                com.visorcraft.radioshed.data.LibraryRepository,
+                                >()
                         val tracks = libraryRepo.tracksForArtist(firstArtistId)
                         if (tracks.isNotEmpty()) {
                             GlobalContext.get().get<StationPlayback>()
@@ -1938,24 +2024,26 @@ class RadioShedMediaSessionService : MediaLibraryService() {
      * metadata for the steady-state track. Returns null when no URI is present.
      */
     private fun mediaItemFromArgs(args: Bundle): MediaItem? {
-        val uri = args.getString(CrossfadeIpc.EXTRA_ITEM_URI)
-            ?.takeIf { it.isNotBlank() } ?: return null
+        val uri =
+            args.getString(CrossfadeIpc.EXTRA_ITEM_URI)
+                ?.takeIf { it.isNotBlank() } ?: return null
         val trackId = args.getLong(CrossfadeIpc.EXTRA_ITEM_TRACK_ID, 0L)
-        val builder = MediaItem.Builder()
-            .setUri(uri)
-            .setMediaId(trackId.toString())
-            .setMediaMetadata(
-                MediaMetadata.Builder()
-                    .setTitle(args.getString(CrossfadeIpc.EXTRA_ITEM_TITLE))
-                    .setArtist(args.getString(CrossfadeIpc.EXTRA_ITEM_ARTIST))
-                    .setAlbumTitle(args.getString(CrossfadeIpc.EXTRA_ITEM_ALBUM))
-                    .also { mb ->
-                        args.getString(CrossfadeIpc.EXTRA_ITEM_ARTWORK_URI)
-                            ?.takeIf { it.isNotBlank() }
-                            ?.let { mb.setArtworkUri(android.net.Uri.parse(it)) }
-                    }
-                    .build(),
-            )
+        val builder =
+            MediaItem.Builder()
+                .setUri(uri)
+                .setMediaId(trackId.toString())
+                .setMediaMetadata(
+                    MediaMetadata.Builder()
+                        .setTitle(args.getString(CrossfadeIpc.EXTRA_ITEM_TITLE))
+                        .setArtist(args.getString(CrossfadeIpc.EXTRA_ITEM_ARTIST))
+                        .setAlbumTitle(args.getString(CrossfadeIpc.EXTRA_ITEM_ALBUM))
+                        .also { mb ->
+                            args.getString(CrossfadeIpc.EXTRA_ITEM_ARTWORK_URI)
+                                ?.takeIf { it.isNotBlank() }
+                                ?.let { mb.setArtworkUri(android.net.Uri.parse(it)) }
+                        }
+                        .build(),
+                )
         val cueStart = args.getLong(CrossfadeIpc.EXTRA_ITEM_CUE_START_MS, -1L)
         val cueEnd = args.getLong(CrossfadeIpc.EXTRA_ITEM_CUE_END_MS, -1L)
         if (cueStart >= 0L || cueEnd >= 0L) {
@@ -1969,7 +2057,10 @@ class RadioShedMediaSessionService : MediaLibraryService() {
         return builder.build()
     }
 
-    private fun browseableItem(mediaId: String, title: String): MediaItem =
+    private fun browseableItem(
+        mediaId: String,
+        title: String,
+    ): MediaItem =
         MediaItem.Builder()
             .setMediaId(mediaId)
             .setMediaMetadata(
@@ -1986,18 +2077,19 @@ class RadioShedMediaSessionService : MediaLibraryService() {
         mediaId: String,
         title: String,
         subtitle: String?,
-    ): MediaItem = MediaItem.Builder()
-        .setMediaId(mediaId)
-        .setMediaMetadata(
-            MediaMetadata.Builder()
-                .setTitle(title)
-                .setSubtitle(subtitle ?: "")
-                .setIsBrowsable(false)
-                .setIsPlayable(true)
-                .setMediaType(MediaMetadata.MEDIA_TYPE_RADIO_STATION)
-                .build(),
-        )
-        .build()
+    ): MediaItem =
+        MediaItem.Builder()
+            .setMediaId(mediaId)
+            .setMediaMetadata(
+                MediaMetadata.Builder()
+                    .setTitle(title)
+                    .setSubtitle(subtitle ?: "")
+                    .setIsBrowsable(false)
+                    .setIsPlayable(true)
+                    .setMediaType(MediaMetadata.MEDIA_TYPE_RADIO_STATION)
+                    .build(),
+            )
+            .build()
 
     private companion object {
         /** Single greppable tag for the AA / lock-screen / Bluetooth
@@ -2043,7 +2135,7 @@ class RadioShedMediaSessionService : MediaLibraryService() {
         // Channel id is referenced from the manifest's auto-created
         // foreground-service channel; OS uses it for "Now playing"
         // notifications. Notification id is unique within our app.
-        const val NOTIFICATION_ID = 0xCAFE  // 51966
+        const val NOTIFICATION_ID = 0xCAFE // 51966
         const val NOTIFICATION_CHANNEL_ID = "radioshed.playback"
 
         // Google Assistant voice-search extras. These match the

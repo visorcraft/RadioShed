@@ -51,7 +51,6 @@ class DjAnnouncer(
     private val sleepTimer: SleepTimer,
     private val weather: WeatherFetcher,
 ) {
-
     private val mutex = Mutex()
 
     // Serializes the whole duck → play → restore section so two announcements
@@ -118,24 +117,25 @@ class DjAnnouncer(
         if (sleepTimer.state.value is SleepTimer.State.Running) return
 
         val now = nowMillis()
-        val due = mutex.withLock {
-            tracksSinceAnnounce += 1
-            // Single source of truth for "station changed": StationPlayback
-            // already computes this by station-id diff, so trust it rather than
-            // re-deriving from a name comparison here.
-            shouldAnnounce(
-                frequency = settings.getDjFrequency(),
-                frequencyN = settings.getDjFrequencyN(),
-                frequencyMinutes = settings.getDjFrequencyMinutes(),
-                tracksSinceAnnounce = tracksSinceAnnounce,
-                lastAnnounceAtMs = lastAnnounceAtMs,
-                nowMs = now,
-                nowMinutesOfDay = localMinutesOfDay(now),
-                quietStartMin = settings.getDjQuietStartMin(),
-                quietEndMin = settings.getDjQuietEndMin(),
-                stationChanged = transition.stationChanged,
-            )
-        }
+        val due =
+            mutex.withLock {
+                tracksSinceAnnounce += 1
+                // Single source of truth for "station changed": StationPlayback
+                // already computes this by station-id diff, so trust it rather than
+                // re-deriving from a name comparison here.
+                shouldAnnounce(
+                    frequency = settings.getDjFrequency(),
+                    frequencyN = settings.getDjFrequencyN(),
+                    frequencyMinutes = settings.getDjFrequencyMinutes(),
+                    tracksSinceAnnounce = tracksSinceAnnounce,
+                    lastAnnounceAtMs = lastAnnounceAtMs,
+                    nowMs = now,
+                    nowMinutesOfDay = localMinutesOfDay(now),
+                    quietStartMin = settings.getDjQuietStartMin(),
+                    quietEndMin = settings.getDjQuietEndMin(),
+                    stationChanged = transition.stationChanged,
+                )
+            }
         if (!due) return
 
         // 3. Slot pick. A station switch gets a station ID; otherwise [slotFor]
@@ -298,14 +298,16 @@ class DjAnnouncer(
         templates: Map<String, List<String>>,
         timeText: String,
     ): RenderedClip? {
-        val variants = templates[slot]?.takeIf { it.isNotEmpty() }
-            ?: DEFAULT_DJ_TEMPLATES[slot]
-            ?: return null
-        val template = DjTemplate.pickVariant(
-            variants,
-            seed = variantSeedFor(transition.startingTrack.trackId, slot),
-            avoid = lastRenderedTemplate,
-        )
+        val variants =
+            templates[slot]?.takeIf { it.isNotEmpty() }
+                ?: DEFAULT_DJ_TEMPLATES[slot]
+                ?: return null
+        val template =
+            DjTemplate.pickVariant(
+                variants,
+                seed = variantSeedFor(transition.startingTrack.trackId, slot),
+                avoid = lastRenderedTemplate,
+            )
         // Only pay the location + network round-trip when the variant we just
         // picked actually uses {weather}; the vast majority don't, so fetching
         // unconditionally would add latency + an API call to every announcement.
@@ -317,11 +319,12 @@ class DjAnnouncer(
         // text varies with temperature/condition so the key (over rendered text)
         // differs run to run. Acceptable: weather copy is rare and cheap to
         // re-synthesize.
-        val weatherText = if (template.contains(WEATHER_TOKEN)) {
-            weather.current()?.let { formatWeather(it) }
-        } else {
-            null
-        }
+        val weatherText =
+            if (template.contains(WEATHER_TOKEN)) {
+                weather.current()?.let { formatWeather(it) }
+            } else {
+                null
+            }
         val rendered = DjTemplate.render(template, transition.toVars(slot, timeText, weatherText))
         if (rendered.isBlank()) return null
         // Key the clip by the rendered text + voice so identical copy re-uses the
@@ -369,20 +372,20 @@ class DjAnnouncer(
         djCache.trimStale(olderThanMs = now - DJ_CACHE_MAX_AGE_MS)
     }
 
-    private fun encodeVars(transition: TrackTransition): String = runCatching {
-        RadioShedJson.encodeToString(
-            MapSerializer(String.serializer(), String.serializer()),
-            buildMap {
-                transition.stationName?.let { put("station", it) }
-                transition.startingTrack.title.let { put("track", it) }
-                transition.startingTrack.artist?.let { put("artist", it) }
-                transition.nextTrack?.title?.let { put("next_track", it) }
-            },
-        )
-    }.getOrDefault("{}")
+    private fun encodeVars(transition: TrackTransition): String =
+        runCatching {
+            RadioShedJson.encodeToString(
+                MapSerializer(String.serializer(), String.serializer()),
+                buildMap {
+                    transition.stationName?.let { put("station", it) }
+                    transition.startingTrack.title.let { put("track", it) }
+                    transition.startingTrack.artist?.let { put("artist", it) }
+                    transition.nextTrack?.title?.let { put("next_track", it) }
+                },
+            )
+        }.getOrDefault("{}")
 
     companion object {
-
         /**
          * Tolerance for "is the engine still at the level we ducked to?" in the
          * finally restore. setVolume round-trips through platform mixers that may
@@ -436,17 +439,19 @@ class DjAnnouncer(
          */
         fun slotFor(transition: TrackTransition): String {
             if (transition.stationChanged) return DjSlots.STATION_ID
-            val pool = buildList {
-                add(DjSlots.UP_NEXT)
-                add(DjSlots.UP_NEXT)
-                if (transition.endedTrack?.artist != null) add(DjSlots.RECAP)
-                add(DjSlots.TIME)
-            }
+            val pool =
+                buildList {
+                    add(DjSlots.UP_NEXT)
+                    add(DjSlots.UP_NEXT)
+                    if (transition.endedTrack?.artist != null) add(DjSlots.RECAP)
+                    add(DjSlots.TIME)
+                }
             // FNV-1a of (trackId + uri), not String.hashCode(): hashCode isn't
             // contractually stable across runtimes, and slot choice must be
             // reproducible between the precache and announce processes' calls.
-            val hash = stableHash("slot|${transition.startingTrack.trackId}|${transition.startingTrack.uri}")
-                .toULong(16)
+            val hash =
+                stableHash("slot|${transition.startingTrack.trackId}|${transition.startingTrack.uri}")
+                    .toULong(16)
             // FNV-1a's LOW bits disperse poorly across near-identical inputs
             // (library URIs share long prefixes and suffixes), and a small
             // modulo reads only the low bits — measured over sequential ids,
@@ -461,8 +466,10 @@ class DjAnnouncer(
          * voice). Single source of truth shared by the announce and precache
          * paths so a pre-synthesized clip is found by the live lookup.
          */
-        fun cacheKeyFor(renderedText: String, voiceId: String): String =
-            stableHash("$renderedText|$voiceId")
+        fun cacheKeyFor(
+            renderedText: String,
+            voiceId: String,
+        ): String = stableHash("$renderedText|$voiceId")
 
         /**
          * Deterministic per-(track, slot) seed for [DjTemplate.pickVariant].
@@ -472,7 +479,10 @@ class DjAnnouncer(
          * yields the same line (acceptable — and the avoid-repeat argument still
          * suppresses identical back-to-back phrasing).
          */
-        fun variantSeedFor(trackId: Long, slot: String): Long =
+        fun variantSeedFor(
+            trackId: Long,
+            slot: String,
+        ): Long =
             // Parse the full FNV-1a-64 hex directly into the seed instead of
             // funnelling it through String.hashCode() (which would collapse 64
             // bits of entropy into 32, raising collisions between distinct
@@ -530,8 +540,11 @@ class DjAnnouncer(
          * wraps across midnight (e.g. 22:00 → 07:00). Delegates to the shared
          * [isInMinuteWindow] helper, which encodes exactly these semantics.
          */
-        private fun inQuietHours(minuteOfDay: Int, startMin: Int, endMin: Int): Boolean =
-            minuteOfDay.isInMinuteWindow(startMin, endMin)
+        private fun inQuietHours(
+            minuteOfDay: Int,
+            startMin: Int,
+            endMin: Int,
+        ): Boolean = minuteOfDay.isInMinuteWindow(startMin, endMin)
 
         /**
          * FNV-1a 64-bit hash rendered as hex — a stable, platform-independent
@@ -566,7 +579,11 @@ data class TrackTransition(
  *  the `{time}` token; [weather] is the pre-formatted weather string (e.g.
  *  "12 degrees and clear") or null when the picked template doesn't use
  *  {weather} or no snapshot was available. */
-private fun TrackTransition.toVars(slot: String, time: String, weather: String?): DjTemplateVars {
+private fun TrackTransition.toVars(
+    slot: String,
+    time: String,
+    weather: String?,
+): DjTemplateVars {
     val subject = if (slot == DjSlots.RECAP) endedTrack else startingTrack
     return DjTemplateVars(
         station = stationName,

@@ -1,5 +1,9 @@
 -- Migration v5 → v6: global track dislike.
 --
+CREATE TABLE IF NOT EXISTS track (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT
+);
+
 -- Adds a per-track "never play this anywhere" flag, distinct from
 -- station_dislike (per-station hide). User-facing entry point is the
 -- track context sheet: "Don't play this anywhere". Filtered out of

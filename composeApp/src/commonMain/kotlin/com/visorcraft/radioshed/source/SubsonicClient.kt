@@ -32,7 +32,6 @@ package com.visorcraft.radioshed.source
  *    and local caching is still deferred.
  */
 interface SubsonicClient {
-
     /**
      * Probe the server. Returns null if the configured server isn't
      * a Subsonic-compatible server, the auth fails, or the network
@@ -73,13 +72,20 @@ interface SubsonicClient {
      * ExoPlayer (which has no Subsonic awareness) can fetch it as
      * a plain HTTPS audio resource.
      */
-    fun streamUrl(server: SubsonicServer, songId: String): String
+    fun streamUrl(
+        server: SubsonicServer,
+        songId: String,
+    ): String
 
     /**
      * Build a cover-art URL for [coverArtId] (typically an album's
      * `coverArt` field). Same auth-embedding as [streamUrl].
      */
-    fun coverArtUrl(server: SubsonicServer, coverArtId: String, size: Int? = null): String
+    fun coverArtUrl(
+        server: SubsonicServer,
+        coverArtId: String,
+        size: Int? = null,
+    ): String
 }
 
 data class SubsonicServer(
@@ -138,16 +144,24 @@ data class SubsonicSong(
 /** No-op stub for platforms with no HTTP wired in (iOS today). */
 class NullSubsonicClient : SubsonicClient {
     override suspend fun ping(server: SubsonicServer): SubsonicPingResult? = null
+
     override suspend fun getArtists(server: SubsonicServer): List<SubsonicArtist> = emptyList()
+
     override suspend fun getAlbumsForArtist(
         server: SubsonicServer,
         artistId: String,
     ): List<SubsonicAlbum> = emptyList()
+
     override suspend fun getSongs(
         server: SubsonicServer,
         albumId: String,
     ): List<SubsonicSong> = emptyList()
-    override fun streamUrl(server: SubsonicServer, songId: String): String = ""
+
+    override fun streamUrl(
+        server: SubsonicServer,
+        songId: String,
+    ): String = ""
+
     override fun coverArtUrl(
         server: SubsonicServer,
         coverArtId: String,

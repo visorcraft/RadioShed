@@ -33,7 +33,6 @@ class StationAwarePlayer(
     private val onSkipNext: () -> Unit,
     private val onSkipPrevious: () -> Unit,
 ) : ForwardingPlayer(underlying) {
-
     override fun getAvailableCommands(): Player.Commands {
         return super.getAvailableCommands()
             .buildUpon()
@@ -44,17 +43,22 @@ class StationAwarePlayer(
             .build()
     }
 
-    override fun isCommandAvailable(command: Int): Boolean = when (command) {
-        Player.COMMAND_SEEK_TO_NEXT,
-        Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM,
-        Player.COMMAND_SEEK_TO_PREVIOUS,
-        Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM -> true
-        else -> super.isCommandAvailable(command)
-    }
+    override fun isCommandAvailable(command: Int): Boolean =
+        when (command) {
+            Player.COMMAND_SEEK_TO_NEXT,
+            Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM,
+            Player.COMMAND_SEEK_TO_PREVIOUS,
+            Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM,
+            -> true
+            else -> super.isCommandAvailable(command)
+        }
 
     override fun seekToNext() = onSkipNext()
+
     override fun seekToNextMediaItem() = onSkipNext()
+
     override fun seekToPrevious() = onSkipPrevious()
+
     override fun seekToPreviousMediaItem() = onSkipPrevious()
 
     /** Whether the underlying ExoPlayer can be released; exposed so the

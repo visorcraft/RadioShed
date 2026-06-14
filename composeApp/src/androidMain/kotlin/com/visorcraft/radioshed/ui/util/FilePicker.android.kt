@@ -13,19 +13,21 @@ import kotlinx.coroutines.withContext
 actual fun rememberFilePicker(onPicked: (ByteArray) -> Unit): (mimeType: String) -> Unit {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val launcher = rememberLauncherForActivityResult(
-        ActivityResultContracts.GetContent(),
-    ) { uri ->
-        if (uri != null) {
-            scope.launch {
-                val bytes = withContext(IODispatcher) {
-                    runCatching {
-                        context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                    }.getOrNull()
+    val launcher =
+        rememberLauncherForActivityResult(
+            ActivityResultContracts.GetContent(),
+        ) { uri ->
+            if (uri != null) {
+                scope.launch {
+                    val bytes =
+                        withContext(IODispatcher) {
+                            runCatching {
+                                context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                            }.getOrNull()
+                        }
+                    if (bytes != null && bytes.isNotEmpty()) onPicked(bytes)
                 }
-                if (bytes != null && bytes.isNotEmpty()) onPicked(bytes)
             }
         }
-    }
     return { mime -> launcher.launch(mime) }
 }

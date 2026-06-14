@@ -15,9 +15,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import com.visorcraft.radioshed.ui.util.TooltipIconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -34,6 +32,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.visorcraft.radioshed.db.RadioShedDatabase
+import com.visorcraft.radioshed.ui.util.TooltipIconButton
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.koin.compose.koinInject
@@ -65,45 +64,66 @@ fun DbBrowserScreen(
 
     LaunchedEffect(Unit) {
         loading = true
-        rows = withContext(Dispatchers.Default) {
-            // Each entry below names a logical table or category and
-            // pulls its count via the existing SQLDelight query of
-            // record. Wrapped in runCatching individually so a single
-            // missing migration doesn't blank the whole screen — failed
-            // counts surface as "?".
-            buildList {
-                add(stat("tracks (total)") {
-                    db.libraryQueries.countTracks().executeAsOne()
-                })
-                add(stat("artists") {
-                    db.libraryQueries.countArtists().executeAsOne()
-                })
-                add(stat("albums") {
-                    db.libraryQueries.countAlbums().executeAsOne()
-                })
-                add(stat("albums missing artwork") {
-                    db.libraryQueries.countAlbumsMissingArtwork().executeAsOne()
-                })
-                add(stat("folders") {
-                    db.foldersQueries.count().executeAsOne()
-                })
-                add(stat("stations") {
-                    db.stationsQueries.countStations().executeAsOne()
-                })
-                add(stat("station plays (history rows)") {
-                    db.stationsQueries.countAllPlays().executeAsOne()
-                })
-                add(stat("playlists") {
-                    db.playlistsQueries.countPlaylists().executeAsOne()
-                })
-                add(stat("liked tracks") {
-                    db.ratingsQueries.countLikedTracks().executeAsOne()
-                })
-                add(stat("backups on disk (last seen)") {
-                    db.backupsQueries.countBackups().executeAsOne()
-                })
+        rows =
+            withContext(Dispatchers.Default) {
+                // Each entry below names a logical table or category and
+                // pulls its count via the existing SQLDelight query of
+                // record. Wrapped in runCatching individually so a single
+                // missing migration doesn't blank the whole screen — failed
+                // counts surface as "?".
+                buildList {
+                    add(
+                        stat("tracks (total)") {
+                            db.libraryQueries.countTracks().executeAsOne()
+                        },
+                    )
+                    add(
+                        stat("artists") {
+                            db.libraryQueries.countArtists().executeAsOne()
+                        },
+                    )
+                    add(
+                        stat("albums") {
+                            db.libraryQueries.countAlbums().executeAsOne()
+                        },
+                    )
+                    add(
+                        stat("albums missing artwork") {
+                            db.libraryQueries.countAlbumsMissingArtwork().executeAsOne()
+                        },
+                    )
+                    add(
+                        stat("folders") {
+                            db.foldersQueries.count().executeAsOne()
+                        },
+                    )
+                    add(
+                        stat("stations") {
+                            db.stationsQueries.countStations().executeAsOne()
+                        },
+                    )
+                    add(
+                        stat("station plays (history rows)") {
+                            db.stationsQueries.countAllPlays().executeAsOne()
+                        },
+                    )
+                    add(
+                        stat("playlists") {
+                            db.playlistsQueries.countPlaylists().executeAsOne()
+                        },
+                    )
+                    add(
+                        stat("liked tracks") {
+                            db.ratingsQueries.countLikedTracks().executeAsOne()
+                        },
+                    )
+                    add(
+                        stat("backups on disk (last seen)") {
+                            db.backupsQueries.countBackups().executeAsOne()
+                        },
+                    )
+                }
             }
-        }
         loading = false
     }
 
@@ -120,9 +140,10 @@ fun DbBrowserScreen(
         },
     ) { padding ->
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(padding),
         ) {
             if (loading) {
                 Column(
@@ -153,15 +174,17 @@ fun DbBrowserScreen(
                 }
                 items(rows, key = { it.label }) { stat ->
                     Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp),
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
                         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
                     ) {
                         Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Text(
@@ -185,5 +208,7 @@ fun DbBrowserScreen(
 
 private data class TableStat(val label: String, val value: Long?)
 
-private inline fun stat(label: String, block: () -> Long): TableStat =
-    TableStat(label = label, value = runCatching(block).getOrNull())
+private inline fun stat(
+    label: String,
+    block: () -> Long,
+): TableStat = TableStat(label = label, value = runCatching(block).getOrNull())

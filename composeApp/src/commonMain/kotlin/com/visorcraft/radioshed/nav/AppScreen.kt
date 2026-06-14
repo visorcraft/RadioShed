@@ -12,7 +12,6 @@ package com.visorcraft.radioshed.nav
  *   - station detail / now-playing routes need argument passing
  */
 sealed interface AppScreen {
-
     /** First-launch flow: welcome → permissions → folder → scan → done. */
     data object Onboarding : AppScreen
 

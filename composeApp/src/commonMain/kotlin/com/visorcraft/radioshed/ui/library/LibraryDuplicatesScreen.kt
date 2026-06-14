@@ -17,9 +17,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import com.visorcraft.radioshed.ui.util.TooltipIconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -38,6 +36,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.visorcraft.radioshed.data.LibraryRepository
 import com.visorcraft.radioshed.domain.Track
+import com.visorcraft.radioshed.ui.util.TooltipIconButton
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.koin.compose.koinInject
@@ -82,68 +81,75 @@ fun LibraryDuplicatesScreen(
 
     LaunchedEffect(Unit) {
         loading = true
-        val result = withContext(Dispatchers.Default) {
-            // 100k cap dwarfs realistic libraries; if a bigger one
-            // ever showed up we'd page, but for now this keeps the
-            // implementation simple and one-shot. Available-only
-            // because deleted/missing tracks aren't a real duplicate
-            // candidate to surface.
-            val all = libraryRepo.listAvailableTracks(limit = 100_000L, offset = 0L)
-            val ids = all.map { it.id }
-            val artistIds = libraryRepo.primaryArtistMap(ids)
-            // Pre-fetch every artist + album once so the per-track
-            // fuzz-key build runs in pure memory rather than re-hitting
-            // the DB for each row.
-            val artistNames: Map<Long, String> = artistIds.values
-                .toSet()
-                .mapNotNull { aid -> libraryRepo.getArtistById(aid)?.let { aid to it.name } }
-                .toMap()
-            val albumIds = all.mapNotNull { it.albumId }.toSet()
-            val albumTitles: Map<Long, String> = albumIds
-                .mapNotNull { aid -> libraryRepo.getAlbumById(aid)?.let { aid to it.title } }
-                .toMap()
+        val result =
+            withContext(Dispatchers.Default) {
+                // 100k cap dwarfs realistic libraries; if a bigger one
+                // ever showed up we'd page, but for now this keeps the
+                // implementation simple and one-shot. Available-only
+                // because deleted/missing tracks aren't a real duplicate
+                // candidate to surface.
+                val all = libraryRepo.listAvailableTracks(limit = 100_000L, offset = 0L)
+                val ids = all.map { it.id }
+                val artistIds = libraryRepo.primaryArtistMap(ids)
+                // Pre-fetch every artist + album once so the per-track
+                // fuzz-key build runs in pure memory rather than re-hitting
+                // the DB for each row.
+                val artistNames: Map<Long, String> =
+                    artistIds.values
+                        .toSet()
+                        .mapNotNull { aid -> libraryRepo.getArtistById(aid)?.let { aid to it.name } }
+                        .toMap()
+                val albumIds = all.mapNotNull { it.albumId }.toSet()
+                val albumTitles: Map<Long, String> =
+                    albumIds
+                        .mapNotNull { aid -> libraryRepo.getAlbumById(aid)?.let { aid to it.title } }
+                        .toMap()
 
-            val artistByTrackMap = ids.mapNotNull { tid ->
-                val aid = artistIds[tid] ?: return@mapNotNull null
-                val name = artistNames[aid] ?: return@mapNotNull null
-                tid to name
-            }.toMap()
-            val albumByTrackMap = all.mapNotNull { t ->
-                val aid = t.albumId ?: return@mapNotNull null
-                val title = albumTitles[aid] ?: return@mapNotNull null
-                t.id to title
-            }.toMap()
+                val artistByTrackMap =
+                    ids.mapNotNull { tid ->
+                        val aid = artistIds[tid] ?: return@mapNotNull null
+                        val name = artistNames[aid] ?: return@mapNotNull null
+                        tid to name
+                    }.toMap()
+                val albumByTrackMap =
+                    all.mapNotNull { t ->
+                        val aid = t.albumId ?: return@mapNotNull null
+                        val title = albumTitles[aid] ?: return@mapNotNull null
+                        t.id to title
+                    }.toMap()
 
-            val byKey = all.groupBy { fuzzKey(it, artistByTrackMap[it.id]) }
-            val dups = byKey.values
-                .filter { it.size > 1 }
-                .map { tracks ->
-                    val sorted = tracks.sortedBy { it.path }
-                    DupGroup(
-                        key = fuzzKey(sorted.first(), artistByTrackMap[sorted.first().id]),
-                        artistName = artistByTrackMap[sorted.first().id],
-                        tracks = sorted,
-                    )
-                }
-                .sortedByDescending { it.tracks.size }
-            val dupTrackCount = dups.sumOf { it.tracks.size - 1 }
-            val wasted = dups.sumOf { g ->
-                // Pessimistic estimate: every duplicate copy beyond the
-                // largest is "wasted" disk. Assumes the user keeps the
-                // highest-quality rip — typical, but a user with the
-                // opposite preference (smallest copy) gets a misleading
-                // number. Surfaced as "≈" to set expectations.
-                val sizes = g.tracks.map { it.fileSize }.filter { it > 0 }
-                if (sizes.size <= 1) 0L else sizes.sortedDescending().drop(1).sum()
+                val byKey = all.groupBy { fuzzKey(it, artistByTrackMap[it.id]) }
+                val dups =
+                    byKey.values
+                        .filter { it.size > 1 }
+                        .map { tracks ->
+                            val sorted = tracks.sortedBy { it.path }
+                            DupGroup(
+                                key = fuzzKey(sorted.first(), artistByTrackMap[sorted.first().id]),
+                                artistName = artistByTrackMap[sorted.first().id],
+                                tracks = sorted,
+                            )
+                        }
+                        .sortedByDescending { it.tracks.size }
+                val dupTrackCount = dups.sumOf { it.tracks.size - 1 }
+                val wasted =
+                    dups.sumOf { g ->
+                        // Pessimistic estimate: every duplicate copy beyond the
+                        // largest is "wasted" disk. Assumes the user keeps the
+                        // highest-quality rip — typical, but a user with the
+                        // opposite preference (smallest copy) gets a misleading
+                        // number. Surfaced as "≈" to set expectations.
+                        val sizes = g.tracks.map { it.fileSize }.filter { it > 0 }
+                        if (sizes.size <= 1) 0L else sizes.sortedDescending().drop(1).sum()
+                    }
+                DupResult(
+                    groups = dups,
+                    totalDup = dupTrackCount,
+                    wastedBytes = wasted,
+                    artistByTrack = artistByTrackMap,
+                    albumByTrack = albumByTrackMap,
+                )
             }
-            DupResult(
-                groups = dups,
-                totalDup = dupTrackCount,
-                wastedBytes = wasted,
-                artistByTrack = artistByTrackMap,
-                albumByTrack = albumByTrackMap,
-            )
-        }
         groups = result.groups
         totalDup = result.totalDup
         wastedBytes = result.wastedBytes
@@ -165,9 +171,10 @@ fun LibraryDuplicatesScreen(
         },
     ) { padding ->
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(padding),
         ) {
             if (loading) {
                 Column(
@@ -246,9 +253,10 @@ private fun DupGroupRow(
     onTrackClick: (Track) -> Unit,
 ) {
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 6.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 6.dp),
         color = MaterialTheme.colorScheme.surface,
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
@@ -269,10 +277,11 @@ private fun DupGroupRow(
             Spacer(Modifier.height(8.dp))
             group.tracks.forEach { track ->
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onTrackClick(track) }
-                        .padding(vertical = 4.dp),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable { onTrackClick(track) }
+                            .padding(vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Column(modifier = Modifier.fillMaxWidth()) {
@@ -283,14 +292,18 @@ private fun DupGroupRow(
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
                         )
-                        val sub = buildString {
-                            albumByTrack[track.id]?.let { append(it); append(" · ") }
-                            append(formatDuration(track.durationMs))
-                            if (track.fileSize > 0) {
-                                append(" · ")
-                                append(formatBytes(track.fileSize))
+                        val sub =
+                            buildString {
+                                albumByTrack[track.id]?.let {
+                                    append(it)
+                                    append(" · ")
+                                }
+                                append(formatDuration(track.durationMs))
+                                if (track.fileSize > 0) {
+                                    append(" · ")
+                                    append(formatBytes(track.fileSize))
+                                }
                             }
-                        }
                         Text(
                             text = sub,
                             style = MaterialTheme.typography.labelSmall,
@@ -317,7 +330,10 @@ private data class DupResult(
     val albumByTrack: Map<Long, String>,
 )
 
-private fun fuzzKey(t: Track, artist: String?): String {
+private fun fuzzKey(
+    t: Track,
+    artist: String?,
+): String {
     val a = (artist ?: "").trim().lowercase()
     val title = t.title.trim().lowercase()
     // Round to the second so a tag-rewrite that re-encoded the

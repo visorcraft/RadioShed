@@ -52,7 +52,6 @@ class PlaybackQueue(
      */
     private val ratingByTrackId: Map<Long, Double> = emptyMap(),
 ) {
-
     /**
      * Pre-filter dislikes once at construction time and use the
      * resulting list everywhere. Prevents an indexing mismatch where
@@ -220,14 +219,20 @@ class PlaybackQueue(
      * range so a stale UI tap (after a track auto-consumed the
      * priority head) becomes a no-op rather than throwing.
      */
-    fun movePriority(from: Int, to: Int) {
+    fun movePriority(
+        from: Int,
+        to: Int,
+    ) {
         if (from == to) return
         if (from !in priority.indices || to !in priority.indices) return
         val track = priority.removeAt(from)
         priority.add(to, track)
     }
 
-    private fun nextSequential(pool: List<Track>, allowWrap: Boolean): Track? {
+    private fun nextSequential(
+        pool: List<Track>,
+        allowWrap: Boolean,
+    ): Track? {
         // `sequentialCursor >= pool.size` is the post-end sentinel: the
         // previous call returned the last track and bumped the cursor
         // past the end. Wrap or stop based on allowWrap.
@@ -253,26 +258,31 @@ class PlaybackQueue(
         var avoid = effectiveAvoidSet(pool.size)
         var avoidAlbums = effectiveAlbumAvoidSet()
         var avoidArtists = effectiveArtistAvoidSet()
-        var available = pool.filter {
-            it.id !in avoid &&
-                it.albumId !in avoidAlbums &&
-                primaryArtistOf(it) !in avoidArtists
-        }
+        var available =
+            pool.filter {
+                it.id !in avoid &&
+                    it.albumId !in avoidAlbums &&
+                    primaryArtistOf(it) !in avoidArtists
+            }
         while (available.isEmpty()) {
             when {
                 recent.isNotEmpty() -> recent.removeFirst()
                 recentAlbums.isNotEmpty() -> recentAlbums.removeFirst()
                 recentArtists.isNotEmpty() -> recentArtists.removeFirst()
-                else -> { available = pool; break }  // last-ditch fallback
+                else -> {
+                    available = pool
+                    break
+                } // last-ditch fallback
             }
             avoid = effectiveAvoidSet(pool.size)
             avoidAlbums = effectiveAlbumAvoidSet()
             avoidArtists = effectiveArtistAvoidSet()
-            available = pool.filter {
-                it.id !in avoid &&
-                    it.albumId !in avoidAlbums &&
-                    primaryArtistOf(it) !in avoidArtists
-            }
+            available =
+                pool.filter {
+                    it.id !in avoid &&
+                        it.albumId !in avoidAlbums &&
+                        primaryArtistOf(it) !in avoidArtists
+                }
         }
         if (available.isEmpty()) available = pool
 
@@ -298,8 +308,7 @@ class PlaybackQueue(
         return recentArtists.toList().subList(start, end).toSet()
     }
 
-    private fun primaryArtistOf(track: Track): Long? =
-        artistByTrackId[track.id]
+    private fun primaryArtistOf(track: Track): Long? = artistByTrackId[track.id]
 
     /**
      * Returns the set of recent ids to avoid. Capped at `pool.size - 1` so
@@ -334,10 +343,11 @@ class PlaybackQueue(
                 if (playCountByTrackId.isEmpty()) {
                     pool[random.nextInt(pool.size)]
                 } else {
-                    val weights = pool.map { t ->
-                        val plays = playCountByTrackId[t.id] ?: 0L
-                        1.0 / (plays + 1.0)
-                    }
+                    val weights =
+                        pool.map { t ->
+                            val plays = playCountByTrackId[t.id] ?: 0L
+                            1.0 / (plays + 1.0)
+                        }
                     weightedPick(pool, weights)
                 }
             }
@@ -350,18 +360,22 @@ class PlaybackQueue(
                 if (ratingByTrackId.isEmpty()) {
                     pool[random.nextInt(pool.size)]
                 } else {
-                    val weights = pool.map { t ->
-                        val stars = ratingByTrackId[t.id] ?: 0.0
-                        val w = stars + 1.0
-                        w * w
-                    }
+                    val weights =
+                        pool.map { t ->
+                            val stars = ratingByTrackId[t.id] ?: 0.0
+                            val w = stars + 1.0
+                            w * w
+                        }
                     weightedPick(pool, weights)
                 }
             }
         }
     }
 
-    private fun weightedPick(items: List<Track>, weights: List<Double>): Track {
+    private fun weightedPick(
+        items: List<Track>,
+        weights: List<Double>,
+    ): Track {
         val total = weights.sum()
         var r = random.nextDouble() * total
         for (i in items.indices) {
@@ -371,10 +385,15 @@ class PlaybackQueue(
         return items.last()
     }
 
-    private fun recordPlayed(id: Long, albumId: Long?, artistId: Long?) {
+    private fun recordPlayed(
+        id: Long,
+        albumId: Long?,
+        artistId: Long?,
+    ) {
         recent.addLast(id)
-        val cap = (rule.noRepeatDepth.coerceAtLeast(0) * 2)
-            .coerceAtLeast(MIN_RECENT_CAP)
+        val cap =
+            (rule.noRepeatDepth.coerceAtLeast(0) * 2)
+                .coerceAtLeast(MIN_RECENT_CAP)
         while (recent.size > cap) recent.removeFirst()
         if (albumId != null) {
             recentAlbums.addLast(albumId)
@@ -416,30 +435,32 @@ class PlaybackQueue(
         val priorityHead = priority.toList().take(count)
         val remainingCount = count - priorityHead.size
         if (remainingCount <= 0 || candidates.isEmpty()) return priorityHead
-        val ruleSlice = when (rule.order) {
-            PlayOrder.Sequential -> {
-                val n = remainingCount.coerceAtMost(candidates.size)
-                (0 until n).map { offset ->
-                    candidates[(sequentialCursor + offset) % candidates.size]
+        val ruleSlice =
+            when (rule.order) {
+                PlayOrder.Sequential -> {
+                    val n = remainingCount.coerceAtMost(candidates.size)
+                    (0 until n).map { offset ->
+                        candidates[(sequentialCursor + offset) % candidates.size]
+                    }
+                }
+                PlayOrder.Shuffle, PlayOrder.SmartShuffle, PlayOrder.WeightedRandom -> {
+                    // Apply the SAME three filters as next() so the preview
+                    // matches what the queue will actually pick from. Without
+                    // album/artist filtering, the Up Next sheet on a heavy-
+                    // shuffle station shows tracks that next() will actively
+                    // skip past.
+                    val avoid = effectiveAvoidSet(candidates.size)
+                    val avoidAlbums = effectiveAlbumAvoidSet()
+                    val avoidArtists = effectiveArtistAvoidSet()
+                    val available =
+                        candidates.filter {
+                            it.id !in avoid &&
+                                it.albumId !in avoidAlbums &&
+                                primaryArtistOf(it) !in avoidArtists
+                        }
+                    available.take(remainingCount)
                 }
             }
-            PlayOrder.Shuffle, PlayOrder.SmartShuffle, PlayOrder.WeightedRandom -> {
-                // Apply the SAME three filters as next() so the preview
-                // matches what the queue will actually pick from. Without
-                // album/artist filtering, the Up Next sheet on a heavy-
-                // shuffle station shows tracks that next() will actively
-                // skip past.
-                val avoid = effectiveAvoidSet(candidates.size)
-                val avoidAlbums = effectiveAlbumAvoidSet()
-                val avoidArtists = effectiveArtistAvoidSet()
-                val available = candidates.filter {
-                    it.id !in avoid &&
-                        it.albumId !in avoidAlbums &&
-                        primaryArtistOf(it) !in avoidArtists
-                }
-                available.take(remainingCount)
-            }
-        }
         return priorityHead + ruleSlice
     }
 

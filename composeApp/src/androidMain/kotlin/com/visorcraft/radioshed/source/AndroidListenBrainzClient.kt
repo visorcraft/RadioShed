@@ -34,103 +34,106 @@ import java.net.URI
  * to us — we just round-trip it.
  */
 class AndroidListenBrainzClient : ListenBrainzClient {
-
     private val json = Json { ignoreUnknownKeys = true }
 
-    override suspend fun submit(
-        listen: ListenBrainzClient.Listen,
-    ): Boolean = withContext(IODispatcher) {
-        if (listen.token.isBlank()) return@withContext false
-        if (listen.artist.isBlank() || listen.track.isBlank()) return@withContext false
-        // Hand-built JSON. A round-trip through `buildJsonObject` would
-        // need separate scopes for the array element + nested object,
-        // and the readability of the resulting code-vs-payload mapping
-        // is worse than this string template — especially given the
-        // payload structure is fixed by the ListenBrainz API.
-        val albumLine = listen.album?.takeIf { it.isNotBlank() }?.let {
-            ",\n      \"release_name\": ${jsonString(it)}"
-        } ?: ""
-        val payload = """
-            {
-              "listen_type": "single",
-              "payload": [
+    override suspend fun submit(listen: ListenBrainzClient.Listen): Boolean =
+        withContext(IODispatcher) {
+            if (listen.token.isBlank()) return@withContext false
+            if (listen.artist.isBlank() || listen.track.isBlank()) return@withContext false
+            // Hand-built JSON. A round-trip through `buildJsonObject` would
+            // need separate scopes for the array element + nested object,
+            // and the readability of the resulting code-vs-payload mapping
+            // is worse than this string template — especially given the
+            // payload structure is fixed by the ListenBrainz API.
+            val albumLine =
+                listen.album?.takeIf { it.isNotBlank() }?.let {
+                    ",\n      \"release_name\": ${jsonString(it)}"
+                } ?: ""
+            val payload =
+                """
                 {
-                  "listened_at": ${listen.listenedAtSeconds},
-                  "track_metadata": {
-                    "artist_name": ${jsonString(listen.artist)},
-                    "track_name": ${jsonString(listen.track)}$albumLine
-                  }
+                  "listen_type": "single",
+                  "payload": [
+                    {
+                      "listened_at": ${listen.listenedAtSeconds},
+                      "track_metadata": {
+                        "artist_name": ${jsonString(listen.artist)},
+                        "track_name": ${jsonString(listen.track)}$albumLine
+                      }
+                    }
+                  ]
                 }
-              ]
-            }
-        """.trimIndent()
+                """.trimIndent()
 
-        try {
-            val url = URI("$LB_BASE/1/submit-listens").toURL()
-            val conn = (url.openConnection() as HttpURLConnection).apply {
-                requestMethod = "POST"
-                doOutput = true
-                connectTimeout = CONNECT_TIMEOUT_MS
-                readTimeout = READ_TIMEOUT_MS
-                setRequestProperty("Authorization", "Token ${listen.token}")
-                setRequestProperty("Content-Type", "application/json")
-                setRequestProperty("User-Agent", USER_AGENT)
-                setRequestProperty("Accept", "application/json")
-            }
             try {
-                conn.outputStream.use { it.write(payload.encodeToByteArray()) }
-                val code = conn.responseCode
-                code in 200..299
-            } finally {
-                conn.disconnect()
+                val url = URI("$LB_BASE/1/submit-listens").toURL()
+                val conn =
+                    (url.openConnection() as HttpURLConnection).apply {
+                        requestMethod = "POST"
+                        doOutput = true
+                        connectTimeout = CONNECT_TIMEOUT_MS
+                        readTimeout = READ_TIMEOUT_MS
+                        setRequestProperty("Authorization", "Token ${listen.token}")
+                        setRequestProperty("Content-Type", "application/json")
+                        setRequestProperty("User-Agent", USER_AGENT)
+                        setRequestProperty("Accept", "application/json")
+                    }
+                try {
+                    conn.outputStream.use { it.write(payload.encodeToByteArray()) }
+                    val code = conn.responseCode
+                    code in 200..299
+                } finally {
+                    conn.disconnect()
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                // Cancellation must propagate, never become "submit failed".
+                throw e
+            } catch (e: Exception) {
+                // Connection setup sits inside the try because it can throw
+                // outside IOException — e.g. setRequestProperty rejects a
+                // pasted token containing CR/LF with IllegalArgumentException
+                // on Android. Every non-cancellation failure means "this
+                // listen didn't make it", which is what false reports.
+                false
             }
-        } catch (e: kotlinx.coroutines.CancellationException) {
-            // Cancellation must propagate, never become "submit failed".
-            throw e
-        } catch (e: Exception) {
-            // Connection setup sits inside the try because it can throw
-            // outside IOException — e.g. setRequestProperty rejects a
-            // pasted token containing CR/LF with IllegalArgumentException
-            // on Android. Every non-cancellation failure means "this
-            // listen didn't make it", which is what false reports.
-            false
         }
-    }
 
-    override suspend fun validateToken(token: String): Boolean = withContext(IODispatcher) {
-        if (token.isBlank()) return@withContext false
-        try {
-            val url = URI("$LB_BASE/1/validate-token").toURL()
-            val conn = (url.openConnection() as HttpURLConnection).apply {
-                requestMethod = "GET"
-                connectTimeout = CONNECT_TIMEOUT_MS
-                readTimeout = READ_TIMEOUT_MS
-                setRequestProperty("Authorization", "Token $token")
-                setRequestProperty("Accept", "application/json")
-                setRequestProperty("User-Agent", USER_AGENT)
-            }
+    override suspend fun validateToken(token: String): Boolean =
+        withContext(IODispatcher) {
+            if (token.isBlank()) return@withContext false
             try {
-                val code = conn.responseCode
-                if (code !in 200..299) return@withContext false
-                val body = conn.inputStream.use { it.readBytes() }.decodeToString()
-                // Response shape: {"code":200,"message":"...","valid":true,"user_name":"..."}
-                runCatching {
-                    json.decodeFromString(ValidateResponse.serializer(), body).valid == true
-                }.getOrDefault(false)
-            } finally {
-                conn.disconnect()
+                val url = URI("$LB_BASE/1/validate-token").toURL()
+                val conn =
+                    (url.openConnection() as HttpURLConnection).apply {
+                        requestMethod = "GET"
+                        connectTimeout = CONNECT_TIMEOUT_MS
+                        readTimeout = READ_TIMEOUT_MS
+                        setRequestProperty("Authorization", "Token $token")
+                        setRequestProperty("Accept", "application/json")
+                        setRequestProperty("User-Agent", USER_AGENT)
+                    }
+                try {
+                    val code = conn.responseCode
+                    if (code !in 200..299) return@withContext false
+                    val body = conn.inputStream.use { it.readBytes() }.decodeToString()
+                    // Response shape: {"code":200,"message":"...","valid":true,"user_name":"..."}
+                    runCatching {
+                        json.decodeFromString(ValidateResponse.serializer(), body).valid == true
+                    }.getOrDefault(false)
+                } finally {
+                    conn.disconnect()
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                // Cancellation must propagate, never become "token invalid".
+                throw e
+            } catch (e: Exception) {
+                // Same broad net as submit(): header validation of a bad
+                // pasted token throws IllegalArgumentException before any
+                // IO starts. False ("couldn't validate") is the right
+                // outcome for every non-cancellation failure.
+                false
             }
-        } catch (e: kotlinx.coroutines.CancellationException) {
-            // Cancellation must propagate, never become "token invalid".
-            throw e
-        } catch (e: Exception) {
-            // Same broad net as submit(): header validation of a bad
-            // pasted token throws IllegalArgumentException before any
-            // IO starts. False ("couldn't validate") is the right
-            // outcome for every non-cancellation failure.
-            false
         }
-    }
 
     /**
      * Minimal JSON-string escaping. Just the chars that would break a

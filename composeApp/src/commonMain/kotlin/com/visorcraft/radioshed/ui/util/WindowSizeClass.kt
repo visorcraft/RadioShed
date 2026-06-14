@@ -34,11 +34,12 @@ enum class RsWindowSizeClass {
 }
 
 /** Resolve the size class from a measured width. */
-fun rsWindowSizeClassOf(width: Dp): RsWindowSizeClass = when {
-    width < 600.dp -> RsWindowSizeClass.Compact
-    width < 840.dp -> RsWindowSizeClass.Medium
-    else -> RsWindowSizeClass.Expanded
-}
+fun rsWindowSizeClassOf(width: Dp): RsWindowSizeClass =
+    when {
+        width < 600.dp -> RsWindowSizeClass.Compact
+        width < 840.dp -> RsWindowSizeClass.Medium
+        else -> RsWindowSizeClass.Expanded
+    }
 
 /**
  * Composable accessor — returns the class for the *measured*

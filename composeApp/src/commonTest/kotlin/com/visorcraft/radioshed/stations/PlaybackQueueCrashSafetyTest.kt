@@ -30,8 +30,11 @@ import kotlin.test.assertNotNull
  * and assert next() either returns a Track or null — never throws.
  */
 class PlaybackQueueCrashSafetyTest {
-
-    private fun track(id: Long, albumId: Long? = null, ctime: Long = id * 1_000L): Track =
+    private fun track(
+        id: Long,
+        albumId: Long? = null,
+        ctime: Long = id * 1_000L,
+    ): Track =
         Track(
             id = id,
             path = "/x/$id.mp3",
@@ -47,19 +50,21 @@ class PlaybackQueueCrashSafetyTest {
             updatedAt = 0L,
         )
 
-    private val allPlayOrders = listOf(
-        PlayOrder.Sequential,
-        PlayOrder.Shuffle,
-        PlayOrder.SmartShuffle,
-        PlayOrder.WeightedRandom,
-    )
+    private val allPlayOrders =
+        listOf(
+            PlayOrder.Sequential,
+            PlayOrder.Shuffle,
+            PlayOrder.SmartShuffle,
+            PlayOrder.WeightedRandom,
+        )
 
-    private val allWeightings = listOf(
-        Weighting.Uniform,
-        Weighting.FavorRecent,
-        Weighting.FavorUnderPlayed,
-        Weighting.FavorHigherRated,
-    )
+    private val allWeightings =
+        listOf(
+            Weighting.Uniform,
+            Weighting.FavorRecent,
+            Weighting.FavorUnderPlayed,
+            Weighting.FavorHigherRated,
+        )
 
     /**
      * The reported regression scenario plus its neighbors: an empty
@@ -71,10 +76,11 @@ class PlaybackQueueCrashSafetyTest {
     fun empty_candidates_never_throw_for_any_order_or_weighting() {
         for (order in allPlayOrders) {
             for (weighting in allWeightings) {
-                val q = PlaybackQueue(
-                    candidates = emptyList(),
-                    rule = PlaybackRule(order = order, weighting = weighting),
-                )
+                val q =
+                    PlaybackQueue(
+                        candidates = emptyList(),
+                        rule = PlaybackRule(order = order, weighting = weighting),
+                    )
                 // 10 calls so a stateful queue (the smart-shuffle path
                 // mutates recent / recentAlbums between picks) can't
                 // crash on the second or third invocation if it
@@ -105,11 +111,12 @@ class PlaybackQueueCrashSafetyTest {
         val allIds = tracks.map { it.id }.toSet()
         for (order in allPlayOrders) {
             for (weighting in allWeightings) {
-                val q = PlaybackQueue(
-                    candidates = tracks,
-                    rule = PlaybackRule(order = order, weighting = weighting),
-                    dislikedIds = allIds,
-                )
+                val q =
+                    PlaybackQueue(
+                        candidates = tracks,
+                        rule = PlaybackRule(order = order, weighting = weighting),
+                        dislikedIds = allIds,
+                    )
                 repeat(10) {
                     val result = runCatching { q.next() }
                     assertSucceedsOrNull(
@@ -130,24 +137,26 @@ class PlaybackQueueCrashSafetyTest {
     @Test
     fun inflated_avoidance_windows_never_throw() {
         val tracks = (1L..3L).map(::track)
-        val inflatedRules = listOf(
-            PlaybackRule(noRepeatDepth = 100, artistSpacing = 0, albumSpacing = 0),
-            PlaybackRule(noRepeatDepth = 0, artistSpacing = 100, albumSpacing = 0),
-            PlaybackRule(noRepeatDepth = 0, artistSpacing = 0, albumSpacing = 100),
-            PlaybackRule(noRepeatDepth = 100, artistSpacing = 100, albumSpacing = 100),
-        )
+        val inflatedRules =
+            listOf(
+                PlaybackRule(noRepeatDepth = 100, artistSpacing = 0, albumSpacing = 0),
+                PlaybackRule(noRepeatDepth = 0, artistSpacing = 100, albumSpacing = 0),
+                PlaybackRule(noRepeatDepth = 0, artistSpacing = 0, albumSpacing = 100),
+                PlaybackRule(noRepeatDepth = 100, artistSpacing = 100, albumSpacing = 100),
+            )
         for (baseRule in inflatedRules) {
             for (order in allPlayOrders) {
                 for (weighting in allWeightings) {
                     val rule = baseRule.copy(order = order, weighting = weighting)
-                    val q = PlaybackQueue(
-                        candidates = tracks,
-                        rule = rule,
-                        // Every track has the same album/artist id so
-                        // the avoid sets exhaust the pool — the worst
-                        // case for the shuffle inner loop.
-                        artistByTrackId = tracks.associate { it.id to 42L },
-                    )
+                    val q =
+                        PlaybackQueue(
+                            candidates = tracks,
+                            rule = rule,
+                            // Every track has the same album/artist id so
+                            // the avoid sets exhaust the pool — the worst
+                            // case for the shuffle inner loop.
+                            artistByTrackId = tracks.associate { it.id to 42L },
+                        )
                     repeat(20) {
                         val result = runCatching { q.next() }
                         assertSucceedsOrNull(
@@ -171,14 +180,15 @@ class PlaybackQueueCrashSafetyTest {
         val only = track(1L, albumId = 7L)
         for (order in allPlayOrders) {
             for (weighting in allWeightings) {
-                val q = PlaybackQueue(
-                    candidates = listOf(only),
-                    rule = PlaybackRule(order = order, weighting = weighting),
-                    artistByTrackId = mapOf(1L to 42L),
-                    playCountByTrackId = mapOf(1L to 5L),
-                    ratingByTrackId = mapOf(1L to 4.0),
-                    random = Random(0),
-                )
+                val q =
+                    PlaybackQueue(
+                        candidates = listOf(only),
+                        rule = PlaybackRule(order = order, weighting = weighting),
+                        artistByTrackId = mapOf(1L to 42L),
+                        playCountByTrackId = mapOf(1L to 5L),
+                        ratingByTrackId = mapOf(1L to 4.0),
+                        random = Random(0),
+                    )
                 repeat(5) {
                     val picked = runCatching { q.next() }
                     val track = picked.getOrNull()
@@ -199,10 +209,11 @@ class PlaybackQueueCrashSafetyTest {
         val extra = track(99L)
         for (order in allPlayOrders) {
             for (weighting in allWeightings) {
-                val q = PlaybackQueue(
-                    candidates = emptyList(),
-                    rule = PlaybackRule(order = order, weighting = weighting),
-                )
+                val q =
+                    PlaybackQueue(
+                        candidates = emptyList(),
+                        rule = PlaybackRule(order = order, weighting = weighting),
+                    )
                 q.enqueueLast(extra)
                 val first = runCatching { q.next() }
                 assertNotNull(first.getOrNull(), "priority pick failed: order=$order, weighting=$weighting")
@@ -222,27 +233,32 @@ class PlaybackQueueCrashSafetyTest {
     @Test
     fun thousand_pick_stress_never_throws() {
         val tracks = (1L..7L).map { track(it, albumId = it % 3) }
-        val rule = PlaybackRule(
-            order = PlayOrder.SmartShuffle,
-            weighting = Weighting.FavorUnderPlayed,
-            noRepeatDepth = 5,
-            artistSpacing = 3,
-            albumSpacing = 2,
-        )
-        val q = PlaybackQueue(
-            candidates = tracks,
-            rule = rule,
-            artistByTrackId = tracks.associate { it.id to (it.id % 4) },
-            playCountByTrackId = tracks.associate { it.id to it.id },
-            random = Random(12345),
-        )
+        val rule =
+            PlaybackRule(
+                order = PlayOrder.SmartShuffle,
+                weighting = Weighting.FavorUnderPlayed,
+                noRepeatDepth = 5,
+                artistSpacing = 3,
+                albumSpacing = 2,
+            )
+        val q =
+            PlaybackQueue(
+                candidates = tracks,
+                rule = rule,
+                artistByTrackId = tracks.associate { it.id to (it.id % 4) },
+                playCountByTrackId = tracks.associate { it.id to it.id },
+                random = Random(12345),
+            )
         repeat(1_000) {
             val picked = runCatching { q.next() }
             assertNotNull(picked.getOrNull(), "iteration $it produced null on a non-empty pool")
         }
     }
 
-    private fun assertSucceedsOrNull(result: Result<Track?>, context: String) {
+    private fun assertSucceedsOrNull(
+        result: Result<Track?>,
+        context: String,
+    ) {
         result.exceptionOrNull()?.let { ex ->
             kotlin.test.fail("PlaybackQueue.next() threw $ex [$context]")
         }

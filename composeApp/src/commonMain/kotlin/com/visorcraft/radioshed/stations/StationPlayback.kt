@@ -3,15 +3,16 @@ package com.visorcraft.radioshed.stations
 import com.visorcraft.radioshed.audio.AudioEngine
 import com.visorcraft.radioshed.audio.CrossfadePlan
 import com.visorcraft.radioshed.audio.PlayerState
+import com.visorcraft.radioshed.audio.effectiveCrossfadeDurationMs
 import com.visorcraft.radioshed.audio.resolveCrossfadePlan
 import com.visorcraft.radioshed.audio.shouldArmCrossfade
 import com.visorcraft.radioshed.audio.toPlayable
-import com.visorcraft.radioshed.domain.Crossfade
 import com.visorcraft.radioshed.data.LibraryRepository
 import com.visorcraft.radioshed.data.RatingRepository
 import com.visorcraft.radioshed.data.SettingsStore
 import com.visorcraft.radioshed.data.StationRepository
 import com.visorcraft.radioshed.data.nowMillis
+import com.visorcraft.radioshed.domain.Crossfade
 import com.visorcraft.radioshed.domain.PlayOrder
 import com.visorcraft.radioshed.domain.PlaybackRule
 import com.visorcraft.radioshed.domain.Station
@@ -65,7 +66,10 @@ class StationPlayback(
      */
     private val _playbackError = MutableStateFlow<String?>(null)
     val playbackError: StateFlow<String?> = _playbackError.asStateFlow()
-    fun clearPlaybackError() { _playbackError.value = null }
+
+    fun clearPlaybackError() {
+        _playbackError.value = null
+    }
 
     /**
      * Catch-all for unhandled exceptions in any coroutine launched on
@@ -82,19 +86,20 @@ class StationPlayback(
      * needs a handler installed on the parent context to avoid
      * uncaught propagation.
      */
-    private val crashGuard = CoroutineExceptionHandler { _, throwable ->
-        // CancellationException is the normal control-flow signal when
-        // [stationLoadJob.cancel] interrupts a rapid station re-tap, or
-        // when [scope] tears down at shutdown. Surfacing it as a user-
-        // visible "Playback error" would flash a red banner during
-        // perfectly healthy station switching — re-throw so the
-        // standard cancellation path stays silent.
-        if (throwable is kotlinx.coroutines.CancellationException) throw throwable
-        val message = throwable.message ?: throwable::class.simpleName ?: "unknown"
-        println("StationPlayback: unhandled exception — $message")
-        throwable.printStackTrace()
-        _playbackError.value = "Playback error: $message"
-    }
+    private val crashGuard =
+        CoroutineExceptionHandler { _, throwable ->
+            // CancellationException is the normal control-flow signal when
+            // [stationLoadJob.cancel] interrupts a rapid station re-tap, or
+            // when [scope] tears down at shutdown. Surfacing it as a user-
+            // visible "Playback error" would flash a red banner during
+            // perfectly healthy station switching — re-throw so the
+            // standard cancellation path stays silent.
+            if (throwable is kotlinx.coroutines.CancellationException) throw throwable
+            val message = throwable.message ?: throwable::class.simpleName ?: "unknown"
+            println("StationPlayback: unhandled exception — $message")
+            throwable.printStackTrace()
+            _playbackError.value = "Playback error: $message"
+        }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default + crashGuard)
 
@@ -138,6 +143,7 @@ class StationPlayback(
      */
     private val _priorityCountFlow = MutableStateFlow(0)
     val priorityCountFlow: StateFlow<Int> = _priorityCountFlow.asStateFlow()
+
     private fun republishPriorityCount() {
         _priorityCountFlow.value = queue?.prioritySnapshot()?.size ?: 0
     }
@@ -172,11 +178,12 @@ class StationPlayback(
     }
 
     fun cycleRepeatMode() {
-        _repeatMode.value = when (_repeatMode.value) {
-            RepeatMode.Off -> RepeatMode.All
-            RepeatMode.All -> RepeatMode.One
-            RepeatMode.One -> RepeatMode.Off
-        }
+        _repeatMode.value =
+            when (_repeatMode.value) {
+                RepeatMode.Off -> RepeatMode.All
+                RepeatMode.All -> RepeatMode.One
+                RepeatMode.One -> RepeatMode.Off
+            }
     }
 
     /**
@@ -193,16 +200,17 @@ class StationPlayback(
 
     /** Live "shuffle is on" flag for the Now Playing UI. Combines
      *  override (if set) with the active station's natural order. */
-    val shuffleSession: StateFlow<Boolean> = run {
-        kotlinx.coroutines.flow.combine(_currentStation, _shuffleOverride) { station, override ->
-            val effective = override ?: station?.playback?.order
-            effective != null && effective != PlayOrder.Sequential
-        }.stateIn(
-            scope = scope,
-            started = kotlinx.coroutines.flow.SharingStarted.Eagerly,
-            initialValue = false,
-        )
-    }
+    val shuffleSession: StateFlow<Boolean> =
+        run {
+            kotlinx.coroutines.flow.combine(_currentStation, _shuffleOverride) { station, override ->
+                val effective = override ?: station?.playback?.order
+                effective != null && effective != PlayOrder.Sequential
+            }.stateIn(
+                scope = scope,
+                started = kotlinx.coroutines.flow.SharingStarted.Eagerly,
+                initialValue = false,
+            )
+        }
 
     fun toggleShuffle() {
         // Flip between Sequential and SmartShuffle. The station's
@@ -212,8 +220,12 @@ class StationPlayback(
             advanceMutex.withLock {
                 val station = _currentStation.value ?: return@withLock
                 val currentEffective = _shuffleOverride.value ?: station.playback.order
-                val target = if (currentEffective == PlayOrder.Sequential) PlayOrder.SmartShuffle
-                             else PlayOrder.Sequential
+                val target =
+                    if (currentEffective == PlayOrder.Sequential) {
+                        PlayOrder.SmartShuffle
+                    } else {
+                        PlayOrder.Sequential
+                    }
                 _shuffleOverride.value = target
                 rebuildQueueForCurrentStation()
             }
@@ -228,35 +240,49 @@ class StationPlayback(
      */
     private suspend fun rebuildQueueForCurrentStation() {
         val station = _currentStation.value ?: return
-        val ruleCandidates = runCatching {
-            sourceEvaluator.evaluate(station.source)
-        }.getOrDefault(emptyList())
+        val ruleCandidates =
+            runCatching {
+                sourceEvaluator.evaluate(station.source)
+            }.getOrDefault(emptyList())
         val pinnedTracks = stationRepo.pinnedTracks(station.id)
-        val candidates = if (pinnedTracks.isEmpty()) ruleCandidates
-        else {
-            val ids = ruleCandidates.mapTo(mutableSetOf()) { it.id }
-            ruleCandidates + pinnedTracks.filter { it.id !in ids }
-        }
+        val candidates =
+            if (pinnedTracks.isEmpty()) {
+                ruleCandidates
+            } else {
+                val ids = ruleCandidates.mapTo(mutableSetOf()) { it.id }
+                ruleCandidates + pinnedTracks.filter { it.id !in ids }
+            }
         val disliked = ratingRepo.dislikedTrackIdsForStation(station.id).toSet()
         val candidateIds = candidates.map { it.id }
         val artistMap = libraryRepo.primaryArtistMap(candidateIds)
         val effectivePlayback = effectivePlaybackFor(station)
-        val needsPlayCount = effectivePlayback.weighting ==
-            com.visorcraft.radioshed.domain.Weighting.FavorUnderPlayed
-        val needsRatings = effectivePlayback.weighting ==
-            com.visorcraft.radioshed.domain.Weighting.FavorHigherRated
-        val playCountMap = if (needsPlayCount) stationRepo.playCountForTracks(candidateIds)
-                           else emptyMap()
-        val ratingMap = if (needsRatings) ratingRepo.ratingsForTracks(candidateIds)
-                        else emptyMap()
-        queue = PlaybackQueue(
-            candidates = candidates,
-            rule = effectivePlayback,
-            dislikedIds = disliked,
-            artistByTrackId = artistMap,
-            playCountByTrackId = playCountMap,
-            ratingByTrackId = ratingMap,
-        )
+        val needsPlayCount =
+            effectivePlayback.weighting ==
+                com.visorcraft.radioshed.domain.Weighting.FavorUnderPlayed
+        val needsRatings =
+            effectivePlayback.weighting ==
+                com.visorcraft.radioshed.domain.Weighting.FavorHigherRated
+        val playCountMap =
+            if (needsPlayCount) {
+                stationRepo.playCountForTracks(candidateIds)
+            } else {
+                emptyMap()
+            }
+        val ratingMap =
+            if (needsRatings) {
+                ratingRepo.ratingsForTracks(candidateIds)
+            } else {
+                emptyMap()
+            }
+        queue =
+            PlaybackQueue(
+                candidates = candidates,
+                rule = effectivePlayback,
+                dislikedIds = disliked,
+                artistByTrackId = artistMap,
+                playCountByTrackId = playCountMap,
+                ratingByTrackId = ratingMap,
+            )
         _candidateCount.value = queue?.candidateCount ?: 0
         // Don't re-trigger advanceToNext — the user wanted to keep
         // listening to the current track and only change the
@@ -411,12 +437,19 @@ class StationPlayback(
                     // so the Ended collector also sees the suppression if the
                     // outgoing track ends between this tick and the mutex
                     // acquisition inside maybeStartCrossfade.
-                    if (!crossfadeArmed && !suppressEndedForCrossfade &&
-                        shouldArmCrossfade(pos.currentMs, pos.durationMs, plan.durationMs)
-                    ) {
-                        crossfadeArmed = true
-                        suppressEndedForCrossfade = true
-                        maybeStartCrossfade(plan)
+                    if (!crossfadeArmed && !suppressEndedForCrossfade) {
+                        val nextTrack = upcoming(1).firstOrNull()
+                        val fadeMs =
+                            effectiveCrossfadeDurationMs(
+                                plan = plan,
+                                outgoingDurationMs = pos.durationMs,
+                                incomingDurationMs = nextTrack?.durationMs ?: 0L,
+                            )
+                        if (shouldArmCrossfade(pos.currentMs, pos.durationMs, fadeMs)) {
+                            crossfadeArmed = true
+                            suppressEndedForCrossfade = true
+                            maybeStartCrossfade(plan, fadeMs)
+                        }
                     }
                     return@collect
                 }
@@ -450,8 +483,11 @@ class StationPlayback(
         // first decided whether the pause landed on
         // the intended track or the next one.
         if (sleepTimer.consumeEndOfTrackPause()) {
-            if (settings.getSleepStopOnExpire()) audioEngine.stop()
-            else audioEngine.pause()
+            if (settings.getSleepStopOnExpire()) {
+                audioEngine.stop()
+            } else {
+                audioEngine.pause()
+            }
             return
         }
         if (_repeatMode.value == RepeatMode.One) {
@@ -472,7 +508,10 @@ class StationPlayback(
      * queue is exhausted we leave the current track to end naturally (the
      * normal [advanceToNext] stop path then runs on Ended).
      */
-    private fun maybeStartCrossfade(plan: CrossfadePlan) {
+    private fun maybeStartCrossfade(
+        plan: CrossfadePlan,
+        resolvedDurationMs: Long = plan.durationMs,
+    ) {
         scope.launch {
             advanceMutex.withLock {
                 // Re-check under the lock: a skip / stop / station change may
@@ -484,11 +523,12 @@ class StationPlayback(
                 // (RepeatMode.One replays; an exhausted queue stops). Leaving
                 // them raised here would suppress that Ended and stall playback.
                 val q = queue
-                val next = if (q == null || _repeatMode.value == RepeatMode.One) {
-                    null
-                } else {
-                    q.next(allowWrap = _repeatMode.value == RepeatMode.All)
-                }
+                val next =
+                    if (q == null || _repeatMode.value == RepeatMode.One) {
+                        null
+                    } else {
+                        q.next(allowWrap = _repeatMode.value == RepeatMode.All)
+                    }
                 if (next == null) {
                     crossfadeArmed = false
                     suppressEndedForCrossfade = false
@@ -505,13 +545,14 @@ class StationPlayback(
                 // half the incoming track's length, floor 1s. Unknown duration
                 // (<= 0, e.g. some streams) keeps the full plan; the grace
                 // watchdog below is the backstop for any residual case.
-                val effectivePlan = if (
-                    next.durationMs > 0L && next.durationMs < plan.durationMs * 2L
-                ) {
-                    plan.copy(durationMs = (next.durationMs / 2L).coerceAtLeast(1_000L))
-                } else {
-                    plan
-                }
+                val effectivePlan =
+                    if (
+                        next.durationMs > 0L && next.durationMs < resolvedDurationMs * 2L
+                    ) {
+                        plan.copy(durationMs = (next.durationMs / 2L).coerceAtLeast(1_000L))
+                    } else {
+                        plan.copy(durationMs = resolvedDurationMs)
+                    }
                 // suppressEndedForCrossfade is already raised (by the poll); it
                 // keeps the OUTGOING track's natural Ended from triggering a
                 // second advance on top of this crossfade. Lower it after the
@@ -520,28 +561,29 @@ class StationPlayback(
                 // of letting a stale timer lower a LATER crossfade's latch.
                 playTrack(next, recordHistory = true, crossfade = effectivePlan)
                 crossfadeGraceJob?.cancel()
-                crossfadeGraceJob = scope.launch {
-                    kotlinx.coroutines.delay(effectivePlan.durationMs + CROSSFADE_ENDED_GRACE_MS)
-                    suppressEndedForCrossfade = false
-                    // Watchdog: if the engine is sitting at Ended now that the
-                    // latch is lowered, the emission was swallowed while it was
-                    // raised (incoming track ended inside the window, or the
-                    // engine-side crossfade failed and the outgoing track ran
-                    // out). StateFlow never re-emits it, so re-dispatch the
-                    // advance here or playback stalls forever. The id re-check
-                    // inside the lock keeps this from double-advancing when the
-                    // normal collector won the race.
-                    if (audioEngine.state.value == PlayerState.Ended && !suppressAutoAdvance) {
-                        advanceMutex.withLock {
-                            if (audioEngine.state.value == PlayerState.Ended &&
-                                !suppressAutoAdvance && !suppressEndedForCrossfade &&
-                                currentTrack?.id == next.id
-                            ) {
-                                advanceAfterEndedLocked()
+                crossfadeGraceJob =
+                    scope.launch {
+                        kotlinx.coroutines.delay(effectivePlan.durationMs + CROSSFADE_ENDED_GRACE_MS)
+                        suppressEndedForCrossfade = false
+                        // Watchdog: if the engine is sitting at Ended now that the
+                        // latch is lowered, the emission was swallowed while it was
+                        // raised (incoming track ended inside the window, or the
+                        // engine-side crossfade failed and the outgoing track ran
+                        // out). StateFlow never re-emits it, so re-dispatch the
+                        // advance here or playback stalls forever. The id re-check
+                        // inside the lock keeps this from double-advancing when the
+                        // normal collector won the race.
+                        if (audioEngine.state.value == PlayerState.Ended && !suppressAutoAdvance) {
+                            advanceMutex.withLock {
+                                if (audioEngine.state.value == PlayerState.Ended &&
+                                    !suppressAutoAdvance && !suppressEndedForCrossfade &&
+                                    currentTrack?.id == next.id
+                                ) {
+                                    advanceAfterEndedLocked()
+                                }
                             }
                         }
                     }
-                }
             }
         }
     }
@@ -552,16 +594,23 @@ class StationPlayback(
      * Doesn't mutate persisted state — the next track-load resets
      * back to the user's chosen volume × ReplayGain.
      */
-    private fun applyEffectiveVolumeAttenuated(track: Track, attenuation: Float) {
+    private fun applyEffectiveVolumeAttenuated(
+        track: Track,
+        attenuation: Float,
+    ) {
         val user = _userVolume.value
-        val rg = if (settings.getReplayGainEnabled()) {
-            val gainDb = track.replayGainTrack ?: track.replayGainAlbum
-            if (gainDb == null) 1f
-            else {
-                val preamp = settings.getReplayGainPreampDb()
-                10.0.pow((gainDb + preamp) / 20.0).toFloat().coerceIn(0f, 1f)
+        val rg =
+            if (settings.getReplayGainEnabled()) {
+                val gainDb = track.replayGainTrack ?: track.replayGainAlbum
+                if (gainDb == null) {
+                    1f
+                } else {
+                    val preamp = settings.getReplayGainPreampDb()
+                    10.0.pow((gainDb + preamp) / 20.0).toFloat().coerceIn(0f, 1f)
+                }
+            } else {
+                1f
             }
-        } else 1f
         audioEngine.setVolume((user * rg * attenuation.coerceIn(0f, 1f)).coerceIn(0f, 1f))
     }
 
@@ -629,19 +678,21 @@ class StationPlayback(
         // app. The user sees "Couldn't load tracks" via [_playbackError]
         // and the station is still selectable — they can fix the rule
         // in the editor without restarting.
-        val ruleCandidates = runCatching {
-            sourceEvaluator.evaluate(station.source)
-        }.onFailure {
-            _playbackError.value = "Couldn't evaluate \"${station.name}\": " +
-                (it.message ?: it::class.simpleName ?: "unknown rule error")
-        }.getOrDefault(emptyList())
+        val ruleCandidates =
+            runCatching {
+                sourceEvaluator.evaluate(station.source)
+            }.onFailure {
+                _playbackError.value = "Couldn't evaluate \"${station.name}\": " +
+                    (it.message ?: it::class.simpleName ?: "unknown rule error")
+            }.getOrDefault(emptyList())
         val pinned = stationRepo.pinnedTracks(stationId)
-        val candidates = if (pinned.isEmpty()) {
-            ruleCandidates
-        } else {
-            val ids = ruleCandidates.mapTo(mutableSetOf()) { it.id }
-            ruleCandidates + pinned.filter { it.id !in ids }
-        }
+        val candidates =
+            if (pinned.isEmpty()) {
+                ruleCandidates
+            } else {
+                val ids = ruleCandidates.mapTo(mutableSetOf()) { it.id }
+                ruleCandidates + pinned.filter { it.id !in ids }
+            }
         // Globally-disliked tracks ("never play this anywhere") and
         // per-station dislikes are unioned and passed to the queue
         // as a single filter set. Globals override pins — the user's
@@ -658,24 +709,33 @@ class StationPlayback(
         // Pre-resolve play_count + rating maps too, but only when the
         // station's weighting actually needs them. Skipping the SQL
         // for Uniform / FavorRecent stations keeps cold-start cheap.
-        val needsPlayCount = station.playback.weighting ==
-            com.visorcraft.radioshed.domain.Weighting.FavorUnderPlayed
-        val needsRatings = station.playback.weighting ==
-            com.visorcraft.radioshed.domain.Weighting.FavorHigherRated
-        val playCountMap = if (needsPlayCount) {
-            stationRepo.playCountForTracks(candidateIds)
-        } else emptyMap()
-        val ratingMap = if (needsRatings) {
-            ratingRepo.ratingsForTracks(candidateIds)
-        } else emptyMap()
-        val newQueue = PlaybackQueue(
-            candidates = candidates,
-            rule = station.playback,
-            dislikedIds = disliked,
-            artistByTrackId = artistMap,
-            playCountByTrackId = playCountMap,
-            ratingByTrackId = ratingMap,
-        )
+        val needsPlayCount =
+            station.playback.weighting ==
+                com.visorcraft.radioshed.domain.Weighting.FavorUnderPlayed
+        val needsRatings =
+            station.playback.weighting ==
+                com.visorcraft.radioshed.domain.Weighting.FavorHigherRated
+        val playCountMap =
+            if (needsPlayCount) {
+                stationRepo.playCountForTracks(candidateIds)
+            } else {
+                emptyMap()
+            }
+        val ratingMap =
+            if (needsRatings) {
+                ratingRepo.ratingsForTracks(candidateIds)
+            } else {
+                emptyMap()
+            }
+        val newQueue =
+            PlaybackQueue(
+                candidates = candidates,
+                rule = station.playback,
+                dislikedIds = disliked,
+                artistByTrackId = artistMap,
+                playCountByTrackId = playCountMap,
+                ratingByTrackId = ratingMap,
+            )
 
         advanceMutex.withLock {
             // Record the in-flight track BEFORE swapping currentStation —
@@ -704,10 +764,13 @@ class StationPlayback(
             // candidates have been disliked, source folders have been
             // deleted. Clear the slot on a successful match so a
             // previous failure doesn't linger across station switches.
-            _playbackError.value = if (newQueue.candidateCount == 0) {
-                "\"${station.name}\" matched 0 tracks. " +
-                    "Edit the station's rule or scan more music."
-            } else null
+            _playbackError.value =
+                if (newQueue.candidateCount == 0) {
+                    "\"${station.name}\" matched 0 tracks. " +
+                        "Edit the station's rule or scan more music."
+                } else {
+                    null
+                }
             // Station mode: clear finite-queue progress flow — the
             // station's pool is conceptually unbounded, so "Track N
             // of M" doesn't make sense.
@@ -921,7 +984,10 @@ class StationPlayback(
      * protection as the other queue mutators so it can't race with
      * auto-advance or skipNext.
      */
-    fun moveQueueItem(from: Int, to: Int) {
+    fun moveQueueItem(
+        from: Int,
+        to: Int,
+    ) {
         if (from == to) return
         scope.launch {
             advanceMutex.withLock {
@@ -939,7 +1005,10 @@ class StationPlayback(
      * selected during ad-hoc playback (`currentStation` is null), so the
      * "Continue Listening" callout on Stations Home stays hidden.
      */
-    fun playTracks(tracks: List<Track>, startIndex: Int = 0) {
+    fun playTracks(
+        tracks: List<Track>,
+        startIndex: Int = 0,
+    ) {
         if (tracks.isEmpty()) return
         scope.launch {
             advanceMutex.withLock {
@@ -958,11 +1027,12 @@ class StationPlayback(
                 crossfadeArmed = false
                 suppressEndedForCrossfade = false
                 audioEngine.setCrossfade(Crossfade.Off)
-                val newQueue = PlaybackQueue(
-                    candidates = tracks,
-                    rule = PlaybackRule(order = PlayOrder.Sequential),
-                    initialSequentialCursor = startIndex.coerceIn(0, tracks.size - 1),
-                )
+                val newQueue =
+                    PlaybackQueue(
+                        candidates = tracks,
+                        rule = PlaybackRule(order = PlayOrder.Sequential),
+                        initialSequentialCursor = startIndex.coerceIn(0, tracks.size - 1),
+                    )
                 queue = newQueue
                 _candidateCount.value = newQueue.candidateCount
                 _priorityCountFlow.value = 0
@@ -1083,8 +1153,9 @@ class StationPlayback(
         val wasUserSkip = userSkipPending
         userSkipPending = false
         val listenedMs = (nowMillis() - startedAt).coerceAtLeast(0L)
-        val completed = prev.durationMs > 0L &&
-            listenedMs >= (prev.durationMs * COMPLETION_FRACTION).toLong()
+        val completed =
+            prev.durationMs > 0L &&
+                listenedMs >= (prev.durationMs * COMPLETION_FRACTION).toLong()
         scope.launch {
             runCatching {
                 stationRepo.recordPlay(
@@ -1118,11 +1189,13 @@ class StationPlayback(
                 // the offline backlog — this site only resolves the
                 // artist / album metadata it can't see.
                 if (completed && settings.getListenBrainzEnabled()) {
-                    val artistName = libraryRepo.artistsForTrack(prev.id)
-                        .firstOrNull()?.name
-                    val albumName = prev.albumId?.let {
-                        libraryRepo.getAlbumById(it)?.title
-                    }
+                    val artistName =
+                        libraryRepo.artistsForTrack(prev.id)
+                            .firstOrNull()?.name
+                    val albumName =
+                        prev.albumId?.let {
+                            libraryRepo.getAlbumById(it)?.title
+                        }
                     if (!artistName.isNullOrBlank()) {
                         scrobbleSync.submitOrEnqueue(
                             artist = artistName,
@@ -1163,12 +1236,13 @@ class StationPlayback(
         // differentiating the two finally honours the user-facing
         // Repeat toggle.
         val allowWrap = _repeatMode.value == RepeatMode.All
-        val next = q.next(allowWrap = allowWrap) ?: run {
-            // Queue exhausted (all dislikes, empty candidates, OR
-            // Sequential reached its last track with Repeat = Off).
-            audioEngine.stop()
-            return
-        }
+        val next =
+            q.next(allowWrap = allowWrap) ?: run {
+                // Queue exhausted (all dislikes, empty candidates, OR
+                // Sequential reached its last track with Repeat = Off).
+                audioEngine.stop()
+                return
+            }
         // q.next() consumes the priority head when one is queued, so
         // the badge count needs to refresh — without this the UI's
         // queue-button badge stays at the pre-consume count until the
@@ -1183,7 +1257,11 @@ class StationPlayback(
      * previously-current track is pushed onto [history] (capped) so
      * skip-previous can navigate back through it.
      */
-    private fun playTrack(track: Track, recordHistory: Boolean, crossfade: CrossfadePlan? = null) {
+    private fun playTrack(
+        track: Track,
+        recordHistory: Boolean,
+        crossfade: CrossfadePlan? = null,
+    ) {
         if (recordHistory) {
             currentTrack?.let { prev ->
                 history.addLast(prev)
@@ -1218,11 +1296,12 @@ class StationPlayback(
         finiteTracksSnapshot?.let { snapshot ->
             val newCursor = resolveFiniteCursor(snapshot, finiteCursor, track.id)
             finiteCursor = newCursor
-            _finiteQueueProgress.value = if (newCursor in snapshot.indices) {
-                (newCursor + 1) to snapshot.size
-            } else {
-                null
-            }
+            _finiteQueueProgress.value =
+                if (newCursor in snapshot.indices) {
+                    (newCursor + 1) to snapshot.size
+                } else {
+                    null
+                }
         }
         // A fresh load clears the crossfade-armed latch for the new track.
         // (maybeStartCrossfade set it for the OUTGOING track; the incoming
@@ -1303,9 +1382,10 @@ class StationPlayback(
         // initial tune-in, handled by the same up-next/station-id slot logic.
         // Tracked BEFORE the enabled gate so toggling the DJ on mid-session
         // doesn't misread the next transition as a station switch.
-        val stationChanged = station != null &&
-            lastDjStationId != null &&
-            lastDjStationId != station.id
+        val stationChanged =
+            station != null &&
+                lastDjStationId != null &&
+                lastDjStationId != station.id
         lastDjStationId = station?.id
         if (!settings.getDjEnabled()) return
         scope.launch {
@@ -1314,15 +1394,18 @@ class StationPlayback(
                 if (currentTrack?.id != startingTrack.id) return@launch
             }
             runCatching {
-                val startingArtist = libraryRepo.artistsForTrack(startingTrack.id)
-                    .firstOrNull()?.name
+                val startingArtist =
+                    libraryRepo.artistsForTrack(startingTrack.id)
+                        .firstOrNull()?.name
                 val nextTrack = upcoming(1).firstOrNull()
-                val nextArtist = nextTrack?.let {
-                    libraryRepo.artistsForTrack(it.id).firstOrNull()?.name
-                }
-                val endedArtist = endedTrack?.let {
-                    libraryRepo.artistsForTrack(it.id).firstOrNull()?.name
-                }
+                val nextArtist =
+                    nextTrack?.let {
+                        libraryRepo.artistsForTrack(it.id).firstOrNull()?.name
+                    }
+                val endedArtist =
+                    endedTrack?.let {
+                        libraryRepo.artistsForTrack(it.id).firstOrNull()?.name
+                    }
                 djAnnouncer.announceIfDue(
                     TrackTransition(
                         stationName = station?.name,
@@ -1344,9 +1427,10 @@ class StationPlayback(
                 // a harmless cache warm, never a wrong announcement).
                 nextTrack?.let { upcomingTrack ->
                     val afterNext = upcoming(2).getOrNull(1)
-                    val afterNextArtist = afterNext?.let {
-                        libraryRepo.artistsForTrack(it.id).firstOrNull()?.name
-                    }
+                    val afterNextArtist =
+                        afterNext?.let {
+                            libraryRepo.artistsForTrack(it.id).firstOrNull()?.name
+                        }
                     djAnnouncer.precacheUpcoming(
                         listOf(
                             TrackTransition(

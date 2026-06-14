@@ -37,9 +37,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import com.visorcraft.radioshed.ui.util.TooltipIconButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -53,6 +51,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -69,7 +68,7 @@ import com.visorcraft.radioshed.domain.Artist
 import com.visorcraft.radioshed.domain.Track
 import com.visorcraft.radioshed.stations.StationPlayback
 import com.visorcraft.radioshed.ui.playlists.TrackContextSheet
-import androidx.compose.runtime.rememberCoroutineScope
+import com.visorcraft.radioshed.ui.util.TooltipIconButton
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
@@ -228,9 +227,10 @@ fun AlbumDetailScreen(
                         }
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                ),
+                colors =
+                    TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                    ),
             )
         },
         containerColor = MaterialTheme.colorScheme.background,
@@ -252,9 +252,10 @@ fun AlbumDetailScreen(
             Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
                 Spacer(Modifier.height(16.dp))
 
-                val totalRuntimeMs = remember(tracks) {
-                    tracks.sumOf { it.durationMs }
-                }
+                val totalRuntimeMs =
+                    remember(tracks) {
+                        tracks.sumOf { it.durationMs }
+                    }
                 if (isCompact) {
                     AlbumHeaderCompact(
                         album = a,
@@ -293,9 +294,10 @@ fun AlbumDetailScreen(
                         },
                         enabled = tracks.isNotEmpty(),
                         modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = MaterialTheme.colorScheme.primary,
-                        ),
+                        colors =
+                            ButtonDefaults.outlinedButtonColors(
+                                contentColor = MaterialTheme.colorScheme.primary,
+                            ),
                     ) {
                         Icon(Icons.Filled.Shuffle, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.size(6.dp))
@@ -305,9 +307,10 @@ fun AlbumDetailScreen(
 
                 Spacer(Modifier.height(8.dp))
 
-                val sortedTracks = remember(tracks, trackSort, playCounts) {
-                    sortAlbumTracks(tracks, trackSort, playCounts)
-                }
+                val sortedTracks =
+                    remember(tracks, trackSort, playCounts) {
+                        sortAlbumTracks(tracks, trackSort, playCounts)
+                    }
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(vertical = 4.dp),
@@ -380,9 +383,12 @@ fun AlbumDetailScreen(
                             MassRateAction.RateFive -> "Rate all"
                             MassRateAction.Clear -> "Clear"
                         },
-                        color = if (action == MassRateAction.Clear)
-                            MaterialTheme.colorScheme.error
-                        else MaterialTheme.colorScheme.primary,
+                        color =
+                            if (action == MassRateAction.Clear) {
+                                MaterialTheme.colorScheme.error
+                            } else {
+                                MaterialTheme.colorScheme.primary
+                            },
                     )
                 }
             },
@@ -406,10 +412,11 @@ private fun AlbumHeaderCompact(
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
         AlbumCover(
             artworkUri = album.artworkUri,
-            modifier = Modifier
-                .widthIn(max = 320.dp)
-                .fillMaxWidth()
-                .aspectRatio(1f),
+            modifier =
+                Modifier
+                    .widthIn(max = 320.dp)
+                    .fillMaxWidth()
+                    .aspectRatio(1f),
         )
         Spacer(Modifier.height(12.dp))
         AlbumMeta(
@@ -433,9 +440,10 @@ private fun AlbumHeaderWide(
     Row(verticalAlignment = Alignment.CenterVertically) {
         AlbumCover(
             artworkUri = album.artworkUri,
-            modifier = Modifier
-                .size(180.dp)
-                .aspectRatio(1f),
+            modifier =
+                Modifier
+                    .size(180.dp)
+                    .aspectRatio(1f),
         )
         Spacer(Modifier.size(20.dp))
         Column(modifier = Modifier.weight(1f)) {
@@ -471,22 +479,24 @@ private fun AlbumMeta(
             modifier = Modifier.clickable { onArtistTap(artist.id) },
         )
     }
-    val subtitle = buildString {
-        album.year?.let { append(it).append(" · ") }
-        append(trackCount).append(if (trackCount == 1) " track" else " tracks")
-        if (totalRuntimeMs > 0L) {
-            append(" · ").append(formatRuntime(totalRuntimeMs))
+    val subtitle =
+        buildString {
+            album.year?.let { append(it).append(" · ") }
+            append(trackCount).append(if (trackCount == 1) " track" else " tracks")
+            if (totalRuntimeMs > 0L) {
+                append(" · ").append(formatRuntime(totalRuntimeMs))
+            }
         }
-    }
     val copySummary = com.visorcraft.radioshed.ui.util.rememberCopyToClipboard()
     Text(
         text = subtitle,
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
-        modifier = Modifier.clickable {
-            val artistPart = artist?.name?.let { " · $it" } ?: ""
-            copySummary("${album.title}$artistPart — $subtitle")
-        },
+        modifier =
+            Modifier.clickable {
+                val artistPart = artist?.name?.let { " · $it" } ?: ""
+                copySummary("${album.title}$artistPart — $subtitle")
+            },
     )
 }
 
@@ -510,7 +520,10 @@ private fun formatRuntime(totalMs: Long): String {
 }
 
 @Composable
-private fun AlbumCover(artworkUri: String?, modifier: Modifier = Modifier) {
+private fun AlbumCover(
+    artworkUri: String?,
+    modifier: Modifier = Modifier,
+) {
     Surface(
         modifier = modifier.clip(RoundedCornerShape(12.dp)),
         color = MaterialTheme.colorScheme.surfaceVariant,
@@ -545,9 +558,10 @@ private fun AlbumTrackRow(
     onLongPress: () -> Unit = {},
 ) {
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .combinedClickable(onClick = onTap, onLongClick = onLongPress),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .combinedClickable(onClick = onTap, onLongClick = onLongPress),
         color = Color.Transparent,
     ) {
         Row(
@@ -571,8 +585,12 @@ private fun AlbumTrackRow(
                     text = track.title.ifBlank { track.fileName },
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.Medium,
-                    color = if (isCurrent) MaterialTheme.colorScheme.primary
-                            else MaterialTheme.colorScheme.onBackground,
+                    color =
+                        if (isCurrent) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onBackground
+                        },
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f, fill = false),
@@ -630,10 +648,11 @@ private fun sortAlbumTracks(
     tracks: List<com.visorcraft.radioshed.domain.Track>,
     sort: AlbumTrackSort,
     playCounts: Map<Long, Long>,
-): List<com.visorcraft.radioshed.domain.Track> = when (sort) {
-    AlbumTrackSort.TrackNumber -> tracks
-    AlbumTrackSort.TitleAsc -> tracks.sortedBy { it.title.lowercase() }
-    AlbumTrackSort.DurationAsc -> tracks.sortedBy { it.durationMs }
-    AlbumTrackSort.DurationDesc -> tracks.sortedByDescending { it.durationMs }
-    AlbumTrackSort.MostPlayed -> tracks.sortedByDescending { playCounts[it.id] ?: 0L }
-}
+): List<com.visorcraft.radioshed.domain.Track> =
+    when (sort) {
+        AlbumTrackSort.TrackNumber -> tracks
+        AlbumTrackSort.TitleAsc -> tracks.sortedBy { it.title.lowercase() }
+        AlbumTrackSort.DurationAsc -> tracks.sortedBy { it.durationMs }
+        AlbumTrackSort.DurationDesc -> tracks.sortedByDescending { it.durationMs }
+        AlbumTrackSort.MostPlayed -> tracks.sortedByDescending { playCounts[it.id] ?: 0L }
+    }

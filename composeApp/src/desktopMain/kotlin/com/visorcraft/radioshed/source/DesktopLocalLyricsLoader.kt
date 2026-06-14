@@ -18,29 +18,30 @@ import java.io.File
  * the network fetcher.
  */
 class DesktopLocalLyricsLoader : LocalLyricsLoader {
+    override suspend fun load(audioFilePath: String): LocalLyrics? =
+        withContext(IODispatcher) {
+            runCatching {
+                val audioFile = File(audioFilePath)
+                if (!audioFile.exists()) return@runCatching null
+                val baseName = audioFile.nameWithoutExtension
+                val dir = audioFile.parentFile ?: return@runCatching null
 
-    override suspend fun load(audioFilePath: String): LocalLyrics? = withContext(IODispatcher) {
-        runCatching {
-            val audioFile = File(audioFilePath)
-            if (!audioFile.exists()) return@runCatching null
-            val baseName = audioFile.nameWithoutExtension
-            val dir = audioFile.parentFile ?: return@runCatching null
+                val lrcLower = File(dir, "$baseName.lrc")
+                val lrcUpper = File(dir, "$baseName.LRC")
+                val txt = File(dir, "$baseName.txt")
 
-            val lrcLower = File(dir, "$baseName.lrc")
-            val lrcUpper = File(dir, "$baseName.LRC")
-            val txt = File(dir, "$baseName.txt")
+                val lrcContent =
+                    lrcLower.takeIf { it.exists() && it.canRead() }?.readText()
+                        ?: lrcUpper.takeIf { it.exists() && it.canRead() }?.readText()
+                if (lrcContent != null) {
+                    return@runCatching LocalLyrics(synced = lrcContent, plain = null)
+                }
 
-            val lrcContent = lrcLower.takeIf { it.exists() && it.canRead() }?.readText()
-                ?: lrcUpper.takeIf { it.exists() && it.canRead() }?.readText()
-            if (lrcContent != null) {
-                return@runCatching LocalLyrics(synced = lrcContent, plain = null)
-            }
-
-            val txtContent = txt.takeIf { it.exists() && it.canRead() }?.readText()
-            if (txtContent != null) {
-                return@runCatching LocalLyrics(synced = null, plain = txtContent)
-            }
-            null
-        }.getOrNull()
-    }
+                val txtContent = txt.takeIf { it.exists() && it.canRead() }?.readText()
+                if (txtContent != null) {
+                    return@runCatching LocalLyrics(synced = null, plain = txtContent)
+                }
+                null
+            }.getOrNull()
+        }
 }

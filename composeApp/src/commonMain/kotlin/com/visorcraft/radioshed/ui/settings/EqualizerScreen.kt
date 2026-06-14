@@ -1,24 +1,29 @@
 package com.visorcraft.radioshed.ui.settings
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
@@ -34,23 +39,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.TextButton
 import com.visorcraft.radioshed.audio.EqPreset
 import com.visorcraft.radioshed.audio.EqualizerController
 import com.visorcraft.radioshed.data.CustomEqPreset
 import com.visorcraft.radioshed.data.SettingsStore
+import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
 /**
@@ -111,20 +108,21 @@ fun EqualizerScreen(
         applyGains(presetGains)
     }
     val scope = rememberCoroutineScope()
-    val pickFile = com.visorcraft.radioshed.ui.util.rememberFilePicker { bytes ->
-        scope.launch {
-            val parsed = com.visorcraft.radioshed.data.EqPresetIO.fromJson(bytes.decodeToString())
-            if (parsed == null) {
-                importStatus = "Couldn't parse preset file."
-                return@launch
+    val pickFile =
+        com.visorcraft.radioshed.ui.util.rememberFilePicker { bytes ->
+            scope.launch {
+                val parsed = com.visorcraft.radioshed.data.EqPresetIO.fromJson(bytes.decodeToString())
+                if (parsed == null) {
+                    importStatus = "Couldn't parse preset file."
+                    return@launch
+                }
+                // Merge — overwrites by name, preserves other custom presets.
+                parsed.presets.forEach { settings.saveCustomEqPreset(it) }
+                customPresets = settings.getCustomEqPresets()
+                importStatus = "Imported ${parsed.presets.size} preset" +
+                    if (parsed.presets.size == 1) "." else "s."
             }
-            // Merge — overwrites by name, preserves other custom presets.
-            parsed.presets.forEach { settings.saveCustomEqPreset(it) }
-            customPresets = settings.getCustomEqPresets()
-            importStatus = "Imported ${parsed.presets.size} preset" +
-                if (parsed.presets.size == 1) "." else "s."
         }
-    }
 
     val copyToClipboard = com.visorcraft.radioshed.ui.util.rememberCopyToClipboard()
     Scaffold(
@@ -145,11 +143,12 @@ fun EqualizerScreen(
                     TextButton(
                         enabled = available && gains.isNotEmpty(),
                         onClick = {
-                            val text = gains.joinToString(
-                                separator = ", ",
-                                prefix = "[",
-                                postfix = "]",
-                            ) { dbFormatForCopy(it) }
+                            val text =
+                                gains.joinToString(
+                                    separator = ", ",
+                                    prefix = "[",
+                                    postfix = "]",
+                                ) { dbFormatForCopy(it) }
                             copyToClipboard(text)
                         },
                     ) { Text("Copy gains") }
@@ -167,18 +166,20 @@ fun EqualizerScreen(
                         },
                     ) { Text("Reset") }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                ),
+                colors =
+                    TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                    ),
             )
         },
         containerColor = MaterialTheme.colorScheme.background,
     ) { padding ->
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(16.dp),
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .padding(16.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(modifier = Modifier.weight(1f)) {
@@ -188,12 +189,13 @@ fun EqualizerScreen(
                         fontWeight = FontWeight.SemiBold,
                     )
                     Text(
-                        text = buildString {
-                            append(if (available) "Active on this session" else "Start playback to activate")
-                            if (available) {
-                                append(" · ${eq.numBands} bands")
-                            }
-                        },
+                        text =
+                            buildString {
+                                append(if (available) "Active on this session" else "Start playback to activate")
+                                if (available) {
+                                    append(" · ${eq.numBands} bands")
+                                }
+                            },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
                     )
@@ -247,20 +249,21 @@ fun EqualizerScreen(
             // restores whichever side is currently showing.
             abLabel?.let { label ->
                 Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 8.dp)
-                        .clickable {
-                            val snap = abSnapshot ?: return@clickable
-                            val bGains = abPresetGains ?: return@clickable
-                            if (abShowingB) {
-                                applyGains(snap)
-                                abShowingB = false
-                            } else {
-                                applyGains(bGains)
-                                abShowingB = true
-                            }
-                        },
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 8.dp)
+                            .clickable {
+                                val snap = abSnapshot ?: return@clickable
+                                val bGains = abPresetGains ?: return@clickable
+                                if (abShowingB) {
+                                    applyGains(snap)
+                                    abShowingB = false
+                                } else {
+                                    applyGains(bGains)
+                                    abShowingB = true
+                                }
+                            },
                     shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
                     color = MaterialTheme.colorScheme.tertiaryContainer,
                 ) {
@@ -269,10 +272,12 @@ fun EqualizerScreen(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            text = if (abShowingB)
-                                "Comparing $label · tap to hear original"
-                            else
-                                "Original tones · tap to hear $label",
+                            text =
+                                if (abShowingB) {
+                                    "Comparing $label · tap to hear original"
+                                } else {
+                                    "Original tones · tap to hear $label"
+                                },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onTertiaryContainer,
                             modifier = Modifier.weight(1f),
@@ -298,39 +303,43 @@ fun EqualizerScreen(
                     AssistChip(
                         onClick = {},
                         label = { Text(preset.label) },
-                        colors = AssistChipDefaults.assistChipColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                        ),
-                        modifier = Modifier.combinedClickable(
-                            onClick = {
-                                clearAB()
-                                eq.applyPreset(preset)
-                            },
-                            onLongClick = { startAB(preset.label, presetGains) },
-                        ),
+                        colors =
+                            AssistChipDefaults.assistChipColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            ),
+                        modifier =
+                            Modifier.combinedClickable(
+                                onClick = {
+                                    clearAB()
+                                    eq.applyPreset(preset)
+                                },
+                                onLongClick = { startAB(preset.label, presetGains) },
+                            ),
                     )
                 }
                 customPresets.forEach { preset ->
                     AssistChip(
                         onClick = {},
                         label = { Text(preset.name) },
-                        colors = AssistChipDefaults.assistChipColors(
-                            containerColor = MaterialTheme.colorScheme.primaryContainer,
-                        ),
-                        modifier = Modifier.combinedClickable(
-                            onClick = {
-                                // Apply: write each saved gain back to
-                                // the controller. Lengths mismatch when
-                                // the device's band count differs from
-                                // when the preset was saved — we
-                                // tolerate that by applying min-length
-                                // and leaving extras at their current
-                                // value.
-                                clearAB()
-                                applyGains(preset.gainsDb)
-                            },
-                            onLongClick = { deleteCandidate = preset },
-                        ),
+                        colors =
+                            AssistChipDefaults.assistChipColors(
+                                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            ),
+                        modifier =
+                            Modifier.combinedClickable(
+                                onClick = {
+                                    // Apply: write each saved gain back to
+                                    // the controller. Lengths mismatch when
+                                    // the device's band count differs from
+                                    // when the preset was saved — we
+                                    // tolerate that by applying min-length
+                                    // and leaving extras at their current
+                                    // value.
+                                    clearAB()
+                                    applyGains(preset.gainsDb)
+                                },
+                                onLongClick = { deleteCandidate = preset },
+                            ),
                     )
                 }
             }
@@ -404,12 +413,14 @@ fun EqualizerScreen(
                         onValueChange = { nameText = it },
                         label = { Text("Name") },
                         singleLine = true,
-                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                            imeAction = androidx.compose.ui.text.input.ImeAction.Done,
-                        ),
-                        keyboardActions = androidx.compose.foundation.text.KeyboardActions(
-                            onDone = { confirmSave() },
-                        ),
+                        keyboardOptions =
+                            androidx.compose.foundation.text.KeyboardOptions(
+                                imeAction = androidx.compose.ui.text.input.ImeAction.Done,
+                            ),
+                        keyboardActions =
+                            androidx.compose.foundation.text.KeyboardActions(
+                                onDone = { confirmSave() },
+                            ),
                     )
                 }
             },
@@ -455,13 +466,14 @@ fun EqualizerScreen(
                 if (mapped.preampDb != 0.0) {
                     settings.setReplayGainPreampDb(mapped.preampDb.toFloat())
                 }
-                val skipped = if (mapped.unsupportedFilters > 0) {
-                    " (${mapped.unsupportedFilters} non-PK filter${
-                        if (mapped.unsupportedFilters == 1) "" else "s"
-                    } skipped)"
-                } else {
-                    ""
-                }
+                val skipped =
+                    if (mapped.unsupportedFilters > 0) {
+                        " (${mapped.unsupportedFilters} non-PK filter${
+                            if (mapped.unsupportedFilters == 1) "" else "s"
+                        } skipped)"
+                    } else {
+                        ""
+                    }
                 importStatus = "Applied APO config: ${mapped.sourceBandCount} band${
                     if (mapped.sourceBandCount == 1) "" else "s"
                 }$skipped."
@@ -501,8 +513,9 @@ private fun ApoImportDialog(
             TextButton(
                 enabled = text.isNotBlank(),
                 onClick = {
-                    val mapped = com.visorcraft.radioshed.audio.ApoConfig
-                        .parseAndMap(text, targetCenters)
+                    val mapped =
+                        com.visorcraft.radioshed.audio.ApoConfig
+                            .parseAndMap(text, targetCenters)
                     if (mapped == null) {
                         error = "Couldn't find any usable filter lines. " +
                             "Expected format: Filter 1: ON PK Fc 105 Hz Gain -2.5 dB Q 0.71"
@@ -567,15 +580,20 @@ private fun HeadphonePickerDialog(
     ) -> Unit,
 ) {
     var query by remember { mutableStateOf("") }
-    val all = remember {
-        com.visorcraft.radioshed.audio.BundledHeadphonePresets.all
-    }
-    val filtered = remember(query) {
-        if (query.isBlank()) all
-        else all.filter {
-            "${it.brand} ${it.name}".contains(query, ignoreCase = true)
+    val all =
+        remember {
+            com.visorcraft.radioshed.audio.BundledHeadphonePresets.all
         }
-    }
+    val filtered =
+        remember(query) {
+            if (query.isBlank()) {
+                all
+            } else {
+                all.filter {
+                    "${it.brand} ${it.name}".contains(query, ignoreCase = true)
+                }
+            }
+        }
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {},
@@ -608,14 +626,16 @@ private fun HeadphonePickerDialog(
                         key = { "${it.brand}|${it.name}" },
                     ) { preset ->
                         Surface(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    val gains = com.visorcraft.radioshed.audio.ApoConfig
-                                        .mapToBands(preset.bands, targetCenters)
-                                    onPick(preset, gains)
-                                }
-                                .padding(vertical = 4.dp),
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        val gains =
+                                            com.visorcraft.radioshed.audio.ApoConfig
+                                                .mapToBands(preset.bands, targetCenters)
+                                        onPick(preset, gains)
+                                    }
+                                    .padding(vertical = 4.dp),
                             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
                         ) {
                             Column(modifier = Modifier.padding(12.dp)) {
@@ -724,20 +744,21 @@ private fun BandSliderRow(
             text = formatHz(centerHz),
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
-            modifier = Modifier
-                .width(56.dp)
-                // Long-press the frequency label to flatten this single
-                // band. Localising the gesture to the label (not the
-                // slider track) keeps drags from accidentally firing it
-                // — the slider needs the full hit area for fine control.
-                .combinedClickable(
-                    onClick = {},
-                    onLongClick = {
-                        pendingValue = 0f
-                        onChange(index, 0f)
-                        hapticTick()
-                    },
-                ),
+            modifier =
+                Modifier
+                    .width(56.dp)
+                    // Long-press the frequency label to flatten this single
+                    // band. Localising the gesture to the label (not the
+                    // slider track) keeps drags from accidentally firing it
+                    // — the slider needs the full hit area for fine control.
+                    .combinedClickable(
+                        onClick = {},
+                        onLongClick = {
+                            pendingValue = 0f
+                            onChange(index, 0f)
+                            hapticTick()
+                        },
+                    ),
         )
         // -1 dB nudge. Useful for fine-tuning past the slider's
         // hit-test resolution — Compose's Slider on a 56-px-wide
@@ -746,9 +767,11 @@ private fun BandSliderRow(
         // clamp here.
         androidx.compose.material3.TextButton(
             onClick = {
-                val next = (pendingValue - 1f).coerceIn(
-                    gainRangeDb.start, gainRangeDb.endInclusive,
-                )
+                val next =
+                    (pendingValue - 1f).coerceIn(
+                        gainRangeDb.start,
+                        gainRangeDb.endInclusive,
+                    )
                 pendingValue = next
                 onChange(index, next)
             },
@@ -765,9 +788,11 @@ private fun BandSliderRow(
         )
         androidx.compose.material3.TextButton(
             onClick = {
-                val next = (pendingValue + 1f).coerceIn(
-                    gainRangeDb.start, gainRangeDb.endInclusive,
-                )
+                val next =
+                    (pendingValue + 1f).coerceIn(
+                        gainRangeDb.start,
+                        gainRangeDb.endInclusive,
+                    )
                 pendingValue = next
                 onChange(index, next)
             },
@@ -783,11 +808,12 @@ private fun BandSliderRow(
     }
 }
 
-private fun formatHz(hz: Int): String = when {
-    hz <= 0 -> "—"
-    hz >= 1000 -> "${hz / 1000}k"
-    else -> "$hz"
-}
+private fun formatHz(hz: Int): String =
+    when {
+        hz <= 0 -> "—"
+        hz >= 1000 -> "${hz / 1000}k"
+        else -> "$hz"
+    }
 
 /**
  * Render a single band gain for clipboard JSON. Drops trailing

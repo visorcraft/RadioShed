@@ -21,8 +21,6 @@ import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import com.visorcraft.radioshed.ui.util.TooltipIconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -54,6 +52,7 @@ import com.visorcraft.radioshed.domain.Station
 import com.visorcraft.radioshed.domain.Track
 import com.visorcraft.radioshed.stations.SourceRuleEvaluator
 import com.visorcraft.radioshed.stations.StationPlayback
+import com.visorcraft.radioshed.ui.util.TooltipIconButton
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
@@ -104,12 +103,13 @@ fun StationDetailScreen(
         // selectTopPlayedTrackIds is global across stations; this is
         // station-scoped).
         val byTrackId = recentRows.groupingBy { it.trackId }.eachCount()
-        top = byTrackId.entries
-            .sortedByDescending { it.value }
-            .take(10)
-            .mapNotNull { (id, count) ->
-                libraryRepo.getTrackById(id)?.let { it to count.toLong() }
-            }
+        top =
+            byTrackId.entries
+                .sortedByDescending { it.value }
+                .take(10)
+                .mapNotNull { (id, count) ->
+                    libraryRepo.getTrackById(id)?.let { it to count.toLong() }
+                }
     }
 
     Scaffold(
@@ -130,9 +130,10 @@ fun StationDetailScreen(
                         Icon(Icons.Filled.PlayArrow, contentDescription = "Play")
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                ),
+                colors =
+                    TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                    ),
             )
         },
         containerColor = MaterialTheme.colorScheme.background,
@@ -157,111 +158,122 @@ fun StationDetailScreen(
             androidx.compose.runtime.derivedStateOf { listState.firstVisibleItemIndex > 8 }
         }
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
-        LazyColumn(
-            state = listState,
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            item { HeaderCard(station = s, candidateCount = candidateCount) }
-
-            if (pinned.isNotEmpty()) {
-                item { SectionHeader("Pinned (${pinned.size})") }
-                items(pinned, key = { "p:${it.id}" }) { track ->
-                    TrackRow(
-                        track = track,
-                        isCurrent = track.id == currentTrackId,
-                        trailing = {
-                            TextButton(
-                                onClick = {
-                                    scope.launch {
-                                        stationRepo.unpinTrackFromStation(stationId, track.id)
-                                        refreshKey += 1
-                                    }
-                                },
-                            ) { Text("Unpin") }
-                        },
-                        onTap = {
-                            scope.launch {
-                                stationPlayback.playTracks(pinned, startIndex = pinned.indexOf(track))
-                            }
-                        },
-                    )
-                }
-            }
-
-            if (top.isNotEmpty()) {
-                item { SectionHeader("Top played in this station") }
-                items(top, key = { "t:${it.first.id}" }) { (track, plays) ->
-                    TrackRow(
-                        track = track,
-                        isCurrent = track.id == currentTrackId,
-                        trailing = {
-                            Text(
-                                text = "$plays play${if (plays == 1L) "" else "s"}",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                            )
-                        },
-                        onTap = {
-                            scope.launch {
-                                stationPlayback.playTracks(top.map { it.first }, startIndex = top.indexOfFirst { it.first.id == track.id })
-                            }
-                        },
-                    )
-                }
-            }
-
-            if (recent.isNotEmpty()) {
-                item { SectionHeader("Recently played") }
-                items(recent, key = { "r:${it.id}" }) { track ->
-                    TrackRow(
-                        track = track,
-                        isCurrent = track.id == currentTrackId,
-                        onTap = {
-                            scope.launch {
-                                stationPlayback.playTracks(recent, startIndex = recent.indexOf(track))
-                            }
-                        },
-                    )
-                }
-            }
-
-            if (pinned.isEmpty() && recent.isEmpty() && top.isEmpty()) {
-                item {
-                    Text(
-                        "No history yet — start playing this station to populate.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
-                        modifier = Modifier.padding(vertical = 8.dp),
-                    )
-                }
-            }
-        }
-        if (showFab) {
-            androidx.compose.material3.SmallFloatingActionButton(
-                onClick = {
-                    scope.launch { listState.animateScrollToItem(0) }
-                },
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(end = 16.dp, bottom = 16.dp),
-                containerColor = MaterialTheme.colorScheme.primaryContainer,
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Icon(
-                    imageVector = androidx.compose.material.icons.Icons.Filled.KeyboardArrowUp,
-                    contentDescription = "Scroll to top",
-                )
+                item { HeaderCard(station = s, candidateCount = candidateCount) }
+
+                if (pinned.isNotEmpty()) {
+                    item { SectionHeader("Pinned (${pinned.size})") }
+                    items(pinned, key = { "p:${it.id}" }) { track ->
+                        TrackRow(
+                            track = track,
+                            isCurrent = track.id == currentTrackId,
+                            trailing = {
+                                TextButton(
+                                    onClick = {
+                                        scope.launch {
+                                            stationRepo.unpinTrackFromStation(stationId, track.id)
+                                            refreshKey += 1
+                                        }
+                                    },
+                                ) { Text("Unpin") }
+                            },
+                            onTap = {
+                                scope.launch {
+                                    stationPlayback.playTracks(pinned, startIndex = pinned.indexOf(track))
+                                }
+                            },
+                        )
+                    }
+                }
+
+                if (top.isNotEmpty()) {
+                    item { SectionHeader("Top played in this station") }
+                    items(top, key = { "t:${it.first.id}" }) { (track, plays) ->
+                        TrackRow(
+                            track = track,
+                            isCurrent = track.id == currentTrackId,
+                            trailing = {
+                                Text(
+                                    text = "$plays play${if (plays == 1L) "" else "s"}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                                )
+                            },
+                            onTap = {
+                                scope.launch {
+                                    stationPlayback.playTracks(
+                                        top.map { it.first },
+                                        startIndex = top.indexOfFirst { it.first.id == track.id },
+                                    )
+                                }
+                            },
+                        )
+                    }
+                }
+
+                if (recent.isNotEmpty()) {
+                    item { SectionHeader("Recently played") }
+                    items(recent, key = { "r:${it.id}" }) { track ->
+                        TrackRow(
+                            track = track,
+                            isCurrent = track.id == currentTrackId,
+                            onTap = {
+                                scope.launch {
+                                    stationPlayback.playTracks(recent, startIndex = recent.indexOf(track))
+                                }
+                            },
+                        )
+                    }
+                }
+
+                if (pinned.isEmpty() && recent.isEmpty() && top.isEmpty()) {
+                    item {
+                        Text(
+                            "No history yet — start playing this station to populate.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
+                            modifier = Modifier.padding(vertical = 8.dp),
+                        )
+                    }
+                }
             }
-        }
+            if (showFab) {
+                androidx.compose.material3.SmallFloatingActionButton(
+                    onClick = {
+                        scope.launch { listState.animateScrollToItem(0) }
+                    },
+                    modifier =
+                        Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(end = 16.dp, bottom = 16.dp),
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                ) {
+                    Icon(
+                        imageVector = androidx.compose.material.icons.Icons.Filled.KeyboardArrowUp,
+                        contentDescription = "Scroll to top",
+                    )
+                }
+            }
         }
     }
 }
 
 @Composable
-private fun HeaderCard(station: Station, candidateCount: Int?) {
-    val color = if (station.color == 0) Color(0xFFFF7F1A)
-                else Color(station.color.toLong() and 0xFFFFFFFFL)
+private fun HeaderCard(
+    station: Station,
+    candidateCount: Int?,
+) {
+    val color =
+        if (station.color == 0) {
+            Color(0xFFFF7F1A)
+        } else {
+            Color(station.color.toLong() and 0xFFFFFFFFL)
+        }
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(14.dp),
@@ -272,10 +284,11 @@ private fun HeaderCard(station: Station, candidateCount: Int?) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(color),
+                modifier =
+                    Modifier
+                        .size(48.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(color),
             )
             Spacer(Modifier.size(14.dp))
             Column(modifier = Modifier.weight(1f)) {
@@ -295,8 +308,9 @@ private fun HeaderCard(station: Station, candidateCount: Int?) {
                 }
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    text = describeSource(station.source) +
-                        (candidateCount?.let { " · ~$it candidates" } ?: ""),
+                    text =
+                        describeSource(station.source) +
+                            (candidateCount?.let { " · ~$it candidates" } ?: ""),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
                 )
@@ -337,8 +351,12 @@ private fun TrackRow(
                     Text(
                         text = track.title.ifBlank { track.fileName },
                         style = MaterialTheme.typography.bodyMedium,
-                        color = if (isCurrent) MaterialTheme.colorScheme.primary
-                                else MaterialTheme.colorScheme.onSurface,
+                        color =
+                            if (isCurrent) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurface
+                            },
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f, fill = false),
@@ -358,33 +376,35 @@ private fun TrackRow(
     }
 }
 
-private fun describeSource(rule: SourceRule): String = when (rule) {
-    is SourceRule.SmartQuery -> when (rule.kind) {
-        SmartQueryKind.NewestN -> "Newest ${rule.limit}"
-        SmartQueryKind.OldestN -> "Oldest ${rule.limit}"
-        SmartQueryKind.LeastPlayed -> "Least played"
-        SmartQueryKind.MostPlayed -> "Most played"
-        SmartQueryKind.HighestRated -> "Highest rated"
-        SmartQueryKind.LongestUnheard -> "Longest unheard"
-        SmartQueryKind.RecentlyAdded -> "Recently added"
-        SmartQueryKind.RecentlyRated -> "Recently rated"
-        SmartQueryKind.NeverPlayed -> "Never played"
-        SmartQueryKind.AdaptiveMix -> "Adaptive mix"
-        SmartQueryKind.ForgottenGems -> "Forgotten gems"
-        SmartQueryKind.ForgottenGemsByRating -> "Forgotten gems (by rating)"
-        SmartQueryKind.LikedSongs -> "Liked songs"
+private fun describeSource(rule: SourceRule): String =
+    when (rule) {
+        is SourceRule.SmartQuery ->
+            when (rule.kind) {
+                SmartQueryKind.NewestN -> "Newest ${rule.limit}"
+                SmartQueryKind.OldestN -> "Oldest ${rule.limit}"
+                SmartQueryKind.LeastPlayed -> "Least played"
+                SmartQueryKind.MostPlayed -> "Most played"
+                SmartQueryKind.HighestRated -> "Highest rated"
+                SmartQueryKind.LongestUnheard -> "Longest unheard"
+                SmartQueryKind.RecentlyAdded -> "Recently added"
+                SmartQueryKind.RecentlyRated -> "Recently rated"
+                SmartQueryKind.NeverPlayed -> "Never played"
+                SmartQueryKind.AdaptiveMix -> "Adaptive mix"
+                SmartQueryKind.ForgottenGems -> "Forgotten gems"
+                SmartQueryKind.ForgottenGemsByRating -> "Forgotten gems (by rating)"
+                SmartQueryKind.LikedSongs -> "Liked songs"
+            }
+        is SourceRule.FolderSelector -> "${rule.folderIds.size} folder(s)"
+        is SourceRule.PlaylistSelector -> "Playlist"
+        is SourceRule.ArtistSelector -> "${rule.artistIds.size} artist(s)"
+        is SourceRule.AlbumSelector -> "${rule.albumIds.size} album(s)"
+        is SourceRule.TagFilter -> "Tag: ${rule.key}"
+        is SourceRule.PathPattern -> "Path patterns"
+        is SourceRule.DurationFilter -> "Duration filter"
+        is SourceRule.FileFormatFilter -> "Format filter"
+        is SourceRule.MediaSourceSelector -> "Media source: ${rule.mediaSourceId}"
+        is SourceRule.Union -> "Union of ${rule.children.size} rules"
+        is SourceRule.Intersection -> "Intersection of ${rule.children.size} rules"
+        is SourceRule.Difference -> "Difference"
+        is SourceRule.TopN -> "Top ${rule.limit}"
     }
-    is SourceRule.FolderSelector -> "${rule.folderIds.size} folder(s)"
-    is SourceRule.PlaylistSelector -> "Playlist"
-    is SourceRule.ArtistSelector -> "${rule.artistIds.size} artist(s)"
-    is SourceRule.AlbumSelector -> "${rule.albumIds.size} album(s)"
-    is SourceRule.TagFilter -> "Tag: ${rule.key}"
-    is SourceRule.PathPattern -> "Path patterns"
-    is SourceRule.DurationFilter -> "Duration filter"
-    is SourceRule.FileFormatFilter -> "Format filter"
-    is SourceRule.MediaSourceSelector -> "Media source: ${rule.mediaSourceId}"
-    is SourceRule.Union -> "Union of ${rule.children.size} rules"
-    is SourceRule.Intersection -> "Intersection of ${rule.children.size} rules"
-    is SourceRule.Difference -> "Difference"
-    is SourceRule.TopN -> "Top ${rule.limit}"
-}

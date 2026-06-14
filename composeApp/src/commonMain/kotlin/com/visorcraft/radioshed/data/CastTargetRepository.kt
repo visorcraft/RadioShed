@@ -7,26 +7,30 @@ import kotlinx.coroutines.withContext
 import com.visorcraft.radioshed.db.Cast_target as CastTargetRow
 
 class CastTargetRepository(private val db: RadioShedDatabase) {
+    suspend fun list(): List<CastTarget> =
+        withContext(IODispatcher) {
+            db.castQueries.selectAllCastTargets().executeAsList().map(::toDomain)
+        }
 
-    suspend fun list(): List<CastTarget> = withContext(IODispatcher) {
-        db.castQueries.selectAllCastTargets().executeAsList().map(::toDomain)
-    }
+    suspend fun listPaired(): List<CastTarget> =
+        withContext(IODispatcher) {
+            db.castQueries.selectPairedCastTargets().executeAsList().map(::toDomain)
+        }
 
-    suspend fun listPaired(): List<CastTarget> = withContext(IODispatcher) {
-        db.castQueries.selectPairedCastTargets().executeAsList().map(::toDomain)
-    }
+    suspend fun listAutoCast(): List<CastTarget> =
+        withContext(IODispatcher) {
+            db.castQueries.selectAutoCastTargets().executeAsList().map(::toDomain)
+        }
 
-    suspend fun listAutoCast(): List<CastTarget> = withContext(IODispatcher) {
-        db.castQueries.selectAutoCastTargets().executeAsList().map(::toDomain)
-    }
+    suspend fun getById(id: Long): CastTarget? =
+        withContext(IODispatcher) {
+            db.castQueries.selectCastTargetById(id).executeAsOneOrNull()?.let(::toDomain)
+        }
 
-    suspend fun getById(id: Long): CastTarget? = withContext(IODispatcher) {
-        db.castQueries.selectCastTargetById(id).executeAsOneOrNull()?.let(::toDomain)
-    }
-
-    suspend fun getByAddress(address: String): CastTarget? = withContext(IODispatcher) {
-        db.castQueries.selectCastTargetByAddress(address).executeAsOneOrNull()?.let(::toDomain)
-    }
+    suspend fun getByAddress(address: String): CastTarget? =
+        withContext(IODispatcher) {
+            db.castQueries.selectCastTargetByAddress(address).executeAsOneOrNull()?.let(::toDomain)
+        }
 
     suspend fun upsert(
         type: CastTargetType,
@@ -52,35 +56,46 @@ class CastTargetRepository(private val db: RadioShedDatabase) {
         )
     }
 
-    suspend fun setPaired(id: Long, paired: Boolean) = withContext(IODispatcher) {
+    suspend fun setPaired(
+        id: Long,
+        paired: Boolean,
+    ) = withContext(IODispatcher) {
         db.castQueries.setCastTargetPaired(if (paired) 1L else 0L, nowMillis(), id)
     }
 
-    suspend fun setAutoCast(id: Long, autoCast: Boolean) = withContext(IODispatcher) {
+    suspend fun setAutoCast(
+        id: Long,
+        autoCast: Boolean,
+    ) = withContext(IODispatcher) {
         db.castQueries.setCastTargetAutoCast(if (autoCast) 1L else 0L, nowMillis(), id)
     }
 
-    suspend fun setTranscodingBitrate(id: Long, bitrateKbps: Int?) = withContext(IODispatcher) {
+    suspend fun setTranscodingBitrate(
+        id: Long,
+        bitrateKbps: Int?,
+    ) = withContext(IODispatcher) {
         db.castQueries.setCastTargetTranscodingBitrate(bitrateKbps?.toLong(), nowMillis(), id)
     }
 
-    suspend fun delete(id: Long) = withContext(IODispatcher) {
-        db.castQueries.deleteCastTarget(id)
-    }
+    suspend fun delete(id: Long) =
+        withContext(IODispatcher) {
+            db.castQueries.deleteCastTarget(id)
+        }
 
-    private fun toDomain(row: CastTargetRow): CastTarget = CastTarget(
-        id = row.id,
-        type = parseType(row.target_type),
-        name = row.name,
-        address = row.address,
-        capabilitiesJson = row.capabilities_json,
-        lastSeenAt = row.last_seen_at,
-        isPaired = row.is_paired == 1L,
-        autoCast = row.auto_cast == 1L,
-        transcodingBitrateKbps = row.transcoding_bitrate_kbps?.toInt(),
-        createdAt = row.created_at,
-        updatedAt = row.updated_at,
-    )
+    private fun toDomain(row: CastTargetRow): CastTarget =
+        CastTarget(
+            id = row.id,
+            type = parseType(row.target_type),
+            name = row.name,
+            address = row.address,
+            capabilitiesJson = row.capabilities_json,
+            lastSeenAt = row.last_seen_at,
+            isPaired = row.is_paired == 1L,
+            autoCast = row.auto_cast == 1L,
+            transcodingBitrateKbps = row.transcoding_bitrate_kbps?.toInt(),
+            createdAt = row.created_at,
+            updatedAt = row.updated_at,
+        )
 
     private fun parseType(name: String): CastTargetType =
         runCatching { CastTargetType.valueOf(name) }.getOrDefault(CastTargetType.Other)

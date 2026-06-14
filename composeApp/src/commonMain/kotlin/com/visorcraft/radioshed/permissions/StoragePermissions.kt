@@ -9,7 +9,6 @@ package com.visorcraft.radioshed.permissions
  * document picker — so iOS impls just return true and no-op the request.
  */
 expect class StoragePermissions {
-
     /** True if the platform's "broad file access" permission is granted. */
     fun hasAllFilesAccess(): Boolean
 

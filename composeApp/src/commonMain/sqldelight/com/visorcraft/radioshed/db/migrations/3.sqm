@@ -1,5 +1,9 @@
 -- Migration v3 → v4: Liked Songs.
 --
+CREATE TABLE IF NOT EXISTS track (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT
+);
+
 -- Adds a per-track liked marker so users can heart-toggle a track
 -- without piping it through the playlist system. Modeled as a
 -- separate table (rather than a column on track) to keep the

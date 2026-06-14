@@ -36,11 +36,9 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
-import com.visorcraft.radioshed.ui.util.TooltipIconButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -67,6 +65,7 @@ import com.visorcraft.radioshed.domain.Artist
 import com.visorcraft.radioshed.domain.Track
 import com.visorcraft.radioshed.stations.StationPlayback
 import com.visorcraft.radioshed.ui.playlists.TrackContextSheet
+import com.visorcraft.radioshed.ui.util.TooltipIconButton
 import org.koin.compose.koinInject
 
 /**
@@ -198,9 +197,10 @@ fun ArtistDetailScreen(
                         }
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                ),
+                colors =
+                    TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                    ),
             )
         },
         containerColor = MaterialTheme.colorScheme.background,
@@ -223,24 +223,27 @@ fun ArtistDetailScreen(
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.SemiBold,
             )
-            val totalRuntimeMs = remember(tracks) {
-                tracks.sumOf { it.durationMs }
-            }
-            val subtitle = buildString {
-                append(albums.size).append(if (albums.size == 1) " album" else " albums")
-                append(" · ").append(tracks.size).append(if (tracks.size == 1) " track" else " tracks")
-                if (totalRuntimeMs > 0L) {
-                    append(" · ").append(formatArtistRuntime(totalRuntimeMs))
+            val totalRuntimeMs =
+                remember(tracks) {
+                    tracks.sumOf { it.durationMs }
                 }
-            }
+            val subtitle =
+                buildString {
+                    append(albums.size).append(if (albums.size == 1) " album" else " albums")
+                    append(" · ").append(tracks.size).append(if (tracks.size == 1) " track" else " tracks")
+                    if (totalRuntimeMs > 0L) {
+                        append(" · ").append(formatArtistRuntime(totalRuntimeMs))
+                    }
+                }
             val copySummary = com.visorcraft.radioshed.ui.util.rememberCopyToClipboard()
             Text(
                 text = subtitle,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
-                modifier = Modifier.clickable {
-                    copySummary("${a.name} — $subtitle")
-                },
+                modifier =
+                    Modifier.clickable {
+                        copySummary("${a.name} — $subtitle")
+                    },
             )
 
             Spacer(Modifier.height(12.dp))
@@ -263,9 +266,10 @@ fun ArtistDetailScreen(
                     },
                     enabled = tracks.isNotEmpty(),
                     modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = MaterialTheme.colorScheme.primary,
-                    ),
+                    colors =
+                        ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.primary,
+                        ),
                 ) {
                     Icon(Icons.Filled.Shuffle, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.size(6.dp))
@@ -299,9 +303,10 @@ fun ArtistDetailScreen(
             )
             Spacer(Modifier.height(4.dp))
 
-            val sortedTracks = remember(tracks, trackSort, playCounts) {
-                sortArtistTracks(tracks, trackSort, playCounts)
-            }
+            val sortedTracks =
+                remember(tracks, trackSort, playCounts) {
+                    sortArtistTracks(tracks, trackSort, playCounts)
+                }
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(vertical = 4.dp),
@@ -331,15 +336,19 @@ fun ArtistDetailScreen(
 }
 
 @Composable
-private fun AlbumCard(album: Album, onTap: () -> Unit) {
+private fun AlbumCard(
+    album: Album,
+    onTap: () -> Unit,
+) {
     Column(
         modifier = Modifier.width(120.dp).clickable(onClick = onTap),
     ) {
         Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(1f)
-                .clip(RoundedCornerShape(8.dp)),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(1f)
+                    .clip(RoundedCornerShape(8.dp)),
             color = MaterialTheme.colorScheme.surfaceVariant,
         ) {
             if (album.artworkUri != null) {
@@ -388,9 +397,10 @@ private fun ArtistTrackRow(
     onLongPress: () -> Unit = {},
 ) {
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .combinedClickable(onClick = onTap, onLongClick = onLongPress),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .combinedClickable(onClick = onTap, onLongClick = onLongPress),
         color = Color.Transparent,
     ) {
         Row(
@@ -398,10 +408,11 @@ private fun ArtistTrackRow(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                modifier =
+                    Modifier
+                        .size(36.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
@@ -417,8 +428,12 @@ private fun ArtistTrackRow(
                     text = track.title.ifBlank { track.fileName },
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.Medium,
-                    color = if (isCurrent) MaterialTheme.colorScheme.primary
-                            else MaterialTheme.colorScheme.onBackground,
+                    color =
+                        if (isCurrent) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onBackground
+                        },
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f, fill = false),
@@ -469,11 +484,12 @@ private fun sortArtistTracks(
     tracks: List<com.visorcraft.radioshed.domain.Track>,
     sort: ArtistTrackSort,
     playCounts: Map<Long, Long>,
-): List<com.visorcraft.radioshed.domain.Track> = when (sort) {
-    ArtistTrackSort.AlbumOrder -> tracks
-    ArtistTrackSort.TitleAsc -> tracks.sortedBy { it.title.lowercase() }
-    ArtistTrackSort.DurationAsc -> tracks.sortedBy { it.durationMs }
-    ArtistTrackSort.DurationDesc -> tracks.sortedByDescending { it.durationMs }
-    ArtistTrackSort.MostPlayed -> tracks.sortedByDescending { playCounts[it.id] ?: 0L }
-    ArtistTrackSort.RecentlyAdded -> tracks.sortedByDescending { it.addedAt }
-}
+): List<com.visorcraft.radioshed.domain.Track> =
+    when (sort) {
+        ArtistTrackSort.AlbumOrder -> tracks
+        ArtistTrackSort.TitleAsc -> tracks.sortedBy { it.title.lowercase() }
+        ArtistTrackSort.DurationAsc -> tracks.sortedBy { it.durationMs }
+        ArtistTrackSort.DurationDesc -> tracks.sortedByDescending { it.durationMs }
+        ArtistTrackSort.MostPlayed -> tracks.sortedByDescending { playCounts[it.id] ?: 0L }
+        ArtistTrackSort.RecentlyAdded -> tracks.sortedByDescending { it.addedAt }
+    }

@@ -21,9 +21,7 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import com.visorcraft.radioshed.ui.util.TooltipIconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -46,6 +44,7 @@ import com.visorcraft.radioshed.crash.CrashLogEntry
 import com.visorcraft.radioshed.crash.CrashLogReader
 import com.visorcraft.radioshed.crash.CrashLogSharer
 import com.visorcraft.radioshed.data.nowMillis
+import com.visorcraft.radioshed.ui.util.TooltipIconButton
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
@@ -101,9 +100,10 @@ fun CrashLogScreen(
                         Icon(Icons.Filled.Share, contentDescription = "Share")
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                ),
+                colors =
+                    TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                    ),
             )
         },
         containerColor = MaterialTheme.colorScheme.background,
@@ -114,8 +114,9 @@ fun CrashLogScreen(
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    text = "No crashes recorded. The OS keeps roughly the last " +
-                        "dozen abnormal app exits — anything older has aged out.",
+                    text =
+                        "No crashes recorded. The OS keeps roughly the last " +
+                            "dozen abnormal app exits — anything older has aged out.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
                 )
@@ -132,8 +133,12 @@ fun CrashLogScreen(
                         entry = entry,
                         expanded = expanded == entry.timestamp,
                         onToggle = {
-                            expanded = if (expanded == entry.timestamp) null
-                                       else entry.timestamp
+                            expanded =
+                                if (expanded == entry.timestamp) {
+                                    null
+                                } else {
+                                    entry.timestamp
+                                }
                         },
                         onShare = {
                             scope.launch {
@@ -203,18 +208,19 @@ private fun CrashLogRow(
                         shape = RoundedCornerShape(6.dp),
                     ) {
                         Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                // Inner verticalScroll inside a LazyColumn item
-                                // requires a finite height — without heightIn,
-                                // expanding any crash row with a stack trace
-                                // throws "Vertical scroll not permitted when
-                                // the parent was measured with infinite
-                                // height." 240dp matches a typical 8-10 frames
-                                // of a stack trace; longer traces scroll.
-                                .heightIn(max = 240.dp)
-                                .verticalScroll(rememberScrollState())
-                                .padding(8.dp),
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    // Inner verticalScroll inside a LazyColumn item
+                                    // requires a finite height — without heightIn,
+                                    // expanding any crash row with a stack trace
+                                    // throws "Vertical scroll not permitted when
+                                    // the parent was measured with infinite
+                                    // height." 240dp matches a typical 8-10 frames
+                                    // of a stack trace; longer traces scroll.
+                                    .heightIn(max = 240.dp)
+                                    .verticalScroll(rememberScrollState())
+                                    .padding(8.dp),
                         ) {
                             Text(
                                 text = trace,
@@ -226,8 +232,9 @@ private fun CrashLogRow(
                     }
                 } else {
                     Text(
-                        text = "No stack trace recorded — the OS only attaches one " +
-                            "for ANRs and some native crashes.",
+                        text =
+                            "No stack trace recorded — the OS only attaches one " +
+                                "for ANRs and some native crashes.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                     )
@@ -237,17 +244,18 @@ private fun CrashLogRow(
     }
 }
 
-private fun CrashLogEntry.toShareText(): String = buildString {
-    append("Reason: ").append(reason).append('\n')
-    append("Time: ").append(formatRelativeTime(timestamp)).append('\n')
-    append("Importance: ").append(importance).append('\n')
-    if (processName.isNotBlank()) append("Process: ").append(processName).append('\n')
-    if (description.isNotBlank()) append("Description: ").append(description).append('\n')
-    val t = trace
-    if (!t.isNullOrBlank()) {
-        append("Trace:\n").append(t)
+private fun CrashLogEntry.toShareText(): String =
+    buildString {
+        append("Reason: ").append(reason).append('\n')
+        append("Time: ").append(formatRelativeTime(timestamp)).append('\n')
+        append("Importance: ").append(importance).append('\n')
+        if (processName.isNotBlank()) append("Process: ").append(processName).append('\n')
+        if (description.isNotBlank()) append("Description: ").append(description).append('\n')
+        val t = trace
+        if (!t.isNullOrBlank()) {
+            append("Trace:\n").append(t)
+        }
     }
-}
 
 private fun formatRelativeTime(ms: Long): String {
     val deltaMs = (nowMillis() - ms).coerceAtLeast(0L)

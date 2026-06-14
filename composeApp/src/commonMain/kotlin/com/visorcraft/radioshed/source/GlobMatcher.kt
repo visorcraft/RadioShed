@@ -26,19 +26,35 @@ package com.visorcraft.radioshed.source
  * on disk that root sits. (We can't write the literal `**` followed
  * by `/` here because that closes the KDoc comment.)
  */
-fun matchesGlob(path: String, glob: String): Boolean {
+fun matchesGlob(
+    path: String,
+    glob: String,
+): Boolean {
     val regex = StringBuilder("^")
     var i = 0
     while (i < glob.length) {
         val c = glob[i]
         when {
             c == '*' && i + 1 < glob.length && glob[i + 1] == '*' -> {
-                regex.append(".*"); i += 2
+                regex.append(".*")
+                i += 2
             }
-            c == '*' -> { regex.append("[^/]*"); i += 1 }
-            c == '?' -> { regex.append("[^/]"); i += 1 }
-            c in ".()+|^$@%{}[]\\" -> { regex.append('\\').append(c); i += 1 }
-            else -> { regex.append(c); i += 1 }
+            c == '*' -> {
+                regex.append("[^/]*")
+                i += 1
+            }
+            c == '?' -> {
+                regex.append("[^/]")
+                i += 1
+            }
+            c in ".()+|^$@%{}[]\\" -> {
+                regex.append('\\').append(c)
+                i += 1
+            }
+            else -> {
+                regex.append(c)
+                i += 1
+            }
         }
     }
     regex.append("$")

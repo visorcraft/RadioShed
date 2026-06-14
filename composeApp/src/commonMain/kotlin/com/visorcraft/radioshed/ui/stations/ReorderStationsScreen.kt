@@ -85,39 +85,42 @@ fun ReorderStationsScreen(
     }
 
     val listState = rememberLazyListState()
-    val dragState = rememberDragReorderState(
-        lazyListState = listState,
-        onMove = { from, to ->
-            pendingDragId = working.getOrNull(from)?.id
-            working = working.toMutableList().also {
-                val item = it.removeAt(from)
-                it.add(to, item)
-            }
-        },
-        onDrop = { _ ->
-            // Persist the new sort_positions in one transaction-ish
-            // batch; the repo's reorder helper updates a single row at
-            // a time but they're indexed and cheap.
-            val orderSnapshot = working
-            scope.launch {
-                orderSnapshot.forEachIndexed { idx, s ->
-                    if (s.sortPosition != idx) {
-                        stationRepo.reorder(s.id, idx)
+    val dragState =
+        rememberDragReorderState(
+            lazyListState = listState,
+            onMove = { from, to ->
+                pendingDragId = working.getOrNull(from)?.id
+                working =
+                    working.toMutableList().also {
+                        val item = it.removeAt(from)
+                        it.add(to, item)
                     }
+            },
+            onDrop = { _ ->
+                // Persist the new sort_positions in one transaction-ish
+                // batch; the repo's reorder helper updates a single row at
+                // a time but they're indexed and cheap.
+                val orderSnapshot = working
+                scope.launch {
+                    orderSnapshot.forEachIndexed { idx, s ->
+                        if (s.sortPosition != idx) {
+                            stationRepo.reorder(s.id, idx)
+                        }
+                    }
+                    pendingDragId = null
                 }
-                pendingDragId = null
-            }
-        },
-    )
+            },
+        )
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Reorder stations") },
                 navigationIcon = { TextButton(onClick = onDone) { Text("Done") } },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                ),
+                colors =
+                    TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                    ),
             )
         },
         containerColor = MaterialTheme.colorScheme.background,
@@ -166,28 +169,38 @@ private fun ReorderRow(
     isDragging: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val color = if (station.color == 0) MaterialTheme.colorScheme.primary
-                else Color(station.color.toLong() and 0xFFFFFFFFL)
+    val color =
+        if (station.color == 0) {
+            MaterialTheme.colorScheme.primary
+        } else {
+            Color(station.color.toLong() and 0xFFFFFFFFL)
+        }
     Card(
         modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isDragging)
-                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
-            else MaterialTheme.colorScheme.surface,
-        ),
-        elevation = CardDefaults.cardElevation(
-            defaultElevation = if (isDragging) 6.dp else 1.dp,
-        ),
+        colors =
+            CardDefaults.cardColors(
+                containerColor =
+                    if (isDragging) {
+                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
+                    } else {
+                        MaterialTheme.colorScheme.surface
+                    },
+            ),
+        elevation =
+            CardDefaults.cardElevation(
+                defaultElevation = if (isDragging) 6.dp else 1.dp,
+            ),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(color),
+                modifier =
+                    Modifier
+                        .size(36.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(color),
             )
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {

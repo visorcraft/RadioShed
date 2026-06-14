@@ -16,16 +16,17 @@ import android.os.storage.StorageVolume
  * filtered out — there's nothing the user can point a Folder at for those.
  */
 actual class StorageVolumes(private val context: Context) {
-
     actual fun discover(): List<DiscoveredVolume> {
-        val sm = context.getSystemService(Context.STORAGE_SERVICE) as? StorageManager
-            ?: return emptyList()
+        val sm =
+            context.getSystemService(Context.STORAGE_SERVICE) as? StorageManager
+                ?: return emptyList()
         return sm.storageVolumes.mapNotNull { sv ->
             val dir = sv.directory ?: return@mapNotNull null
             DiscoveredVolume(
                 path = dir.absolutePath,
-                label = sv.getDescription(context)
-                    ?: if (sv.isPrimary) "Internal Storage" else dir.name,
+                label =
+                    sv.getDescription(context)
+                        ?: if (sv.isPrimary) "Internal Storage" else dir.name,
                 isPrimary = sv.isPrimary,
                 isRemovable = sv.isRemovable,
             )

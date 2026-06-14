@@ -20,7 +20,6 @@ import kotlinx.coroutines.withContext
  * ones worth keeping.
  */
 class ScrobbleQueueRepository(private val db: RadioShedDatabase) {
-
     /**
      * Persist a finished play, then prune to the [CAP] in the same
      * transaction so the queue is never observed over the cap.
@@ -44,24 +43,28 @@ class ScrobbleQueueRepository(private val db: RadioShedDatabase) {
     }
 
     /** Oldest [limit] queued scrobbles, in FIFO (insertion) order. */
-    suspend fun oldestBatch(limit: Int = 25): List<QueuedScrobble> = withContext(IODispatcher) {
-        db.scrobblesQueries.oldestBatch(limit.toLong()).executeAsList().map { it.toQueuedScrobble() }
-    }
+    suspend fun oldestBatch(limit: Int = 25): List<QueuedScrobble> =
+        withContext(IODispatcher) {
+            db.scrobblesQueries.oldestBatch(limit.toLong()).executeAsList().map { it.toQueuedScrobble() }
+        }
 
     /** Remove a row once it has been successfully submitted. */
-    suspend fun deleteById(id: Long) = withContext(IODispatcher) {
-        db.scrobblesQueries.deleteById(id)
-    }
+    suspend fun deleteById(id: Long) =
+        withContext(IODispatcher) {
+            db.scrobblesQueries.deleteById(id)
+        }
 
     /** Record a failed flush attempt so the sender can back off. */
-    suspend fun bumpAttempts(id: Long) = withContext(IODispatcher) {
-        db.scrobblesQueries.bumpAttempts(id)
-    }
+    suspend fun bumpAttempts(id: Long) =
+        withContext(IODispatcher) {
+            db.scrobblesQueries.bumpAttempts(id)
+        }
 
     /** Total queued rows — used for diagnostics / UI badges. */
-    suspend fun countAll(): Long = withContext(IODispatcher) {
-        db.scrobblesQueries.countAll().executeAsOne()
-    }
+    suspend fun countAll(): Long =
+        withContext(IODispatcher) {
+            db.scrobblesQueries.countAll().executeAsOne()
+        }
 
     internal companion object {
         /**
@@ -83,12 +86,13 @@ data class QueuedScrobble(
     val createdAt: Long,
 )
 
-private fun Scrobble_queue.toQueuedScrobble(): QueuedScrobble = QueuedScrobble(
-    id = id,
-    artist = artist,
-    track = track,
-    album = album,
-    listenedAtSeconds = listened_at_seconds,
-    attempts = attempts,
-    createdAt = created_at,
-)
+private fun Scrobble_queue.toQueuedScrobble(): QueuedScrobble =
+    QueuedScrobble(
+        id = id,
+        artist = artist,
+        track = track,
+        album = album,
+        listenedAtSeconds = listened_at_seconds,
+        attempts = attempts,
+        createdAt = created_at,
+    )

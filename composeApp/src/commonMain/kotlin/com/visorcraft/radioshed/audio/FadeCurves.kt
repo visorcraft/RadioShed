@@ -23,7 +23,6 @@ import kotlin.math.sin
  * any platform harness.
  */
 object FadeCurves {
-
     /**
      * Returns the gain factor [0, 1] for one side of a crossfade at the given
      * [fraction] through the transition (0 = start, 1 = end).
@@ -36,14 +35,19 @@ object FadeCurves {
      *                to 0); `true` = the incoming track (starts at 0, rises to 1).
      *                For symmetric curves this is equivalent to `gainOut(1 - f)`.
      */
-    fun gain(curve: CrossfadeCurve, fraction: Float, fadeIn: Boolean = false): Float {
+    fun gain(
+        curve: CrossfadeCurve,
+        fraction: Float,
+        fadeIn: Boolean = false,
+    ): Float {
         val f = fraction.coerceIn(0f, 1f)
         return when (curve) {
-            CrossfadeCurve.EqualPower -> if (fadeIn) {
-                sin(f * (PI / 2).toFloat())
-            } else {
-                cos(f * (PI / 2).toFloat())
-            }
+            CrossfadeCurve.EqualPower ->
+                if (fadeIn) {
+                    sin(f * (PI / 2).toFloat())
+                } else {
+                    cos(f * (PI / 2).toFloat())
+                }
             CrossfadeCurve.Linear -> if (fadeIn) f else 1f - f
             CrossfadeCurve.SCurve -> {
                 // Smoothstep: 3f² - 2f³ gives an S-shaped rise from 0→1

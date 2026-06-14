@@ -22,7 +22,6 @@ import kotlinx.coroutines.withContext
  * the off-Main `withContext(IODispatcher)`.
  */
 class DatabaseMaintenanceRepository(private val driver: SqlDriver) {
-
     /**
      * Reclaim space by rebuilding the DB file. Useful after a big
      * "Clear all caches" pass — without VACUUM the SQLite page
@@ -31,9 +30,10 @@ class DatabaseMaintenanceRepository(private val driver: SqlDriver) {
      * (positive number = bytes freed) when the caller can resolve
      * the on-disk path; null otherwise.
      */
-    suspend fun vacuum(): Unit = withContext(IODispatcher) {
-        driver.execute(identifier = null, sql = "VACUUM", parameters = 0)
-    }
+    suspend fun vacuum(): Unit =
+        withContext(IODispatcher) {
+            driver.execute(identifier = null, sql = "VACUUM", parameters = 0)
+        }
 
     /**
      * Refresh query-planner statistics. Cheap (sub-second on typical
@@ -41,7 +41,8 @@ class DatabaseMaintenanceRepository(private val driver: SqlDriver) {
      * outdated stats can otherwise cause the planner to pick a
      * full-table-scan plan over an index for a hot query.
      */
-    suspend fun analyze(): Unit = withContext(IODispatcher) {
-        driver.execute(identifier = null, sql = "ANALYZE", parameters = 0)
-    }
+    suspend fun analyze(): Unit =
+        withContext(IODispatcher) {
+            driver.execute(identifier = null, sql = "ANALYZE", parameters = 0)
+        }
 }

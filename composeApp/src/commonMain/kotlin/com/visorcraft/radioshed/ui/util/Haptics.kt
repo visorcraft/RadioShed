@@ -20,9 +20,7 @@ import org.koin.compose.koinInject
  * "no buzz" which is exactly what most iOS apps do anyway.
  */
 @Composable
-fun rememberHapticTick(
-    type: HapticFeedbackType = HapticFeedbackType.LongPress,
-): () -> Unit {
+fun rememberHapticTick(type: HapticFeedbackType = HapticFeedbackType.LongPress): () -> Unit {
     val haptics = LocalHapticFeedback.current
     val settings: SettingsStore = koinInject()
     return remember(haptics, type) {

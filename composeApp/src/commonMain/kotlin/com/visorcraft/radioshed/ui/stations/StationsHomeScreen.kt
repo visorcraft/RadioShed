@@ -1,9 +1,9 @@
 package com.visorcraft.radioshed.ui.stations
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -25,36 +25,35 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.items as lazyItems
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
-import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.VerticalAlignBottom
-import androidx.compose.material.icons.filled.VerticalAlignTop
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Casino
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Explore
+import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.NewReleases
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.RestartAlt
-import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material.icons.filled.RestartAlt
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.SwapVert
-import androidx.compose.material.icons.filled.Casino
+import androidx.compose.material.icons.filled.VerticalAlignBottom
+import androidx.compose.material.icons.filled.VerticalAlignTop
 import androidx.compose.material.icons.filled.Whatshot
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material3.AlertDialog
@@ -63,14 +62,11 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedTextField
-import com.visorcraft.radioshed.ui.util.TooltipIconButton
-import com.visorcraft.radioshed.ui.util.onRightClick
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -102,8 +98,11 @@ import com.visorcraft.radioshed.domain.PlayOrder
 import com.visorcraft.radioshed.domain.Station
 import com.visorcraft.radioshed.domain.Track
 import com.visorcraft.radioshed.stations.StationPlayback
+import com.visorcraft.radioshed.ui.util.TooltipIconButton
+import com.visorcraft.radioshed.ui.util.onRightClick
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
+import androidx.compose.foundation.lazy.items as lazyItems
 
 /** Drive Mode quick-list cap, matching [SettingsStore.setDriveQuickList]'s
  *  `take(6)`. The action-sheet "Add to Drive Mode quick-list" row greys out
@@ -190,12 +189,16 @@ fun StationsHomeScreen(
         completionRates = stationRepo.stationCompletionRates()
     }
     LaunchedEffect(stations.map { it.id }, currentStation?.id) {
-        stationCollages = stations.associate { s ->
-            s.id to (
-                if (s.stats.playCount > 0L) stationRepo.recentAlbumArtwork(s.id, 4L)
-                else emptyList()
-            )
-        }
+        stationCollages =
+            stations.associate { s ->
+                s.id to (
+                    if (s.stats.playCount > 0L) {
+                        stationRepo.recentAlbumArtwork(s.id, 4L)
+                    } else {
+                        emptyList()
+                    }
+                )
+            }
     }
 
     // Recently-added tracks — pulled from the library by file ctime
@@ -221,10 +224,11 @@ fun StationsHomeScreen(
     LaunchedEffect(nowPlaying?.trackId, libraryTrackCount) {
         if (libraryTrackCount < 0L) return@LaunchedEffect
         recentlyAdded = libraryRepo.newestTracks(limit = 12L)
-        recentlyAddedArtwork = recentlyAdded
-            .mapNotNull { it.albumId }
-            .distinct()
-            .associateWith { id -> libraryRepo.getAlbumById(id)?.artworkUri }
+        recentlyAddedArtwork =
+            recentlyAdded
+                .mapNotNull { it.albumId }
+                .distinct()
+                .associateWith { id -> libraryRepo.getAlbumById(id)?.artworkUri }
 
         // Rediscover: tracks played at least once but not in the last
         // 30 days. Resolves track ids to full Track objects (skipping
@@ -232,16 +236,19 @@ fun StationsHomeScreen(
         // was recorded). 30-day cutoff matches Spotify's "On Repeat" /
         // "Repeat Rewind" rotation cadence — past that, the track has
         // been gone long enough to feel fresh again.
-        val cutoff = com.visorcraft.radioshed.data.nowMillis() -
-            REDISCOVER_THRESHOLD_DAYS * 86_400_000L
-        rediscover = stationRepo.rediscoverTrackIds(
-            olderThanMs = cutoff,
-            limit = 12L,
-        ).mapNotNull { libraryRepo.getTrackById(it) }
-        rediscoverArtwork = rediscover
-            .mapNotNull { it.albumId }
-            .distinct()
-            .associateWith { id -> libraryRepo.getAlbumById(id)?.artworkUri }
+        val cutoff =
+            com.visorcraft.radioshed.data.nowMillis() -
+                REDISCOVER_THRESHOLD_DAYS * 86_400_000L
+        rediscover =
+            stationRepo.rediscoverTrackIds(
+                olderThanMs = cutoff,
+                limit = 12L,
+            ).mapNotNull { libraryRepo.getTrackById(it) }
+        rediscoverArtwork =
+            rediscover
+                .mapNotNull { it.albumId }
+                .distinct()
+                .associateWith { id -> libraryRepo.getAlbumById(id)?.artworkUri }
     }
 
     // Long-press → action sheet state. Holds the station id whose sheet
@@ -406,9 +413,10 @@ fun StationsHomeScreen(
                         }
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                ),
+                colors =
+                    TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                    ),
             )
         },
         containerColor = MaterialTheme.colorScheme.background,
@@ -432,359 +440,390 @@ fun StationsHomeScreen(
             // layout always wins — the tile-size selector is a
             // medium+ affordance, since under ~600dp width even the
             // smallest stop would still produce one column.
-            val columns = if (isCompact) GridCells.Fixed(1)
-                          else GridCells.Adaptive(minSize = tileSizeDp.dp)
+            val columns =
+                if (isCompact) {
+                    GridCells.Fixed(1)
+                } else {
+                    GridCells.Adaptive(minSize = tileSizeDp.dp)
+                }
 
             androidx.compose.material3.pulltorefresh.PullToRefreshBox(
                 isRefreshing = rescanInFlight,
                 onRefresh = triggerRescan,
                 modifier = Modifier.fillMaxSize(),
             ) {
-            val gridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
-            // Threshold of 8 first-visible items aligns with every
-            // other scroll-to-top FAB in the app (Library, Playlists,
-            // PlaylistDetail, StationDetail, LikedSongs).
-            val showGridScrollTop by remember {
-                androidx.compose.runtime.derivedStateOf {
-                    gridState.firstVisibleItemIndex > 8
-                }
-            }
-            androidx.compose.foundation.layout.Box(modifier = Modifier.fillMaxSize()) {
-            LazyVerticalGrid(
-                columns = columns,
-                state = gridState,
-                contentPadding = PaddingValues(
-                    start = outerPadding,
-                    end = outerPadding,
-                    top = 8.dp,
-                    bottom = outerPadding,
-                ),
-                verticalArrangement = Arrangement.spacedBy(if (isCompact) 8.dp else 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(if (isCompact) 8.dp else 16.dp),
-                modifier = Modifier.fillMaxSize(),
-            ) {
-                // Page header spanning the full row — replaces the TopAppBar
-                // title with something proportional to a 1290dp screen.
-                item(span = { GridItemSpan(maxLineSpan) }) {
-                    // Visible count for the header subtitle, computed
-                    // here (the full filter pipeline lives further
-                    // down inside the items block but we can recreate
-                    // its name+subtitle predicate cheaply for the
-                    // count). Same predicate as the items filter
-                    // below — keep them in sync if either changes.
-                    val visibleCountForHeader = remember(
-                        stations,
-                        stationFilter,
-                        hideBuiltIns,
-                    ) {
-                        val src = if (hideBuiltIns) stations.filterNot { it.isBuiltIn }
-                                  else stations
-                        val q = stationFilter.trim()
-                        if (q.isBlank()) src.size
-                        else src.count {
-                            it.name.contains(q, ignoreCase = true) ||
-                                (it.customSubtitle?.contains(q, ignoreCase = true) == true)
-                        }
+                val gridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
+                // Threshold of 8 first-visible items aligns with every
+                // other scroll-to-top FAB in the app (Library, Playlists,
+                // PlaylistDetail, StationDetail, LikedSongs).
+                val showGridScrollTop by remember {
+                    androidx.compose.runtime.derivedStateOf {
+                        gridState.firstVisibleItemIndex > 8
                     }
-                    StationsPageHeader(
-                        stationCount = stations.size,
-                        builtInCount = stations.count { it.isBuiltIn },
-                        builtInsHidden = hideBuiltIns,
-                        // While the filter is active, the subtitle
-                        // reads "M of N stations" — same pattern as
-                        // PlaylistsScreen. Visible-count vs total
-                        // matters more mid-search than the
-                        // built-in / custom split.
-                        filterActive = stationFilter.isNotBlank(),
-                        visibleCount = visibleCountForHeader,
-                        isCompact = isCompact,
-                        onAddStation = onAddStation,
-                        onReorder = onReorderStations,
-                        onSurpriseMe = {
-                            // Pick one available track at random and
-                            // play it as a single-item queue. Keeps the
-                            // "Stations Home" mental model intact —
-                            // user-driven discovery without committing
-                            // to a station's rules.
-                            scope.launch {
-                                val track = libraryRepo.randomAvailableTrack() ?: return@launch
-                                stationPlayback.playTracks(listOf(track), startIndex = 0)
-                                onOpenNowPlaying()
-                            }
-                        },
-                        onSurpriseShuffle = {
-                            // Long-press: shuffle 25 tracks straight
-                            // into the queue. The user gets a session
-                            // they can ride for ~90 minutes without
-                            // committing to a station's source/playback
-                            // rules. Falls back gracefully on small
-                            // libraries — fewer tracks just means a
-                            // shorter queue.
-                            scope.launch {
-                                val tracks = libraryRepo.randomAvailableTracks(25L)
-                                if (tracks.isNotEmpty()) {
-                                    stationPlayback.playTracks(tracks, startIndex = 0)
-                                    onOpenNowPlaying()
-                                }
-                            }
-                        },
-                    )
                 }
-
-                // Inline filter field above the grid. Only surfaces
-                // when the grid is busy enough that scroll-to-find
-                // is a real friction point (≥9 stations) so a fresh-
-                // install user with the seeded preset count doesn't
-                // see clutter.
-                if (stations.size >= 9) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
-                        androidx.compose.material3.OutlinedTextField(
-                            value = stationFilter,
-                            onValueChange = { stationFilter = it },
-                            placeholder = { Text("Filter stations…") },
-                            singleLine = true,
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = Icons.Filled.Search,
-                                    contentDescription = null,
-                                )
-                            },
-                            trailingIcon = if (stationFilter.isNotEmpty()) {
-                                {
-                                    TooltipIconButton(
-                                        tooltip = "Clear filter",
-                                        onClick = { stationFilter = "" },
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Filled.Close,
-                                            contentDescription = "Clear filter",
-                                        )
+                androidx.compose.foundation.layout.Box(modifier = Modifier.fillMaxSize()) {
+                    LazyVerticalGrid(
+                        columns = columns,
+                        state = gridState,
+                        contentPadding =
+                            PaddingValues(
+                                start = outerPadding,
+                                end = outerPadding,
+                                top = 8.dp,
+                                bottom = outerPadding,
+                            ),
+                        verticalArrangement = Arrangement.spacedBy(if (isCompact) 8.dp else 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(if (isCompact) 8.dp else 16.dp),
+                        modifier = Modifier.fillMaxSize(),
+                    ) {
+                        // Page header spanning the full row — replaces the TopAppBar
+                        // title with something proportional to a 1290dp screen.
+                        item(span = { GridItemSpan(maxLineSpan) }) {
+                            // Visible count for the header subtitle, computed
+                            // here (the full filter pipeline lives further
+                            // down inside the items block but we can recreate
+                            // its name+subtitle predicate cheaply for the
+                            // count). Same predicate as the items filter
+                            // below — keep them in sync if either changes.
+                            val visibleCountForHeader =
+                                remember(
+                                    stations,
+                                    stationFilter,
+                                    hideBuiltIns,
+                                ) {
+                                    val src =
+                                        if (hideBuiltIns) {
+                                            stations.filterNot { it.isBuiltIn }
+                                        } else {
+                                            stations
+                                        }
+                                    val q = stationFilter.trim()
+                                    if (q.isBlank()) {
+                                        src.size
+                                    } else {
+                                        src.count {
+                                            it.name.contains(q, ignoreCase = true) ||
+                                                (it.customSubtitle?.contains(q, ignoreCase = true) == true)
+                                        }
                                     }
                                 }
-                            } else null,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                    }
-                }
-
-                // Continue Listening callout — only when a station is active.
-                currentStation?.let { active ->
-                    item(span = { GridItemSpan(maxLineSpan) }) {
-                        ContinueListeningCard(
-                            station = active,
-                            isPlaying = playerState == PlayerState.Playing,
-                            trackTitle = nowPlaying?.title,
-                            trackArtist = nowPlaying?.artist,
-                            artworkUri = nowPlaying?.artworkUri,
-                            onTap = onOpenNowPlaying,
-                        )
-                    }
-                }
-
-                // Recently Played horizontal row — shown only after the
-                // user has actually played something. Filters out the
-                // currently-playing station (it's already pinned above
-                // in the Continue Listening card).
-                val recentToShow = recent
-                    .filter { it.id != currentStation?.id && it.stats.lastPlayedAt != null }
-                if (recentToShow.isNotEmpty()) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
-                        RecentlyPlayedRow(
-                            stations = recentToShow,
-                            onPlay = { id -> scope.launch { stationPlayback.playStation(id) } },
-                        )
-                    }
-                }
-
-                // Most Played row — top stations by play_count, computed
-                // client-side from the live stations list. Skip if the
-                // user hasn't played anything yet, and skip if the only
-                // candidate is whatever's currently playing (Continue
-                // Listening already has it).
-                val mostPlayed = stations
-                    .asSequence()
-                    .filter { it.stats.playCount > 0 && it.id != currentStation?.id }
-                    .sortedByDescending { it.stats.playCount }
-                    .take(6)
-                    .toList()
-                if (mostPlayed.isNotEmpty()) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
-                        MostPlayedRow(
-                            stations = mostPlayed,
-                            onPlay = { id -> scope.launch { stationPlayback.playStation(id) } },
-                        )
-                    }
-                }
-
-                if (recentlyAdded.isNotEmpty()) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
-                        RecentlyAddedRow(
-                            tracks = recentlyAdded,
-                            artworkByAlbumId = recentlyAddedArtwork,
-                            onPlay = { idx ->
-                                stationPlayback.playTracks(recentlyAdded, startIndex = idx)
-                            },
-                        )
-                    }
-                }
-
-                if (rediscover.isNotEmpty()) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
-                        TrackCarouselRow(
-                            label = "Rediscover",
-                            tracks = rediscover,
-                            artworkByAlbumId = rediscoverArtwork,
-                            onPlay = { idx ->
-                                stationPlayback.playTracks(rediscover, startIndex = idx)
-                            },
-                        )
-                    }
-                }
-
-                // Apply hide-built-ins toggle and the substring filter
-                // before rendering tiles. Filter checks both name and
-                // customSubtitle so users can search "tag-driven" or
-                // "60s" if they remember the subtitle but not the name.
-                val displayedStations = stations
-                    .let { src ->
-                        if (hideBuiltIns) src.filterNot { it.isBuiltIn } else src
-                    }
-                    .let { src ->
-                        val q = stationFilter.trim()
-                        if (q.isBlank()) src
-                        else src.filter {
-                            it.name.contains(q, ignoreCase = true) ||
-                                (it.customSubtitle?.contains(q, ignoreCase = true) == true)
-                        }
-                    }
-                    // Sort last so the user's filter / hide toggles
-                    // run against the original ordering (filter
-                    // result counts in the header are stable
-                    // regardless of sort) and only the on-screen
-                    // arrangement reacts to the sort preference.
-                    // "Custom" is the legacy pin / drag-reorder
-                    // ordering that the StationRepository.observeAll
-                    // flow already returns — pass through unchanged
-                    // so power users who hand-curated the order
-                    // don't see their layout reshuffle just because
-                    // the sort menu shipped.
-                    .let { src ->
-                        when (currentSort) {
-                            "NameAsc" -> src.sortedBy { it.name.lowercase() }
-                            "NameDesc" -> src.sortedByDescending { it.name.lowercase() }
-                            "MostPlayed" -> src.sortedByDescending { it.stats.playCount }
-                            "LeastPlayed" -> src.sortedBy { it.stats.playCount }
-                            "RecentlyPlayed" -> src.sortedByDescending {
-                                it.stats.lastPlayedAt ?: Long.MIN_VALUE
-                            }
-                            else -> src
-                        }
-                    }
-                // Inline empty hint when an active filter (Hide
-                // built-ins toggle, or text filter) has reduced the
-                // visible grid to nothing. The full-screen EmptyState
-                // only fires for an actually-empty stations table;
-                // here we want a softer reset hint that points the
-                // user at how to recover. Spans the full grid width
-                // so it isn't squeezed into a single tile slot.
-                if (displayedStations.isEmpty()) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 24.dp, horizontal = outerPadding),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                        ) {
-                            Text(
-                                text = if (hideBuiltIns && stationFilter.isBlank()) {
-                                    "All stations are built-in. Tap + to add a custom station, " +
-                                        "or untoggle \"Hide built-ins\" in the grid menu to see them."
-                                } else if (stationFilter.isNotBlank()) {
-                                    "No stations match \"${stationFilter.trim()}\"."
-                                } else {
-                                    "No stations to show."
+                            StationsPageHeader(
+                                stationCount = stations.size,
+                                builtInCount = stations.count { it.isBuiltIn },
+                                builtInsHidden = hideBuiltIns,
+                                // While the filter is active, the subtitle
+                                // reads "M of N stations" — same pattern as
+                                // PlaylistsScreen. Visible-count vs total
+                                // matters more mid-search than the
+                                // built-in / custom split.
+                                filterActive = stationFilter.isNotBlank(),
+                                visibleCount = visibleCountForHeader,
+                                isCompact = isCompact,
+                                onAddStation = onAddStation,
+                                onReorder = onReorderStations,
+                                onSurpriseMe = {
+                                    // Pick one available track at random and
+                                    // play it as a single-item queue. Keeps the
+                                    // "Stations Home" mental model intact —
+                                    // user-driven discovery without committing
+                                    // to a station's rules.
+                                    scope.launch {
+                                        val track = libraryRepo.randomAvailableTrack() ?: return@launch
+                                        stationPlayback.playTracks(listOf(track), startIndex = 0)
+                                        onOpenNowPlaying()
+                                    }
                                 },
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.65f),
-                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                onSurpriseShuffle = {
+                                    // Long-press: shuffle 25 tracks straight
+                                    // into the queue. The user gets a session
+                                    // they can ride for ~90 minutes without
+                                    // committing to a station's source/playback
+                                    // rules. Falls back gracefully on small
+                                    // libraries — fewer tracks just means a
+                                    // shorter queue.
+                                    scope.launch {
+                                        val tracks = libraryRepo.randomAvailableTracks(25L)
+                                        if (tracks.isNotEmpty()) {
+                                            stationPlayback.playTracks(tracks, startIndex = 0)
+                                            onOpenNowPlaying()
+                                        }
+                                    }
+                                },
                             )
-                            // CTA for the filter-active empty state:
-                            // jump to the New Station flow with the
-                            // filter text as a starting suggestion.
-                            // Saves the "didn't find what I wanted —
-                            // want to create a new one named for this
-                            // idea" detour. Mirrors the PlaylistsScreen
-                            // empty-filter CTA shipped in batch 15.
-                            if (stationFilter.isNotBlank()) {
-                                Spacer(Modifier.height(8.dp))
-                                TextButton(onClick = {
-                                    stationFilter = ""
-                                    onAddStation()
-                                }) {
-                                    Text("Create new station…")
+                        }
+
+                        // Inline filter field above the grid. Only surfaces
+                        // when the grid is busy enough that scroll-to-find
+                        // is a real friction point (≥9 stations) so a fresh-
+                        // install user with the seeded preset count doesn't
+                        // see clutter.
+                        if (stations.size >= 9) {
+                            item(span = { GridItemSpan(maxLineSpan) }) {
+                                androidx.compose.material3.OutlinedTextField(
+                                    value = stationFilter,
+                                    onValueChange = { stationFilter = it },
+                                    placeholder = { Text("Filter stations…") },
+                                    singleLine = true,
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = Icons.Filled.Search,
+                                            contentDescription = null,
+                                        )
+                                    },
+                                    trailingIcon =
+                                        if (stationFilter.isNotEmpty()) {
+                                            {
+                                                TooltipIconButton(
+                                                    tooltip = "Clear filter",
+                                                    onClick = { stationFilter = "" },
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Filled.Close,
+                                                        contentDescription = "Clear filter",
+                                                    )
+                                                }
+                                            }
+                                        } else {
+                                            null
+                                        },
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            }
+                        }
+
+                        // Continue Listening callout — only when a station is active.
+                        currentStation?.let { active ->
+                            item(span = { GridItemSpan(maxLineSpan) }) {
+                                ContinueListeningCard(
+                                    station = active,
+                                    isPlaying = playerState == PlayerState.Playing,
+                                    trackTitle = nowPlaying?.title,
+                                    trackArtist = nowPlaying?.artist,
+                                    artworkUri = nowPlaying?.artworkUri,
+                                    onTap = onOpenNowPlaying,
+                                )
+                            }
+                        }
+
+                        // Recently Played horizontal row — shown only after the
+                        // user has actually played something. Filters out the
+                        // currently-playing station (it's already pinned above
+                        // in the Continue Listening card).
+                        val recentToShow =
+                            recent
+                                .filter { it.id != currentStation?.id && it.stats.lastPlayedAt != null }
+                        if (recentToShow.isNotEmpty()) {
+                            item(span = { GridItemSpan(maxLineSpan) }) {
+                                RecentlyPlayedRow(
+                                    stations = recentToShow,
+                                    onPlay = { id -> scope.launch { stationPlayback.playStation(id) } },
+                                )
+                            }
+                        }
+
+                        // Most Played row — top stations by play_count, computed
+                        // client-side from the live stations list. Skip if the
+                        // user hasn't played anything yet, and skip if the only
+                        // candidate is whatever's currently playing (Continue
+                        // Listening already has it).
+                        val mostPlayed =
+                            stations
+                                .asSequence()
+                                .filter { it.stats.playCount > 0 && it.id != currentStation?.id }
+                                .sortedByDescending { it.stats.playCount }
+                                .take(6)
+                                .toList()
+                        if (mostPlayed.isNotEmpty()) {
+                            item(span = { GridItemSpan(maxLineSpan) }) {
+                                MostPlayedRow(
+                                    stations = mostPlayed,
+                                    onPlay = { id -> scope.launch { stationPlayback.playStation(id) } },
+                                )
+                            }
+                        }
+
+                        if (recentlyAdded.isNotEmpty()) {
+                            item(span = { GridItemSpan(maxLineSpan) }) {
+                                RecentlyAddedRow(
+                                    tracks = recentlyAdded,
+                                    artworkByAlbumId = recentlyAddedArtwork,
+                                    onPlay = { idx ->
+                                        stationPlayback.playTracks(recentlyAdded, startIndex = idx)
+                                    },
+                                )
+                            }
+                        }
+
+                        if (rediscover.isNotEmpty()) {
+                            item(span = { GridItemSpan(maxLineSpan) }) {
+                                TrackCarouselRow(
+                                    label = "Rediscover",
+                                    tracks = rediscover,
+                                    artworkByAlbumId = rediscoverArtwork,
+                                    onPlay = { idx ->
+                                        stationPlayback.playTracks(rediscover, startIndex = idx)
+                                    },
+                                )
+                            }
+                        }
+
+                        // Apply hide-built-ins toggle and the substring filter
+                        // before rendering tiles. Filter checks both name and
+                        // customSubtitle so users can search "tag-driven" or
+                        // "60s" if they remember the subtitle but not the name.
+                        val displayedStations =
+                            stations
+                                .let { src ->
+                                    if (hideBuiltIns) src.filterNot { it.isBuiltIn } else src
+                                }
+                                .let { src ->
+                                    val q = stationFilter.trim()
+                                    if (q.isBlank()) {
+                                        src
+                                    } else {
+                                        src.filter {
+                                            it.name.contains(q, ignoreCase = true) ||
+                                                (it.customSubtitle?.contains(q, ignoreCase = true) == true)
+                                        }
+                                    }
+                                }
+                                // Sort last so the user's filter / hide toggles
+                                // run against the original ordering (filter
+                                // result counts in the header are stable
+                                // regardless of sort) and only the on-screen
+                                // arrangement reacts to the sort preference.
+                                // "Custom" is the legacy pin / drag-reorder
+                                // ordering that the StationRepository.observeAll
+                                // flow already returns — pass through unchanged
+                                // so power users who hand-curated the order
+                                // don't see their layout reshuffle just because
+                                // the sort menu shipped.
+                                .let { src ->
+                                    when (currentSort) {
+                                        "NameAsc" -> src.sortedBy { it.name.lowercase() }
+                                        "NameDesc" -> src.sortedByDescending { it.name.lowercase() }
+                                        "MostPlayed" -> src.sortedByDescending { it.stats.playCount }
+                                        "LeastPlayed" -> src.sortedBy { it.stats.playCount }
+                                        "RecentlyPlayed" ->
+                                            src.sortedByDescending {
+                                                it.stats.lastPlayedAt ?: Long.MIN_VALUE
+                                            }
+                                        else -> src
+                                    }
+                                }
+                        // Inline empty hint when an active filter (Hide
+                        // built-ins toggle, or text filter) has reduced the
+                        // visible grid to nothing. The full-screen EmptyState
+                        // only fires for an actually-empty stations table;
+                        // here we want a softer reset hint that points the
+                        // user at how to recover. Spans the full grid width
+                        // so it isn't squeezed into a single tile slot.
+                        if (displayedStations.isEmpty()) {
+                            item(span = { GridItemSpan(maxLineSpan) }) {
+                                Column(
+                                    modifier =
+                                        Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 24.dp, horizontal = outerPadding),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                ) {
+                                    Text(
+                                        text =
+                                            if (hideBuiltIns && stationFilter.isBlank()) {
+                                                "All stations are built-in. Tap + to add a custom station, " +
+                                                    "or untoggle \"Hide built-ins\" in the grid menu to see them."
+                                            } else if (stationFilter.isNotBlank()) {
+                                                "No stations match \"${stationFilter.trim()}\"."
+                                            } else {
+                                                "No stations to show."
+                                            },
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.65f),
+                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                    )
+                                    // CTA for the filter-active empty state:
+                                    // jump to the New Station flow with the
+                                    // filter text as a starting suggestion.
+                                    // Saves the "didn't find what I wanted —
+                                    // want to create a new one named for this
+                                    // idea" detour. Mirrors the PlaylistsScreen
+                                    // empty-filter CTA shipped in batch 15.
+                                    if (stationFilter.isNotBlank()) {
+                                        Spacer(Modifier.height(8.dp))
+                                        TextButton(onClick = {
+                                            stationFilter = ""
+                                            onAddStation()
+                                        }) {
+                                            Text("Create new station…")
+                                        }
+                                    }
                                 }
                             }
                         }
+                        items(displayedStations, key = { it.id }) { station ->
+                            val rate = completionRates[station.id]
+                            val skipRateLine =
+                                rate?.let { (plays, skips) ->
+                                    // Display only when we've got enough plays for
+                                    // the percentage to mean something — a single
+                                    // skip on a 1-play station rendering "100%
+                                    // skip" is just noise.
+                                    if (plays >= 5L) {
+                                        val pct = (skips * 100L / plays).toInt()
+                                        "$plays plays · $pct% skip"
+                                    } else {
+                                        null
+                                    }
+                                }
+                            if (isCompact) {
+                                StationListRow(
+                                    station = station,
+                                    isCurrent = station.id == currentStation?.id,
+                                    isPlaying =
+                                        station.id == currentStation?.id &&
+                                            playerState == PlayerState.Playing,
+                                    statsLine = skipRateLine,
+                                    collageArtwork = stationCollages[station.id].orEmpty(),
+                                    onPlay = {
+                                        scope.launch { stationPlayback.playStation(station.id) }
+                                    },
+                                    onLongPress = { actionsForStationId = station.id },
+                                )
+                            } else {
+                                StationGridTile(
+                                    station = station,
+                                    isCurrent = station.id == currentStation?.id,
+                                    isPlaying =
+                                        station.id == currentStation?.id &&
+                                            playerState == PlayerState.Playing,
+                                    statsLine = skipRateLine,
+                                    collageArtwork = stationCollages[station.id].orEmpty(),
+                                    onPlay = {
+                                        scope.launch { stationPlayback.playStation(station.id) }
+                                    },
+                                    onEdit = { actionsForStationId = station.id },
+                                )
+                            }
+                        }
                     }
-                }
-                items(displayedStations, key = { it.id }) { station ->
-                    val rate = completionRates[station.id]
-                    val skipRateLine = rate?.let { (plays, skips) ->
-                        // Display only when we've got enough plays for
-                        // the percentage to mean something — a single
-                        // skip on a 1-play station rendering "100%
-                        // skip" is just noise.
-                        if (plays >= 5L) {
-                            val pct = (skips * 100L / plays).toInt()
-                            "$plays plays · $pct% skip"
-                        } else null
-                    }
-                    if (isCompact) {
-                        StationListRow(
-                            station = station,
-                            isCurrent = station.id == currentStation?.id,
-                            isPlaying = station.id == currentStation?.id &&
-                                playerState == PlayerState.Playing,
-                            statsLine = skipRateLine,
-                            collageArtwork = stationCollages[station.id].orEmpty(),
-                            onPlay = {
-                                scope.launch { stationPlayback.playStation(station.id) }
+                    if (showGridScrollTop) {
+                        androidx.compose.material3.SmallFloatingActionButton(
+                            onClick = {
+                                scope.launch { gridState.animateScrollToItem(0) }
                             },
-                            onLongPress = { actionsForStationId = station.id },
-                        )
-                    } else {
-                        StationGridTile(
-                            station = station,
-                            isCurrent = station.id == currentStation?.id,
-                            isPlaying = station.id == currentStation?.id &&
-                                playerState == PlayerState.Playing,
-                            statsLine = skipRateLine,
-                            collageArtwork = stationCollages[station.id].orEmpty(),
-                            onPlay = {
-                                scope.launch { stationPlayback.playStation(station.id) }
-                            },
-                            onEdit = { actionsForStationId = station.id },
-                        )
+                            modifier =
+                                Modifier
+                                    .align(Alignment.BottomEnd)
+                                    .padding(end = 16.dp, bottom = 16.dp),
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.KeyboardArrowUp,
+                                contentDescription = "Scroll to top",
+                            )
+                        }
                     }
-                }
-            }
-            if (showGridScrollTop) {
-                androidx.compose.material3.SmallFloatingActionButton(
-                    onClick = {
-                        scope.launch { gridState.animateScrollToItem(0) }
-                    },
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(end = 16.dp, bottom = 16.dp),
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.KeyboardArrowUp,
-                        contentDescription = "Scroll to top",
-                    )
-                }
-            }
-            } // Box
+                } // Box
             } // PullToRefreshBox
         }
     }
@@ -1025,11 +1064,12 @@ private fun StationActionSheet(
             // sees the more specific reason.
             ActionRow(
                 icon = Icons.Filled.DirectionsCar,
-                label = when {
-                    inDriveQuickList -> "In Drive Mode quick-list"
-                    driveQuickListFull -> "Drive Mode quick-list full ($DRIVE_QUICK_LIST_MAX)"
-                    else -> "Add to Drive Mode quick-list"
-                },
+                label =
+                    when {
+                        inDriveQuickList -> "In Drive Mode quick-list"
+                        driveQuickListFull -> "Drive Mode quick-list full ($DRIVE_QUICK_LIST_MAX)"
+                        else -> "Add to Drive Mode quick-list"
+                    },
                 onClick = onAddToDriveQuickList,
                 enabled = !inDriveQuickList && !driveQuickListFull,
             )
@@ -1066,16 +1106,18 @@ private fun ActionRow(
     enabled: Boolean = true,
     danger: Boolean = false,
 ) {
-    val tint = when {
-        !enabled -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-        danger -> MaterialTheme.colorScheme.error
-        else -> MaterialTheme.colorScheme.onSurface
-    }
+    val tint =
+        when {
+            !enabled -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+            danger -> MaterialTheme.colorScheme.error
+            else -> MaterialTheme.colorScheme.onSurface
+        }
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable(enabled = enabled, onClick = onClick)
+                .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(22.dp))
@@ -1112,21 +1154,22 @@ private fun StationsPageHeader(
     // While the text filter is active, neither breakdown is the
     // most useful info — the user wants "M of N" to know how
     // narrow their search is. Mirror the PlaylistsScreen pattern.
-    val subtitleParts = buildList {
-        if (filterActive) {
-            add(
-                "$visibleCount of $stationCount " +
-                    if (stationCount == 1) "station" else "stations",
-            )
-        } else if (builtInsHidden && builtInCount > 0) {
-            add("$customCount custom")
-            add("$builtInCount built-in hidden")
-        } else {
-            add("$stationCount station${if (stationCount == 1) "" else "s"}")
-            if (builtInCount > 0) add("$builtInCount built-in")
-            if (customCount > 0) add("$customCount custom")
+    val subtitleParts =
+        buildList {
+            if (filterActive) {
+                add(
+                    "$visibleCount of $stationCount " +
+                        if (stationCount == 1) "station" else "stations",
+                )
+            } else if (builtInsHidden && builtInCount > 0) {
+                add("$customCount custom")
+                add("$builtInCount built-in hidden")
+            } else {
+                add("$stationCount station${if (stationCount == 1) "" else "s"}")
+                if (builtInCount > 0) add("$builtInCount built-in")
+                if (customCount > 0) add("$customCount custom")
+            }
         }
-    }
     Row(
         modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -1135,8 +1178,12 @@ private fun StationsPageHeader(
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 "Stations",
-                style = if (isCompact) MaterialTheme.typography.headlineMedium
-                        else MaterialTheme.typography.displaySmall,
+                style =
+                    if (isCompact) {
+                        MaterialTheme.typography.headlineMedium
+                    } else {
+                        MaterialTheme.typography.displaySmall
+                    },
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onBackground,
             )
@@ -1156,16 +1203,18 @@ private fun StationsPageHeader(
         Surface(
             shape = RoundedCornerShape(20.dp),
             color = androidx.compose.ui.graphics.Color.Transparent,
-            border = androidx.compose.foundation.BorderStroke(
-                1.dp,
-                MaterialTheme.colorScheme.outline,
-            ),
-            modifier = Modifier
-                .size(40.dp)
-                .combinedClickable(
-                    onClick = onSurpriseMe,
-                    onLongClick = onSurpriseShuffle,
+            border =
+                androidx.compose.foundation.BorderStroke(
+                    1.dp,
+                    MaterialTheme.colorScheme.outline,
                 ),
+            modifier =
+                Modifier
+                    .size(40.dp)
+                    .combinedClickable(
+                        onClick = onSurpriseMe,
+                        onLongClick = onSurpriseShuffle,
+                    ),
         ) {
             Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
                 Icon(
@@ -1205,12 +1254,14 @@ private fun ContinueListeningCard(
 ) {
     val accent = stationColor(station)
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onTap),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer,
-        ),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onTap),
+        colors =
+            CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+            ),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
     ) {
         Row(
@@ -1220,14 +1271,15 @@ private fun ContinueListeningCard(
             // Album art when we have it, otherwise tinted gradient with a
             // playing/paused glyph overlay (same visual language as tiles).
             Box(
-                modifier = Modifier
-                    .size(64.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(
-                        Brush.linearGradient(
-                            colors = listOf(accent, accent.copy(alpha = 0.55f)),
+                modifier =
+                    Modifier
+                        .size(64.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(
+                            Brush.linearGradient(
+                                colors = listOf(accent, accent.copy(alpha = 0.55f)),
+                            ),
                         ),
-                    ),
                 contentAlignment = Alignment.Center,
             ) {
                 if (artworkUri != null) {
@@ -1262,10 +1314,11 @@ private fun ContinueListeningCard(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                val subtitleLine = listOfNotNull(
-                    trackArtist,
-                    "from ${station.name}".takeIf { trackTitle != null },
-                ).joinToString(" · ")
+                val subtitleLine =
+                    listOfNotNull(
+                        trackArtist,
+                        "from ${station.name}".takeIf { trackTitle != null },
+                    ).joinToString(" · ")
                 if (subtitleLine.isNotBlank()) {
                     Spacer(Modifier.size(2.dp))
                     Text(
@@ -1374,16 +1427,18 @@ private fun RecentlyAddedTile(
     onTap: () -> Unit,
 ) {
     Column(
-        modifier = Modifier
-            .width(120.dp)
-            .clickable(onClick = onTap),
+        modifier =
+            Modifier
+                .width(120.dp)
+                .clickable(onClick = onTap),
     ) {
         Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(1f)
-                .clip(RoundedCornerShape(8.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(1f)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
             contentAlignment = Alignment.Center,
         ) {
             if (artworkUri != null) {
@@ -1436,19 +1491,24 @@ private fun MostPlayedRow(
 }
 
 @Composable
-private fun MostPlayedChip(station: Station, onTap: () -> Unit) {
+private fun MostPlayedChip(
+    station: Station,
+    onTap: () -> Unit,
+) {
     val accent = stationColor(station)
     Column(
-        modifier = Modifier
-            .width(120.dp)
-            .clickable(onClick = onTap),
+        modifier =
+            Modifier
+                .width(120.dp)
+                .clickable(onClick = onTap),
     ) {
         Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(1.4f)
-                .clip(RoundedCornerShape(12.dp))
-                .background(stationGradient(accent)),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(1.4f)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(stationGradient(accent)),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
@@ -1460,9 +1520,10 @@ private fun MostPlayedChip(station: Station, onTap: () -> Unit) {
             // Top-left chip showing play count — visual hierarchy hint
             // that this row is *ranked* by listening, not just recent.
             Surface(
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(6.dp),
+                modifier =
+                    Modifier
+                        .align(Alignment.TopStart)
+                        .padding(6.dp),
                 color = Color.Black.copy(alpha = 0.45f),
                 shape = RoundedCornerShape(8.dp),
             ) {
@@ -1487,19 +1548,24 @@ private fun MostPlayedChip(station: Station, onTap: () -> Unit) {
 }
 
 @Composable
-private fun RecentChip(station: Station, onTap: () -> Unit) {
+private fun RecentChip(
+    station: Station,
+    onTap: () -> Unit,
+) {
     val accent = stationColor(station)
     Column(
-        modifier = Modifier
-            .width(96.dp)
-            .clickable(onClick = onTap),
+        modifier =
+            Modifier
+                .width(96.dp)
+                .clickable(onClick = onTap),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Box(
-            modifier = Modifier
-                .size(72.dp)
-                .clip(RoundedCornerShape(36.dp))
-                .background(stationGradient(accent)),
+            modifier =
+                Modifier
+                    .size(72.dp)
+                    .clip(RoundedCornerShape(36.dp))
+                    .background(stationGradient(accent)),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
@@ -1545,8 +1611,12 @@ private fun EmptyState(
         Spacer(Modifier.size(16.dp))
         Text(
             "No stations yet",
-            style = if (isCompact) MaterialTheme.typography.headlineSmall
-                    else MaterialTheme.typography.headlineMedium,
+            style =
+                if (isCompact) {
+                    MaterialTheme.typography.headlineSmall
+                } else {
+                    MaterialTheme.typography.headlineMedium
+                },
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onBackground,
         )
@@ -1590,17 +1660,23 @@ private fun StationListRow(
         // tile — desktop right-click reaches the same action sheet
         // that long-press opens on touch. See StationGridTile for
         // the rationale.
-        modifier = Modifier
-            .fillMaxWidth()
-            .combinedClickable(
-                onClick = onPlay,
-                onLongClick = onLongPress,
-            )
-            .onRightClick(onLongPress),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isCurrent) MaterialTheme.colorScheme.primaryContainer
-                             else MaterialTheme.colorScheme.surface,
-        ),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .combinedClickable(
+                    onClick = onPlay,
+                    onLongClick = onLongPress,
+                )
+                .onRightClick(onLongPress),
+        colors =
+            CardDefaults.cardColors(
+                containerColor =
+                    if (isCurrent) {
+                        MaterialTheme.colorScheme.primaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.surface
+                    },
+            ),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(12.dp),
@@ -1611,9 +1687,10 @@ private fun StationListRow(
                 coil3.compose.AsyncImage(
                     model = station.artworkUri,
                     contentDescription = null,
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(RoundedCornerShape(8.dp)),
+                    modifier =
+                        Modifier
+                            .size(48.dp)
+                            .clip(RoundedCornerShape(8.dp)),
                     contentScale = androidx.compose.ui.layout.ContentScale.Crop,
                 )
             } else if (collageArtwork.size >= 4) {
@@ -1634,8 +1711,12 @@ private fun StationListRow(
                         station.name,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
-                        color = if (isCurrent) MaterialTheme.colorScheme.onPrimaryContainer
-                                else MaterialTheme.colorScheme.onSurface,
+                        color =
+                            if (isCurrent) {
+                                MaterialTheme.colorScheme.onPrimaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.onSurface
+                            },
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -1648,8 +1729,12 @@ private fun StationListRow(
                     Text(
                         it,
                         style = MaterialTheme.typography.bodySmall,
-                        color = if (isCurrent) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.75f)
-                                else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                        color =
+                            if (isCurrent) {
+                                MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.75f)
+                            } else {
+                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            },
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -1658,16 +1743,23 @@ private fun StationListRow(
                 // 25% skip") over the bare play count when it's
                 // available, since it captures more useful info in
                 // the same vertical space.
-                val infoLine = statsLine
-                    ?: if (station.stats.playCount > 0) {
-                        "Played ${station.stats.playCount}× · ${station.playback.order.label()}"
-                    } else null
+                val infoLine =
+                    statsLine
+                        ?: if (station.stats.playCount > 0) {
+                            "Played ${station.stats.playCount}× · ${station.playback.order.label()}"
+                        } else {
+                            null
+                        }
                 if (infoLine != null) {
                     Text(
                         infoLine,
                         style = MaterialTheme.typography.bodySmall,
-                        color = if (isCurrent) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.55f)
-                                else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
+                        color =
+                            if (isCurrent) {
+                                MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.55f)
+                            } else {
+                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f)
+                            },
                     )
                 }
             }
@@ -1677,16 +1769,24 @@ private fun StationListRow(
                     imageVector = Icons.Filled.PlayArrow,
                     contentDescription = null,
                     modifier = Modifier.size(20.dp),
-                    tint = if (isCurrent) MaterialTheme.colorScheme.onPrimaryContainer
-                           else MaterialTheme.colorScheme.primary,
+                    tint =
+                        if (isCurrent) {
+                            MaterialTheme.colorScheme.onPrimaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.primary
+                        },
                 )
                 if (isPlaying) {
                     Spacer(Modifier.size(4.dp))
                     Text(
                         "Playing",
                         style = MaterialTheme.typography.titleMedium,
-                        color = if (isCurrent) MaterialTheme.colorScheme.onPrimaryContainer
-                                else MaterialTheme.colorScheme.primary,
+                        color =
+                            if (isCurrent) {
+                                MaterialTheme.colorScheme.onPrimaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.primary
+                            },
                     )
                 }
             }
@@ -1722,20 +1822,27 @@ private fun StationGridTile(
         // intentionally point at the same lambda — there's no
         // separate "right-click menu" surface; this just gives
         // mouse users a non-touch path to the existing sheet.
-        modifier = Modifier
-            .fillMaxWidth()
-            .combinedClickable(
-                onClick = onPlay,
-                onLongClick = onEdit,
-            )
-            .onRightClick(onEdit),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isCurrent) MaterialTheme.colorScheme.primaryContainer
-                             else MaterialTheme.colorScheme.surface,
-        ),
-        elevation = CardDefaults.cardElevation(
-            defaultElevation = if (isCurrent) 4.dp else 1.dp,
-        ),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .combinedClickable(
+                    onClick = onPlay,
+                    onLongClick = onEdit,
+                )
+                .onRightClick(onEdit),
+        colors =
+            CardDefaults.cardColors(
+                containerColor =
+                    if (isCurrent) {
+                        MaterialTheme.colorScheme.primaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.surface
+                    },
+            ),
+        elevation =
+            CardDefaults.cardElevation(
+                defaultElevation = if (isCurrent) 4.dp else 1.dp,
+            ),
     ) {
         Column {
             // Tile header. Precedence:
@@ -1748,10 +1855,11 @@ private fun StationGridTile(
             //     user-created, etc.).
             val presetIcon = presetIconFor(station)
             Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(1.5f)
-                    .background(stationGradient(accent)),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(1.5f)
+                        .background(stationGradient(accent)),
             ) {
                 when {
                     station.artworkUri != null -> {
@@ -1785,9 +1893,10 @@ private fun StationGridTile(
                 // Now-playing chip in the corner
                 if (isPlaying) {
                     Surface(
-                        modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .padding(10.dp),
+                        modifier =
+                            Modifier
+                                .align(Alignment.BottomEnd)
+                                .padding(10.dp),
                         color = Color.Black.copy(alpha = 0.45f),
                         shape = RoundedCornerShape(12.dp),
                     ) {
@@ -1817,8 +1926,12 @@ private fun StationGridTile(
                         station.name,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
-                        color = if (isCurrent) MaterialTheme.colorScheme.onPrimaryContainer
-                                else MaterialTheme.colorScheme.onSurface,
+                        color =
+                            if (isCurrent) {
+                                MaterialTheme.colorScheme.onPrimaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.onSurface
+                            },
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f),
@@ -1830,26 +1943,38 @@ private fun StationGridTile(
                 }
                 Spacer(Modifier.size(4.dp))
                 Text(
-                    text = station.customSubtitle
-                        ?: station.playback.order.label().replaceFirstChar { it.uppercase() },
+                    text =
+                        station.customSubtitle
+                            ?: station.playback.order.label().replaceFirstChar { it.uppercase() },
                     style = MaterialTheme.typography.bodySmall,
-                    color = if (isCurrent) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
-                            else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    color =
+                        if (isCurrent) {
+                            MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                        } else {
+                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        },
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
                 // Same precedence as the list-row variant: prefer the
                 // history-derived stats line when available.
-                val tileInfo = statsLine ?: if (station.stats.playCount > 0) {
-                    "Played ${station.stats.playCount}×"
-                } else null
+                val tileInfo =
+                    statsLine ?: if (station.stats.playCount > 0) {
+                        "Played ${station.stats.playCount}×"
+                    } else {
+                        null
+                    }
                 if (tileInfo != null) {
                     Spacer(Modifier.size(4.dp))
                     Text(
                         tileInfo,
                         style = MaterialTheme.typography.labelSmall,
-                        color = if (isCurrent) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.55f)
-                                else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
+                        color =
+                            if (isCurrent) {
+                                MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.55f)
+                            } else {
+                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f)
+                            },
                     )
                 }
             }
@@ -1858,11 +1983,15 @@ private fun StationGridTile(
 }
 
 @Composable
-private fun ColorTile(color: Color, modifier: Modifier = Modifier) {
+private fun ColorTile(
+    color: Color,
+    modifier: Modifier = Modifier,
+) {
     Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(if (color == Color.Black) MaterialTheme.colorScheme.primary else color),
+        modifier =
+            modifier
+                .clip(RoundedCornerShape(8.dp))
+                .background(if (color == Color.Black) MaterialTheme.colorScheme.primary else color),
     )
 }
 
@@ -1879,13 +2008,17 @@ private fun ColorTile(color: Color, modifier: Modifier = Modifier) {
  * without paying for borders on every render.
  */
 @Composable
-private fun AlbumCollage(uris: List<String>, modifier: Modifier = Modifier) {
+private fun AlbumCollage(
+    uris: List<String>,
+    modifier: Modifier = Modifier,
+) {
     val gap = 1.dp
     val separator = MaterialTheme.colorScheme.surface
     Column(
-        modifier = modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(separator),
+        modifier =
+            modifier
+                .clip(RoundedCornerShape(8.dp))
+                .background(separator),
     ) {
         Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
             CollageCell(uris.getOrNull(0), Modifier.weight(1f).fillMaxHeight())
@@ -1902,7 +2035,10 @@ private fun AlbumCollage(uris: List<String>, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun CollageCell(uri: String?, modifier: Modifier) {
+private fun CollageCell(
+    uri: String?,
+    modifier: Modifier,
+) {
     if (uri == null) {
         Box(modifier = modifier.background(MaterialTheme.colorScheme.surfaceVariant))
     } else {
@@ -1921,12 +2057,13 @@ private fun BuiltInBadge() {
         "BUILT-IN",
         style = MaterialTheme.typography.labelSmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier
-            .background(
-                MaterialTheme.colorScheme.surfaceVariant,
-                shape = RoundedCornerShape(4.dp),
-            )
-            .padding(horizontal = 6.dp, vertical = 2.dp),
+        modifier =
+            Modifier
+                .background(
+                    MaterialTheme.colorScheme.surfaceVariant,
+                    shape = RoundedCornerShape(4.dp),
+                )
+                .padding(horizontal = 6.dp, vertical = 2.dp),
     )
 }
 
@@ -1941,12 +2078,13 @@ private const val REDISCOVER_THRESHOLD_DAYS: Long = 30L
  * selector is moot — single-column always wins on phones in
  * portrait.
  */
-private val TILE_SIZE_STOPS: List<Pair<String, Int>> = listOf(
-    "Small" to 200,
-    "Medium" to 240,
-    "Large" to 280,
-    "Extra-large" to 360,
-)
+private val TILE_SIZE_STOPS: List<Pair<String, Int>> =
+    listOf(
+        "Small" to 200,
+        "Medium" to 240,
+        "Large" to 280,
+        "Extra-large" to 360,
+    )
 
 /**
  * Stations Home sort options. The first value (`Custom`) preserves
@@ -1955,14 +2093,15 @@ private val TILE_SIZE_STOPS: List<Pair<String, Int>> = listOf(
  * displayed grid in-place. String-encoded so adding a new option
  * later doesn't require a `SettingsStore` schema bump.
  */
-private val STATION_SORT_OPTIONS: List<Pair<String, String>> = listOf(
-    "Custom" to "Custom (drag order)",
-    "NameAsc" to "Name A → Z",
-    "NameDesc" to "Name Z → A",
-    "MostPlayed" to "Most played",
-    "LeastPlayed" to "Least played",
-    "RecentlyPlayed" to "Recently played",
-)
+private val STATION_SORT_OPTIONS: List<Pair<String, String>> =
+    listOf(
+        "Custom" to "Custom (drag order)",
+        "NameAsc" to "Name A → Z",
+        "NameDesc" to "Name Z → A",
+        "MostPlayed" to "Most played",
+        "LeastPlayed" to "Least played",
+        "RecentlyPlayed" to "Recently played",
+    )
 
 /**
  * Maps a station to a thematic Material icon. Built-in presets are
@@ -1985,9 +2124,10 @@ private fun presetIconFor(station: Station): androidx.compose.ui.graphics.vector
     }
 }
 
-private fun PlayOrder.label(): String = when (this) {
-    PlayOrder.Shuffle -> "shuffle"
-    PlayOrder.Sequential -> "sequential"
-    PlayOrder.SmartShuffle -> "smart shuffle"
-    PlayOrder.WeightedRandom -> "weighted"
-}
+private fun PlayOrder.label(): String =
+    when (this) {
+        PlayOrder.Shuffle -> "shuffle"
+        PlayOrder.Sequential -> "sequential"
+        PlayOrder.SmartShuffle -> "smart shuffle"
+        PlayOrder.WeightedRandom -> "weighted"
+    }

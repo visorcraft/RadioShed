@@ -25,7 +25,6 @@ import kotlin.test.assertTrue
  * after the missing key.
  */
 class SettingsStoreBackupTest {
-
     private fun newStore(): SettingsStore = SettingsStore(InMemorySettings())
 
     @Test
@@ -242,15 +241,17 @@ class SettingsStoreBackupTest {
         // so this stays robust if the key constant is ever renamed.
         val seed = newStore()
         seed.setConnectivityPolicy(ConnectivityPolicy.WiFiOnly)
-        val connectivityKey = seed.dumpForBackup().keys
-            .first { it.contains("connectivityPolicy", ignoreCase = true) }
+        val connectivityKey =
+            seed.dumpForBackup().keys
+                .first { it.contains("connectivityPolicy", ignoreCase = true) }
 
         val store = newStore()
         store.setConnectivityPolicy(ConnectivityPolicy.Always)
-        val mismatched = mapOf(
-            connectivityKey to
-                com.visorcraft.radioshed.source.BackupSettingValue.IntValue(99),
-        )
+        val mismatched =
+            mapOf(
+                connectivityKey to
+                    com.visorcraft.radioshed.source.BackupSettingValue.IntValue(99),
+            )
         store.restoreFromBackup(mismatched)
 
         // Original value should remain — the type-mismatched

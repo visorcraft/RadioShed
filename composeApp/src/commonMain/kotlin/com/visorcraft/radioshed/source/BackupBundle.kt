@@ -93,15 +93,24 @@ data class BackupLikedTrack(
  */
 @Serializable
 sealed interface BackupSettingValue {
-    @Serializable @kotlinx.serialization.SerialName("bool")
+    @Serializable
+    @kotlinx.serialization.SerialName("bool")
     data class Bool(val value: Boolean) : BackupSettingValue
-    @Serializable @kotlinx.serialization.SerialName("str")
+
+    @Serializable
+    @kotlinx.serialization.SerialName("str")
     data class Str(val value: String) : BackupSettingValue
-    @Serializable @kotlinx.serialization.SerialName("int")
+
+    @Serializable
+    @kotlinx.serialization.SerialName("int")
     data class IntValue(val value: Int) : BackupSettingValue
-    @Serializable @kotlinx.serialization.SerialName("long")
+
+    @Serializable
+    @kotlinx.serialization.SerialName("long")
     data class LongValue(val value: Long) : BackupSettingValue
-    @Serializable @kotlinx.serialization.SerialName("float")
+
+    @Serializable
+    @kotlinx.serialization.SerialName("float")
     data class FloatValue(val value: Float) : BackupSettingValue
 }
 

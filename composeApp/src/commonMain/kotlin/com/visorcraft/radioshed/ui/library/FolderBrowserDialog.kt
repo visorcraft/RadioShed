@@ -1,6 +1,5 @@
 package com.visorcraft.radioshed.ui.library
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -27,7 +26,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -120,11 +118,12 @@ fun FolderBrowserDialog(
                         singleLine = true,
                         placeholder = { Text("Path or \\\\server\\share") },
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
-                        keyboardActions = KeyboardActions(
-                            onGo = { currentPath = pathInput.trim() },
-                            onDone = { currentPath = pathInput.trim() },
-                            onSend = { currentPath = pathInput.trim() },
-                        ),
+                        keyboardActions =
+                            KeyboardActions(
+                                onGo = { currentPath = pathInput.trim() },
+                                onDone = { currentPath = pathInput.trim() },
+                                onSend = { currentPath = pathInput.trim() },
+                            ),
                     )
                     Spacer(Modifier.size(8.dp))
                     Button(onClick = { currentPath = pathInput.trim() }) {
@@ -142,10 +141,11 @@ fun FolderBrowserDialog(
                     if (parent != null) {
                         TextButton(
                             onClick = { currentPath = parent },
-                            contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                                horizontal = 8.dp,
-                                vertical = 4.dp,
-                            ),
+                            contentPadding =
+                                androidx.compose.foundation.layout.PaddingValues(
+                                    horizontal = 8.dp,
+                                    vertical = 4.dp,
+                                ),
                         ) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
@@ -195,9 +195,10 @@ fun FolderBrowserDialog(
                 if (bookmarks.isNotEmpty()) {
                     Spacer(Modifier.height(8.dp))
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState()),
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
                         bookmarks.forEach { bm ->
@@ -246,7 +247,10 @@ fun FolderBrowserDialog(
 }
 
 @Composable
-private fun QuickJumpChip(label: String, onClick: () -> Unit) {
+private fun QuickJumpChip(
+    label: String,
+    onClick: () -> Unit,
+) {
     Surface(
         modifier = Modifier.clickable(onClick = onClick),
         shape = RoundedCornerShape(16.dp),
@@ -263,7 +267,10 @@ private fun QuickJumpChip(label: String, onClick: () -> Unit) {
 }
 
 @Composable
-private fun FolderEntry(name: String, onTap: () -> Unit) {
+private fun FolderEntry(
+    name: String,
+    onTap: () -> Unit,
+) {
     Surface(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onTap),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),

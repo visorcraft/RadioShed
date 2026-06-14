@@ -4,32 +4,32 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 class WeatherFormatTest {
-
     @Test
     fun describeWmoCode_mapsEachBucket() {
         // One representative code per documented WMO bucket plus the boundary
         // values, so a future range edit can't silently shift a code into the
         // wrong bucket.
-        val cases = listOf(
-            0 to "clear",
-            1 to "partly cloudy",
-            2 to "partly cloudy",
-            3 to "partly cloudy",
-            45 to "foggy",
-            48 to "foggy",
-            51 to "rainy",
-            61 to "rainy",
-            67 to "rainy",
-            71 to "snowy",
-            77 to "snowy",
-            80 to "rainy",  // rain shower: slight
-            81 to "rainy",  // rain shower: moderate
-            82 to "rainy",  // rain shower: violent
-            85 to "snowy",
-            86 to "snowy",
-            95 to "stormy",
-            99 to "stormy",
-        )
+        val cases =
+            listOf(
+                0 to "clear",
+                1 to "partly cloudy",
+                2 to "partly cloudy",
+                3 to "partly cloudy",
+                45 to "foggy",
+                48 to "foggy",
+                51 to "rainy",
+                61 to "rainy",
+                67 to "rainy",
+                71 to "snowy",
+                77 to "snowy",
+                80 to "rainy", // rain shower: slight
+                81 to "rainy", // rain shower: moderate
+                82 to "rainy", // rain shower: violent
+                85 to "snowy",
+                86 to "snowy",
+                95 to "stormy",
+                99 to "stormy",
+            )
         for ((code, expected) in cases) {
             assertEquals(expected, describeWmoCode(code), "weathercode $code")
         }
@@ -41,8 +41,8 @@ class WeatherFormatTest {
         assertEquals("unsettled", describeWmoCode(4))
         assertEquals("unsettled", describeWmoCode(44))
         assertEquals("unsettled", describeWmoCode(70))
-        assertEquals("unsettled", describeWmoCode(78))  // gap: snow grains (unused in Open-Meteo)
-        assertEquals("unsettled", describeWmoCode(83))  // gap: freezing rain showers (unused)
+        assertEquals("unsettled", describeWmoCode(78)) // gap: snow grains (unused in Open-Meteo)
+        assertEquals("unsettled", describeWmoCode(83)) // gap: freezing rain showers (unused)
         assertEquals("unsettled", describeWmoCode(100))
         assertEquals("unsettled", describeWmoCode(-1))
     }

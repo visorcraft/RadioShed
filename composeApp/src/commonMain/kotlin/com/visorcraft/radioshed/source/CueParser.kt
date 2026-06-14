@@ -41,7 +41,6 @@ data class CueTrack(
 )
 
 object CueParser {
-
     /**
      * Parse a cue-sheet. Returns a sheet with whatever could be salvaged;
      * malformed lines are silently skipped rather than aborting.
@@ -61,18 +60,19 @@ object CueParser {
             val ft = currentFileType ?: "WAVE"
             // Compute end times: track[i].endMs = track[i+1].startMs
             val builders = currentTracks.toList()
-            val finalized = builders.mapIndexed { idx, b ->
-                val nextStart = builders.getOrNull(idx + 1)?.startMs
-                CueTrack(
-                    number = b.number,
-                    type = b.type,
-                    title = b.title,
-                    performer = b.performer ?: albumPerformer,
-                    isrc = b.isrc,
-                    startMs = b.startMs ?: 0,
-                    endMs = nextStart,
-                )
-            }
+            val finalized =
+                builders.mapIndexed { idx, b ->
+                    val nextStart = builders.getOrNull(idx + 1)?.startMs
+                    CueTrack(
+                        number = b.number,
+                        type = b.type,
+                        title = b.title,
+                        performer = b.performer ?: albumPerformer,
+                        isrc = b.isrc,
+                        startMs = b.startMs ?: 0,
+                        endMs = nextStart,
+                    )
+                }
             files += CueFile(fileName = fn, fileType = ft, tracks = finalized)
             currentFileName = null
             currentFileType = null
@@ -91,13 +91,19 @@ object CueParser {
             when (cmd) {
                 "PERFORMER" -> {
                     val value = tokens.getOrNull(1) ?: return@forEach
-                    if (currentTrack != null) currentTrack!!.performer = value
-                    else albumPerformer = value
+                    if (currentTrack != null) {
+                        currentTrack!!.performer = value
+                    } else {
+                        albumPerformer = value
+                    }
                 }
                 "TITLE" -> {
                     val value = tokens.getOrNull(1) ?: return@forEach
-                    if (currentTrack != null) currentTrack!!.title = value
-                    else albumTitle = value
+                    if (currentTrack != null) {
+                        currentTrack!!.title = value
+                    } else {
+                        albumTitle = value
+                    }
                 }
                 "FILE" -> {
                     finalizeFile()

@@ -9,7 +9,6 @@ import kotlinx.serialization.Serializable
  */
 @Serializable
 sealed interface SourceRule {
-
     // ---- Selectors ----
 
     @Serializable
@@ -91,6 +90,7 @@ enum class SmartQueryKind {
     RecentlyRated,
     NeverPlayed,
     AdaptiveMix,
+
     /**
      * Highly-rated tracks (≥4★) that haven't been played in 90+ days.
      * Distinct from [LongestUnheard] which is "least played by count" —
@@ -98,6 +98,7 @@ enum class SmartQueryKind {
      * longest-unheard first.
      */
     ForgottenGems,
+
     /**
      * Same gem set as [ForgottenGems] but sorted by rating descending —
      * surfaces the top-rated tracks among the never-played-in-a-while
@@ -105,6 +106,7 @@ enum class SmartQueryKind {
      * "most overdue for a replay".
      */
     ForgottenGemsByRating,
+
     /**
      * The user's Liked-Songs collection. Picks track-ids from
      * [com.visorcraft.radioshed.data.RatingRepository.likedTracks]

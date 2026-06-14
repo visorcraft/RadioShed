@@ -60,9 +60,10 @@ internal val AmoledSurface = Color(0xFF000000)
  * mode interleaves a light and a dark cue since the theme will
  * follow the OS at runtime — we can't know ahead of time.
  */
-fun previewSwatchesFor(mode: ThemeMode): List<Color> = when (mode) {
-    ThemeMode.System -> listOf(LightBackground, DarkBackground, LightPrimary)
-    ThemeMode.Light -> listOf(LightBackground, LightSecondaryContainer, LightPrimary)
-    ThemeMode.Dark -> listOf(DarkBackground, DarkSecondaryContainer, DarkPrimary)
-    ThemeMode.Amoled -> listOf(AmoledBackground, DarkSecondaryContainer, DarkPrimary)
-}
+fun previewSwatchesFor(mode: ThemeMode): List<Color> =
+    when (mode) {
+        ThemeMode.System -> listOf(LightBackground, DarkBackground, LightPrimary)
+        ThemeMode.Light -> listOf(LightBackground, LightSecondaryContainer, LightPrimary)
+        ThemeMode.Dark -> listOf(DarkBackground, DarkSecondaryContainer, DarkPrimary)
+        ThemeMode.Amoled -> listOf(AmoledBackground, DarkSecondaryContainer, DarkPrimary)
+    }

@@ -30,8 +30,9 @@ actual class SyncthingDetector(private val context: Context) {
     actual fun launch(): Boolean {
         val pkg = installedPackage() ?: return false
         return runCatching {
-            val intent = context.packageManager.getLaunchIntentForPackage(pkg)
-                ?: return@runCatching false
+            val intent =
+                context.packageManager.getLaunchIntentForPackage(pkg)
+                    ?: return@runCatching false
             // FLAG_ACTIVITY_NEW_TASK is required when launching from a
             // non-Activity context (we may be invoked from the
             // application context via Koin).
@@ -42,14 +43,18 @@ actual class SyncthingDetector(private val context: Context) {
     }
 
     @Suppress("DEPRECATION")
-    private fun isPackageInstalled(pm: PackageManager, pkg: String): Boolean = runCatching {
-        // The signature with `flags: Int` is deprecated on API 33+ in
-        // favour of a PackageInfoFlags overload, but the deprecated
-        // form still works back to API 21 and reads fine on Tiramisu+
-        // — we accept the lint warning rather than gate on Build.VERSION.
-        pm.getPackageInfo(pkg, 0)
-        true
-    }.getOrDefault(false)
+    private fun isPackageInstalled(
+        pm: PackageManager,
+        pkg: String,
+    ): Boolean =
+        runCatching {
+            // The signature with `flags: Int` is deprecated on API 33+ in
+            // favour of a PackageInfoFlags overload, but the deprecated
+            // form still works back to API 21 and reads fine on Tiramisu+
+            // — we accept the lint warning rather than gate on Build.VERSION.
+            pm.getPackageInfo(pkg, 0)
+            true
+        }.getOrDefault(false)
 
     private companion object {
         // Order = preference for the wizard's "first install" path.
@@ -57,9 +62,10 @@ actual class SyncthingDetector(private val context: Context) {
         // that lives on Play Store + F-Droid; the original Nutomic
         // build was discontinued in 2022 but lingers on devices that
         // installed it years ago. Either is acceptable.
-        val KNOWN_PACKAGES = listOf(
-            "com.github.catfriend1.syncthingandroid",
-            "com.nutomic.syncthingandroid",
-        )
+        val KNOWN_PACKAGES =
+            listOf(
+                "com.github.catfriend1.syncthingandroid",
+                "com.nutomic.syncthingandroid",
+            )
     }
 }

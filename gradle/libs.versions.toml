@@ -34,6 +34,8 @@ multiplatformSettings = "1.3.0"
 # that SQLDelight's AndroidSqliteDriver needs.
 requerySqliteAndroid = "3.45.0"
 sqldelight = "2.1.0"
+ktlint = "12.1.2"
+detekt = "1.23.8"
 
 # JNA — direct foreign-function binding to the system libvlc 3.x used by
 # the desktop AudioEngine (replaces the GPL VLCJ layer). jna-jpms carries
@@ -127,3 +129,5 @@ composeCompiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "k
 kotlinMultiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
 kotlinSerialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 sqldelight = { id = "app.cash.sqldelight", version.ref = "sqldelight" }
+ktlint = { id = "org.jlleitschuh.gradle.ktlint", version.ref = "ktlint" }
+detekt = { id = "io.gitlab.arturbosch.detekt", version.ref = "detekt" }

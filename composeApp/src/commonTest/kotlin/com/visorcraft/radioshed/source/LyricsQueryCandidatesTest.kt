@@ -5,24 +5,25 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class LyricsQueryCandidatesTest {
-
     @Test
     fun verbatimTagsAreFirstCandidate() {
-        val candidates = lyricsQueryCandidates(
-            taggedArtist = "Roberta Flack",
-            taggedTitle = "Making Love",
-            fileName = "anything.mp3",
-        )
+        val candidates =
+            lyricsQueryCandidates(
+                taggedArtist = "Roberta Flack",
+                taggedTitle = "Making Love",
+                fileName = "anything.mp3",
+            )
         assertEquals(LyricsQuery("Roberta Flack", "Making Love"), candidates.first())
     }
 
     @Test
     fun strippedParentheticalProducesAlternateCandidate() {
-        val candidates = lyricsQueryCandidates(
-            taggedArtist = "Queen",
-            taggedTitle = "Bohemian Rhapsody (Remastered 2011)",
-            fileName = "01.mp3",
-        )
+        val candidates =
+            lyricsQueryCandidates(
+                taggedArtist = "Queen",
+                taggedTitle = "Bohemian Rhapsody (Remastered 2011)",
+                fileName = "01.mp3",
+            )
         // The clean variant should appear in the list — exact order
         // doesn't matter, only that it's reachable.
         assertTrue(
@@ -33,11 +34,12 @@ class LyricsQueryCandidatesTest {
 
     @Test
     fun featuredArtistSuffixIsDropped() {
-        val candidates = lyricsQueryCandidates(
-            taggedArtist = "Roberta Flack feat. Donny Hathaway",
-            taggedTitle = "The Closer I Get to You",
-            fileName = "track.mp3",
-        )
+        val candidates =
+            lyricsQueryCandidates(
+                taggedArtist = "Roberta Flack feat. Donny Hathaway",
+                taggedTitle = "The Closer I Get to You",
+                fileName = "track.mp3",
+            )
         assertTrue(
             candidates.any { it.artist == "Roberta Flack" },
             "expected primary-artist candidate in $candidates",
@@ -46,11 +48,12 @@ class LyricsQueryCandidatesTest {
 
     @Test
     fun filenamePatternFallsBackWhenTagsMissing() {
-        val candidates = lyricsQueryCandidates(
-            taggedArtist = null,
-            taggedTitle = null,
-            fileName = "46. Roberta Flack - Making Love.mp3",
-        )
+        val candidates =
+            lyricsQueryCandidates(
+                taggedArtist = null,
+                taggedTitle = null,
+                fileName = "46. Roberta Flack - Making Love.mp3",
+            )
         assertTrue(
             candidates.any { it.artist == "Roberta Flack" && it.title == "Making Love" },
             "expected filename-derived candidate in $candidates",
@@ -112,11 +115,12 @@ class LyricsQueryCandidatesTest {
 
     @Test
     fun candidateListDeduplicates() {
-        val candidates = lyricsQueryCandidates(
-            taggedArtist = "Adele",
-            taggedTitle = "Hello",
-            fileName = "Adele - Hello.mp3",
-        )
+        val candidates =
+            lyricsQueryCandidates(
+                taggedArtist = "Adele",
+                taggedTitle = "Hello",
+                fileName = "Adele - Hello.mp3",
+            )
         // Verbatim + filename-derived should produce the same query
         // and be deduplicated rather than fired twice.
         val matching = candidates.filter { it.artist == "Adele" && it.title == "Hello" }
@@ -125,11 +129,12 @@ class LyricsQueryCandidatesTest {
 
     @Test
     fun emptyTagsDontProduceEmptyCandidates() {
-        val candidates = lyricsQueryCandidates(
-            taggedArtist = "",
-            taggedTitle = "",
-            fileName = "noisy_filename.mp3",
-        )
+        val candidates =
+            lyricsQueryCandidates(
+                taggedArtist = "",
+                taggedTitle = "",
+                fileName = "noisy_filename.mp3",
+            )
         assertTrue(candidates.all { it.artist.isNotBlank() && it.title.isNotBlank() })
     }
 }

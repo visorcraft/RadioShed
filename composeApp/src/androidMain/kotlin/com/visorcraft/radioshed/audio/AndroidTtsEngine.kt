@@ -5,13 +5,13 @@ import android.os.Bundle
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import com.visorcraft.radioshed.domain.DjVoice
-import java.io.File
-import java.util.UUID
-import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import java.io.File
+import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Android [TextToSpeech]-backed TTS engine for DJ announcements.
@@ -35,10 +35,10 @@ import kotlinx.coroutines.sync.withLock
  * for app lifetime; Android reclaims the service connection on process exit.
  */
 class AndroidTtsEngine(private val context: Context) : TtsEngine {
-
     private val initMutex = Mutex()
 
     @Volatile private var tts: TextToSpeech? = null
+
     @Volatile private var initDeferred: CompletableDeferred<Boolean>? = null
 
     // null = not yet attempted; true/false = outcome of init.
@@ -57,9 +57,10 @@ class AndroidTtsEngine(private val context: Context) : TtsEngine {
     // evicting a clip mid-announcement under storage pressure. The dj_cache
     // table's blob_path rows point here, and the Settings "Clear DJ cache"
     // action walks these blobs before wiping the table.
-    override fun cacheDir(): String? = runCatching {
-        File(context.filesDir, "dj").also { it.mkdirs() }.absolutePath
-    }.getOrNull()
+    override fun cacheDir(): String? =
+        runCatching {
+            File(context.filesDir, "dj").also { it.mkdirs() }.absolutePath
+        }.getOrNull()
 
     /**
      * Synthesize [text] to an audio file at [outPath].
@@ -69,7 +70,11 @@ class AndroidTtsEngine(private val context: Context) : TtsEngine {
      *
      * Returns false on any engine failure; rethrows [CancellationException] (see class KDoc).
      */
-    override suspend fun synthesizeToFile(text: String, voice: DjVoice?, outPath: String): Boolean =
+    override suspend fun synthesizeToFile(
+        text: String,
+        voice: DjVoice?,
+        outPath: String,
+    ): Boolean =
         runCatching {
             val engine = awaitInit() ?: return@runCatching false
 
@@ -86,12 +91,13 @@ class AndroidTtsEngine(private val context: Context) : TtsEngine {
             // callback on a fast (cached) engine.
             utteranceListeners[utteranceId] = resultDeferred
 
-            val synthesizeResult = engine.synthesizeToFile(
-                text,
-                Bundle(),
-                File(outPath),
-                utteranceId,
-            )
+            val synthesizeResult =
+                engine.synthesizeToFile(
+                    text,
+                    Bundle(),
+                    File(outPath),
+                    utteranceId,
+                )
 
             if (synthesizeResult != TextToSpeech.SUCCESS) {
                 utteranceListeners.remove(utteranceId)
@@ -128,50 +134,60 @@ class AndroidTtsEngine(private val context: Context) : TtsEngine {
         if (initSucceeded == true) return tts
         if (initSucceeded == false) return null
 
-        val deferred = initMutex.withLock {
-            // Double-checked inside the lock.
-            if (initSucceeded == true) return tts
-            if (initSucceeded == false) return null
+        val deferred =
+            initMutex.withLock {
+                // Double-checked inside the lock.
+                if (initSucceeded == true) return tts
+                if (initSucceeded == false) return null
 
-            if (initDeferred == null) {
-                val d = CompletableDeferred<Boolean>()
-                initDeferred = d
+                if (initDeferred == null) {
+                    val d = CompletableDeferred<Boolean>()
+                    initDeferred = d
 
-                val engine = TextToSpeech(context) { status ->
-                    val ok = status == TextToSpeech.SUCCESS
-                    initSucceeded = ok
-                    d.complete(ok)
+                    val engine =
+                        TextToSpeech(context) { status ->
+                            val ok = status == TextToSpeech.SUCCESS
+                            initSucceeded = ok
+                            d.complete(ok)
+                        }
+                    tts = engine
+
+                    // Single shared listener; dispatches each event to the matching
+                    // per-utterance deferred by utteranceId.
+                    engine.setOnUtteranceProgressListener(
+                        object : UtteranceProgressListener() {
+                            override fun onStart(utteranceId: String?) = Unit
+
+                            override fun onDone(utteranceId: String?) {
+                                utteranceId?.let { completeUtterance(it, success = true) }
+                            }
+
+                            @Deprecated("Deprecated in Java")
+                            override fun onError(utteranceId: String?) {
+                                utteranceId?.let { completeUtterance(it, success = false) }
+                            }
+
+                            override fun onError(
+                                utteranceId: String?,
+                                errorCode: Int,
+                            ) {
+                                utteranceId?.let { completeUtterance(it, success = false) }
+                            }
+                        },
+                    )
                 }
-                tts = engine
 
-                // Single shared listener; dispatches each event to the matching
-                // per-utterance deferred by utteranceId.
-                engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-                    override fun onStart(utteranceId: String?) = Unit
-
-                    override fun onDone(utteranceId: String?) {
-                        utteranceId?.let { completeUtterance(it, success = true) }
-                    }
-
-                    @Deprecated("Deprecated in Java")
-                    override fun onError(utteranceId: String?) {
-                        utteranceId?.let { completeUtterance(it, success = false) }
-                    }
-
-                    override fun onError(utteranceId: String?, errorCode: Int) {
-                        utteranceId?.let { completeUtterance(it, success = false) }
-                    }
-                })
+                initDeferred!!
             }
-
-            initDeferred!!
-        }
 
         return if (deferred.await()) tts else null
     }
 
     /** Called from the TTS internal thread — must not block. */
-    private fun completeUtterance(utteranceId: String, success: Boolean) {
+    private fun completeUtterance(
+        utteranceId: String,
+        success: Boolean,
+    ) {
         utteranceListeners.remove(utteranceId)?.complete(success)
     }
 }

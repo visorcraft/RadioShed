@@ -19,8 +19,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import com.visorcraft.radioshed.ui.util.TooltipIconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -49,6 +47,7 @@ import com.visorcraft.radioshed.source.SubsonicArtist
 import com.visorcraft.radioshed.source.SubsonicClient
 import com.visorcraft.radioshed.source.SubsonicServer
 import com.visorcraft.radioshed.source.SubsonicSong
+import com.visorcraft.radioshed.ui.util.TooltipIconButton
 import org.koin.compose.koinInject
 
 /**
@@ -94,13 +93,14 @@ fun SubsonicBrowseScreen(
     val urlPref = settings.getSubsonicUrl()
     val userPref = settings.getSubsonicUsername()
     val passPref = settings.getSubsonicPassword()
-    val server = remember(urlPref, userPref, passPref) {
-        SubsonicServer(
-            baseUrl = urlPref,
-            username = userPref,
-            password = passPref,
-        )
-    }
+    val server =
+        remember(urlPref, userPref, passPref) {
+            SubsonicServer(
+                baseUrl = urlPref,
+                username = userPref,
+                password = passPref,
+            )
+        }
 
     var stack by remember { mutableStateOf<List<Level>>(listOf(Level.Artists)) }
     val current = stack.last()
@@ -117,16 +117,18 @@ fun SubsonicBrowseScreen(
     // make every recomposition produce a fresh URL — Coil keys its
     // cache by URL string, so without memoization a scroll would
     // re-fetch every cover that left and re-entered the viewport.
-    val albumCoverUrls = remember(albums, server) {
-        albums.associate { album ->
-            album.id to album.coverArtId?.let { client.coverArtUrl(server, it, size = 256) }
+    val albumCoverUrls =
+        remember(albums, server) {
+            albums.associate { album ->
+                album.id to album.coverArtId?.let { client.coverArtUrl(server, it, size = 256) }
+            }
         }
-    }
-    val songCoverUrls = remember(songs, server) {
-        songs.associate { song ->
-            song.id to song.coverArtId?.let { client.coverArtUrl(server, it, size = 128) }
+    val songCoverUrls =
+        remember(songs, server) {
+            songs.associate { song ->
+                song.id to song.coverArtId?.let { client.coverArtUrl(server, it, size = 128) }
+            }
         }
-    }
 
     LaunchedEffect(current) {
         // Honour the user's connectivity preference. Subsonic browse
@@ -160,8 +162,11 @@ fun SubsonicBrowseScreen(
     }
 
     com.visorcraft.radioshed.nav.PlatformBackHandler {
-        if (stack.size > 1) stack = stack.dropLast(1)
-        else onBack()
+        if (stack.size > 1) {
+            stack = stack.dropLast(1)
+        } else {
+            onBack()
+        }
     }
 
     Scaffold(
@@ -234,46 +239,57 @@ fun SubsonicBrowseScreen(
                         onValueChange = { query = it },
                         placeholder = { Text("Filter…") },
                         singleLine = true,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
                     )
                 }
                 LazyColumn(modifier = Modifier.fillMaxSize()) {
                     when (current) {
                         is Level.Artists -> {
-                            val visible = if (query.isBlank()) artists
-                                          else artists.filter {
-                                              it.name.contains(query, ignoreCase = true)
-                                          }
+                            val visible =
+                                if (query.isBlank()) {
+                                    artists
+                                } else {
+                                    artists.filter {
+                                        it.name.contains(query, ignoreCase = true)
+                                    }
+                                }
                             items(visible, key = { it.id }) { artist ->
                                 ArtistRow(
                                     artist = artist,
                                     onClick = {
                                         query = ""
-                                        stack = stack + Level.Albums(
-                                            artistId = artist.id,
-                                            artistName = artist.name,
-                                        )
+                                        stack = stack +
+                                            Level.Albums(
+                                                artistId = artist.id,
+                                                artistName = artist.name,
+                                            )
                                     },
                                 )
                             }
                         }
                         is Level.Albums -> {
-                            val visible = if (query.isBlank()) albums
-                                          else albums.filter {
-                                              it.name.contains(query, ignoreCase = true)
-                                          }
+                            val visible =
+                                if (query.isBlank()) {
+                                    albums
+                                } else {
+                                    albums.filter {
+                                        it.name.contains(query, ignoreCase = true)
+                                    }
+                                }
                             items(visible, key = { it.id }) { album ->
                                 AlbumRow(
                                     album = album,
                                     coverUrl = albumCoverUrls[album.id],
                                     onClick = {
                                         query = ""
-                                        stack = stack + Level.Songs(
-                                            albumId = album.id,
-                                            albumName = album.name,
-                                        )
+                                        stack = stack +
+                                            Level.Songs(
+                                                albumId = album.id,
+                                                albumName = album.name,
+                                            )
                                     },
                                 )
                             }
@@ -311,12 +327,16 @@ fun SubsonicBrowseScreen(
 }
 
 @Composable
-private fun ArtistRow(artist: SubsonicArtist, onClick: () -> Unit) {
+private fun ArtistRow(
+    artist: SubsonicArtist,
+    onClick: () -> Unit,
+) {
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onClick)
+                .padding(horizontal = 16.dp, vertical = 12.dp),
         color = androidx.compose.ui.graphics.Color.Transparent,
     ) {
         Column {
@@ -337,11 +357,16 @@ private fun ArtistRow(artist: SubsonicArtist, onClick: () -> Unit) {
 }
 
 @Composable
-private fun AlbumRow(album: SubsonicAlbum, coverUrl: String?, onClick: () -> Unit) {
+private fun AlbumRow(
+    album: SubsonicAlbum,
+    coverUrl: String?,
+    onClick: () -> Unit,
+) {
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onClick),
         color = androidx.compose.ui.graphics.Color.Transparent,
     ) {
         Row(
@@ -349,9 +374,10 @@ private fun AlbumRow(album: SubsonicAlbum, coverUrl: String?, onClick: () -> Uni
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(RoundedCornerShape(4.dp)),
+                modifier =
+                    Modifier
+                        .size(48.dp)
+                        .clip(RoundedCornerShape(4.dp)),
             ) {
                 if (coverUrl != null) {
                     AsyncImage(
@@ -375,10 +401,14 @@ private fun AlbumRow(album: SubsonicAlbum, coverUrl: String?, onClick: () -> Uni
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                val sub = buildString {
-                    album.year?.let { append(it); append(" · ") }
-                    if (album.songCount > 0) append("${album.songCount} tracks")
-                }
+                val sub =
+                    buildString {
+                        album.year?.let {
+                            append(it)
+                            append(" · ")
+                        }
+                        if (album.songCount > 0) append("${album.songCount} tracks")
+                    }
                 if (sub.isNotEmpty()) {
                     Text(
                         text = sub,
@@ -392,11 +422,15 @@ private fun AlbumRow(album: SubsonicAlbum, coverUrl: String?, onClick: () -> Uni
 }
 
 @Composable
-private fun SongRow(song: SubsonicSong, onClick: () -> Unit) {
+private fun SongRow(
+    song: SubsonicSong,
+    onClick: () -> Unit,
+) {
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onClick),
         color = androidx.compose.ui.graphics.Color.Transparent,
     ) {
         Row(
@@ -410,11 +444,18 @@ private fun SongRow(song: SubsonicSong, onClick: () -> Unit) {
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                val sub = buildString {
-                    song.track?.let { append(it.toString().padStart(2, '0')); append(" · ") }
-                    append(formatDuration(song.durationSec))
-                    song.bitRateKbps?.let { append(" · "); append("$it kbps") }
-                }
+                val sub =
+                    buildString {
+                        song.track?.let {
+                            append(it.toString().padStart(2, '0'))
+                            append(" · ")
+                        }
+                        append(formatDuration(song.durationSec))
+                        song.bitRateKbps?.let {
+                            append(" · ")
+                            append("$it kbps")
+                        }
+                    }
                 Text(
                     text = sub,
                     style = MaterialTheme.typography.labelSmall,
@@ -434,6 +475,8 @@ private fun formatDuration(seconds: Int): String {
 
 private sealed interface Level {
     data object Artists : Level
+
     data class Albums(val artistId: String, val artistName: String) : Level
+
     data class Songs(val albumId: String, val albumName: String) : Level
 }

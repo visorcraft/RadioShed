@@ -13,7 +13,6 @@ import kotlinx.coroutines.flow.emptyFlow
  * lands in Phase 3 part 2.
  */
 class IosFileEnumerator : FileEnumerator {
-
     override fun enumerate(
         rootUri: String,
         recursive: Boolean,

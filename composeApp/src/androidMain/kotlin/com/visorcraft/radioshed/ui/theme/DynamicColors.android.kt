@@ -14,5 +14,4 @@ actual fun dynamicColorScheme(dark: Boolean): ColorScheme? {
     return if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
 }
 
-actual fun supportsMaterialYou(): Boolean =
-    Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+actual fun supportsMaterialYou(): Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S

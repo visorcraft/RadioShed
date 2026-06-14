@@ -19,8 +19,9 @@ internal fun appAppDataDir(): Path {
     val home = System.getProperty("user.home") ?: "."
     return when {
         osName.contains("win") -> {
-            val appdata = System.getenv("APPDATA")
-                ?: "$home/AppData/Roaming"
+            val appdata =
+                System.getenv("APPDATA")
+                    ?: "$home/AppData/Roaming"
             Paths.get(appdata, "RadioShed")
         }
         osName.contains("mac") || osName.contains("darwin") ->

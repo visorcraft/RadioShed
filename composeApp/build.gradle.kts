@@ -13,6 +13,8 @@ plugins {
     alias(libs.plugins.composeCompiler)
     alias(libs.plugins.kotlinSerialization)
     alias(libs.plugins.sqldelight)
+    alias(libs.plugins.ktlint)
+    alias(libs.plugins.detekt)
 }
 
 // Load version.properties from the repo root. Single source of truth
@@ -20,13 +22,15 @@ plugins {
 // Desktop installer packageVersion, AND the generated BuildInfo
 // Kotlin object below. Missing keys throw at configure-time so a
 // half-edited properties file can't silently ship a stale version.
-val versionProps: Properties = Properties().apply {
-    val propsFile = rootProject.file("version.properties")
-    require(propsFile.exists()) {
-        "version.properties not found at ${propsFile.absolutePath}"
+val versionProps: Properties =
+    Properties().apply {
+        val propsFile = rootProject.file("version.properties")
+        require(propsFile.exists()) {
+            "version.properties not found at ${propsFile.absolutePath}"
+        }
+        propsFile.inputStream().use { load(it) }
     }
-    propsFile.inputStream().use { load(it) }
-}
+
 fun requiredVersionProp(key: String): String =
     versionProps.getProperty(key)
         ?: error("$key missing from version.properties")
@@ -169,9 +173,6 @@ kotlin {
             implementation(libs.requery.sqliteAndroid)
             implementation(libs.koin.android)
 
-            // Audio metadata reader (Phase 3 scanner)
-            implementation(libs.jaudiotagger)
-
             // Audio engine (Phase 4): ExoPlayer + MediaSession for
             // background playback, lock-screen, BT AVRCP metadata.
             implementation(libs.androidx.media3.exoplayer)
@@ -183,7 +184,19 @@ kotlin {
             implementation(libs.sqldelight.nativeDriver)
         }
 
+        val jvmMain by creating {
+            dependsOn(commonMain.get())
+            dependencies {
+                implementation(libs.jaudiotagger)
+            }
+        }
+
+        named("androidMain") {
+            dependsOn(jvmMain)
+        }
+
         val desktopMain by getting {
+            dependsOn(jvmMain)
             dependencies {
                 // Compose desktop runtime — provides Window, application,
                 // Swing-based MenuBar, file dialogs, etc.
@@ -202,10 +215,7 @@ kotlin {
                 // path computed in DatabaseDriverFactory.desktop.kt).
                 implementation(libs.sqldelight.sqliteDriver)
 
-                // Tag reader — pure-JVM library, identical to what the
-                // Android scanner uses. Lifts ID3, Vorbis, M4A, FLAC,
-                // APE — same coverage on desktop as on Android.
-                implementation(libs.jaudiotagger)
+                // Tag reader — shared jvmMain (jaudiotagger)
 
                 // JNA: direct foreign-function binding to the system
                 // libvlc 3.x (see NativeLibVlc.kt), replacing the GPL
@@ -287,16 +297,9 @@ sqldelight {
         create("RadioShedDatabase") {
             packageName.set("com.visorcraft.radioshed.db")
             dialect(libs.sqldelight.dialectSqlite338)
-            // verifyMigrations stays off: the existing 1.sqm /
-            // 2.sqm / 6.sqm files use ALTER TABLE / CREATE TABLE
-            // against tables defined in the .sq baseline, which
-            // the verifier doesn't see in an isolated parse —
-            // every FK reference fails with "No column found with
-            // name id" because `station(id)` and `track(id)` aren't
-            // visible in the migration's own view. Turning this on
-            // requires re-stating the prior schema at the top of
-            // each .sqm — meaningful refactor tracked in SPEC
-            // Phase 18.
+            verifyMigrations.set(true)
+            // Each .sqm re-states FK targets at the top so the verifier
+            // can parse migrations in isolation (SPEC Phase 18).
         }
     }
 }
@@ -332,8 +335,12 @@ compose.desktop {
             // versionMajor>=1 (it's 1.0.0 now), pass it through
             // unchanged so the OS install metadata matches what the
             // user sees in About.
-            packageVersion = if (appVersionMajor >= 1) appVersionName
-                             else "1.$appVersionMinor.$appVersionPatch"
+            packageVersion =
+                if (appVersionMajor >= 1) {
+                    appVersionName
+                } else {
+                    "1.$appVersionMinor.$appVersionPatch"
+                }
             // Description is baked into the Windows PE FileDescription
             // resource on the generated RadioShed.exe, which is what
             // Task Manager's "Name" column and the taskbar hover
@@ -411,8 +418,11 @@ val appImageToolFile = layout.buildDirectory.file("compose/tools/appimagetool-x8
 
 abstract class DownloadAppImageToolTask : DefaultTask() {
     @get:Input abstract val downloadUrl: Property<String>
+
     @get:Input abstract val appImageToolEnv: Property<String>
+
     @get:Input abstract val pathEnv: Property<String>
+
     @get:OutputFile abstract val outputFile: RegularFileProperty
 
     @TaskAction
@@ -431,7 +441,10 @@ abstract class DownloadAppImageToolTask : DefaultTask() {
         toolFile.setExecutable(true)
     }
 
-    private fun findAppImageTool(configuredPath: String, path: String): File? {
+    private fun findAppImageTool(
+        configuredPath: String,
+        path: String,
+    ): File? {
         configuredPath
             .takeIf { it.isNotBlank() }
             ?.let { File(it) }
@@ -446,130 +459,148 @@ abstract class DownloadAppImageToolTask : DefaultTask() {
     }
 }
 
-abstract class PackageSingleFileAppImageTask @Inject constructor(
-    private val fileSystemOperations: FileSystemOperations,
-    private val execOperations: ExecOperations,
-) : DefaultTask() {
-    @get:Input abstract val versionName: Property<String>
-    @get:Input abstract val downloadUrl: Property<String>
-    @get:Input abstract val hostOsName: Property<String>
-    @get:Input abstract val hostOsArch: Property<String>
-    @get:Input abstract val appImageToolEnv: Property<String>
-    @get:Input abstract val pathEnv: Property<String>
-    @get:Internal
-    abstract val downloadedAppImageTool: RegularFileProperty
-    @get:InputDirectory @get:PathSensitive(PathSensitivity.RELATIVE)
-    abstract val sourceDir: DirectoryProperty
-    @get:Internal abstract val appDir: DirectoryProperty
-    @get:OutputFile abstract val outputFile: RegularFileProperty
+abstract class PackageSingleFileAppImageTask
+    @Inject
+    constructor(
+        private val fileSystemOperations: FileSystemOperations,
+        private val execOperations: ExecOperations,
+    ) : DefaultTask() {
+        @get:Input abstract val versionName: Property<String>
 
-    @TaskAction
-    fun packageAppImage() {
-        require(isLinuxX64Host()) {
-            "packageSingleFileAppImage currently supports Linux x86_64 hosts only."
-        }
+        @get:Input abstract val downloadUrl: Property<String>
 
-        val source = sourceDir.get().asFile
-        val target = appDir.get().asFile
-        val output = outputFile.get().asFile
-        val tool = findAppImageTool(appImageToolEnv.get(), pathEnv.get())
-            ?: downloadedAppImageTool.get().asFile.takeIf { it.canExecute() }
-            ?: error(
-                "appimagetool is unavailable; set APPIMAGETOOL, put appimagetool on PATH, " +
-                    "or allow Gradle to download ${downloadUrl.get()}",
-            )
+        @get:Input abstract val hostOsName: Property<String>
 
-        fileSystemOperations.delete {
-            delete(target)
-        }
-        fileSystemOperations.copy {
-            from(source)
-            into(target)
-        }
+        @get:Input abstract val hostOsArch: Property<String>
 
-        target.resolve("AppRun").apply {
-            writeText(
+        @get:Input abstract val appImageToolEnv: Property<String>
+
+        @get:Input abstract val pathEnv: Property<String>
+
+        @get:Internal
+        abstract val downloadedAppImageTool: RegularFileProperty
+
+        @get:InputDirectory
+        @get:PathSensitive(PathSensitivity.RELATIVE)
+        abstract val sourceDir: DirectoryProperty
+
+        @get:Internal abstract val appDir: DirectoryProperty
+
+        @get:OutputFile abstract val outputFile: RegularFileProperty
+
+        @TaskAction
+        fun packageAppImage() {
+            require(isLinuxX64Host()) {
+                "packageSingleFileAppImage currently supports Linux x86_64 hosts only."
+            }
+
+            val source = sourceDir.get().asFile
+            val target = appDir.get().asFile
+            val output = outputFile.get().asFile
+            val tool =
+                findAppImageTool(appImageToolEnv.get(), pathEnv.get())
+                    ?: downloadedAppImageTool.get().asFile.takeIf { it.canExecute() }
+                    ?: error(
+                        "appimagetool is unavailable; set APPIMAGETOOL, put appimagetool on PATH, " +
+                            "or allow Gradle to download ${downloadUrl.get()}",
+                    )
+
+            fileSystemOperations.delete {
+                delete(target)
+            }
+            fileSystemOperations.copy {
+                from(source)
+                into(target)
+            }
+
+            target.resolve("AppRun").apply {
+                writeText(
+                    """
+                    #!/bin/sh
+                    HERE="$(dirname "$(readlink -f "${'$'}0")")"
+                    exec "${'$'}HERE/bin/RadioShed" "${'$'}@"
+                    """.trimIndent() + "\n",
+                )
+                setExecutable(true)
+            }
+            target.resolve("radioshed.desktop").writeText(
                 """
-                #!/bin/sh
-                HERE="$(dirname "$(readlink -f "${'$'}0")")"
-                exec "${'$'}HERE/bin/RadioShed" "${'$'}@"
+                [Desktop Entry]
+                Type=Application
+                Name=RadioShed
+                Exec=RadioShed
+                Icon=radioshed
+                Categories=AudioVideo;Audio;Player;
+                Terminal=false
                 """.trimIndent() + "\n",
             )
-            setExecutable(true)
+            fileSystemOperations.copy {
+                from(target.resolve("lib/RadioShed.png"))
+                into(target)
+                rename { "radioshed.png" }
+            }
+
+            output.parentFile.mkdirs()
+            output.delete()
+            execOperations.exec {
+                executable = tool.absolutePath
+                args("-n", target.absolutePath, output.absolutePath)
+                environment("ARCH", "x86_64")
+                environment("VERSION", versionName.get())
+                environment("APPIMAGE_EXTRACT_AND_RUN", "1")
+            }.assertNormalExitValue()
         }
-        target.resolve("radioshed.desktop").writeText(
-            """
-            [Desktop Entry]
-            Type=Application
-            Name=RadioShed
-            Exec=RadioShed
-            Icon=radioshed
-            Categories=AudioVideo;Audio;Player;
-            Terminal=false
-            """.trimIndent() + "\n",
+
+        private fun isLinuxX64Host(): Boolean =
+            hostOsName.get().contains("linux") && hostOsArch.get() in setOf("amd64", "x86_64")
+
+        private fun findAppImageTool(
+            configuredPath: String,
+            path: String,
+        ): File? {
+            configuredPath
+                .takeIf { it.isNotBlank() }
+                ?.let { File(it) }
+                ?.takeIf { it.canExecute() }
+                ?.let { return it }
+
+            return path
+                .split(File.pathSeparator)
+                .asSequence()
+                .map { File(it, "appimagetool") }
+                .firstOrNull { it.canExecute() }
+        }
+    }
+
+val downloadAppImageTool =
+    tasks.register<DownloadAppImageToolTask>("downloadAppImageTool") {
+        group = "distribution"
+        description = "Download appimagetool for building a single-file Linux AppImage."
+        downloadUrl.set(appImageToolUrl)
+        appImageToolEnv.set(providers.environmentVariable("APPIMAGETOOL").orElse(""))
+        pathEnv.set(providers.environmentVariable("PATH").orElse(""))
+        outputFile.set(appImageToolFile)
+    }
+
+val packageSingleFileAppImage =
+    tasks.register<PackageSingleFileAppImageTask>("packageSingleFileAppImage") {
+        group = "distribution"
+        description = "Package the desktop app-image directory as a single-file Linux .AppImage."
+        dependsOn("packageAppImage", downloadAppImageTool)
+
+        versionName.set(appVersionName)
+        downloadUrl.set(appImageToolUrl)
+        hostOsName.set(osName)
+        hostOsArch.set(osArch)
+        appImageToolEnv.set(providers.environmentVariable("APPIMAGETOOL").orElse(""))
+        pathEnv.set(providers.environmentVariable("PATH").orElse(""))
+        downloadedAppImageTool.set(appImageToolFile)
+        sourceDir.set(layout.buildDirectory.dir("compose/binaries/main/app/RadioShed"))
+        appDir.set(layout.buildDirectory.dir("compose/tmp/singleFileAppImage/RadioShed.AppDir"))
+        outputFile.set(
+            layout.buildDirectory.file("compose/binaries/main/appimage/RadioShed-$appVersionName-x86_64.AppImage"),
         )
-        fileSystemOperations.copy {
-            from(target.resolve("lib/RadioShed.png"))
-            into(target)
-            rename { "radioshed.png" }
-        }
-
-        output.parentFile.mkdirs()
-        output.delete()
-        execOperations.exec {
-            executable = tool.absolutePath
-            args("-n", target.absolutePath, output.absolutePath)
-            environment("ARCH", "x86_64")
-            environment("VERSION", versionName.get())
-            environment("APPIMAGE_EXTRACT_AND_RUN", "1")
-        }.assertNormalExitValue()
     }
-
-    private fun isLinuxX64Host(): Boolean =
-        hostOsName.get().contains("linux") && hostOsArch.get() in setOf("amd64", "x86_64")
-
-    private fun findAppImageTool(configuredPath: String, path: String): File? {
-        configuredPath
-            .takeIf { it.isNotBlank() }
-            ?.let { File(it) }
-            ?.takeIf { it.canExecute() }
-            ?.let { return it }
-
-        return path
-            .split(File.pathSeparator)
-            .asSequence()
-            .map { File(it, "appimagetool") }
-            .firstOrNull { it.canExecute() }
-    }
-}
-
-val downloadAppImageTool = tasks.register<DownloadAppImageToolTask>("downloadAppImageTool") {
-    group = "distribution"
-    description = "Download appimagetool for building a single-file Linux AppImage."
-    downloadUrl.set(appImageToolUrl)
-    appImageToolEnv.set(providers.environmentVariable("APPIMAGETOOL").orElse(""))
-    pathEnv.set(providers.environmentVariable("PATH").orElse(""))
-    outputFile.set(appImageToolFile)
-}
-
-val packageSingleFileAppImage = tasks.register<PackageSingleFileAppImageTask>("packageSingleFileAppImage") {
-    group = "distribution"
-    description = "Package the desktop app-image directory as a single-file Linux .AppImage."
-    dependsOn("packageAppImage", downloadAppImageTool)
-
-    versionName.set(appVersionName)
-    downloadUrl.set(appImageToolUrl)
-    hostOsName.set(osName)
-    hostOsArch.set(osArch)
-    appImageToolEnv.set(providers.environmentVariable("APPIMAGETOOL").orElse(""))
-    pathEnv.set(providers.environmentVariable("PATH").orElse(""))
-    downloadedAppImageTool.set(appImageToolFile)
-    sourceDir.set(layout.buildDirectory.dir("compose/binaries/main/app/RadioShed"))
-    appDir.set(layout.buildDirectory.dir("compose/tmp/singleFileAppImage/RadioShed.AppDir"))
-    outputFile.set(
-        layout.buildDirectory.file("compose/binaries/main/appimage/RadioShed-$appVersionName-x86_64.AppImage"),
-    )
-}
 
 if (isLinuxX64Host) {
     tasks.matching { it.name == "packageDistributionForCurrentOS" }.configureEach {
@@ -592,14 +623,18 @@ if (isLinuxX64Host) {
 // `./gradlew :composeApp:generateBuildInfo`.
 abstract class GenerateBuildInfoTask : DefaultTask() {
     @get:Input abstract val versionName: Property<String>
+
     @get:Input abstract val versionCode: Property<Int>
+
     @get:Input abstract val buildDate: Property<String>
+
     @get:OutputDirectory abstract val outputDir: DirectoryProperty
 
     @TaskAction
     fun generate() {
-        val pkgDir = outputDir.get().asFile
-            .resolve("com/visorcraft/radioshed")
+        val pkgDir =
+            outputDir.get().asFile
+                .resolve("com/visorcraft/radioshed")
         pkgDir.mkdirs()
         val file = pkgDir.resolve("BuildInfo.kt")
         file.writeText(
@@ -625,14 +660,15 @@ abstract class GenerateBuildInfoTask : DefaultTask() {
     }
 }
 
-val generateBuildInfo = tasks.register<GenerateBuildInfoTask>("generateBuildInfo") {
-    group = "build"
-    description = "Generate BuildInfo.kt from version.properties."
-    versionName.set(appVersionName)
-    versionCode.set(appVersionCode)
-    buildDate.set(appBuildDate)
-    outputDir.set(layout.buildDirectory.dir("generated/buildinfo/kotlin"))
-}
+val generateBuildInfo =
+    tasks.register<GenerateBuildInfoTask>("generateBuildInfo") {
+        group = "build"
+        description = "Generate BuildInfo.kt from version.properties."
+        versionName.set(appVersionName)
+        versionCode.set(appVersionCode)
+        buildDate.set(appBuildDate)
+        outputDir.set(layout.buildDirectory.dir("generated/buildinfo/kotlin"))
+    }
 
 // Wire the generator as an upstream dependency of every Kotlin
 // compile task. matching{} catches commonMain + every target's
@@ -665,46 +701,52 @@ tasks.matching { it.name == "kspCommonMainKotlinMetadata" }
 // Deliberately NOT wired upstream of compile* (unlike generateBuildInfo):
 // it depends on the desktop compile, so wiring it before compile would
 // cycle. The bundled .txt is checked in; package tasks regenerate it.
-val licensesResDir = layout.projectDirectory.dir(
-    "src/commonMain/composeResources/files/licenses",
-)
+val licensesResDir =
+    layout.projectDirectory.dir(
+        "src/commonMain/composeResources/files/licenses",
+    )
 val thirdPartyLicensesRoot = rootProject.layout.projectDirectory.file("THIRD_PARTY_LICENSES")
-val thirdPartyLicensesBundled = layout.projectDirectory.file(
-    "src/commonMain/composeResources/files/THIRD_PARTY_LICENSES.txt",
-)
+val thirdPartyLicensesBundled =
+    layout.projectDirectory.file(
+        "src/commonMain/composeResources/files/THIRD_PARTY_LICENSES.txt",
+    )
 // Under `common/` so Compose's appResourcesRootDir actually picks it up
 // (root-level files are ignored — see the nativeDistributions note above).
-val thirdPartyLicensesDesktop = layout.projectDirectory.file(
-    "desktopAppResources/common/THIRD_PARTY_LICENSES",
-)
+val thirdPartyLicensesDesktop =
+    layout.projectDirectory.file(
+        "desktopAppResources/common/THIRD_PARTY_LICENSES",
+    )
 
-val generateThirdPartyLicenses = tasks.register<JavaExec>("generateThirdPartyLicenses") {
-    group = "build"
-    description = "Render THIRD_PARTY_LICENSES from LicenseCatalog.kt (single source of truth)."
-    val desktopMainCompilation = kotlin.targets.getByName("desktop")
-        .compilations.getByName("main")
-    dependsOn(desktopMainCompilation.compileTaskProvider)
-    classpath = files(
-        desktopMainCompilation.output.allOutputs,
-        configurations.getByName("desktopRuntimeClasspath"),
-    )
-    mainClass.set("com.visorcraft.radioshed.licenses.LicenseFileRendererKt")
-    // The renderer writes the same body to every output path (arg[1..]).
-    // Passing the desktop side-car as a 4th arg keeps the copy inside the
-    // JVM main, which is configuration-cache-safe (no `project`/`copy`
-    // reference at execution time).
-    args(
-        licensesResDir.asFile.absolutePath,
-        thirdPartyLicensesRoot.asFile.absolutePath,
-        thirdPartyLicensesBundled.asFile.absolutePath,
-        thirdPartyLicensesDesktop.asFile.absolutePath,
-    )
-    inputs.dir(licensesResDir)
-    inputs.file("src/commonMain/kotlin/com/visorcraft/radioshed/licenses/LicenseCatalog.kt")
-    outputs.file(thirdPartyLicensesRoot)
-    outputs.file(thirdPartyLicensesBundled)
-    outputs.file(thirdPartyLicensesDesktop)
-}
+val generateThirdPartyLicenses =
+    tasks.register<JavaExec>("generateThirdPartyLicenses") {
+        group = "build"
+        description = "Render THIRD_PARTY_LICENSES from LicenseCatalog.kt (single source of truth)."
+        val desktopMainCompilation =
+            kotlin.targets.getByName("desktop")
+                .compilations.getByName("main")
+        dependsOn(desktopMainCompilation.compileTaskProvider)
+        classpath =
+            files(
+                desktopMainCompilation.output.allOutputs,
+                configurations.getByName("desktopRuntimeClasspath"),
+            )
+        mainClass.set("com.visorcraft.radioshed.licenses.LicenseFileRendererKt")
+        // The renderer writes the same body to every output path (arg[1..]).
+        // Passing the desktop side-car as a 4th arg keeps the copy inside the
+        // JVM main, which is configuration-cache-safe (no `project`/`copy`
+        // reference at execution time).
+        args(
+            licensesResDir.asFile.absolutePath,
+            thirdPartyLicensesRoot.asFile.absolutePath,
+            thirdPartyLicensesBundled.asFile.absolutePath,
+            thirdPartyLicensesDesktop.asFile.absolutePath,
+        )
+        inputs.dir(licensesResDir)
+        inputs.file("src/commonMain/kotlin/com/visorcraft/radioshed/licenses/LicenseCatalog.kt")
+        outputs.file(thirdPartyLicensesRoot)
+        outputs.file(thirdPartyLicensesBundled)
+        outputs.file(thirdPartyLicensesDesktop)
+    }
 
 // Make packaging depend on the generator so the side-car can't go stale
 // at release time.
@@ -727,12 +769,13 @@ tasks.matching { it.name == "prepareAppResources" }
 // prepareAppResources is covered, but harmless, and they keep the generator
 // wired even if a future Compose version renames the Sync task.
 tasks.matching {
-    it.name in setOf(
-        "packageDistributionForCurrentOS",
-        "packageReleaseDistributionForCurrentOS",
-        "packageDeb", "packageReleaseDeb",
-        "packageAppImage", "packageReleaseAppImage",
-        "packageMsi", "packageReleaseMsi",
-        "packageDmg", "packageReleaseDmg",
-    )
+    it.name in
+        setOf(
+            "packageDistributionForCurrentOS",
+            "packageReleaseDistributionForCurrentOS",
+            "packageDeb", "packageReleaseDeb",
+            "packageAppImage", "packageReleaseAppImage",
+            "packageMsi", "packageReleaseMsi",
+            "packageDmg", "packageReleaseDmg",
+        )
 }.configureEach { dependsOn(generateThirdPartyLicenses) }

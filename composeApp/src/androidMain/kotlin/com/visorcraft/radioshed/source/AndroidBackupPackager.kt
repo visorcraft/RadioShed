@@ -18,31 +18,31 @@ import java.util.zip.ZipOutputStream
  * path is more important than the marginal size savings.
  */
 class AndroidBackupPackager : BackupPackager {
-
     override suspend fun pack(
         manifestJson: ByteArray,
         blobs: Map<String, ByteArray>,
-    ): ByteArray? = withContext(IODispatcher) {
-        runCatching {
-            val out = ByteArrayOutputStream()
-            ZipOutputStream(out).use { zip ->
-                // manifest.json comes first by convention. Some zip
-                // tools list entries in the order they were written;
-                // putting the manifest at index 0 makes a curl-driven
-                // diagnostic easier ("just unzip and read the first
-                // file").
-                zip.putNextEntry(ZipEntry(MANIFEST_NAME))
-                zip.write(manifestJson)
-                zip.closeEntry()
-                for ((name, bytes) in blobs) {
-                    zip.putNextEntry(ZipEntry(name))
-                    zip.write(bytes)
+    ): ByteArray? =
+        withContext(IODispatcher) {
+            runCatching {
+                val out = ByteArrayOutputStream()
+                ZipOutputStream(out).use { zip ->
+                    // manifest.json comes first by convention. Some zip
+                    // tools list entries in the order they were written;
+                    // putting the manifest at index 0 makes a curl-driven
+                    // diagnostic easier ("just unzip and read the first
+                    // file").
+                    zip.putNextEntry(ZipEntry(MANIFEST_NAME))
+                    zip.write(manifestJson)
                     zip.closeEntry()
+                    for ((name, bytes) in blobs) {
+                        zip.putNextEntry(ZipEntry(name))
+                        zip.write(bytes)
+                        zip.closeEntry()
+                    }
                 }
-            }
-            out.toByteArray()
-        }.getOrNull()
-    }
+                out.toByteArray()
+            }.getOrNull()
+        }
 
     override suspend fun unpack(bytes: ByteArray): BackupPackager.Unpacked? =
         withContext(IODispatcher) {

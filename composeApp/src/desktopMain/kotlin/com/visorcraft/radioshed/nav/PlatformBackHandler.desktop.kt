@@ -9,6 +9,9 @@ import androidx.compose.runtime.Composable
  * easy to interfere with focused text input. So this is a no-op.
  */
 @Composable
-actual fun PlatformBackHandler(enabled: Boolean, onBack: () -> Unit) {
+actual fun PlatformBackHandler(
+    enabled: Boolean,
+    onBack: () -> Unit,
+) {
     // intentionally empty
 }

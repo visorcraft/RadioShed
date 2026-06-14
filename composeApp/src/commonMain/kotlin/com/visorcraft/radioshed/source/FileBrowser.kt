@@ -37,7 +37,10 @@ interface FileBrowser {
      * Sorted alphabetically by full path so the queue plays in
      * directory-walk order.
      */
-    suspend fun listAudioRecursive(path: String, limit: Int = 5_000): List<DirectoryEntry> = emptyList()
+    suspend fun listAudioRecursive(
+        path: String,
+        limit: Int = 5_000,
+    ): List<DirectoryEntry> = emptyList()
 
     /**
      * Common known-good navigation jumping points for the file

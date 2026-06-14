@@ -26,7 +26,6 @@ import java.net.URLEncoder
  * better than the wrong result.
  */
 class AndroidWikipediaBioFetcher : WikipediaBioFetcher {
-
     private val json = Json { ignoreUnknownKeys = true }
 
     override suspend fun fetchSummary(title: String): WikipediaSummary? =
@@ -37,33 +36,38 @@ class AndroidWikipediaBioFetcher : WikipediaBioFetcher {
             // underscore-spaces (urlEncode would percent-encode the
             // underscore back to %5F otherwise — fine for the server,
             // but breaks the readable-URL invariant the API likes).
-            val encoded = URLEncoder.encode(pageTitle, "UTF-8")
-                .replace("+", "%20")
-                .replace("%5F", "_")
+            val encoded =
+                URLEncoder.encode(pageTitle, "UTF-8")
+                    .replace("+", "%20")
+                    .replace("%5F", "_")
             val url = URI("$WP_BASE/api/rest_v1/page/summary/$encoded").toURL()
-            val conn = (url.openConnection() as HttpURLConnection).apply {
-                requestMethod = "GET"
-                instanceFollowRedirects = true
-                connectTimeout = CONNECT_TIMEOUT_MS
-                readTimeout = READ_TIMEOUT_MS
-                setRequestProperty("User-Agent", USER_AGENT)
-                setRequestProperty("Accept", "application/json")
-            }
+            val conn =
+                (url.openConnection() as HttpURLConnection).apply {
+                    requestMethod = "GET"
+                    instanceFollowRedirects = true
+                    connectTimeout = CONNECT_TIMEOUT_MS
+                    readTimeout = READ_TIMEOUT_MS
+                    setRequestProperty("User-Agent", USER_AGENT)
+                    setRequestProperty("Accept", "application/json")
+                }
             try {
                 val code = conn.responseCode
                 if (code !in 200..299) return@withContext null
                 val body = conn.inputStream.use { it.readBytes() }.decodeToString()
-                val parsed = runCatching {
-                    json.decodeFromString(WpSummary.serializer(), body)
-                }.getOrNull() ?: return@withContext null
+                val parsed =
+                    runCatching {
+                        json.decodeFromString(WpSummary.serializer(), body)
+                    }.getOrNull() ?: return@withContext null
                 if (parsed.type == "disambiguation") return@withContext null
-                val extract = parsed.extract?.takeIf { it.isNotBlank() }
-                    ?: return@withContext null
+                val extract =
+                    parsed.extract?.takeIf { it.isNotBlank() }
+                        ?: return@withContext null
                 WikipediaSummary(
                     title = parsed.title ?: title,
                     extract = extract,
-                    pageUrl = parsed.contentUrls?.desktop?.page
-                        ?: "https://en.wikipedia.org/wiki/$encoded",
+                    pageUrl =
+                        parsed.contentUrls?.desktop?.page
+                            ?: "https://en.wikipedia.org/wiki/$encoded",
                 )
             } catch (e: java.io.IOException) {
                 null

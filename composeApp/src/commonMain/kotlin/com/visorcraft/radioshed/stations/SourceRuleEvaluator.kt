@@ -28,27 +28,27 @@ class SourceRuleEvaluator(
     private val playlistRepo: PlaylistRepository,
     private val mediaSourceRegistry: MediaSourceRegistry,
 ) {
-
     /** Hard cap on "everything in the library" smart-queries so we don't
      *  load 500k rows into memory accidentally. v1 ships with 100 k. */
     private val absoluteCeiling: Long = 100_000
 
-    suspend fun evaluate(rule: SourceRule): List<Track> = when (rule) {
-        is SourceRule.FolderSelector -> evaluateFolders(rule)
-        is SourceRule.SmartQuery -> evaluateSmart(rule)
-        is SourceRule.PlaylistSelector -> playlistRepo.tracksIn(rule.playlistId)
-        is SourceRule.ArtistSelector -> evaluateArtists(rule)
-        is SourceRule.AlbumSelector -> evaluateAlbums(rule)
-        is SourceRule.TagFilter -> evaluateTagFilter(rule)
-        is SourceRule.DurationFilter -> emptyList() // standalone n/a; see KDoc
-        is SourceRule.FileFormatFilter -> emptyList()
-        is SourceRule.PathPattern -> emptyList()
-        is SourceRule.MediaSourceSelector -> evaluateMediaSource(rule)
-        is SourceRule.Union -> evaluateUnion(rule)
-        is SourceRule.Intersection -> evaluateIntersection(rule)
-        is SourceRule.Difference -> evaluateDifference(rule)
-        is SourceRule.TopN -> evaluateTopN(rule)
-    }
+    suspend fun evaluate(rule: SourceRule): List<Track> =
+        when (rule) {
+            is SourceRule.FolderSelector -> evaluateFolders(rule)
+            is SourceRule.SmartQuery -> evaluateSmart(rule)
+            is SourceRule.PlaylistSelector -> playlistRepo.tracksIn(rule.playlistId)
+            is SourceRule.ArtistSelector -> evaluateArtists(rule)
+            is SourceRule.AlbumSelector -> evaluateAlbums(rule)
+            is SourceRule.TagFilter -> evaluateTagFilter(rule)
+            is SourceRule.DurationFilter -> emptyList() // standalone n/a; see KDoc
+            is SourceRule.FileFormatFilter -> emptyList()
+            is SourceRule.PathPattern -> emptyList()
+            is SourceRule.MediaSourceSelector -> evaluateMediaSource(rule)
+            is SourceRule.Union -> evaluateUnion(rule)
+            is SourceRule.Intersection -> evaluateIntersection(rule)
+            is SourceRule.Difference -> evaluateDifference(rule)
+            is SourceRule.TopN -> evaluateTopN(rule)
+        }
 
     private suspend fun evaluateFolders(rule: SourceRule.FolderSelector): List<Track> =
         rule.folderIds.flatMap { libraryRepo.listTracksByFolder(it) }
@@ -67,7 +67,8 @@ class SourceRuleEvaluator(
                     .sortedBy { it.fileCtime }
                     .take(limit.toInt())
             SmartQueryKind.LeastPlayed,
-            SmartQueryKind.LongestUnheard ->
+            SmartQueryKind.LongestUnheard,
+            ->
                 ratingRepo.leastPlayedTracks(limit)
             SmartQueryKind.AdaptiveMix -> evaluateAdaptiveMix(limit)
             SmartQueryKind.MostPlayed ->
@@ -77,7 +78,8 @@ class SourceRuleEvaluator(
             SmartQueryKind.NeverPlayed ->
                 ratingRepo.neverPlayedTracks(limit)
             SmartQueryKind.ForgottenGems,
-            SmartQueryKind.ForgottenGemsByRating -> {
+            SmartQueryKind.ForgottenGemsByRating,
+            -> {
                 // 90 days ago. We could expose this as a parameter on
                 // the SmartQuery rule itself in a later schema bump,
                 // but a fixed cutoff matches Spotify / Apple Music's
@@ -154,15 +156,16 @@ class SourceRuleEvaluator(
         val ratings = ratingRepo.ratingsForTracks(ids)
 
         val now = nowMs()
-        val candidates = pool.map { track ->
-            val playStats = plays[track.id]
-            AdaptiveMixCandidate(
-                track = track,
-                playCount = playStats?.count ?: 0L,
-                lastPlayedAtMs = playStats?.lastPlayedAt,
-                rating = ratings[track.id] ?: 0.0,
-            )
-        }
+        val candidates =
+            pool.map { track ->
+                val playStats = plays[track.id]
+                AdaptiveMixCandidate(
+                    track = track,
+                    playCount = playStats?.count ?: 0L,
+                    lastPlayedAtMs = playStats?.lastPlayedAt,
+                    rating = ratings[track.id] ?: 0.0,
+                )
+            }
         return scoreAdaptiveMix(
             candidates = candidates,
             nowMs = now,
@@ -212,12 +215,17 @@ class SourceRuleEvaluator(
         // banner ("station matched 0 tracks") points them at the
         // fix. Documented so future readers don't try to "fix" the
         // emptiness without understanding the link model.
-        val isArtistKey = rule.key.equals("ALBUM_ARTIST", ignoreCase = true) ||
-            rule.key.equals("ARTIST", ignoreCase = true)
-        val perValue = cleanValues.map { value ->
-            if (isArtistKey) libraryRepo.tracksByArtistName(value)
-            else libraryRepo.tracksByTagCaseInsensitive(rule.key, value)
-        }
+        val isArtistKey =
+            rule.key.equals("ALBUM_ARTIST", ignoreCase = true) ||
+                rule.key.equals("ARTIST", ignoreCase = true)
+        val perValue =
+            cleanValues.map { value ->
+                if (isArtistKey) {
+                    libraryRepo.tracksByArtistName(value)
+                } else {
+                    libraryRepo.tracksByTagCaseInsensitive(rule.key, value)
+                }
+            }
         return if (rule.matchAll) {
             // Tracks present in every value's result set
             perValue.reduce { acc, list ->
@@ -263,16 +271,17 @@ class SourceRuleEvaluator(
 
     private suspend fun evaluateTopN(rule: SourceRule.TopN): List<Track> {
         val all = evaluate(rule.source)
-        val sorted = when (rule.sortBy) {
-            SortBy.Newest -> all.sortedByDescending { it.fileCtime }
-            SortBy.Oldest -> all.sortedBy { it.fileCtime }
-            SortBy.Title -> all.sortedBy { it.title.lowercase() }
-            SortBy.Random -> all.shuffled()
-            // MostPlayed / HighestRated need joining with play_count / rating
-            // tables; v1 falls back to source order. Phase 5 part 2 wires these
-            // up properly via dedicated queries.
-            SortBy.MostPlayed, SortBy.HighestRated -> all
-        }
+        val sorted =
+            when (rule.sortBy) {
+                SortBy.Newest -> all.sortedByDescending { it.fileCtime }
+                SortBy.Oldest -> all.sortedBy { it.fileCtime }
+                SortBy.Title -> all.sortedBy { it.title.lowercase() }
+                SortBy.Random -> all.shuffled()
+                // MostPlayed / HighestRated need joining with play_count / rating
+                // tables; v1 falls back to source order. Phase 5 part 2 wires these
+                // up properly via dedicated queries.
+                SortBy.MostPlayed, SortBy.HighestRated -> all
+            }
         return sorted.take(rule.limit)
     }
 }

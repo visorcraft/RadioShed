@@ -67,9 +67,10 @@ fun LicensesScreen(onBack: () -> Unit) {
         if (selected != null) selected = null else onBack()
     }
 
-    val proprietary = remember {
-        RADIOSHED_PROPRIETARY.copy(version = BuildInfo.VERSION_NAME)
-    }
+    val proprietary =
+        remember {
+            RADIOSHED_PROPRIETARY.copy(version = BuildInfo.VERSION_NAME)
+        }
 
     Scaffold(
         topBar = {
@@ -83,9 +84,10 @@ fun LicensesScreen(onBack: () -> Unit) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                ),
+                colors =
+                    TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                    ),
             )
         },
         containerColor = MaterialTheme.colorScheme.background,
@@ -115,13 +117,14 @@ private fun LicenseList(
     // Fixed section order: RadioShed (proprietary), then All / Android /
     // Desktop / iOS. A component belongs to a platform section when that
     // Platform is in its platforms set.
-    val sections: List<Pair<String, List<ThirdPartyComponent>>> = listOf(
-        "RadioShed" to listOf(proprietary),
-        "All platforms" to THIRD_PARTY_COMPONENTS.filter { Platform.ALL in it.platforms },
-        "Android" to THIRD_PARTY_COMPONENTS.filter { Platform.ANDROID in it.platforms },
-        "Desktop" to THIRD_PARTY_COMPONENTS.filter { Platform.DESKTOP in it.platforms },
-        "iOS" to THIRD_PARTY_COMPONENTS.filter { Platform.IOS in it.platforms },
-    ).filter { it.second.isNotEmpty() }
+    val sections: List<Pair<String, List<ThirdPartyComponent>>> =
+        listOf(
+            "RadioShed" to listOf(proprietary),
+            "All platforms" to THIRD_PARTY_COMPONENTS.filter { Platform.ALL in it.platforms },
+            "Android" to THIRD_PARTY_COMPONENTS.filter { Platform.ANDROID in it.platforms },
+            "Desktop" to THIRD_PARTY_COMPONENTS.filter { Platform.DESKTOP in it.platforms },
+            "iOS" to THIRD_PARTY_COMPONENTS.filter { Platform.IOS in it.platforms },
+        ).filter { it.second.isNotEmpty() }
 
     LazyColumn(
         modifier = modifier,
@@ -155,7 +158,10 @@ private fun PlatformSectionHeader(text: String) {
 }
 
 @Composable
-private fun LicenseRow(component: ThirdPartyComponent, onClick: () -> Unit) {
+private fun LicenseRow(
+    component: ThirdPartyComponent,
+    onClick: () -> Unit,
+) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(10.dp),
@@ -167,8 +173,12 @@ private fun LicenseRow(component: ThirdPartyComponent, onClick: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                text = if (component.version.isBlank()) component.name
-                       else "${component.name} · ${component.version}",
+                text =
+                    if (component.version.isBlank()) {
+                        component.name
+                    } else {
+                        "${component.name} · ${component.version}"
+                    },
                 style = MaterialTheme.typography.bodyLarge,
                 modifier = Modifier.weight(1f),
             )
@@ -179,38 +189,53 @@ private fun LicenseRow(component: ThirdPartyComponent, onClick: () -> Unit) {
 
 @Composable
 private fun LicenseBadge(component: ThirdPartyComponent) {
-    val container = if (component.license.copyleft) MaterialTheme.colorScheme.tertiaryContainer
-                    else MaterialTheme.colorScheme.secondaryContainer
-    val content = if (component.license.copyleft) MaterialTheme.colorScheme.onTertiaryContainer
-                  else MaterialTheme.colorScheme.onSecondaryContainer
+    val container =
+        if (component.license.copyleft) {
+            MaterialTheme.colorScheme.tertiaryContainer
+        } else {
+            MaterialTheme.colorScheme.secondaryContainer
+        }
+    val content =
+        if (component.license.copyleft) {
+            MaterialTheme.colorScheme.onTertiaryContainer
+        } else {
+            MaterialTheme.colorScheme.onSecondaryContainer
+        }
     Text(
         text = component.license.spdx,
         style = MaterialTheme.typography.labelSmall,
         fontWeight = FontWeight.Medium,
         color = content,
-        modifier = Modifier
-            .background(container, RoundedCornerShape(6.dp))
-            .padding(horizontal = 8.dp, vertical = 4.dp),
+        modifier =
+            Modifier
+                .background(container, RoundedCornerShape(6.dp))
+                .padding(horizontal = 8.dp, vertical = 4.dp),
     )
 }
 
 @Composable
-private fun ComponentDetail(component: ThirdPartyComponent, modifier: Modifier) {
+private fun ComponentDetail(
+    component: ThirdPartyComponent,
+    modifier: Modifier,
+) {
     // Primary license body, then any secondary bodies a layered component must
     // reproduce (sqlite-jdbc -> BSD-2-Clause, Skiko -> BSD-3-Clause). Each pair
     // is the license's display name and its full text.
-    val licenses = remember(component) {
-        listOf(component.license) + component.additionalLicenses
-    }
-    val bodies by produceState(initialValue = emptyList<Pair<String, String>>(), component) {
-        value = licenses.map { license ->
-            license.displayName to Res.readBytes(license.textResource).decodeToString()
+    val licenses =
+        remember(component) {
+            listOf(component.license) + component.additionalLicenses
         }
+    val bodies by produceState(initialValue = emptyList<Pair<String, String>>(), component) {
+        value =
+            licenses.map { license ->
+                license.displayName to Res.readBytes(license.textResource).decodeToString()
+            }
     }
     Column(
-        modifier = modifier
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+        modifier =
+            modifier
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp, vertical = 12.dp),
     ) {
         Text(
             text = component.name,
@@ -278,7 +303,10 @@ private fun ComponentDetail(component: ThirdPartyComponent, modifier: Modifier) 
 }
 
 @Composable
-private fun DetailLine(label: String, value: String) {
+private fun DetailLine(
+    label: String,
+    value: String,
+) {
     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
         Text(
             text = "$label:",

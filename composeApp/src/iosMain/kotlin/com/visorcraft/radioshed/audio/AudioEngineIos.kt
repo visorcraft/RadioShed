@@ -15,7 +15,6 @@ import kotlinx.coroutines.flow.asStateFlow
  * and Compose UI on iOS doesn't crash when injecting AudioEngine.
  */
 class AudioEngineIos : AudioEngine {
-
     private val _state = MutableStateFlow<PlayerState>(PlayerState.Idle)
     override val state: StateFlow<PlayerState> = _state.asStateFlow()
 
@@ -33,14 +32,26 @@ class AudioEngineIos : AudioEngine {
         _state.value = PlayerState.Idle
     }
 
-    override fun playQueue(items: List<Playable>, startIndex: Int) = Unit
+    override fun playQueue(
+        items: List<Playable>,
+        startIndex: Int,
+    ) = Unit
+
     override fun pause() = Unit
+
     override fun resume() = Unit
+
     override fun togglePlayPause() = Unit
+
     override fun seekTo(positionMs: Long) = Unit
+
     override fun skipNext() = Unit
+
     override fun skipPrevious() = Unit
+
     override fun stop() = Unit
+
     override fun setVolume(fraction: Float) = Unit
+
     override fun setPlaybackSpeed(speed: Float) = Unit
 }

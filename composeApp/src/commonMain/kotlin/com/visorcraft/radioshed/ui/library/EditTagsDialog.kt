@@ -109,20 +109,25 @@ fun EditTagsDialog(
                     saving = true
                     status = "Writing tags…"
                     scope.launch {
-                        val patch = TagPatch(
-                            title = TagPatch.Update(title),
-                            artist = artist.takeIf { it.isNotBlank() }
-                                ?.let { TagPatch.Update(it) },
-                            album = album.takeIf { it.isNotBlank() }
-                                ?.let { TagPatch.Update(it) },
-                            albumArtist = albumArtist.takeIf { it.isNotBlank() }
-                                ?.let { TagPatch.Update(it) },
-                            genre = genre.takeIf { it.isNotBlank() }
-                                ?.let { TagPatch.Update(it) },
-                            year = year.toIntOrNull()?.let { TagPatch.Update(it) },
-                            trackNumber = trackNumber.toIntOrNull()?.let { TagPatch.Update(it) },
-                            discNumber = discNumber.toIntOrNull()?.let { TagPatch.Update(it) },
-                        )
+                        val patch =
+                            TagPatch(
+                                title = TagPatch.Update(title),
+                                artist =
+                                    artist.takeIf { it.isNotBlank() }
+                                        ?.let { TagPatch.Update(it) },
+                                album =
+                                    album.takeIf { it.isNotBlank() }
+                                        ?.let { TagPatch.Update(it) },
+                                albumArtist =
+                                    albumArtist.takeIf { it.isNotBlank() }
+                                        ?.let { TagPatch.Update(it) },
+                                genre =
+                                    genre.takeIf { it.isNotBlank() }
+                                        ?.let { TagPatch.Update(it) },
+                                year = year.toIntOrNull()?.let { TagPatch.Update(it) },
+                                trackNumber = trackNumber.toIntOrNull()?.let { TagPatch.Update(it) },
+                                discNumber = discNumber.toIntOrNull()?.let { TagPatch.Update(it) },
+                            )
                         val writeResult = tagWriter.write(track.path, patch)
                         if (writeResult.isFailure) {
                             status = writeResult.exceptionOrNull()?.message
@@ -306,16 +311,17 @@ fun BatchEditTagsDialog(
                         // merged == null means snapshot loading failed;
                         // don't write against state the user never saw.
                         if (merged == null) return@launch
-                        val edits = buildMap {
-                            if (TagField.Title in touchedFields) put(TagField.Title, title)
-                            if (TagField.Artist in touchedFields) put(TagField.Artist, artist)
-                            if (TagField.Album in touchedFields) put(TagField.Album, album)
-                            if (TagField.AlbumArtist in touchedFields) put(TagField.AlbumArtist, albumArtist)
-                            if (TagField.Genre in touchedFields) put(TagField.Genre, genre)
-                            if (TagField.Year in touchedFields) put(TagField.Year, year)
-                            if (TagField.TrackNumber in touchedFields) put(TagField.TrackNumber, trackNumber)
-                            if (TagField.DiscNumber in touchedFields) put(TagField.DiscNumber, discNumber)
-                        }
+                        val edits =
+                            buildMap {
+                                if (TagField.Title in touchedFields) put(TagField.Title, title)
+                                if (TagField.Artist in touchedFields) put(TagField.Artist, artist)
+                                if (TagField.Album in touchedFields) put(TagField.Album, album)
+                                if (TagField.AlbumArtist in touchedFields) put(TagField.AlbumArtist, albumArtist)
+                                if (TagField.Genre in touchedFields) put(TagField.Genre, genre)
+                                if (TagField.Year in touchedFields) put(TagField.Year, year)
+                                if (TagField.TrackNumber in touchedFields) put(TagField.TrackNumber, trackNumber)
+                                if (TagField.DiscNumber in touchedFields) put(TagField.DiscNumber, discNumber)
+                            }
                         val patch = BatchTagMerge.buildPatch(edits)
                         var successes = 0
                         var failures = 0
@@ -335,9 +341,10 @@ fun BatchEditTagsDialog(
                         }
 
                         val allFolders = folderRepo.list()
-                        val affectedFolderIds = tracks
-                            .mapNotNull { folderContaining(it.path, allFolders)?.id }
-                            .distinct()
+                        val affectedFolderIds =
+                            tracks
+                                .mapNotNull { folderContaining(it.path, allFolders)?.id }
+                                .distinct()
                         affectedFolderIds.forEach { folderId ->
                             runCatching { scanner.scanFolder(folderId).collect { } }
                         }
@@ -370,16 +377,17 @@ fun BatchEditTagsDialog(
 
                     fun placeholderFor(field: TagField): String {
                         val m = merged ?: return ""
-                        val value = when (field) {
-                            TagField.Title -> m.title
-                            TagField.Artist -> m.artist
-                            TagField.Album -> m.album
-                            TagField.AlbumArtist -> m.albumArtist
-                            TagField.Genre -> m.genre
-                            TagField.Year -> m.year
-                            TagField.TrackNumber -> m.trackNumber
-                            TagField.DiscNumber -> m.discNumber
-                        }
+                        val value =
+                            when (field) {
+                                TagField.Title -> m.title
+                                TagField.Artist -> m.artist
+                                TagField.Album -> m.album
+                                TagField.AlbumArtist -> m.albumArtist
+                                TagField.Genre -> m.genre
+                                TagField.Year -> m.year
+                                TagField.TrackNumber -> m.trackNumber
+                                TagField.DiscNumber -> m.discNumber
+                            }
                         return when (value) {
                             is MergedValue.Uniform -> ""
                             MergedValue.Mixed -> "Multiple values"
@@ -389,7 +397,10 @@ fun BatchEditTagsDialog(
 
                     OutlinedTextField(
                         value = title,
-                        onValueChange = { title = it; markTouched(TagField.Title) },
+                        onValueChange = {
+                            title = it
+                            markTouched(TagField.Title)
+                        },
                         label = { Text("Title") },
                         placeholder = { Text(placeholderFor(TagField.Title)) },
                         singleLine = true,
@@ -398,7 +409,10 @@ fun BatchEditTagsDialog(
                     )
                     OutlinedTextField(
                         value = artist,
-                        onValueChange = { artist = it; markTouched(TagField.Artist) },
+                        onValueChange = {
+                            artist = it
+                            markTouched(TagField.Artist)
+                        },
                         label = { Text("Artist") },
                         placeholder = { Text(placeholderFor(TagField.Artist)) },
                         singleLine = true,
@@ -407,7 +421,10 @@ fun BatchEditTagsDialog(
                     )
                     OutlinedTextField(
                         value = album,
-                        onValueChange = { album = it; markTouched(TagField.Album) },
+                        onValueChange = {
+                            album = it
+                            markTouched(TagField.Album)
+                        },
                         label = { Text("Album") },
                         placeholder = { Text(placeholderFor(TagField.Album)) },
                         singleLine = true,
@@ -416,7 +433,10 @@ fun BatchEditTagsDialog(
                     )
                     OutlinedTextField(
                         value = albumArtist,
-                        onValueChange = { albumArtist = it; markTouched(TagField.AlbumArtist) },
+                        onValueChange = {
+                            albumArtist = it
+                            markTouched(TagField.AlbumArtist)
+                        },
                         label = { Text("Album artist (optional)") },
                         placeholder = { Text(placeholderFor(TagField.AlbumArtist)) },
                         singleLine = true,
@@ -425,7 +445,10 @@ fun BatchEditTagsDialog(
                     )
                     OutlinedTextField(
                         value = genre,
-                        onValueChange = { genre = it; markTouched(TagField.Genre) },
+                        onValueChange = {
+                            genre = it
+                            markTouched(TagField.Genre)
+                        },
                         label = { Text("Genre") },
                         placeholder = { Text(placeholderFor(TagField.Genre)) },
                         singleLine = true,
@@ -506,7 +529,9 @@ data class TrackTagSnapshot(
 
 sealed class MergedValue {
     data class Uniform(val value: String) : MergedValue()
+
     data object Mixed : MergedValue()
+
     data object Empty : MergedValue()
 }
 
@@ -522,17 +547,17 @@ data class MergedTagView(
 )
 
 object BatchTagMerge {
-
-    fun merge(tracks: List<TrackTagSnapshot>): MergedTagView = MergedTagView(
-        title = mergeField(tracks.map { it.title }),
-        artist = mergeField(tracks.map { it.artist }),
-        album = mergeField(tracks.map { it.album }),
-        albumArtist = mergeField(tracks.map { it.albumArtist }),
-        genre = mergeField(tracks.map { it.genre }),
-        year = mergeField(tracks.map { it.year }),
-        trackNumber = mergeField(tracks.map { it.trackNumber }),
-        discNumber = mergeField(tracks.map { it.discNumber }),
-    )
+    fun merge(tracks: List<TrackTagSnapshot>): MergedTagView =
+        MergedTagView(
+            title = mergeField(tracks.map { it.title }),
+            artist = mergeField(tracks.map { it.artist }),
+            album = mergeField(tracks.map { it.album }),
+            albumArtist = mergeField(tracks.map { it.albumArtist }),
+            genre = mergeField(tracks.map { it.genre }),
+            year = mergeField(tracks.map { it.year }),
+            trackNumber = mergeField(tracks.map { it.trackNumber }),
+            discNumber = mergeField(tracks.map { it.discNumber }),
+        )
 
     private fun mergeField(values: List<String>): MergedValue {
         if (values.isEmpty()) return MergedValue.Empty
@@ -550,28 +575,27 @@ object BatchTagMerge {
      * the user actually edited appear in [edits]; everything else is
      * absent from the patch and stays untouched on disk.
      */
-    fun buildPatch(edits: Map<TagField, String>): TagPatch = TagPatch(
-        title = patchFor(TagField.Title, edits),
-        artist = patchFor(TagField.Artist, edits),
-        album = patchFor(TagField.Album, edits),
-        albumArtist = patchFor(TagField.AlbumArtist, edits),
-        genre = patchFor(TagField.Genre, edits),
-        year = patchForInt(TagField.Year, edits),
-        trackNumber = patchForInt(TagField.TrackNumber, edits),
-        discNumber = patchForInt(TagField.DiscNumber, edits),
-    )
+    fun buildPatch(edits: Map<TagField, String>): TagPatch =
+        TagPatch(
+            title = patchFor(TagField.Title, edits),
+            artist = patchFor(TagField.Artist, edits),
+            album = patchFor(TagField.Album, edits),
+            albumArtist = patchFor(TagField.AlbumArtist, edits),
+            genre = patchFor(TagField.Genre, edits),
+            year = patchForInt(TagField.Year, edits),
+            trackNumber = patchForInt(TagField.TrackNumber, edits),
+            discNumber = patchForInt(TagField.DiscNumber, edits),
+        )
 
     private fun patchFor(
         field: TagField,
         edits: Map<TagField, String>,
-    ): TagPatch.Update<String>? =
-        edits[field]?.takeIf { it.isNotBlank() }?.let { TagPatch.Update(it) }
+    ): TagPatch.Update<String>? = edits[field]?.takeIf { it.isNotBlank() }?.let { TagPatch.Update(it) }
 
     private fun patchForInt(
         field: TagField,
         edits: Map<TagField, String>,
-    ): TagPatch.Update<Int>? =
-        edits[field]?.takeIf { it.isNotBlank() }?.toIntOrNull()?.let { TagPatch.Update(it) }
+    ): TagPatch.Update<Int>? = edits[field]?.takeIf { it.isNotBlank() }?.toIntOrNull()?.let { TagPatch.Update(it) }
 }
 
 /**
@@ -592,14 +616,16 @@ private suspend fun loadTagSnapshot(
     val artistRow = libraryRepo.artistsForTrack(track.id).firstOrNull()
     val albumRow = track.albumId?.let { libraryRepo.getAlbumById(it) }
     val albumArtistId = albumRow?.artistId
-    val albumArtist = if (albumArtistId != null && albumArtistId != artistRow?.id) {
-        libraryRepo.getArtistById(albumArtistId)?.name ?: ""
-    } else {
-        ""
-    }
-    val genre = libraryRepo.tagsForTrack(track.id)
-        .firstOrNull { it.key.equals("GENRE", ignoreCase = true) }
-        ?.value ?: ""
+    val albumArtist =
+        if (albumArtistId != null && albumArtistId != artistRow?.id) {
+            libraryRepo.getArtistById(albumArtistId)?.name ?: ""
+        } else {
+            ""
+        }
+    val genre =
+        libraryRepo.tagsForTrack(track.id)
+            .firstOrNull { it.key.equals("GENRE", ignoreCase = true) }
+            ?.value ?: ""
     return TrackTagSnapshot(
         title = track.title,
         artist = artistRow?.name ?: "",
@@ -615,7 +641,10 @@ private suspend fun loadTagSnapshot(
 // Path-prefix match against registered folders; pick the longest prefix
 // so nested registrations (e.g. /storage/Music and /storage/Music/Albums
 // both registered) resolve to the most specific folder for the rescan.
-private fun folderContaining(path: String, folders: List<Folder>): Folder? =
+private fun folderContaining(
+    path: String,
+    folders: List<Folder>,
+): Folder? =
     folders
         .filter { path.startsWith(it.uri) }
         .maxByOrNull { it.uri.length }

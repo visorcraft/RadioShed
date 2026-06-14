@@ -44,7 +44,6 @@ import kotlin.math.pow
  *    were skipped so the UI can warn.
  */
 object ApoConfig {
-
     /**
      * Parsed contents of an APO file.
      *
@@ -130,10 +129,11 @@ object ApoConfig {
         val out = FloatArray(targetCenters.size)
         for ((i, target) in targetCenters.withIndex()) {
             val targetLog = ln(target.toDouble().coerceAtLeast(1.0))
-            val best = bands.minByOrNull { band ->
-                val srcLog = ln(band.frequencyHz.toDouble().coerceAtLeast(1.0))
-                kotlin.math.abs(srcLog - targetLog)
-            }
+            val best =
+                bands.minByOrNull { band ->
+                    val srcLog = ln(band.frequencyHz.toDouble().coerceAtLeast(1.0))
+                    kotlin.math.abs(srcLog - targetLog)
+                }
             out[i] = best?.gainDb?.toFloat() ?: 0f
         }
         return out
@@ -169,16 +169,18 @@ object ApoConfig {
     // is always integer Hz; if a tool emits "Fc 105.0" we still match
     // because the regex captures the integer prefix and the decimal trail
     // gets ignored.
-    private val PREAMP_REGEX = Regex(
-        "^Preamp:\\s*(-?\\d+(?:[.,]\\d+)?)\\s*dB",
-        RegexOption.IGNORE_CASE,
-    )
-    private val FILTER_REGEX = Regex(
-        "^Filter\\s+\\d+:\\s+(ON|OFF)\\s+([A-Z]+)\\s+Fc\\s+(\\d+)" +
-            "(?:[.,]\\d+)?\\s*Hz\\s+Gain\\s+(-?\\d+(?:[.,]\\d+)?)\\s*dB" +
-            "\\s+Q\\s+(-?\\d+(?:[.,]\\d+)?)",
-        RegexOption.IGNORE_CASE,
-    )
+    private val PREAMP_REGEX =
+        Regex(
+            "^Preamp:\\s*(-?\\d+(?:[.,]\\d+)?)\\s*dB",
+            RegexOption.IGNORE_CASE,
+        )
+    private val FILTER_REGEX =
+        Regex(
+            "^Filter\\s+\\d+:\\s+(ON|OFF)\\s+([A-Z]+)\\s+Fc\\s+(\\d+)" +
+                "(?:[.,]\\d+)?\\s*Hz\\s+Gain\\s+(-?\\d+(?:[.,]\\d+)?)\\s*dB" +
+                "\\s+Q\\s+(-?\\d+(?:[.,]\\d+)?)",
+            RegexOption.IGNORE_CASE,
+        )
 }
 
 /**

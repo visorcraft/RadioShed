@@ -9,7 +9,10 @@ package com.visorcraft.radioshed.source
  * that needs Mac access.
  */
 class IosTagWriter : TagWriter {
-    override suspend fun write(uri: String, patch: TagPatch): Result<Unit> =
+    override suspend fun write(
+        uri: String,
+        patch: TagPatch,
+    ): Result<Unit> =
         Result.failure(
             UnsupportedOperationException(
                 "Tag editing is not implemented on iOS yet.",

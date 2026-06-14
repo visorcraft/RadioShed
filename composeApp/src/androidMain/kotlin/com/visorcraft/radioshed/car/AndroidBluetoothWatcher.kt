@@ -42,7 +42,6 @@ import kotlinx.coroutines.flow.asStateFlow
  * kind degrades to "no seed"; ACL broadcasts keep the set current from then on.
  */
 class AndroidBluetoothWatcher(private val context: Context) : BluetoothWatcher {
-
     private val _connectedDevices = MutableStateFlow<Set<BtPeer>>(emptySet())
     override val connectedDevices: StateFlow<Set<BtPeer>> = _connectedDevices.asStateFlow()
 
@@ -50,41 +49,46 @@ class AndroidBluetoothWatcher(private val context: Context) : BluetoothWatcher {
 
     override fun start() {
         if (receiver != null) return
-        val r = object : BroadcastReceiver() {
-            override fun onReceive(ctx: Context, intent: Intent) {
-                // Wrap the whole body: BluetoothDevice.getAddress()/getName() both
-                // require BLUETOOTH_CONNECT on API 31+ and throw SecurityException
-                // if the user hasn't granted it. A throw out of onReceive crashes
-                // the process, so a revoked-permission read degrades to "ignore
-                // this broadcast" rather than taking the app down.
-                runCatching {
-                    val device: BluetoothDevice =
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                            intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
-                        } else {
-                            @Suppress("DEPRECATION")
-                            intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
-                        } ?: return@runCatching
-                    when (intent.action) {
-                        BluetoothDevice.ACTION_ACL_CONNECTED ->
-                            // Dedupe on mac: BtPeer equality includes the name, so a
-                            // reconnect that resolves a different name (permission just
-                            // granted, cached vs live name) would otherwise leave two
-                            // peers for one device. Replace any same-mac entry.
-                            _connectedDevices.value =
-                                _connectedDevices.value.filterNot { it.mac == device.address }.toSet() +
+        val r =
+            object : BroadcastReceiver() {
+                override fun onReceive(
+                    ctx: Context,
+                    intent: Intent,
+                ) {
+                    // Wrap the whole body: BluetoothDevice.getAddress()/getName() both
+                    // require BLUETOOTH_CONNECT on API 31+ and throw SecurityException
+                    // if the user hasn't granted it. A throw out of onReceive crashes
+                    // the process, so a revoked-permission read degrades to "ignore
+                    // this broadcast" rather than taking the app down.
+                    runCatching {
+                        val device: BluetoothDevice =
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
+                            } else {
+                                @Suppress("DEPRECATION")
+                                intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
+                            } ?: return@runCatching
+                        when (intent.action) {
+                            BluetoothDevice.ACTION_ACL_CONNECTED ->
+                                // Dedupe on mac: BtPeer equality includes the name, so a
+                                // reconnect that resolves a different name (permission just
+                                // granted, cached vs live name) would otherwise leave two
+                                // peers for one device. Replace any same-mac entry.
+                                _connectedDevices.value =
+                                    _connectedDevices.value.filterNot { it.mac == device.address }.toSet() +
                                     device.toPeer()
-                        BluetoothDevice.ACTION_ACL_DISCONNECTED ->
-                            _connectedDevices.value =
-                                _connectedDevices.value.filterNot { it.mac == device.address }.toSet()
+                            BluetoothDevice.ACTION_ACL_DISCONNECTED ->
+                                _connectedDevices.value =
+                                    _connectedDevices.value.filterNot { it.mac == device.address }.toSet()
+                        }
                     }
                 }
             }
-        }
-        val filter = IntentFilter().apply {
-            addAction(BluetoothDevice.ACTION_ACL_CONNECTED)
-            addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED)
-        }
+        val filter =
+            IntentFilter().apply {
+                addAction(BluetoothDevice.ACTION_ACL_CONNECTED)
+                addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED)
+            }
         // ACL events keep the set current from here on; the profile-proxy seed
         // below back-fills peers that connected before we registered, since no
         // fresh ACL broadcast ever fires for an already-established link.
@@ -119,29 +123,35 @@ class AndroidBluetoothWatcher(private val context: Context) : BluetoothWatcher {
     private fun seedAlreadyConnected() {
         if (!hasConnectPermission()) return
         runCatching {
-            val adapter = (context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)
-                ?.adapter ?: return
-            val listener = object : BluetoothProfile.ServiceListener {
-                override fun onServiceConnected(profile: Int, proxy: BluetoothProfile) {
-                    runCatching {
-                        // stop() may have run while the proxy was binding; in
-                        // that case skip the merge so the cleared set isn't
-                        // repopulated, but still fall through to the close.
-                        if (receiver != null) {
-                            val current = _connectedDevices.value
-                            val newPeers = proxy.connectedDevices.orEmpty()
-                                .map { it.toPeer() }
-                                .filterNot { peer -> current.any { it.mac == peer.mac } }
-                            if (newPeers.isNotEmpty()) {
-                                _connectedDevices.value = current + newPeers
+            val adapter =
+                (context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)
+                    ?.adapter ?: return
+            val listener =
+                object : BluetoothProfile.ServiceListener {
+                    override fun onServiceConnected(
+                        profile: Int,
+                        proxy: BluetoothProfile,
+                    ) {
+                        runCatching {
+                            // stop() may have run while the proxy was binding; in
+                            // that case skip the merge so the cleared set isn't
+                            // repopulated, but still fall through to the close.
+                            if (receiver != null) {
+                                val current = _connectedDevices.value
+                                val newPeers =
+                                    proxy.connectedDevices.orEmpty()
+                                        .map { it.toPeer() }
+                                        .filterNot { peer -> current.any { it.mac == peer.mac } }
+                                if (newPeers.isNotEmpty()) {
+                                    _connectedDevices.value = current + newPeers
+                                }
                             }
                         }
+                        runCatching { adapter.closeProfileProxy(profile, proxy) }
                     }
-                    runCatching { adapter.closeProfileProxy(profile, proxy) }
-                }
 
-                override fun onServiceDisconnected(profile: Int) {}
-            }
+                    override fun onServiceDisconnected(profile: Int) {}
+                }
             adapter.getProfileProxy(context, listener, BluetoothProfile.A2DP)
             adapter.getProfileProxy(context, listener, BluetoothProfile.HEADSET)
         }
@@ -158,11 +168,12 @@ class AndroidBluetoothWatcher(private val context: Context) : BluetoothWatcher {
     /** device.name needs BLUETOOTH_CONNECT (API 31+) and can throw SecurityException;
      *  fall back to the mac as the display name. */
     private fun BluetoothDevice.toPeer(): BtPeer {
-        val name = if (hasConnectPermission()) {
-            runCatching { name }.getOrNull()
-        } else {
-            null
-        }
+        val name =
+            if (hasConnectPermission()) {
+                runCatching { name }.getOrNull()
+            } else {
+                null
+            }
         return BtPeer(mac = address, name = name ?: address)
     }
 

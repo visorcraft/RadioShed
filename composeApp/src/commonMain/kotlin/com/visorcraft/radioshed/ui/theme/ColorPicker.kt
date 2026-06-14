@@ -1,9 +1,9 @@
 package com.visorcraft.radioshed.ui.theme
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -11,10 +11,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
@@ -38,7 +38,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.Canvas
 import kotlin.math.PI
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -47,7 +46,6 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.math.sqrt
-import androidx.compose.foundation.text.KeyboardOptions
 
 /**
  * HSV color picker — preset swatch row, hue/saturation wheel, value
@@ -125,20 +123,22 @@ fun ColorPicker(
                 Surface(
                     shape = CircleShape,
                     color = swatch,
-                    modifier = Modifier
-                        .size(28.dp)
-                        .clickable {
-                            hsv = swatch.toHsv().copy(value = max(0.55f, swatch.toHsv().value))
-                        }
-                        .border(
-                            width = if (selected) 3.dp else 1.dp,
-                            color = if (selected) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
-                            },
-                            shape = CircleShape,
-                        ),
+                    modifier =
+                        Modifier
+                            .size(28.dp)
+                            .clickable {
+                                hsv = swatch.toHsv().copy(value = max(0.55f, swatch.toHsv().value))
+                            }
+                            .border(
+                                width = if (selected) 3.dp else 1.dp,
+                                color =
+                                    if (selected) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+                                    },
+                                shape = CircleShape,
+                            ),
                     content = {},
                 )
             }
@@ -147,9 +147,10 @@ fun ColorPicker(
 
         // ---- Hue / saturation wheel ------------------------------
         BoxWithConstraints(
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(1f),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(1f),
             contentAlignment = Alignment.Center,
         ) {
             val density = LocalDensity.current
@@ -158,36 +159,39 @@ fun ColorPicker(
             val centerPx = Offset(sizePx / 2f, sizePx / 2f)
 
             Canvas(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(1f)
-                    .pointerInput(centerPx, radiusPx) {
-                        // Both tap and drag funnel through the same
-                        // hit-test path so a quick tap behaves
-                        // identically to the start of a drag. Keying
-                        // pointerInput on the geometry restarts the
-                        // handler if the dialog is ever resized so
-                        // the closure captures of `centerPx`/`radiusPx`
-                        // never go stale.
-                        awaitPointerEventScope {
-                            while (true) {
-                                val event = awaitPointerEvent()
-                                val pos = event.changes.firstOrNull()?.position
-                                    ?: continue
-                                if (event.changes.any { it.pressed }) {
-                                    hsv = hsvFromWheel(pos, centerPx, radiusPx, hsv.value)
-                                    event.changes.forEach { it.consume() }
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(1f)
+                        .pointerInput(centerPx, radiusPx) {
+                            // Both tap and drag funnel through the same
+                            // hit-test path so a quick tap behaves
+                            // identically to the start of a drag. Keying
+                            // pointerInput on the geometry restarts the
+                            // handler if the dialog is ever resized so
+                            // the closure captures of `centerPx`/`radiusPx`
+                            // never go stale.
+                            awaitPointerEventScope {
+                                while (true) {
+                                    val event = awaitPointerEvent()
+                                    val pos =
+                                        event.changes.firstOrNull()?.position
+                                            ?: continue
+                                    if (event.changes.any { it.pressed }) {
+                                        hsv = hsvFromWheel(pos, centerPx, radiusPx, hsv.value)
+                                        event.changes.forEach { it.consume() }
+                                    }
                                 }
                             }
-                        }
-                    },
+                        },
             ) {
                 // Layer 1: hue sweep gradient — 13 stops give a
                 // visually smooth wheel without obvious banding at
                 // typical screen sizes (~240-300dp diameter).
-                val hueColors = (0..12).map { i ->
-                    colorFromHsv(i * 30f, saturation = 1f, value = 1f)
-                }
+                val hueColors =
+                    (0..12).map { i ->
+                        colorFromHsv(i * 30f, saturation = 1f, value = 1f)
+                    }
                 drawCircle(
                     brush = Brush.sweepGradient(hueColors, center = centerPx),
                     radius = radiusPx,
@@ -197,11 +201,12 @@ fun ColorPicker(
                 // transparent at the rim. Gives the inner-circle pastel
                 // look characteristic of Material colour wheels.
                 drawCircle(
-                    brush = Brush.radialGradient(
-                        colors = listOf(Color.White, Color.White.copy(alpha = 0f)),
-                        center = centerPx,
-                        radius = radiusPx,
-                    ),
+                    brush =
+                        Brush.radialGradient(
+                            colors = listOf(Color.White, Color.White.copy(alpha = 0f)),
+                            center = centerPx,
+                            radius = radiusPx,
+                        ),
                     radius = radiusPx,
                     center = centerPx,
                 )
@@ -223,10 +228,11 @@ fun ColorPicker(
                 // Compose canvas y grows downward; subtract sin so
                 // 0° = right, 90° = top (matches the conventional
                 // "red at 3 o'clock" hue layout).
-                val pickerPos = Offset(
-                    centerPx.x + r * cos(angle),
-                    centerPx.y + r * sin(angle),
-                )
+                val pickerPos =
+                    Offset(
+                        centerPx.x + r * cos(angle),
+                        centerPx.y + r * sin(angle),
+                    )
                 val ringR = with(density) { 8.dp.toPx() }
                 drawCircle(color = Color.Black, radius = ringR + 1.5f, center = pickerPos, style = Stroke(2.5f))
                 drawCircle(color = Color.White, radius = ringR, center = pickerPos, style = Stroke(2f))
@@ -248,11 +254,12 @@ fun ColorPicker(
             Slider(
                 value = hsv.value,
                 onValueChange = { hsv = hsv.copy(value = it.coerceIn(0f, 1f)) },
-                colors = SliderDefaults.colors(
-                    activeTrackColor = trackColor,
-                    inactiveTrackColor = trackColor.copy(alpha = 0.25f),
-                    thumbColor = trackColor,
-                ),
+                colors =
+                    SliderDefaults.colors(
+                        activeTrackColor = trackColor,
+                        inactiveTrackColor = trackColor.copy(alpha = 0.25f),
+                        thumbColor = trackColor,
+                    ),
                 valueRange = 0f..1f,
             )
         }
@@ -265,13 +272,14 @@ fun ColorPicker(
             Surface(
                 color = current,
                 shape = RoundedCornerShape(8.dp),
-                modifier = Modifier
-                    .size(40.dp)
-                    .border(
-                        1.dp,
-                        MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
-                        RoundedCornerShape(8.dp),
-                    ),
+                modifier =
+                    Modifier
+                        .size(40.dp)
+                        .border(
+                            1.dp,
+                            MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
+                            RoundedCornerShape(8.dp),
+                        ),
                 content = {},
             )
             Spacer(Modifier.size(12.dp))
@@ -294,10 +302,11 @@ fun ColorPicker(
                 singleLine = true,
                 label = { Text("Hex") },
                 placeholder = { Text("RRGGBB") },
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = KeyboardType.Ascii,
-                    capitalization = KeyboardCapitalization.Characters,
-                ),
+                keyboardOptions =
+                    KeyboardOptions(
+                        keyboardType = KeyboardType.Ascii,
+                        capitalization = KeyboardCapitalization.Characters,
+                    ),
                 modifier = Modifier.fillMaxWidth(),
             )
         }
@@ -306,16 +315,17 @@ fun ColorPicker(
 
 /** Curated quick-pick swatches. Spans the hue wheel with the brand
  *  blue at the front so taps in order land at the default. */
-val DefaultColorPresets: List<Color> = listOf(
-    Color(0xFF0061A4), // RadioShed brand blue (Material 3 Blue)
-    Color(0xFF6750A4), // Material You purple
-    Color(0xFFD32F2F), // red
-    Color(0xFFE91E63), // pink
-    Color(0xFF7B1FA2), // deep purple
-    Color(0xFFB04E00), // amber (legacy brand)
-    Color(0xFF00897B), // teal
-    Color(0xFF388E3C), // green
-)
+val DefaultColorPresets: List<Color> =
+    listOf(
+        Color(0xFF0061A4), // RadioShed brand blue (Material 3 Blue)
+        Color(0xFF6750A4), // Material You purple
+        Color(0xFFD32F2F), // red
+        Color(0xFFE91E63), // pink
+        Color(0xFF7B1FA2), // deep purple
+        Color(0xFFB04E00), // amber (legacy brand)
+        Color(0xFF00897B), // teal
+        Color(0xFF388E3C), // green
+    )
 
 // ---- HSV math (KMP-safe; no android.graphics.Color) ------------------
 
@@ -336,32 +346,39 @@ internal fun Color.toHsv(): Hsv {
     val cMax = max(r, max(g, b))
     val cMin = min(r, min(g, b))
     val delta = cMax - cMin
-    val h = when {
-        delta == 0f -> 0f
-        cMax == r -> 60f * (((g - b) / delta) % 6f)
-        cMax == g -> 60f * (((b - r) / delta) + 2f)
-        else -> 60f * (((r - g) / delta) + 4f)
-    }
+    val h =
+        when {
+            delta == 0f -> 0f
+            cMax == r -> 60f * (((g - b) / delta) % 6f)
+            cMax == g -> 60f * (((b - r) / delta) + 2f)
+            else -> 60f * (((r - g) / delta) + 4f)
+        }
     val hue = if (h < 0f) h + 360f else h
     val saturation = if (cMax == 0f) 0f else delta / cMax
     return Hsv(hue, saturation, cMax, alpha)
 }
 
-internal fun colorFromHsv(hue: Float, saturation: Float, value: Float, alpha: Float = 1f): Color {
+internal fun colorFromHsv(
+    hue: Float,
+    saturation: Float,
+    value: Float,
+    alpha: Float = 1f,
+): Color {
     val h = ((hue % 360f) + 360f) % 360f
     val s = saturation.coerceIn(0f, 1f)
     val v = value.coerceIn(0f, 1f)
     val c = v * s
     val x = c * (1f - kotlin.math.abs(((h / 60f) % 2f) - 1f))
     val m = v - c
-    val (r1, g1, b1) = when {
-        h < 60f -> Triple(c, x, 0f)
-        h < 120f -> Triple(x, c, 0f)
-        h < 180f -> Triple(0f, c, x)
-        h < 240f -> Triple(0f, x, c)
-        h < 300f -> Triple(x, 0f, c)
-        else -> Triple(c, 0f, x)
-    }
+    val (r1, g1, b1) =
+        when {
+            h < 60f -> Triple(c, x, 0f)
+            h < 120f -> Triple(x, c, 0f)
+            h < 180f -> Triple(0f, c, x)
+            h < 240f -> Triple(0f, x, c)
+            h < 300f -> Triple(x, 0f, c)
+            else -> Triple(c, 0f, x)
+        }
     return Color(red = r1 + m, green = g1 + m, blue = b1 + m, alpha = alpha)
 }
 
@@ -388,6 +405,7 @@ private fun Color.toHexString(): String {
     val r = (red * 255f).roundToInt().coerceIn(0, 255)
     val g = (green * 255f).roundToInt().coerceIn(0, 255)
     val b = (blue * 255f).roundToInt().coerceIn(0, 255)
+
     fun byte(v: Int): String {
         val s = v.toString(16).uppercase()
         return if (s.length == 1) "0$s" else s
@@ -403,10 +421,12 @@ private fun parseHex6(hex: String): Color? {
     return Color(red = r, green = g, blue = b, alpha = 1f)
 }
 
-private fun Char.isHexDigit(): Boolean =
-    this in '0'..'9' || this in 'a'..'f' || this in 'A'..'F'
+private fun Char.isHexDigit(): Boolean = this in '0'..'9' || this in 'a'..'f' || this in 'A'..'F'
 
-private fun colorsClose(a: Color, b: Color): Boolean {
+private fun colorsClose(
+    a: Color,
+    b: Color,
+): Boolean {
     val tol = 0.02f
     return kotlin.math.abs(a.red - b.red) < tol &&
         kotlin.math.abs(a.green - b.green) < tol &&

@@ -5,7 +5,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,6 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
@@ -29,9 +29,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import com.visorcraft.radioshed.ui.util.TooltipIconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -44,6 +42,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -52,8 +51,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.layout.Box as LayoutBox
-import androidx.compose.runtime.rememberCoroutineScope
 import com.visorcraft.radioshed.data.HistoryEntryWithStation
 import com.visorcraft.radioshed.data.LibraryRepository
 import com.visorcraft.radioshed.data.StationRepository
@@ -62,8 +59,10 @@ import com.visorcraft.radioshed.data.nowMillis
 import com.visorcraft.radioshed.domain.Track
 import com.visorcraft.radioshed.stations.StationPlayback
 import com.visorcraft.radioshed.ui.playlists.TrackContextSheet
+import com.visorcraft.radioshed.ui.util.TooltipIconButton
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
+import androidx.compose.foundation.layout.Box as LayoutBox
 
 /**
  * Chronological global play history. Each row shows what was played,
@@ -116,11 +115,12 @@ fun HistoryScreen(
 
     suspend fun reload() {
         entries = stationRepo.allHistory(limit = 200L)
-        trackById = entries
-            .map { it.trackId }
-            .distinct()
-            .mapNotNull { id -> libraryRepo.getTrackById(id)?.let { id to it } }
-            .toMap()
+        trackById =
+            entries
+                .map { it.trackId }
+                .distinct()
+                .mapNotNull { id -> libraryRepo.getTrackById(id)?.let { id to it } }
+                .toMap()
     }
 
     LaunchedEffect(Unit) { reload() }
@@ -214,25 +214,28 @@ fun HistoryScreen(
                                 onClick = {
                                     menuOpen = false
                                     scope.launch {
-                                        val rows = entries.map { e ->
-                                            val track = trackById[e.trackId]
-                                            val albumTitle = track?.albumId?.let {
-                                                libraryRepo.getAlbumById(it)?.title
+                                        val rows =
+                                            entries.map { e ->
+                                                val track = trackById[e.trackId]
+                                                val albumTitle =
+                                                    track?.albumId?.let {
+                                                        libraryRepo.getAlbumById(it)?.title
+                                                    }
+                                                val artistName =
+                                                    track?.id?.let {
+                                                        libraryRepo.artistsForTrack(it)
+                                                            .firstOrNull()?.name
+                                                    }
+                                                com.visorcraft.radioshed.source.HistoryCsvRow(
+                                                    playedAtIso = formatIsoUtc(e.playedAt),
+                                                    title = track?.title ?: "(missing)",
+                                                    artist = artistName,
+                                                    album = albumTitle,
+                                                    stationName = e.stationName,
+                                                    listenedMs = e.listenedMs,
+                                                    completed = e.completed,
+                                                )
                                             }
-                                            val artistName = track?.id?.let {
-                                                libraryRepo.artistsForTrack(it)
-                                                    .firstOrNull()?.name
-                                            }
-                                            com.visorcraft.radioshed.source.HistoryCsvRow(
-                                                playedAtIso = formatIsoUtc(e.playedAt),
-                                                title = track?.title ?: "(missing)",
-                                                artist = artistName,
-                                                album = albumTitle,
-                                                stationName = e.stationName,
-                                                listenedMs = e.listenedMs,
-                                                completed = e.completed,
-                                            )
-                                        }
                                         historyExporter.exportCsv(rows)
                                     }
                                 },
@@ -240,9 +243,10 @@ fun HistoryScreen(
                         }
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                ),
+                colors =
+                    TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                    ),
             )
         },
         containerColor = MaterialTheme.colorScheme.background,
@@ -264,41 +268,55 @@ fun HistoryScreen(
             // distinctBy({id}) keeps each station once even when it
             // appears in many rows, while preserving the natural
             // "most-recently-played stations first" order.
-            val stationOptions = remember(entries) {
-                entries
-                    .distinctBy { it.stationId }
-                    .map { it.stationId to it.stationName }
-            }
-            val visibleEntries = remember(entries, selectedStationId, searchQuery, trackById, timeWindow) {
-                // Time-window cutoff: nowMillis() at filter eval, so a
-                // user who left the screen open across midnight gets a
-                // freshly-rolled window when the chip composes again.
-                val nowMs = nowMillis()
-                val cutoffMs = when (timeWindow) {
-                    HistoryTimeWindow.All -> 0L
-                    HistoryTimeWindow.Today -> nowMs - 24L * 60L * 60L * 1000L
-                    HistoryTimeWindow.Week -> nowMs - 7L * 24L * 60L * 60L * 1000L
-                    HistoryTimeWindow.Month -> nowMs - 30L * 24L * 60L * 60L * 1000L
+            val stationOptions =
+                remember(entries) {
+                    entries
+                        .distinctBy { it.stationId }
+                        .map { it.stationId to it.stationName }
                 }
-                val byTime = if (cutoffMs == 0L) entries
-                             else entries.filter { it.playedAt >= cutoffMs }
-                val byStation = if (selectedStationId == null) byTime
-                                else byTime.filter { it.stationId == selectedStationId }
-                val q = searchQuery.trim()
-                if (q.isBlank()) byStation
-                else byStation.filter { entry ->
-                    // Match on track title OR file name (for tracks with
-                    // empty title tags). Removed-from-library tracks
-                    // also fall through here — they won't have a row
-                    // in trackById and thus never match the filter,
-                    // which is the right behavior (a search shouldn't
-                    // surface ghost rows).
-                    val track = trackById[entry.trackId] ?: return@filter false
-                    track.title.contains(q, ignoreCase = true) ||
-                        track.fileName.contains(q, ignoreCase = true) ||
-                        entry.stationName.contains(q, ignoreCase = true)
+            val visibleEntries =
+                remember(entries, selectedStationId, searchQuery, trackById, timeWindow) {
+                    // Time-window cutoff: nowMillis() at filter eval, so a
+                    // user who left the screen open across midnight gets a
+                    // freshly-rolled window when the chip composes again.
+                    val nowMs = nowMillis()
+                    val cutoffMs =
+                        when (timeWindow) {
+                            HistoryTimeWindow.All -> 0L
+                            HistoryTimeWindow.Today -> nowMs - 24L * 60L * 60L * 1000L
+                            HistoryTimeWindow.Week -> nowMs - 7L * 24L * 60L * 60L * 1000L
+                            HistoryTimeWindow.Month -> nowMs - 30L * 24L * 60L * 60L * 1000L
+                        }
+                    val byTime =
+                        if (cutoffMs == 0L) {
+                            entries
+                        } else {
+                            entries.filter { it.playedAt >= cutoffMs }
+                        }
+                    val byStation =
+                        if (selectedStationId == null) {
+                            byTime
+                        } else {
+                            byTime.filter { it.stationId == selectedStationId }
+                        }
+                    val q = searchQuery.trim()
+                    if (q.isBlank()) {
+                        byStation
+                    } else {
+                        byStation.filter { entry ->
+                            // Match on track title OR file name (for tracks with
+                            // empty title tags). Removed-from-library tracks
+                            // also fall through here — they won't have a row
+                            // in trackById and thus never match the filter,
+                            // which is the right behavior (a search shouldn't
+                            // surface ghost rows).
+                            val track = trackById[entry.trackId] ?: return@filter false
+                            track.title.contains(q, ignoreCase = true) ||
+                                track.fileName.contains(q, ignoreCase = true) ||
+                                entry.stationName.contains(q, ignoreCase = true)
+                        }
+                    }
                 }
-            }
             Column(modifier = Modifier.fillMaxSize().padding(padding)) {
                 // Free-text search row above the station filter chips.
                 // Matches on track title / filename / station name —
@@ -316,31 +334,36 @@ fun HistoryScreen(
                             contentDescription = null,
                         )
                     },
-                    trailingIcon = if (searchQuery.isNotEmpty()) {
-                        {
-                            TooltipIconButton(
-                                tooltip = "Clear search",
-                                onClick = { searchQuery = "" },
-                            ) {
-                                Icon(
-                                    imageVector = androidx.compose.material.icons.Icons.Filled.Clear,
-                                    contentDescription = "Clear search",
-                                )
+                    trailingIcon =
+                        if (searchQuery.isNotEmpty()) {
+                            {
+                                TooltipIconButton(
+                                    tooltip = "Clear search",
+                                    onClick = { searchQuery = "" },
+                                ) {
+                                    Icon(
+                                        imageVector = androidx.compose.material.icons.Icons.Filled.Clear,
+                                        contentDescription = "Clear search",
+                                    )
+                                }
                             }
-                        }
-                    } else null,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 4.dp),
+                        } else {
+                            null
+                        },
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 4.dp),
                 )
                 // Time-window chip row, always rendered (doesn't need a
                 // size threshold like station chips do — even one
                 // station's history benefits from "show me Today only").
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 4.dp)
-                        .horizontalScroll(rememberScrollState()),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 4.dp)
+                            .horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     HistoryTimeWindow.entries.forEach { opt ->
@@ -351,27 +374,29 @@ fun HistoryScreen(
                         // everything" which already lives in the menu's
                         // Clear-all-history option (with its own confirm).
                         Box(
-                            modifier = Modifier.combinedClickable(
-                                onClick = { timeWindow = opt },
-                                onLongClick = lp@{
-                                    // `All` is filtered out here because trimming
-                                    // *everything* is destructive enough to live
-                                    // exclusively in the menu's Clear-all-history
-                                    // option (with its own confirm) — we don't want
-                                    // a long-press on the All chip to trigger a
-                                    // wipe. With All ruled out, the `when` below
-                                    // covers Today/Week/Month exhaustively, no
-                                    // `else` arm needed.
-                                    if (opt == HistoryTimeWindow.All) return@lp
-                                    val nowMs = nowMillis()
-                                    val cutoff = when (opt) {
-                                        HistoryTimeWindow.Today -> nowMs - 24L * 60L * 60L * 1000L
-                                        HistoryTimeWindow.Week -> nowMs - 7L * 24L * 60L * 60L * 1000L
-                                        HistoryTimeWindow.Month -> nowMs - 30L * 24L * 60L * 60L * 1000L
-                                    }
-                                    trimConfirm = cutoff to opt.trimLabel
-                                },
-                            ),
+                            modifier =
+                                Modifier.combinedClickable(
+                                    onClick = { timeWindow = opt },
+                                    onLongClick = lp@{
+                                        // `All` is filtered out here because trimming
+                                        // *everything* is destructive enough to live
+                                        // exclusively in the menu's Clear-all-history
+                                        // option (with its own confirm) — we don't want
+                                        // a long-press on the All chip to trigger a
+                                        // wipe. With All ruled out, the `when` below
+                                        // covers Today/Week/Month exhaustively, no
+                                        // `else` arm needed.
+                                        if (opt == HistoryTimeWindow.All) return@lp
+                                        val nowMs = nowMillis()
+                                        val cutoff =
+                                            when (opt) {
+                                                HistoryTimeWindow.Today -> nowMs - 24L * 60L * 60L * 1000L
+                                                HistoryTimeWindow.Week -> nowMs - 7L * 24L * 60L * 60L * 1000L
+                                                HistoryTimeWindow.Month -> nowMs - 30L * 24L * 60L * 60L * 1000L
+                                            }
+                                        trimConfirm = cutoff to opt.trimLabel
+                                    },
+                                ),
                         ) {
                             androidx.compose.material3.FilterChip(
                                 selected = timeWindow == opt,
@@ -422,38 +447,45 @@ fun HistoryScreen(
                 // at composition time so all rows agree on which side
                 // of midnight they fall on.
                 val nowSnap = remember(visibleEntries) { nowMillis() }
-                val grouped = remember(visibleEntries, nowSnap) {
-                    buildList {
-                        var lastBucket: HistoryBucket? = null
-                        for (e in visibleEntries) {
-                            val b = bucketFor(e.playedAt, nowSnap)
-                            if (b != lastBucket) {
-                                add(HistoryListItem.Header(b))
-                                lastBucket = b
+                val grouped =
+                    remember(visibleEntries, nowSnap) {
+                        buildList {
+                            var lastBucket: HistoryBucket? = null
+                            for (e in visibleEntries) {
+                                val b = bucketFor(e.playedAt, nowSnap)
+                                if (b != lastBucket) {
+                                    add(HistoryListItem.Header(b))
+                                    lastBucket = b
+                                }
+                                add(HistoryListItem.Entry(e))
                             }
-                            add(HistoryListItem.Entry(e))
                         }
                     }
-                }
                 // Aggregate header — total plays in the visible
                 // window, summed listened-time, and avg/day across
                 // the calendar-day span the entries cover. Quietly
                 // hides when visibleEntries is empty (the empty-state
                 // copy at the screen top already handles that case).
-                val summary = remember(visibleEntries, nowSnap) {
-                    if (visibleEntries.isEmpty()) null
-                    else {
-                        val plays = visibleEntries.size
-                        val listenedMs = visibleEntries.sumOf { it.listenedMs }
-                        val span = visibleEntries.maxOf { it.playedAt } -
-                            visibleEntries.minOf { it.playedAt }
-                        val daysInSpan = (span / DAY_MS_MILLIS).toInt() + 1
-                        val avgPerDay = if (daysInSpan > 0)
-                            (plays.toDouble() / daysInSpan).coerceAtLeast(0.0)
-                        else 0.0
-                        Triple(plays, listenedMs, avgPerDay)
+                val summary =
+                    remember(visibleEntries, nowSnap) {
+                        if (visibleEntries.isEmpty()) {
+                            null
+                        } else {
+                            val plays = visibleEntries.size
+                            val listenedMs = visibleEntries.sumOf { it.listenedMs }
+                            val span =
+                                visibleEntries.maxOf { it.playedAt } -
+                                    visibleEntries.minOf { it.playedAt }
+                            val daysInSpan = (span / DAY_MS_MILLIS).toInt() + 1
+                            val avgPerDay =
+                                if (daysInSpan > 0) {
+                                    (plays.toDouble() / daysInSpan).coerceAtLeast(0.0)
+                                } else {
+                                    0.0
+                                }
+                            Triple(plays, listenedMs, avgPerDay)
+                        }
                     }
-                }
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(vertical = 4.dp),
@@ -466,28 +498,33 @@ fun HistoryScreen(
                             // numbers. Single-tap because the row's
                             // only purpose is informational — no
                             // collision with another gesture.
-                            val copyToClipboard = com.visorcraft
-                                .radioshed.ui.util.rememberCopyToClipboard()
-                            val summaryText = "$plays play" +
-                                (if (plays == 1) "" else "s") +
-                                " · ${formatHistoryListened(listenedMs)}" +
-                                " · ${"%.1f/day".format(avgPerDay)}"
+                            val copyToClipboard =
+                                com.visorcraft
+                                    .radioshed.ui.util.rememberCopyToClipboard()
+                            val summaryText =
+                                "$plays play" +
+                                    (if (plays == 1) "" else "s") +
+                                    " · ${formatHistoryListened(listenedMs)}" +
+                                    " · ${"%.1f/day".format(avgPerDay)}"
                             Surface(
-                                color = MaterialTheme.colorScheme.surfaceVariant
-                                    .copy(alpha = 0.45f),
+                                color =
+                                    MaterialTheme.colorScheme.surfaceVariant
+                                        .copy(alpha = 0.45f),
                                 shape = RoundedCornerShape(10.dp),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 12.dp, vertical = 8.dp)
-                                    .clickable {
-                                        copyToClipboard(summaryText)
-                                    },
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                                        .clickable {
+                                            copyToClipboard(summaryText)
+                                        },
                             ) {
                                 Row(
-                                    modifier = Modifier.padding(
-                                        horizontal = 12.dp,
-                                        vertical = 8.dp,
-                                    ),
+                                    modifier =
+                                        Modifier.padding(
+                                            horizontal = 12.dp,
+                                            vertical = 8.dp,
+                                        ),
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                 ) {
                                     Text(
@@ -544,16 +581,18 @@ fun HistoryScreen(
                                         // tapped entry's id is found in
                                         // the reversed list to seed
                                         // playback at the right slot.
-                                        val sessionPairs = entries
-                                            .filter { it.playedAt <= entry.playedAt }
-                                            .reversed()
-                                            .mapNotNull { e ->
-                                                trackById[e.trackId]?.let { e.id to it }
-                                            }
+                                        val sessionPairs =
+                                            entries
+                                                .filter { it.playedAt <= entry.playedAt }
+                                                .reversed()
+                                                .mapNotNull { e ->
+                                                    trackById[e.trackId]?.let { e.id to it }
+                                                }
                                         if (sessionPairs.isEmpty()) return@HistoryRow
-                                        val startIdx = sessionPairs
-                                            .indexOfFirst { it.first == entry.id }
-                                            .coerceAtLeast(0)
+                                        val startIdx =
+                                            sessionPairs
+                                                .indexOfFirst { it.first == entry.id }
+                                                .coerceAtLeast(0)
                                         stationPlayback.playTracks(
                                             sessionPairs.map { it.second },
                                             startIndex = startIdx,
@@ -659,9 +698,10 @@ private fun HistoryRow(
     onLongPress: () -> Unit = {},
 ) {
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .combinedClickable(onClick = onTap, onLongClick = onLongPress),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .combinedClickable(onClick = onTap, onLongClick = onLongPress),
         color = Color.Transparent,
     ) {
         Row(
@@ -669,10 +709,11 @@ private fun HistoryRow(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                modifier =
+                    Modifier
+                        .size(36.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
@@ -689,11 +730,12 @@ private fun HistoryRow(
                         text = track?.title?.ifBlank { track.fileName } ?: "Removed track",
                         style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.Medium,
-                        color = when {
-                            track == null -> MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
-                            isCurrent -> MaterialTheme.colorScheme.primary
-                            else -> MaterialTheme.colorScheme.onBackground
-                        },
+                        color =
+                            when {
+                                track == null -> MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
+                                isCurrent -> MaterialTheme.colorScheme.primary
+                                else -> MaterialTheme.colorScheme.onBackground
+                            },
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f, fill = false),
@@ -712,13 +754,17 @@ private fun HistoryRow(
             // gets a small filled dot, skipped is hollow. Subtle but
             // useful for "what did I actually finish vs skip past?".
             Box(
-                modifier = Modifier
-                    .size(8.dp)
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(
-                        if (entry.completed) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.25f),
-                    ),
+                modifier =
+                    Modifier
+                        .size(8.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(
+                            if (entry.completed) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onBackground.copy(alpha = 0.25f)
+                            },
+                        ),
             )
         }
     }
@@ -753,10 +799,14 @@ private enum class HistoryTimeWindow(val label: String, val trimLabel: String) {
 
 private sealed interface HistoryListItem {
     data class Header(val bucket: HistoryBucket) : HistoryListItem
+
     data class Entry(val entry: HistoryEntryWithStation) : HistoryListItem
 }
 
-private fun bucketFor(playedAtMs: Long, nowMs: Long): HistoryBucket {
+private fun bucketFor(
+    playedAtMs: Long,
+    nowMs: Long,
+): HistoryBucket {
     val deltaMs = (nowMs - playedAtMs).coerceAtLeast(0L)
     val day = deltaMs / 86_400_000L
     return when {
@@ -775,9 +825,10 @@ private fun HistoryDateHeader(bucket: HistoryBucket) {
         style = MaterialTheme.typography.titleSmall,
         fontWeight = FontWeight.SemiBold,
         color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
     )
 }
 

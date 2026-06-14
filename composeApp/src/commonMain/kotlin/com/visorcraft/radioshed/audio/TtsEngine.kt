@@ -20,7 +20,11 @@ interface TtsEngine {
      * [outPath] must be an absolute path in an app-writable directory (e.g. the DJ
      * cache dir); the caller guarantees the parent exists.
      */
-    suspend fun synthesizeToFile(text: String, voice: DjVoice?, outPath: String): Boolean
+    suspend fun synthesizeToFile(
+        text: String,
+        voice: DjVoice?,
+        outPath: String,
+    ): Boolean
 
     /**
      * Absolute path of an app-writable directory the DJ pipeline may write
@@ -35,6 +39,7 @@ interface TtsEngine {
 
 class NullTtsEngine : TtsEngine {
     override fun isAvailable(): Boolean = false
+
     override suspend fun synthesizeToFile(
         text: String,
         voice: DjVoice?,

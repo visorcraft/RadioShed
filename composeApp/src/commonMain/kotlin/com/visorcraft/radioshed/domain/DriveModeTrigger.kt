@@ -15,7 +15,6 @@ import kotlinx.serialization.builtins.ListSerializer
  */
 @Serializable
 sealed interface DriveModeTrigger {
-
     /** Activate Drive Mode when a Bluetooth device with the given [mac] connects. */
     @Serializable
     @SerialName("bt_device")
@@ -32,6 +31,15 @@ sealed interface DriveModeTrigger {
     @Serializable
     @SerialName("schedule")
     data class Schedule(val startMin: Int, val endMin: Int) : DriveModeTrigger
+
+    /**
+     * Activate Drive Mode when ground speed reaches [enterKmh]; the trigger
+     * stays active until speed drops below [exitKmh] (hysteresis prevents
+     * flicker at the threshold). Requires a platform [SpeedWatcher].
+     */
+    @Serializable
+    @SerialName("speed")
+    data class Speed(val enterKmh: Float, val exitKmh: Float) : DriveModeTrigger
 }
 
 /** Serializer for the persisted trigger list. */

@@ -32,7 +32,10 @@ import androidx.compose.ui.unit.dp
  * cost zero in long lists.
  */
 @Composable
-fun NowPlayingIndicator(isCurrent: Boolean, modifier: Modifier = Modifier) {
+fun NowPlayingIndicator(
+    isCurrent: Boolean,
+    modifier: Modifier = Modifier,
+) {
     if (!isCurrent) return
     Spacer(Modifier.size(6.dp))
     Icon(

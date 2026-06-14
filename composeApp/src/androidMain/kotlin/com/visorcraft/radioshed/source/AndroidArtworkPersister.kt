@@ -21,46 +21,46 @@ import java.security.MessageDigest
  * album is stored once on disk.
  */
 class AndroidArtworkPersister(private val context: Context) : ArtworkPersister {
-
     private val artworkDir: File by lazy {
         File(context.filesDir, "artwork").also { it.mkdirs() }
     }
 
-    override suspend fun persist(bytes: ByteArray): String? = withContext(IODispatcher) {
-        if (bytes.isEmpty()) return@withContext null
-        runCatching {
-            val hash = sha256Hex(bytes)
-            val target = File(artworkDir, hash)
-            if (!target.exists() || target.length().toInt() != bytes.size) {
-                // Write atomically: tmp → rename. Avoids leaving a half-written
-                // file readable if the process dies mid-write (unlikely on a
-                // ~50KB image, but cheap to do right).
-                val tmp = File(artworkDir, "$hash.tmp")
-                try {
-                    tmp.writeBytes(bytes)
-                    if (!tmp.renameTo(target)) {
-                        // renameTo can fail across filesystems or when the
-                        // target was created by a concurrent persist of the
-                        // same bytes. Fall through to verify the (already-
-                        // existing) target — its sha256 matches by
-                        // construction.
-                        if (!target.exists() || target.length().toInt() != bytes.size) {
-                            return@runCatching null
+    override suspend fun persist(bytes: ByteArray): String? =
+        withContext(IODispatcher) {
+            if (bytes.isEmpty()) return@withContext null
+            runCatching {
+                val hash = sha256Hex(bytes)
+                val target = File(artworkDir, hash)
+                if (!target.exists() || target.length().toInt() != bytes.size) {
+                    // Write atomically: tmp → rename. Avoids leaving a half-written
+                    // file readable if the process dies mid-write (unlikely on a
+                    // ~50KB image, but cheap to do right).
+                    val tmp = File(artworkDir, "$hash.tmp")
+                    try {
+                        tmp.writeBytes(bytes)
+                        if (!tmp.renameTo(target)) {
+                            // renameTo can fail across filesystems or when the
+                            // target was created by a concurrent persist of the
+                            // same bytes. Fall through to verify the (already-
+                            // existing) target — its sha256 matches by
+                            // construction.
+                            if (!target.exists() || target.length().toInt() != bytes.size) {
+                                return@runCatching null
+                            }
                         }
+                    } finally {
+                        // Always clean up the tmp file: writeBytes can throw
+                        // mid-write on disk-full, leaving a partial .tmp on
+                        // disk. Without this finally, a series of disk-full
+                        // attempts would accumulate orphan .tmp files in
+                        // filesDir/artwork/, making the disk-full condition
+                        // self-reinforcing.
+                        if (tmp.exists()) tmp.delete()
                     }
-                } finally {
-                    // Always clean up the tmp file: writeBytes can throw
-                    // mid-write on disk-full, leaving a partial .tmp on
-                    // disk. Without this finally, a series of disk-full
-                    // attempts would accumulate orphan .tmp files in
-                    // filesDir/artwork/, making the disk-full condition
-                    // self-reinforcing.
-                    if (tmp.exists()) tmp.delete()
                 }
-            }
-            "file://${target.absolutePath}"
-        }.getOrNull()
-    }
+                "file://${target.absolutePath}"
+            }.getOrNull()
+        }
 
     override suspend fun listBlobs(): List<Pair<String, ByteArray>> =
         withContext(IODispatcher) {
@@ -109,21 +109,22 @@ class AndroidArtworkPersister(private val context: Context) : ArtworkPersister {
             written
         }
 
-    override suspend fun clearAll(): Int = withContext(IODispatcher) {
-        // listFiles() can return null on a freshly-created dir or
-        // a permissions edge case; treat that as zero. We delete
-        // each file individually rather than rm -rf the whole
-        // directory so the dir handle stays valid for subsequent
-        // persists without re-creating it.
-        val files = artworkDir.listFiles() ?: return@withContext 0
-        var removed = 0
-        for (f in files) {
-            if (f.isFile && runCatching { f.delete() }.getOrDefault(false)) {
-                removed += 1
+    override suspend fun clearAll(): Int =
+        withContext(IODispatcher) {
+            // listFiles() can return null on a freshly-created dir or
+            // a permissions edge case; treat that as zero. We delete
+            // each file individually rather than rm -rf the whole
+            // directory so the dir handle stays valid for subsequent
+            // persists without re-creating it.
+            val files = artworkDir.listFiles() ?: return@withContext 0
+            var removed = 0
+            for (f in files) {
+                if (f.isFile && runCatching { f.delete() }.getOrDefault(false)) {
+                    removed += 1
+                }
             }
+            removed
         }
-        removed
-    }
 
     private fun sha256Hex(bytes: ByteArray): String {
         val digest = MessageDigest.getInstance("SHA-256").digest(bytes)

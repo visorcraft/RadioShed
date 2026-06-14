@@ -13,6 +13,7 @@ import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.MoreExecutors
+import com.visorcraft.radioshed.util.crashGuard
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -20,7 +21,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
-import com.visorcraft.radioshed.util.crashGuard
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -36,7 +36,6 @@ import kotlinx.coroutines.launch
  * callbacks; position is polled at 2 Hz while a track is loaded.
  */
 class AudioEngineAndroid(private val appContext: Context) : AudioEngine {
-
     // crashGuard prevents a Media3 callback exception (bad media file,
     // controller disconnect during teardown, etc.) from propagating to
     // Android's system uncaught-exception handler and showing the
@@ -64,10 +63,11 @@ class AudioEngineAndroid(private val appContext: Context) : AudioEngine {
     }
 
     private fun connect() {
-        val token = SessionToken(
-            appContext,
-            ComponentName(appContext, RadioShedMediaSessionService::class.java),
-        )
+        val token =
+            SessionToken(
+                appContext,
+                ComponentName(appContext, RadioShedMediaSessionService::class.java),
+            )
         val future: ListenableFuture<MediaController> =
             MediaController.Builder(appContext, token).buildAsync()
         future.addListener({
@@ -83,60 +83,69 @@ class AudioEngineAndroid(private val appContext: Context) : AudioEngine {
                 refreshStateFromController(c)
                 controllerDeferred.complete(c)
             } catch (t: Throwable) {
-                _state.value = PlayerState.Error(
-                    "Failed to connect to audio service: ${t.message ?: t::class.simpleName}",
-                )
+                _state.value =
+                    PlayerState.Error(
+                        "Failed to connect to audio service: ${t.message ?: t::class.simpleName}",
+                    )
                 controllerDeferred.completeExceptionally(t)
             }
         }, MoreExecutors.directExecutor())
     }
 
     private fun wireListeners(c: MediaController) {
-        c.addListener(object : Player.Listener {
-            override fun onPlaybackStateChanged(playbackState: Int) {
-                refreshStateFromController(c)
-            }
+        c.addListener(
+            object : Player.Listener {
+                override fun onPlaybackStateChanged(playbackState: Int) {
+                    refreshStateFromController(c)
+                }
 
-            override fun onIsPlayingChanged(isPlaying: Boolean) {
-                refreshStateFromController(c)
-            }
+                override fun onIsPlayingChanged(isPlaying: Boolean) {
+                    refreshStateFromController(c)
+                }
 
-            override fun onPlayerError(error: PlaybackException) {
-                _state.value = PlayerState.Error(error.message ?: "Player error")
-            }
+                override fun onPlayerError(error: PlaybackException) {
+                    _state.value = PlayerState.Error(error.message ?: "Player error")
+                }
 
-            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-                _nowPlaying.value = mediaItem?.toPlayable(
-                    fallbackDurationMs = if (c.duration > 0) c.duration else 0L,
-                )
-            }
+                override fun onMediaItemTransition(
+                    mediaItem: MediaItem?,
+                    reason: Int,
+                ) {
+                    _nowPlaying.value =
+                        mediaItem?.toPlayable(
+                            fallbackDurationMs = if (c.duration > 0) c.duration else 0L,
+                        )
+                }
 
-            override fun onVolumeChanged(volume: Float) {
-                // Keep the volume StateFlow in lockstep with the real player
-                // volume. Critical after a crossfade swap: the service re-points
-                // the session at the incoming ExoPlayer, whose volume the ramp
-                // landed at the incoming track's effective level. Without this,
-                // _volume stays stuck at the OUTGOING track's last setVolume()
-                // value, so the SleepTimer fade and DJ-duck restore would
-                // capture/restore a stale ceiling. (MediaController.volume maps
-                // straight through StationAwarePlayer to the active player's
-                // volume, so this fires on the swap and on every setVolume.)
-                _volume.value = volume.coerceIn(0f, 1f)
-            }
-        })
+                override fun onVolumeChanged(volume: Float) {
+                    // Keep the volume StateFlow in lockstep with the real player
+                    // volume. Critical after a crossfade swap: the service re-points
+                    // the session at the incoming ExoPlayer, whose volume the ramp
+                    // landed at the incoming track's effective level. Without this,
+                    // _volume stays stuck at the OUTGOING track's last setVolume()
+                    // value, so the SleepTimer fade and DJ-duck restore would
+                    // capture/restore a stale ceiling. (MediaController.volume maps
+                    // straight through StationAwarePlayer to the active player's
+                    // volume, so this fires on the swap and on every setVolume.)
+                    _volume.value = volume.coerceIn(0f, 1f)
+                }
+            },
+        )
     }
 
     private fun refreshStateFromController(c: MediaController) {
-        val newState = when {
-            c.playerError != null -> PlayerState.Error(
-                c.playerError?.message ?: "Player error",
-            )
-            c.playbackState == Player.STATE_BUFFERING -> PlayerState.Buffering
-            c.isPlaying -> PlayerState.Playing
-            c.playbackState == Player.STATE_READY -> PlayerState.Paused
-            c.playbackState == Player.STATE_ENDED -> PlayerState.Ended
-            else -> PlayerState.Idle
-        }
+        val newState =
+            when {
+                c.playerError != null ->
+                    PlayerState.Error(
+                        c.playerError?.message ?: "Player error",
+                    )
+                c.playbackState == Player.STATE_BUFFERING -> PlayerState.Buffering
+                c.isPlaying -> PlayerState.Playing
+                c.playbackState == Player.STATE_READY -> PlayerState.Paused
+                c.playbackState == Player.STATE_ENDED -> PlayerState.Ended
+                else -> PlayerState.Idle
+            }
         _state.value = newState
 
         // Only poll position while there's something meaningful to report.
@@ -155,15 +164,17 @@ class AudioEngineAndroid(private val appContext: Context) : AudioEngine {
 
     private fun ensurePositionPolling(c: MediaController) {
         if (positionJob?.isActive == true) return
-        positionJob = scope.launch {
-            while (true) {
-                _position.value = Position(
-                    currentMs = c.currentPosition.coerceAtLeast(0L),
-                    durationMs = if (c.duration > 0L) c.duration else 0L,
-                )
-                delay(500L)
+        positionJob =
+            scope.launch {
+                while (true) {
+                    _position.value =
+                        Position(
+                            currentMs = c.currentPosition.coerceAtLeast(0L),
+                            durationMs = if (c.duration > 0L) c.duration else 0L,
+                        )
+                    delay(500L)
+                }
             }
-        }
     }
 
     override fun play(playable: Playable) {
@@ -176,7 +187,10 @@ class AudioEngineAndroid(private val appContext: Context) : AudioEngine {
         }
     }
 
-    override fun playQueue(items: List<Playable>, startIndex: Int) {
+    override fun playQueue(
+        items: List<Playable>,
+        startIndex: Int,
+    ) {
         if (items.isEmpty()) return
         val safeIndex = startIndex.coerceIn(0, items.size - 1)
         scope.launch {
@@ -184,7 +198,8 @@ class AudioEngineAndroid(private val appContext: Context) : AudioEngine {
             c.setMediaItems(
                 items.map { it.toMediaItem(appContext) },
                 safeIndex,
-                /* startPositionMs = */ 0L,
+                // startPositionMs =
+                0L,
             )
             c.prepare()
             c.play()
@@ -201,9 +216,10 @@ class AudioEngineAndroid(private val appContext: Context) : AudioEngine {
     private suspend fun awaitControllerOrSurface(): MediaController? =
         runCatching { controllerDeferred.await() }
             .getOrElse {
-                _state.value = PlayerState.Error(
-                    "Audio service unavailable: ${it.message ?: it::class.simpleName}",
-                )
+                _state.value =
+                    PlayerState.Error(
+                        "Audio service unavailable: ${it.message ?: it::class.simpleName}",
+                    )
                 null
             }
 
@@ -309,7 +325,10 @@ class AudioEngineAndroid(private val appContext: Context) : AudioEngine {
      * harmless to drop if the service never comes up) and swallows failures
      * the same way the other transport calls do.
      */
-    private fun sendServiceCommand(action: String, fill: android.os.Bundle.() -> Unit) {
+    private fun sendServiceCommand(
+        action: String,
+        fill: android.os.Bundle.() -> Unit,
+    ) {
         val args = android.os.Bundle().apply(fill)
         scope.launch {
             val c = awaitControllerOrSurface() ?: return@launch
@@ -334,46 +353,48 @@ class AudioEngineAndroid(private val appContext: Context) : AudioEngine {
 // ---- Mappers ----
 
 private fun Playable.toMediaItem(appContext: Context): MediaItem {
-    val builder = MediaItem.Builder()
-        .setUri(uri)
-        .setMediaId(trackId.toString())
-        .setMediaMetadata(
-            MediaMetadata.Builder()
-                .setTitle(title)
-                .setArtist(artist)
-                .setAlbumTitle(album)
-                .also { mb ->
-                    // Two artwork channels covering both consumers:
-                    //   - setArtworkUri: a content:// URI surfaced via
-                    //     FileProvider so out-of-process consumers
-                    //     (Android Auto, Bluetooth AVRCP cover art,
-                    //     system lock screen) can fetch the full-fidelity
-                    //     image directly. Their processes can't read
-                    //     file:// from our private filesDir; a content://
-                    //     URI is the canonical bridge.
-                    //   - setArtworkData: downscaled 512px JPEG bytes
-                    //     parceled inline as a fallback for hosts that
-                    //     don't follow the URI (some BT AVRCP stacks,
-                    //     legacy AA versions).
-                    // In-app surfaces (Coil in MiniPlayer / NowPlaying)
-                    // continue to read the original file:// URI from
-                    // [Playable.artworkUri] directly — they don't go
-                    // through MediaMetadata.
-                    val uriString = artworkUri
-                    if (uriString != null) {
-                        val publicUri = artworkContentUri(appContext, uriString)
-                            ?: android.net.Uri.parse(uriString)
-                        mb.setArtworkUri(publicUri)
-                        readArtworkBytes(uriString)?.let { bytes ->
-                            mb.setArtworkData(
-                                bytes,
-                                MediaMetadata.PICTURE_TYPE_FRONT_COVER,
-                            )
+    val builder =
+        MediaItem.Builder()
+            .setUri(uri)
+            .setMediaId(trackId.toString())
+            .setMediaMetadata(
+                MediaMetadata.Builder()
+                    .setTitle(title)
+                    .setArtist(artist)
+                    .setAlbumTitle(album)
+                    .also { mb ->
+                        // Two artwork channels covering both consumers:
+                        //   - setArtworkUri: a content:// URI surfaced via
+                        //     FileProvider so out-of-process consumers
+                        //     (Android Auto, Bluetooth AVRCP cover art,
+                        //     system lock screen) can fetch the full-fidelity
+                        //     image directly. Their processes can't read
+                        //     file:// from our private filesDir; a content://
+                        //     URI is the canonical bridge.
+                        //   - setArtworkData: downscaled 512px JPEG bytes
+                        //     parceled inline as a fallback for hosts that
+                        //     don't follow the URI (some BT AVRCP stacks,
+                        //     legacy AA versions).
+                        // In-app surfaces (Coil in MiniPlayer / NowPlaying)
+                        // continue to read the original file:// URI from
+                        // [Playable.artworkUri] directly — they don't go
+                        // through MediaMetadata.
+                        val uriString = artworkUri
+                        if (uriString != null) {
+                            val publicUri =
+                                artworkContentUri(appContext, uriString)
+                                    ?: android.net.Uri.parse(uriString)
+                            mb.setArtworkUri(publicUri)
+                            readArtworkBytes(uriString)?.let { bytes ->
+                                mb.setArtworkData(
+                                    bytes,
+                                    MediaMetadata.PICTURE_TYPE_FRONT_COVER,
+                                )
+                            }
                         }
                     }
-                }
-                .build(),
-        )
+                    .build(),
+            )
     if (cueOffsetStartMs != null || cueOffsetEndMs != null) {
         builder.setClippingConfiguration(
             MediaItem.ClippingConfiguration.Builder()
@@ -409,62 +430,65 @@ private fun Playable.toMediaItem(appContext: Context): MediaItem {
  * around `setMediaItem`). Decode of a typical 2000×2000 JPEG runs in
  * 30-80 ms which is acceptable per track switch.
  */
-private fun readArtworkBytes(uriString: String): ByteArray? = runCatching {
-    if (!uriString.startsWith("file://")) {
-        Log.i(TAG_ART, "skip: not file:// uri ($uriString)")
-        return@runCatching null
-    }
-    val path = android.net.Uri.parse(uriString).path ?: return@runCatching null
-    val file = java.io.File(path)
-    if (!file.exists() || !file.canRead()) {
-        Log.i(TAG_ART, "skip: file missing or unreadable ($path)")
-        return@runCatching null
-    }
-
-    // Two-pass decode — first an inJustDecodeBounds probe to read the
-    // dimensions without allocating the pixel buffer, then a real
-    // decode at an inSampleSize that fits the target box. Avoids
-    // allocating a 4000×4000 Bitmap into RAM on hi-res cover art.
-    val probe = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-    BitmapFactory.decodeFile(path, probe)
-    if (probe.outWidth <= 0 || probe.outHeight <= 0) {
-        Log.i(TAG_ART, "skip: decoder reported zero dimensions ($path)")
-        return@runCatching null
-    }
-    var sample = 1
-    val maxOf2 = maxOf(probe.outWidth, probe.outHeight)
-    while (maxOf2 / sample > ART_TARGET_PX * 2) sample *= 2
-
-    val opts = BitmapFactory.Options().apply { inSampleSize = sample }
-    val raw = BitmapFactory.decodeFile(path, opts) ?: run {
-        Log.i(TAG_ART, "skip: decode returned null ($path)")
-        return@runCatching null
-    }
-
-    // Final fit-into-box step. Downscale (never up) to ART_TARGET_PX
-    // on the long edge, preserving aspect ratio so non-square art
-    // (rare in practice but possible) doesn't get squashed.
-    val longEdge = maxOf(raw.width, raw.height)
-    val scaled = if (longEdge > ART_TARGET_PX) {
-        val ratio = ART_TARGET_PX.toFloat() / longEdge
-        val w = (raw.width * ratio).toInt().coerceAtLeast(1)
-        val h = (raw.height * ratio).toInt().coerceAtLeast(1)
-        Bitmap.createScaledBitmap(raw, w, h, true).also {
-            if (it !== raw) raw.recycle()
+private fun readArtworkBytes(uriString: String): ByteArray? =
+    runCatching {
+        if (!uriString.startsWith("file://")) {
+            Log.i(TAG_ART, "skip: not file:// uri ($uriString)")
+            return@runCatching null
         }
-    } else {
-        raw
-    }
+        val path = android.net.Uri.parse(uriString).path ?: return@runCatching null
+        val file = java.io.File(path)
+        if (!file.exists() || !file.canRead()) {
+            Log.i(TAG_ART, "skip: file missing or unreadable ($path)")
+            return@runCatching null
+        }
 
-    val out = java.io.ByteArrayOutputStream(64 * 1024)
-    scaled.compress(Bitmap.CompressFormat.JPEG, ART_JPEG_QUALITY, out)
-    scaled.recycle()
-    val bytes = out.toByteArray()
-    Log.i(TAG_ART, "embed: ${bytes.size}B (src=${file.length()}B path=$path)")
-    bytes
-}.onFailure {
-    Log.e(TAG_ART, "readArtworkBytes failed for $uriString", it)
-}.getOrNull()
+        // Two-pass decode — first an inJustDecodeBounds probe to read the
+        // dimensions without allocating the pixel buffer, then a real
+        // decode at an inSampleSize that fits the target box. Avoids
+        // allocating a 4000×4000 Bitmap into RAM on hi-res cover art.
+        val probe = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(path, probe)
+        if (probe.outWidth <= 0 || probe.outHeight <= 0) {
+            Log.i(TAG_ART, "skip: decoder reported zero dimensions ($path)")
+            return@runCatching null
+        }
+        var sample = 1
+        val maxOf2 = maxOf(probe.outWidth, probe.outHeight)
+        while (maxOf2 / sample > ART_TARGET_PX * 2) sample *= 2
+
+        val opts = BitmapFactory.Options().apply { inSampleSize = sample }
+        val raw =
+            BitmapFactory.decodeFile(path, opts) ?: run {
+                Log.i(TAG_ART, "skip: decode returned null ($path)")
+                return@runCatching null
+            }
+
+        // Final fit-into-box step. Downscale (never up) to ART_TARGET_PX
+        // on the long edge, preserving aspect ratio so non-square art
+        // (rare in practice but possible) doesn't get squashed.
+        val longEdge = maxOf(raw.width, raw.height)
+        val scaled =
+            if (longEdge > ART_TARGET_PX) {
+                val ratio = ART_TARGET_PX.toFloat() / longEdge
+                val w = (raw.width * ratio).toInt().coerceAtLeast(1)
+                val h = (raw.height * ratio).toInt().coerceAtLeast(1)
+                Bitmap.createScaledBitmap(raw, w, h, true).also {
+                    if (it !== raw) raw.recycle()
+                }
+            } else {
+                raw
+            }
+
+        val out = java.io.ByteArrayOutputStream(64 * 1024)
+        scaled.compress(Bitmap.CompressFormat.JPEG, ART_JPEG_QUALITY, out)
+        scaled.recycle()
+        val bytes = out.toByteArray()
+        Log.i(TAG_ART, "embed: ${bytes.size}B (src=${file.length()}B path=$path)")
+        bytes
+    }.onFailure {
+        Log.e(TAG_ART, "readArtworkBytes failed for $uriString", it)
+    }.getOrNull()
 
 private const val TAG_ART = "RadioShedArt"
 private const val ART_TARGET_PX = 512
@@ -484,22 +508,26 @@ private const val ART_JPEG_QUALITY = 85
  * screen can fetch without us calling [Context.grantUriPermission]
  * per-controller.
  */
-private fun artworkContentUri(appContext: Context, fileUri: String): android.net.Uri? {
+private fun artworkContentUri(
+    appContext: Context,
+    fileUri: String,
+): android.net.Uri? {
     if (!fileUri.startsWith("file://")) return null
     val path = android.net.Uri.parse(fileUri).path ?: return null
     val artworkDir = java.io.File(appContext.filesDir, "artwork").absolutePath
     val file = java.io.File(path)
     if (!file.absolutePath.startsWith(artworkDir)) return null
     if (!file.exists()) return null
-    val contentUri = runCatching {
-        androidx.core.content.FileProvider.getUriForFile(
-            appContext,
-            "${appContext.packageName}.fileprovider",
-            file,
-        )
-    }.onFailure {
-        Log.e(TAG_ART, "FileProvider.getUriForFile failed for $path", it)
-    }.getOrNull() ?: return null
+    val contentUri =
+        runCatching {
+            androidx.core.content.FileProvider.getUriForFile(
+                appContext,
+                "${appContext.packageName}.fileprovider",
+                file,
+            )
+        }.onFailure {
+            Log.e(TAG_ART, "FileProvider.getUriForFile failed for $path", it)
+        }.getOrNull() ?: return null
 
     // Belt-and-suspenders URI grant. The MediaSession framework is
     // documented to auto-grant URI permissions on metadata to the
@@ -549,13 +577,14 @@ private fun artworkContentUri(appContext: Context, fileUri: String): android.net
 // transition runs on the player thread.
 private val lastGrantedArtworkUri = java.util.concurrent.atomic.AtomicReference<android.net.Uri?>()
 
-private val MEDIA_CONSUMER_PACKAGES = listOf(
-    "com.google.android.projection.gearhead",   // Android Auto
-    "com.google.android.bluetooth",             // Bluetooth AVRCP cover-art
-    "com.android.bluetooth",                    // Bluetooth (alt package name)
-    "com.android.systemui",                     // System lock screen / notifications
-    "com.google.android.gms",                   // Google Play Services bridge
-)
+private val MEDIA_CONSUMER_PACKAGES =
+    listOf(
+        "com.google.android.projection.gearhead", // Android Auto
+        "com.google.android.bluetooth", // Bluetooth AVRCP cover-art
+        "com.android.bluetooth", // Bluetooth (alt package name)
+        "com.android.systemui", // System lock screen / notifications
+        "com.google.android.gms", // Google Play Services bridge
+    )
 
 private fun MediaItem.toPlayable(fallbackDurationMs: Long = 0L): Playable {
     val md = mediaMetadata

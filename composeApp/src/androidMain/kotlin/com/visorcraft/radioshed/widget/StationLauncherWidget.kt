@@ -33,7 +33,6 @@ import org.koin.core.context.GlobalContext
  * music-station launcher.
  */
 class StationLauncherWidget : AppWidgetProvider() {
-
     override fun onUpdate(
         context: Context,
         appWidgetManager: AppWidgetManager,
@@ -42,7 +41,10 @@ class StationLauncherWidget : AppWidgetProvider() {
         for (id in appWidgetIds) updateWidget(context, appWidgetManager, id)
     }
 
-    override fun onDeleted(context: Context, appWidgetIds: IntArray) {
+    override fun onDeleted(
+        context: Context,
+        appWidgetIds: IntArray,
+    ) {
         val repo = GlobalContext.get().get<WidgetConfigRepository>()
         for (id in appWidgetIds) {
             runBlocking {
@@ -54,30 +56,33 @@ class StationLauncherWidget : AppWidgetProvider() {
     companion object {
         const val MAX_SLOTS = 6
 
-        private val SLOT_VIEW_IDS = intArrayOf(
-            R.id.widget_slot_0,
-            R.id.widget_slot_1,
-            R.id.widget_slot_2,
-            R.id.widget_slot_3,
-            R.id.widget_slot_4,
-            R.id.widget_slot_5,
-        )
-        private val SLOT_ARTWORK_IDS = intArrayOf(
-            R.id.widget_slot_artwork_0,
-            R.id.widget_slot_artwork_1,
-            R.id.widget_slot_artwork_2,
-            R.id.widget_slot_artwork_3,
-            R.id.widget_slot_artwork_4,
-            R.id.widget_slot_artwork_5,
-        )
-        private val SLOT_NAME_IDS = intArrayOf(
-            R.id.widget_slot_name_0,
-            R.id.widget_slot_name_1,
-            R.id.widget_slot_name_2,
-            R.id.widget_slot_name_3,
-            R.id.widget_slot_name_4,
-            R.id.widget_slot_name_5,
-        )
+        private val SLOT_VIEW_IDS =
+            intArrayOf(
+                R.id.widget_slot_0,
+                R.id.widget_slot_1,
+                R.id.widget_slot_2,
+                R.id.widget_slot_3,
+                R.id.widget_slot_4,
+                R.id.widget_slot_5,
+            )
+        private val SLOT_ARTWORK_IDS =
+            intArrayOf(
+                R.id.widget_slot_artwork_0,
+                R.id.widget_slot_artwork_1,
+                R.id.widget_slot_artwork_2,
+                R.id.widget_slot_artwork_3,
+                R.id.widget_slot_artwork_4,
+                R.id.widget_slot_artwork_5,
+            )
+        private val SLOT_NAME_IDS =
+            intArrayOf(
+                R.id.widget_slot_name_0,
+                R.id.widget_slot_name_1,
+                R.id.widget_slot_name_2,
+                R.id.widget_slot_name_3,
+                R.id.widget_slot_name_4,
+                R.id.widget_slot_name_5,
+            )
 
         fun widgetKey(appWidgetId: Int): String = "station-launcher:$appWidgetId"
 
@@ -89,8 +94,9 @@ class StationLauncherWidget : AppWidgetProvider() {
         fun pushUpdate(context: Context) {
             val mgr = AppWidgetManager.getInstance(context)
             val component = ComponentName(context, StationLauncherWidget::class.java)
-            val ids = runCatching { mgr.getAppWidgetIds(component) }
-                .getOrNull() ?: IntArray(0)
+            val ids =
+                runCatching { mgr.getAppWidgetIds(component) }
+                    .getOrNull() ?: IntArray(0)
             for (id in ids) updateWidget(context, mgr, id)
         }
 
@@ -104,18 +110,20 @@ class StationLauncherWidget : AppWidgetProvider() {
             // Read config from the repository. runBlocking is acceptable here
             // because the DB read is small (single row) and the system expects
             // onUpdate to finish quickly.
-            val config = runBlocking {
-                runCatching {
-                    val repo = GlobalContext.get().get<WidgetConfigRepository>()
-                    val entry = repo.get(widgetKey(widgetId))
-                    entry?.configJson?.let { Json.decodeFromString<LauncherConfig>(it) }
-                }.getOrNull()
-            } ?: LauncherConfig()
+            val config =
+                runBlocking {
+                    runCatching {
+                        val repo = GlobalContext.get().get<WidgetConfigRepository>()
+                        val entry = repo.get(widgetKey(widgetId))
+                        entry?.configJson?.let { Json.decodeFromString<LauncherConfig>(it) }
+                    }.getOrNull()
+                } ?: LauncherConfig()
 
             val stationRepo = GlobalContext.get().get<StationRepository>()
-            val stations = runBlocking {
-                runCatching { stationRepo.list() }.getOrDefault(emptyList())
-            }
+            val stations =
+                runBlocking {
+                    runCatching { stationRepo.list() }.getOrDefault(emptyList())
+                }
             val stationById = stations.associateBy { it.id }
 
             // Populate each slot. Slots without a configured station are hidden

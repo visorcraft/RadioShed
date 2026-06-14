@@ -13,11 +13,17 @@ import androidx.compose.ui.Modifier
  * VerticalScrollbar lives.
  */
 @Composable
-actual fun ListScrollbar(state: LazyListState, modifier: Modifier) {
+actual fun ListScrollbar(
+    state: LazyListState,
+    modifier: Modifier,
+) {
     // Intentionally empty.
 }
 
 @Composable
-actual fun GridScrollbar(state: LazyGridState, modifier: Modifier) {
+actual fun GridScrollbar(
+    state: LazyGridState,
+    modifier: Modifier,
+) {
     // Intentionally empty.
 }

@@ -5,6 +5,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -37,7 +38,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.unit.dp
 import com.visorcraft.radioshed.audio.PlayerState
 import com.visorcraft.radioshed.data.SettingsStore
 import com.visorcraft.radioshed.data.StationRepository
@@ -47,13 +47,6 @@ import com.visorcraft.radioshed.ui.util.rememberVoiceInput
 import com.visorcraft.radioshed.ui.util.supportsVoiceInput
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
-
-/** Big-button hit target for Drive Mode — well past the 64dp Material default
- *  and the 96dp at-a-glance minimum. */
-private val DRIVE_BUTTON_SIZE = 88.dp
-private val DRIVE_EMPHASIZED_SIZE = 108.dp
-private val DRIVE_ICON_SIZE = 48.dp
-private val DRIVE_EMPHASIZED_ICON_SIZE = 64.dp
 
 /**
  * Configurable Drive Mode transport row (Task 2.4). Replaces the hardcoded
@@ -121,88 +114,114 @@ fun DriveTransportRow(
 
     var pickerOpen by remember { mutableStateOf(false) }
 
-    val voicePicker = rememberVoiceInput { spoken ->
-        scope.launch {
-            val match = bestStationMatch(stationRepo.list().map { it.id to it.name }, spoken)
-            if (match != null) stationPlayback.playStation(match) else rejectHaptic()
+    val voicePicker =
+        rememberVoiceInput { spoken ->
+            scope.launch {
+                val match = bestStationMatch(stationRepo.list().map { it.id to it.name }, spoken)
+                if (match != null) stationPlayback.playStation(match) else rejectHaptic()
+            }
         }
-    }
 
     // Stored order is already canonical (SettingsStore filters + the editor
     // re-orders before persist), so render ids straight through.
-    val buttonIds = settings.getDriveButtons()
-        .split(',')
-        .map { it.trim() }
-        .filter { it.isNotEmpty() }
+    val buttonIds =
+        settings.getDriveButtons()
+            .split(',')
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
 
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceEvenly,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        buttonIds.forEach { id ->
-            when (id) {
-                "previous" -> DriveButton(
-                    icon = Icons.Filled.SkipPrevious,
-                    description = "Previous (long-press to restart current)",
-                    onClick = onPrev,
-                    onLongClick = onLongPressPrev,
-                )
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        val metrics = rememberDriveLayoutMetrics(maxWidth, maxHeight)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            buttonIds.forEach { id ->
+                when (id) {
+                    "previous" ->
+                        DriveButton(
+                            icon = Icons.Filled.SkipPrevious,
+                            description = "Previous (long-press to restart current)",
+                            buttonSize = metrics.buttonSize,
+                            iconSize = metrics.iconSize,
+                            onClick = onPrev,
+                            onLongClick = onLongPressPrev,
+                        )
 
-                "play_pause" -> DriveButton(
-                    icon = if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                    description = if (playing) "Pause" else "Play",
-                    emphasized = true,
-                    onClick = onTogglePlayPause,
-                    onLongClick = onLongPressTogglePlayPause,
-                )
+                    "play_pause" ->
+                        DriveButton(
+                            icon = if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                            description = if (playing) "Pause" else "Play",
+                            emphasized = true,
+                            buttonSize = metrics.emphasizedButtonSize,
+                            iconSize = metrics.emphasizedIconSize,
+                            onClick = onTogglePlayPause,
+                            onLongClick = onLongPressTogglePlayPause,
+                        )
 
-                "next" -> DriveButton(
-                    icon = Icons.Filled.SkipNext,
-                    description = "Next",
-                    onClick = onNext,
-                    onLongClick = onLongPressNext,
-                )
+                    "next" ->
+                        DriveButton(
+                            icon = Icons.Filled.SkipNext,
+                            description = "Next",
+                            buttonSize = metrics.buttonSize,
+                            iconSize = metrics.iconSize,
+                            onClick = onNext,
+                            onLongClick = onLongPressNext,
+                        )
 
-                "station_picker" -> DriveButton(
-                    icon = Icons.Filled.GridView,
-                    description = "Station picker",
-                    onClick = {
-                        haptic()
-                        pickerOpen = true
-                    },
-                )
+                    "station_picker" ->
+                        DriveButton(
+                            icon = Icons.Filled.GridView,
+                            description = "Station picker",
+                            buttonSize = metrics.buttonSize,
+                            iconSize = metrics.iconSize,
+                            onClick = {
+                                haptic()
+                                pickerOpen = true
+                            },
+                        )
 
-                "voice_search" -> if (supportsVoiceInput()) {
-                    DriveButton(
-                        icon = Icons.Filled.Mic,
-                        description = "Voice search",
-                        onClick = {
-                            haptic()
-                            voicePicker()
-                        },
-                    )
-                }
+                    "voice_search" ->
+                        if (supportsVoiceInput()) {
+                            DriveButton(
+                                icon = Icons.Filled.Mic,
+                                description = "Voice search",
+                                buttonSize = metrics.buttonSize,
+                                iconSize = metrics.iconSize,
+                                onClick = {
+                                    haptic()
+                                    voicePicker()
+                                },
+                            )
+                        }
 
-                "mute" -> {
-                    val muted = volume < 0.02f
-                    DriveButton(
-                        icon = if (muted) Icons.AutoMirrored.Filled.VolumeOff
-                               else Icons.AutoMirrored.Filled.VolumeUp,
-                        description = if (muted) "Unmute" else "Mute",
-                        onClick = {
-                            haptic()
-                            if (muted) {
-                                val target = preMuteLevel.coerceAtLeast(0.1f)
-                                stationPlayback.previewUserVolume(target)
-                                stationPlayback.commitUserVolume(target)
-                            } else {
-                                onPreMuteLevelChange(volume)
-                                stationPlayback.previewUserVolume(0f)
-                                stationPlayback.commitUserVolume(0f)
-                            }
-                        },
-                    )
+                    "mute" -> {
+                        val muted = volume < 0.02f
+                        DriveButton(
+                            icon =
+                                if (muted) {
+                                    Icons.AutoMirrored.Filled.VolumeOff
+                                } else {
+                                    Icons.AutoMirrored.Filled.VolumeUp
+                                },
+                            description = if (muted) "Unmute" else "Mute",
+                            buttonSize = metrics.buttonSize,
+                            iconSize = metrics.iconSize,
+                            onClick = {
+                                haptic()
+                                if (muted) {
+                                    val target = preMuteLevel.coerceAtLeast(0.1f)
+                                    stationPlayback.previewUserVolume(target)
+                                    stationPlayback.commitUserVolume(target)
+                                } else {
+                                    onPreMuteLevelChange(volume)
+                                    stationPlayback.previewUserVolume(0f)
+                                    stationPlayback.commitUserVolume(0f)
+                                }
+                            },
+                        )
+                    }
                 }
             }
         }
@@ -218,24 +237,25 @@ fun DriveTransportRow(
 private fun DriveButton(
     icon: ImageVector,
     description: String,
+    buttonSize: androidx.compose.ui.unit.Dp,
+    iconSize: androidx.compose.ui.unit.Dp,
     emphasized: Boolean = false,
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
 ) {
-    val buttonSize = if (emphasized) DRIVE_EMPHASIZED_SIZE else DRIVE_BUTTON_SIZE
-    val iconSize = if (emphasized) DRIVE_EMPHASIZED_ICON_SIZE else DRIVE_ICON_SIZE
     Surface(
         color = Color.Transparent,
-        modifier = Modifier
-            .size(buttonSize)
-            .clip(RoundedCornerShape(buttonSize / 2))
-            .combinedClickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onClick,
-                onLongClick = onLongClick,
-            )
-            .semantics { contentDescription = description },
+        modifier =
+            Modifier
+                .size(buttonSize)
+                .clip(RoundedCornerShape(buttonSize / 2))
+                .combinedClickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = onClick,
+                    onLongClick = onLongClick,
+                )
+                .semantics { contentDescription = description },
     ) {
         Box(
             modifier = Modifier.fillMaxSize(),

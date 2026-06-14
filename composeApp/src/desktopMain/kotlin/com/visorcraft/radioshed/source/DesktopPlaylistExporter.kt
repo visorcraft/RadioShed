@@ -18,35 +18,38 @@ import java.io.File
  * accommodates both.
  */
 class DesktopPlaylistExporter : PlaylistExporter {
-
     override suspend fun exportM3u(
         playlistName: String,
         entries: List<M3uEntry>,
-    ): Boolean = runCatching {
-        val safeName = playlistName
-            .replace(Regex("""[\\/:*?"<>|]"""), "_")
-            .ifBlank { "playlist" }
-            .take(80)
-        val (dir, name) = showSaveDialog("Export playlist", "$safeName.m3u")
-        if (dir == null || name == null) return@runCatching false
-        withContext(IODispatcher) {
-            File(dir, name).writeText(buildM3uText(entries))
-        }
-        true
-    }.getOrDefault(false)
+    ): Boolean =
+        runCatching {
+            val safeName =
+                playlistName
+                    .replace(Regex("""[\\/:*?"<>|]"""), "_")
+                    .ifBlank { "playlist" }
+                    .take(80)
+            val (dir, name) = showSaveDialog("Export playlist", "$safeName.m3u")
+            if (dir == null || name == null) return@runCatching false
+            withContext(IODispatcher) {
+                File(dir, name).writeText(buildM3uText(entries))
+            }
+            true
+        }.getOrDefault(false)
 
-    private fun buildM3uText(entries: List<M3uEntry>): String = buildString {
-        append("#EXTM3U\n")
-        entries.forEach { e ->
-            val dur = e.durationSec.coerceAtLeast(0)
-            val artist = e.artist?.replace('\n', ' ')?.trim().orEmpty()
-            val title = e.title?.replace('\n', ' ')?.trim().orEmpty()
-            val label = listOf(artist, title)
-                .filter { it.isNotBlank() }
-                .joinToString(" - ")
-                .ifBlank { File(e.absolutePath).nameWithoutExtension }
-            append("#EXTINF:$dur,$label\n")
-            append(e.absolutePath).append('\n')
+    private fun buildM3uText(entries: List<M3uEntry>): String =
+        buildString {
+            append("#EXTM3U\n")
+            entries.forEach { e ->
+                val dur = e.durationSec.coerceAtLeast(0)
+                val artist = e.artist?.replace('\n', ' ')?.trim().orEmpty()
+                val title = e.title?.replace('\n', ' ')?.trim().orEmpty()
+                val label =
+                    listOf(artist, title)
+                        .filter { it.isNotBlank() }
+                        .joinToString(" - ")
+                        .ifBlank { File(e.absolutePath).nameWithoutExtension }
+                append("#EXTINF:$dur,$label\n")
+                append(e.absolutePath).append('\n')
+            }
         }
-    }
 }
