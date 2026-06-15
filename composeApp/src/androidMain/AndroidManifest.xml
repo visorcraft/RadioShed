@@ -50,8 +50,15 @@
         <package android:name="com.nutomic.syncthingandroid" />
     </queries>
 
+    <!-- allowBackup=false: the app stores the Subsonic password and the
+         ListenBrainz token in multiplatform-settings (plaintext app prefs).
+         With allowBackup=true they're extractable via `adb backup` on a
+         USB-debugging-enabled device. The in-app Backup & Restore feature
+         is unaffected — it writes its own bundle to filesDir/backups/ and
+         deliberately excludes both credentials (SettingsStore.dumpForBackup),
+         so this flag only disables the system's adb/auto backup path. -->
     <application
-        android:allowBackup="true"
+        android:allowBackup="false"
         android:name=".RadioShedApp"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
