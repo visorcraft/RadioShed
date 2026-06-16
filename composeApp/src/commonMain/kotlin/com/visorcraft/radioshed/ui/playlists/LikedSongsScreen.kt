@@ -489,13 +489,7 @@ fun LikedSongsScreen(
                                         saveAsPlaylistOpen = false
                                         scope.launch {
                                             val playlistId = playlistRepo.insert(name = cleanName)
-                                            snapshot.forEachIndexed { idx, track ->
-                                                playlistRepo.addTrack(
-                                                    playlistId,
-                                                    track.id,
-                                                    position = idx,
-                                                )
-                                            }
+                                            playlistRepo.appendTracks(playlistId, snapshot.map { it.id })
                                             savedPlaylistName = cleanName
                                         }
                                     }
@@ -513,9 +507,7 @@ fun LikedSongsScreen(
                         saveAsPlaylistOpen = false
                         scope.launch {
                             val playlistId = playlistRepo.insert(name = cleanName)
-                            snapshot.forEachIndexed { idx, track ->
-                                playlistRepo.addTrack(playlistId, track.id, position = idx)
-                            }
+                            playlistRepo.appendTracks(playlistId, snapshot.map { it.id })
                             savedPlaylistName = cleanName
                         }
                     },

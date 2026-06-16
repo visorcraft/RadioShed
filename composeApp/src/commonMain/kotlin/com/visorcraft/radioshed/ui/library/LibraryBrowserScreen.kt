@@ -607,45 +607,53 @@ fun LibraryBrowserScreen(
                                 .fillMaxWidth()
                                 .padding(horizontal = 12.dp, vertical = 4.dp),
                     )
-                    val filtered =
-                        allTracks
-                            .let { tracks ->
-                                albumFilter?.let { al -> tracks.filter { it.albumId == al.id } } ?: tracks
-                            }
-                            .let { tracks ->
-                                // Artist filter requires a join; we don't have artist
-                                // info on Track domain. We DO have the artist's tracks
-                                // via libraryRepo.tracksForArtist — but that's another
-                                // query. For MVP: when artist filter is active, fetch
-                                // their tracks separately. Simpler than passing the
-                                // pre-fetched list around.
-                                tracks
-                            }
-                            .let { tracks ->
-                                val q = songsFilter.trim()
-                                if (q.isBlank()) {
-                                    tracks
-                                } else {
-                                    tracks.filter {
-                                        it.title.contains(q, ignoreCase = true) ||
-                                            it.fileName.contains(q, ignoreCase = true)
-                                    }
-                                }
-                            }
+                    // Memoize filter + sort on their inputs — allTracks can
+                    // reach 100k rows, so the O(n) filter + O(n log n) sort
+                    // must not re-run on every incidental recomposition. The
+                    // sibling tabs wrap the same work in remember
+                    // (Artists :748, Albums :768, Genres :793); Songs is now
+                    // consistent with them.
                     val sorted =
-                        when (sortOrder) {
-                            SongSort.TitleAsc -> filtered.sortedBy { it.title.lowercase() }
-                            SongSort.TitleDesc -> filtered.sortedByDescending { it.title.lowercase() }
-                            SongSort.RecentlyAdded -> filtered.sortedByDescending { it.fileCtime }
-                            SongSort.Duration -> filtered.sortedBy { it.durationMs }
-                            SongSort.MostPlayed ->
-                                filtered.sortedByDescending {
-                                    playCounts[it.id] ?: 0L
-                                }
-                            SongSort.TopRated ->
-                                filtered.sortedByDescending {
-                                    ratings[it.id] ?: -1.0
-                                }
+                        remember(allTracks, songsFilter, sortOrder, albumFilter, playCounts, ratings) {
+                            val filtered =
+                                allTracks
+                                    .let { tracks ->
+                                        albumFilter?.let { al -> tracks.filter { it.albumId == al.id } } ?: tracks
+                                    }
+                                    .let { tracks ->
+                                        // Artist filter requires a join; we don't have artist
+                                        // info on Track domain. We DO have the artist's tracks
+                                        // via libraryRepo.tracksForArtist — but that's another
+                                        // query. For MVP: when artist filter is active, fetch
+                                        // their tracks separately. Simpler than passing the
+                                        // pre-fetched list around.
+                                        tracks
+                                    }
+                                    .let { tracks ->
+                                        val q = songsFilter.trim()
+                                        if (q.isBlank()) {
+                                            tracks
+                                        } else {
+                                            tracks.filter {
+                                                it.title.contains(q, ignoreCase = true) ||
+                                                    it.fileName.contains(q, ignoreCase = true)
+                                            }
+                                        }
+                                    }
+                            when (sortOrder) {
+                                SongSort.TitleAsc -> filtered.sortedBy { it.title.lowercase() }
+                                SongSort.TitleDesc -> filtered.sortedByDescending { it.title.lowercase() }
+                                SongSort.RecentlyAdded -> filtered.sortedByDescending { it.fileCtime }
+                                SongSort.Duration -> filtered.sortedBy { it.durationMs }
+                                SongSort.MostPlayed ->
+                                    filtered.sortedByDescending {
+                                        playCounts[it.id] ?: 0L
+                                    }
+                                SongSort.TopRated ->
+                                    filtered.sortedByDescending {
+                                        ratings[it.id] ?: -1.0
+                                    }
+                            }
                         }
 
                     // Tap-to-play seeds an ad-hoc queue from the visible list,

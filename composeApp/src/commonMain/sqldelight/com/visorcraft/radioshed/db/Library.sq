@@ -387,6 +387,14 @@ SELECT * FROM track WHERE id IN ?;
 selectTrackByPath:
 SELECT * FROM track WHERE path = ?;
 
+-- Bulk exact-path lookup by id set. Backup restore resolves a bundle's
+-- trackPaths in one query instead of one selectTrackByPath per row; paths
+-- that don't match exactly fall back to selectTracksByPathSuffix in
+-- LibraryRepository.getTrackByPathOrSuffix. SQLite IN(?) cap of 999 applies;
+-- the repository wrapper chunks above that.
+selectTracksByPaths:
+SELECT * FROM track WHERE path IN ?;
+
 selectTracksByFolder:
 SELECT track.* FROM track
 JOIN track_folder tf ON tf.track_id = track.id

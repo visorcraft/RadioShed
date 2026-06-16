@@ -500,11 +500,25 @@ class LibraryRepository(private val db: RadioShedDatabase) {
      * the requested path — a reasonable tie-breaker for users who
      * reorganized their library between export and import.
      */
+    /**
+     * Batched exact-(track_id ← path) lookup. Backup restore resolves a
+     * bundle's worth of track paths in one chunked query instead of one
+     * [getTrackByPathOrSuffix] round-trip per row; the per-row LIKE-suffix
+     * fallback then runs only for paths that miss the exact map (the rare
+     * moved-file case on a same-machine restore).
+     */
+    suspend fun tracksByExactPaths(paths: Collection<String>): Map<String, Track> =
+        withContext(IODispatcher) {
+            if (paths.isEmpty()) return@withContext emptyMap()
+            paths.toSet().chunked(IN_CLAUSE_CHUNK).flatMap {
+                db.libraryQueries.selectTracksByPaths(it).executeAsList()
+            }.associate { it.path to it.toDomain() }
+        }
+
     suspend fun getTrackByPathOrSuffix(path: String): Track? =
         withContext(IODispatcher) {
             val exact = db.libraryQueries.selectTrackByPath(path).executeAsOneOrNull()
             if (exact != null) return@withContext exact.toDomain()
-
             val sep = if (path.contains('\\')) '\\' else '/'
             val parts = path.split(sep).filter { it.isNotBlank() }
             if (parts.isEmpty()) return@withContext null

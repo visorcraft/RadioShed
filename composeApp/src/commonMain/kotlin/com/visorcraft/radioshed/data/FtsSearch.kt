@@ -50,9 +50,15 @@ class FtsSearch(
         withContext(IODispatcher) {
             if (!hasTrackFts()) return@withContext
             driver.execute(null, "DELETE FROM track_fts", 0)
+            // Filter is_available = 1 so search never surfaces tracks whose
+            // scanner root was removed (they're detached, not deleted, but
+            // must not appear in results). is_available only flips during a
+            // scan, and [Scanner] triggers a rebuild after each scan, so the
+            // index stays in sync. (Trigger-maintained FTS to avoid the
+            // cold-start rebuild entirely is tracked as future work.)
             driver.execute(
                 null,
-                "INSERT INTO track_fts(track_id, title) SELECT id, title FROM track",
+                "INSERT INTO track_fts(track_id, title) SELECT id, title FROM track WHERE is_available = 1",
                 0,
             )
         }

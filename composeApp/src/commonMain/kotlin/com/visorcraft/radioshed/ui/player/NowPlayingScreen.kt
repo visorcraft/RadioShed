@@ -816,9 +816,10 @@ fun NowPlayingScreen(
                         saveQueueDialog = null
                         scope.launch {
                             val pid = playlistRepo.insert(name = name, description = null)
-                            toSave.forEachIndexed { idx, t ->
-                                runCatching { playlistRepo.addTrack(pid, t.id, position = idx) }
-                            }
+                            // One transaction via appendTracks — was one addTrack
+                            // call per queued track, each in its own transaction and
+                            // swallowing failures silently.
+                            runCatching { playlistRepo.appendTracks(pid, toSave.map { it.id }) }
                         }
                     },
                 )

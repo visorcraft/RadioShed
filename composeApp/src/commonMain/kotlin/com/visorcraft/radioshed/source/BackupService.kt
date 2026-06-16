@@ -320,13 +320,24 @@ class BackupService(
             }.onFailure { stationsFailed += 1 }
         }
 
+        // Resolve every referenced track path in one chunked query instead of
+        // one getTrackByPathOrSuffix round-trip per row. Exact matches cover
+        // the dominant same-machine-restore case; misses fall back to the
+        // per-path LIKE-suffix chain (the rare moved-file case).
+        val allPaths =
+            (bundle.playlists.flatMap { it.trackPaths } +
+                bundle.ratings.map { it.trackPath } +
+                bundle.likedTracks.map { it.trackPath }).distinct()
+        val exactPathMap = libraryRepo.tracksByExactPaths(allPaths)
+        suspend fun resolvePath(path: String) = exactPathMap[path] ?: libraryRepo.getTrackByPathOrSuffix(path)
+
         var playlistsAdded = 0
         var playlistsFailed = 0
         bundle.playlists.forEach { p ->
             runCatching {
                 val playlistId = playlistRepo.insert(name = p.name, description = p.description)
                 p.trackPaths.forEachIndexed { idx, path ->
-                    val track = libraryRepo.getTrackByPathOrSuffix(path) ?: return@forEachIndexed
+                    val track = resolvePath(path) ?: return@forEachIndexed
                     playlistRepo.addTrack(playlistId, track.id, position = idx)
                 }
                 playlistsAdded += 1
@@ -337,7 +348,7 @@ class BackupService(
         var ratingsSkipped = 0
         var ratingsFailed = 0
         bundle.ratings.forEach { r ->
-            val track = libraryRepo.getTrackByPathOrSuffix(r.trackPath)
+            val track = resolvePath(r.trackPath)
             if (track == null) {
                 ratingsSkipped += 1
                 return@forEach
@@ -352,7 +363,7 @@ class BackupService(
         var likedSkipped = 0
         var likedFailed = 0
         bundle.likedTracks.forEach { l ->
-            val track = libraryRepo.getTrackByPathOrSuffix(l.trackPath)
+            val track = resolvePath(l.trackPath)
             if (track == null) {
                 likedSkipped += 1
                 return@forEach
