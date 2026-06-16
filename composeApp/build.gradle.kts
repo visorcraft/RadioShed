@@ -221,14 +221,6 @@ kotlin {
                 // Compose desktop runtime — provides Window, application,
                 // Swing-based MenuBar, file dialogs, etc.
                 implementation(compose.desktop.currentOs)
-                // ui-tooling: Compose dev-mode introspection (the
-                // composable inspector helpers used by `@Preview` etc.).
-                // Reach for it via the version-catalog entry rather than
-                // the `compose.uiTooling` accessor — the accessor is
-                // deprecated in Compose Multiplatform 1.10 in favour of
-                // the explicit `org.jetbrains.compose.ui:ui-tooling`
-                // coordinate.
-                implementation(libs.compose.uiTooling)
 
                 // SQLDelight JDBC driver for the desktop DB. Stores at
                 // jdbc:sqlite:%APPDATA%/RadioShed/radioshed.db (per the

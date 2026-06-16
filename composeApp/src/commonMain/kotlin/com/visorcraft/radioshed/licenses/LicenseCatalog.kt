@@ -278,6 +278,54 @@ val THIRD_PARTY_COMPONENTS: List<ThirdPartyComponent> =
             additionalLicenses = listOf(BSD_3_CLAUSE),
         ),
         ThirdPartyComponent(
+            name = "Compose Desktop Runtime (Linux x86_64)",
+            coordinate = "org.jetbrains.compose.desktop:desktop-jvm-linux-x64",
+            version = "1.10.3",
+            license = APACHE_2_0,
+            copyright = "Copyright 2020-2021 JetBrains s.r.o. and respective authors and developers",
+            platforms = setOf(DESKTOP),
+            homepage = "https://github.com/JetBrains/compose-multiplatform",
+            notes =
+                "OS-specific desktop runtime artifact selected by compose.desktop.currentOs. " +
+                    "Provides the Swing window, application lifecycle, and menu bar on Linux.",
+        ),
+        ThirdPartyComponent(
+            name = "Compose Desktop Runtime (Windows x86_64)",
+            coordinate = "org.jetbrains.compose.desktop:desktop-jvm-windows-x64",
+            version = "1.10.3",
+            license = APACHE_2_0,
+            copyright = "Copyright 2020-2021 JetBrains s.r.o. and respective authors and developers",
+            platforms = setOf(DESKTOP),
+            homepage = "https://github.com/JetBrains/compose-multiplatform",
+            notes =
+                "OS-specific desktop runtime artifact selected by compose.desktop.currentOs. " +
+                    "Provides the Swing window, application lifecycle, and menu bar on Windows.",
+        ),
+        ThirdPartyComponent(
+            name = "Compose Desktop Runtime (macOS x86_64)",
+            coordinate = "org.jetbrains.compose.desktop:desktop-jvm-macos-x64",
+            version = "1.10.3",
+            license = APACHE_2_0,
+            copyright = "Copyright 2020-2021 JetBrains s.r.o. and respective authors and developers",
+            platforms = setOf(DESKTOP),
+            homepage = "https://github.com/JetBrains/compose-multiplatform",
+            notes =
+                "OS-specific desktop runtime artifact selected by compose.desktop.currentOs. " +
+                    "Provides the Swing window, application lifecycle, and menu bar on Intel Macs.",
+        ),
+        ThirdPartyComponent(
+            name = "Compose Desktop Runtime (macOS ARM64)",
+            coordinate = "org.jetbrains.compose.desktop:desktop-jvm-macos-arm64",
+            version = "1.10.3",
+            license = APACHE_2_0,
+            copyright = "Copyright 2020-2021 JetBrains s.r.o. and respective authors and developers",
+            platforms = setOf(DESKTOP),
+            homepage = "https://github.com/JetBrains/compose-multiplatform",
+            notes =
+                "OS-specific desktop runtime artifact selected by compose.desktop.currentOs. " +
+                    "Provides the Swing window, application lifecycle, and menu bar on Apple Silicon Macs.",
+        ),
+        ThirdPartyComponent(
             name = "SQLDelight SQLite Driver (JVM)",
             coordinate = "app.cash.sqldelight:sqlite-driver",
             version = "2.1.0",

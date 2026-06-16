@@ -92,6 +92,10 @@ private val EXPECTED_SHIPPED_COORDINATES: Set<String> =
         // Desktop
         "org.jetbrains.kotlinx:kotlinx-coroutines-swing",
         "org.jetbrains.skiko:skiko",
+        "org.jetbrains.compose.desktop:desktop-jvm-linux-x64",
+        "org.jetbrains.compose.desktop:desktop-jvm-windows-x64",
+        "org.jetbrains.compose.desktop:desktop-jvm-macos-x64",
+        "org.jetbrains.compose.desktop:desktop-jvm-macos-arm64",
         "app.cash.sqldelight:sqlite-driver",
         "org.xerial:sqlite-jdbc",
         "net.jthink:jaudiotagger",
