@@ -9,6 +9,7 @@ import android.os.Looper
 import android.util.Log
 import android.view.KeyEvent
 import android.widget.Toast
+import androidx.core.content.IntentCompat
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -289,7 +290,11 @@ class RadioShedMediaSessionService : MediaLibraryService() {
         // crossfade into a hard cut instead of an overlap.
         fun buildExoPlayer(): ExoPlayer =
             ExoPlayer.Builder(this)
-                .setAudioAttributes(attributes, /* handleAudioFocus = */ false)
+                .setAudioAttributes(
+                    attributes,
+                    /* handleAudioFocus = */
+                    false,
+                )
                 .setHandleAudioBecomingNoisy(true)
                 .build()
                 .also { attachEffectsAndWidgetListeners(it) }
@@ -732,7 +737,7 @@ class RadioShedMediaSessionService : MediaLibraryService() {
             intent: Intent,
         ): Boolean {
             val key =
-                intent.getParcelableExtra<KeyEvent>(Intent.EXTRA_KEY_EVENT)
+                IntentCompat.getParcelableExtra(intent, Intent.EXTRA_KEY_EVENT, KeyEvent::class.java)
                     ?: return false
             if (key.action != KeyEvent.ACTION_DOWN || key.repeatCount != 0) return false
             return when (key.keyCode) {
@@ -890,10 +895,10 @@ class RadioShedMediaSessionService : MediaLibraryService() {
             // glyph slots we owned in the notification.
 
             val heartButton =
-                CommandButton.Builder()
+                CommandButton.Builder(CommandButton.ICON_UNDEFINED)
                     .setSessionCommand(SessionCommand(ACTION_TOGGLE_LIKE, Bundle.EMPTY))
                     .setDisplayName(if (currentTrackLiked) "Unlike" else "Like")
-                    .setIconResId(heartIcon)
+                    .setCustomIconResId(heartIcon)
                     .build()
             // Filled-vs-outline star is the cheap way to give visible
             // feedback for the cycling rating without shipping six
@@ -915,16 +920,16 @@ class RadioShedMediaSessionService : MediaLibraryService() {
                     "★ $currentTrackRating/5"
                 }
             val starButton =
-                CommandButton.Builder()
+                CommandButton.Builder(CommandButton.ICON_UNDEFINED)
                     .setSessionCommand(SessionCommand(ACTION_TOGGLE_STAR, Bundle.EMPTY))
                     .setDisplayName(starLabel)
-                    .setIconResId(starIcon)
+                    .setCustomIconResId(starIcon)
                     .build()
             val dislikeButton =
-                CommandButton.Builder()
+                CommandButton.Builder(CommandButton.ICON_UNDEFINED)
                     .setSessionCommand(SessionCommand(ACTION_DISLIKE_ON_STATION, Bundle.EMPTY))
                     .setDisplayName("Dislike")
-                    .setIconResId(R.drawable.ic_radioshed_thumb_down)
+                    .setCustomIconResId(R.drawable.ic_radioshed_thumb_down)
                     .build()
 
             // Order matters: Auto's Now Playing template caps the
@@ -1700,7 +1705,7 @@ class RadioShedMediaSessionService : MediaLibraryService() {
                 }
             if (voiceItem != null) {
                 val rm = voiceItem.requestMetadata
-                val rawQuery = rm.searchQuery?.toString().orEmpty()
+                val rawQuery = rm.searchQuery.orEmpty()
                 val extras = rm.extras
                 val focus = extras?.getString(EXTRA_MEDIA_FOCUS)
                 val artistExtra = extras?.getString(EXTRA_MEDIA_ARTIST)

@@ -211,11 +211,22 @@ class SourceRuleEvaluator(
             rule.key.equals("ALBUM_ARTIST", ignoreCase = true) ||
                 rule.key.equals("ARTIST", ignoreCase = true)
         val perValue =
-            if (isArtistKey) {
-                listOf(libraryRepo.tracksByArtistNames(cleanValues))
+            if (rule.matchAll) {
+                // matchAll means a track must satisfy every value. Query
+                // per-value so the intersection is exact; batched unions
+                // would collapse into a single list and break semantics.
+                if (isArtistKey) {
+                    cleanValues.map { libraryRepo.tracksByArtistName(it) }
+                } else {
+                    cleanValues.map { libraryRepo.tracksByTagValues(rule.key, listOf(it)) }
+                }
             } else {
-                cleanValues.chunked(IN_CLAUSE_CHUNK).map { chunk ->
-                    libraryRepo.tracksByTagValues(rule.key, chunk)
+                if (isArtistKey) {
+                    listOf(libraryRepo.tracksByArtistNames(cleanValues))
+                } else {
+                    cleanValues.chunked(IN_CLAUSE_CHUNK).map { chunk ->
+                        libraryRepo.tracksByTagValues(rule.key, chunk)
+                    }
                 }
             }
         return if (rule.matchAll) {

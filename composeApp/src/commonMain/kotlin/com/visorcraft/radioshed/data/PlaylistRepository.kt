@@ -9,6 +9,9 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 
+// SQLite allows at most 999 host parameters per statement.
+private const val IN_CLAUSE_CHUNK = 900
+
 class PlaylistRepository(private val db: RadioShedDatabase) {
     fun observeAll(): Flow<List<Playlist>> =
         db.playlistsQueries.selectAllPlaylists()
@@ -237,16 +240,16 @@ class PlaylistRepository(private val db: RadioShedDatabase) {
     suspend fun firstTrackArtworkForPlaylists(playlistIds: Collection<Long>): Map<Long, String?> =
         withContext(IODispatcher) {
             if (playlistIds.isEmpty()) return@withContext emptyMap()
-            db.playlistsQueries.firstTrackArtworkForPlaylists(playlistIds)
-                .executeAsList()
-                .associate { it.playlist_id to it.artwork_uri }
+            playlistIds.toSet().chunked(IN_CLAUSE_CHUNK).flatMap {
+                db.playlistsQueries.firstTrackArtworkForPlaylists(it).executeAsList()
+            }.associate { it.playlist_id to it.artwork_uri }
         }
 
     suspend fun trackCountsForPlaylists(playlistIds: Collection<Long>): Map<Long, Long> =
         withContext(IODispatcher) {
             if (playlistIds.isEmpty()) return@withContext emptyMap()
-            db.playlistsQueries.trackCountsForPlaylists(playlistIds)
-                .executeAsList()
-                .associate { it.playlist_id to it.track_count }
+            playlistIds.toSet().chunked(IN_CLAUSE_CHUNK).flatMap {
+                db.playlistsQueries.trackCountsForPlaylists(it).executeAsList()
+            }.associate { it.playlist_id to it.track_count }
         }
 }

@@ -110,18 +110,24 @@ import androidx.compose.foundation.lazy.items as lazyItems
 private const val DRIVE_QUICK_LIST_MAX = 6
 
 /**
- * Lightweight identity of a station for sort/filter memoization.
- * [StationRepository.observeAll] emits a new list every time stats change,
- * which would otherwise rerun the expensive sort/filter pipeline on every
- * track start. Keying on these fields instead of the full decoded Station
- * objects avoids that churn while still refreshing when something that
- * affects the grid actually changes.
+ * Lightweight identity of a station for filter memoization.
+ * [StationRepository.observeAll] emits a new list every time stats change;
+ * we keep stats out of this key so play-count bumps don't recompute the
+ * filter/sort pipeline for sorts that don't depend on stats.
  */
 private data class StationGridKey(
     val id: Long,
     val name: String,
     val customSubtitle: String?,
     val isBuiltIn: Boolean,
+)
+
+/**
+ * Stats-only key used when the current sort actually needs play-count or
+ * last-played data (MostPlayed / LeastPlayed / RecentlyPlayed).
+ */
+private data class StationStatKey(
+    val id: Long,
     val playCount: Long,
     val lastPlayedAt: Long?,
 )
@@ -190,6 +196,30 @@ fun StationsHomeScreen(
                 name = it.name,
                 customSubtitle = it.customSubtitle,
                 isBuiltIn = it.isBuiltIn,
+            )
+        }
+    }
+    // Only include stats in the memo key when the active sort actually
+    // depends on them, so NameAsc / Custom sorts don't recompute on every
+    // track start.
+    val stationSortKey: List<StationStatKey>? = remember(stations, currentSort) {
+        when (currentSort) {
+            "MostPlayed", "LeastPlayed", "RecentlyPlayed" ->
+                stations.map {
+                    StationStatKey(
+                        id = it.id,
+                        playCount = it.stats.playCount,
+                        lastPlayedAt = it.stats.lastPlayedAt,
+                    )
+                }
+            else -> null
+        }
+    }
+    // Most-played carousel needs stats regardless of the main grid sort.
+    val stationStatKeys = remember(stations) {
+        stations.map {
+            StationStatKey(
+                id = it.id,
                 playCount = it.stats.playCount,
                 lastPlayedAt = it.stats.lastPlayedAt,
             )
@@ -496,7 +526,7 @@ fun StationsHomeScreen(
                                 .filter { it.id != currentStation?.id && it.stats.lastPlayedAt != null }
                         }
                     val mostPlayedMemo =
-                        remember(stationKeys, currentStation?.id) {
+                        remember(stationStatKeys, currentStation?.id) {
                             stations
                                 .asSequence()
                                 .filter { it.stats.playCount > 0 && it.id != currentStation?.id }
@@ -505,7 +535,7 @@ fun StationsHomeScreen(
                                 .toList()
                         }
                     val displayedStationsMemo =
-                        remember(stationKeys, stationFilter, hideBuiltIns, currentSort) {
+                        remember(stationKeys, stationSortKey, stationFilter, hideBuiltIns, currentSort) {
                             stations
                                 .let { src ->
                                     if (hideBuiltIns) src.filterNot { it.isBuiltIn } else src
@@ -561,6 +591,7 @@ fun StationsHomeScreen(
                             val visibleCountForHeader =
                                 remember(
                                     stationKeys,
+                                    stationSortKey,
                                     stationFilter,
                                     hideBuiltIns,
                                 ) {

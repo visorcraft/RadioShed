@@ -56,6 +56,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -154,8 +155,6 @@ fun LibraryBrowserScreen(
             runCatching { SongSort.valueOf(settings.getLibrarySongSort()) }.getOrDefault(SongSort.TitleAsc),
         )
     }
-    var artistFilter by remember { mutableStateOf<Artist?>(null) }
-    var albumFilter by remember { mutableStateOf<Album?>(null) }
     var artistSort by remember {
         mutableStateOf(
             runCatching { ArtistSort.valueOf(settings.getLibraryArtistSort()) }
@@ -180,49 +179,37 @@ fun LibraryBrowserScreen(
     // album table, which would hold the entire library in memory.
     var albumNameById by remember { mutableStateOf<Map<Long, String>>(emptyMap()) }
 
-    // Most-played sorts need a play-count map. Building it scans the
-    // whole station_history table, so cache it once per sort/refresh
-    // rather than recomputing it inside every paged-load lambda.
-    var artistPlayCounts by remember { mutableStateOf<Map<Long, Long>>(emptyMap()) }
-    var albumPlayCounts by remember { mutableStateOf<Map<Long, Long>>(emptyMap()) }
+    // Most-played artist/album grids need the globally-ordered top-N
+    // lists. We cache them once per sort/refresh so the paged loader can
+    // slice by offset/limit instead of re-scanning history per page.
+    var mostPlayedArtists by remember { mutableStateOf<List<com.visorcraft.radioshed.data.TopArtistEntry>>(emptyList()) }
+    var mostPlayedAlbums by remember { mutableStateOf<List<com.visorcraft.radioshed.data.TopAlbumEntry>>(emptyList()) }
     LaunchedEffect(artistSort, trackCount) {
-        artistPlayCounts = if (artistSort == ArtistSort.MostPlayed && trackCount >= 0L) {
-            stationRepo.topPlayedArtists(Long.MAX_VALUE).associate { it.id to it.plays }
+        mostPlayedArtists = if (artistSort == ArtistSort.MostPlayed && trackCount >= 0L) {
+            stationRepo.topPlayedArtists(Long.MAX_VALUE)
         } else {
-            emptyMap()
+            emptyList()
         }
     }
     LaunchedEffect(albumSort, trackCount) {
-        albumPlayCounts = if (albumSort == AlbumSort.MostPlayed && trackCount >= 0L) {
-            stationRepo.topPlayedAlbums(Long.MAX_VALUE).associate { it.id to it.plays }
+        mostPlayedAlbums = if (albumSort == AlbumSort.MostPlayed && trackCount >= 0L) {
+            stationRepo.topPlayedAlbums(Long.MAX_VALUE)
         } else {
-            emptyMap()
+            emptyList()
         }
     }
 
-    val songsPager = remember(sortOrder, songsFilter, albumFilter, trackCount) { PagedListState<Track>() }
-    LaunchedEffect(sortOrder, songsFilter, albumFilter, trackCount) {
+    val songsPager = remember(sortOrder, songsFilter, trackCount) { PagedListState<Track>() }
+    LaunchedEffect(sortOrder, songsFilter, trackCount) {
         if (trackCount < 0L) return@LaunchedEffect
         songsPager.reset()
         songsPager.loadPage { limit, offset ->
-            val base =
-                libraryRepo.listAvailableTracksPaged(
-                    limit = limit,
-                    offset = offset,
-                    sort = sortOrder.toLibrarySort(),
-                    filter = songsFilter.takeIf { it.isNotBlank() },
-                )
-            when (sortOrder) {
-                SongSort.MostPlayed -> {
-                    val counts = stationRepo.playCountForTracks(base.map { it.id })
-                    base.sortedByDescending { counts[it.id] ?: 0L }
-                }
-                SongSort.TopRated -> {
-                    val ratings = ratingRepo.ratingsForTracks(base.map { it.id })
-                    base.sortedByDescending { ratings[it.id] ?: -1.0 }
-                }
-                else -> base
-            }
+            libraryRepo.listAvailableTracksPaged(
+                limit = limit,
+                offset = offset,
+                sort = sortOrder.toLibrarySort(),
+                filter = songsFilter.takeIf { it.isNotBlank() },
+            )
         }
     }
 
@@ -231,11 +218,14 @@ fun LibraryBrowserScreen(
         if (trackCount < 0L) return@LaunchedEffect
         artistsPager.reset()
         artistsPager.loadPage { limit, offset ->
-            val base = libraryRepo.listArtistsPaged(limit, offset)
             when (artistSort) {
-                ArtistSort.NameAsc -> base.sortedBy { it.name.lowercase() }
-                ArtistSort.NameDesc -> base.sortedByDescending { it.name.lowercase() }
-                ArtistSort.MostPlayed -> base.sortedByDescending { artistPlayCounts[it.id] ?: 0L }
+                ArtistSort.NameAsc -> libraryRepo.listArtistsPaged(limit, offset)
+                ArtistSort.NameDesc -> libraryRepo.listArtistsPagedDesc(limit, offset)
+                ArtistSort.MostPlayed -> {
+                    val entries = mostPlayedArtists.drop(offset.toInt()).take(limit.toInt())
+                    libraryRepo.artistsByIds(entries.map { it.id }).values.toList()
+                        .sortedBy { artist -> entries.indexOfFirst { it.id == artist.id } }
+                }
             }
         }
     }
@@ -245,13 +235,16 @@ fun LibraryBrowserScreen(
         if (trackCount < 0L) return@LaunchedEffect
         albumsPager.reset()
         albumsPager.loadPage { limit, offset ->
-            val base = libraryRepo.listAlbumsPaged(limit, offset)
             when (albumSort) {
-                AlbumSort.TitleAsc -> base.sortedBy { it.title.lowercase() }
-                AlbumSort.TitleDesc -> base.sortedByDescending { it.title.lowercase() }
-                AlbumSort.YearAsc -> base.sortedBy { it.year ?: Int.MAX_VALUE }
-                AlbumSort.YearDesc -> base.sortedByDescending { it.year ?: Int.MIN_VALUE }
-                AlbumSort.MostPlayed -> base.sortedByDescending { albumPlayCounts[it.id] ?: 0L }
+                AlbumSort.TitleAsc -> libraryRepo.listAlbumsPaged(limit, offset)
+                AlbumSort.TitleDesc -> libraryRepo.listAlbumsPagedDesc(limit, offset)
+                AlbumSort.YearAsc -> libraryRepo.listAlbumsPagedByYear(limit, offset, ascending = true)
+                AlbumSort.YearDesc -> libraryRepo.listAlbumsPagedByYear(limit, offset, ascending = false)
+                AlbumSort.MostPlayed -> {
+                    val entries = mostPlayedAlbums.drop(offset.toInt()).take(limit.toInt())
+                    libraryRepo.albumsByIds(entries.map { it.id }).values.toList()
+                        .sortedBy { album -> entries.indexOfFirst { it.id == album.id } }
+                }
             }
         }
     }
@@ -261,11 +254,11 @@ fun LibraryBrowserScreen(
         if (trackCount < 0L) return@LaunchedEffect
         genresPager.reset()
         genresPager.loadPage { limit, offset ->
-            val base = libraryRepo.distinctTagValuesPaged("GENRE", limit, offset).filter { it.isNotBlank() }
-            when (genreSort) {
-                GenreSort.NameAsc -> base.sortedBy { it.lowercase() }
-                GenreSort.NameDesc -> base.sortedByDescending { it.lowercase() }
+            val values = when (genreSort) {
+                GenreSort.NameAsc -> libraryRepo.distinctTagValuesPaged("GENRE", limit, offset)
+                GenreSort.NameDesc -> libraryRepo.distinctTagValuesPagedDesc("GENRE", limit, offset)
             }
+            values.filter { it.isNotBlank() }
         }
     }
 
@@ -455,18 +448,10 @@ fun LibraryBrowserScreen(
                                     Modifier.combinedClickable(
                                         onClick = {
                                             scope.launch {
-                                                val tracks = when {
-                                                    artistFilter != null ->
-                                                        libraryRepo.tracksForArtist(artistFilter!!.id)
-                                                    albumFilter != null ->
-                                                        libraryRepo.tracksForAlbum(albumFilter!!.id)
-                                                    else -> {
-                                                        val ids = libraryRepo.listAvailableTrackIds(songsFilter.takeIf { it.isNotBlank() })
-                                                            .shuffled()
-                                                            .take(SHUFFLE_ALL_CAP)
-                                                        libraryRepo.tracksByIds(ids).values.toList()
-                                                    }
-                                                }
+                                                val ids = libraryRepo.listAvailableTrackIds(songsFilter.takeIf { it.isNotBlank() })
+                                                    .shuffled()
+                                                    .take(SHUFFLE_ALL_CAP)
+                                                val tracks = libraryRepo.tracksByIds(ids).values.toList()
                                                 stationPlayback.playTracks(tracks.shuffled(), startIndex = 0)
                                             }
                                         },
@@ -594,44 +579,6 @@ fun LibraryBrowserScreen(
                 }
             }
 
-            // Active filter chips (only shown when something's filtered)
-            if (artistFilter != null || albumFilter != null) {
-                Row(
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    artistFilter?.let { a ->
-                        AssistChip(
-                            onClick = { artistFilter = null },
-                            label = { Text("Artist: ${a.name}") },
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = Icons.Filled.Clear,
-                                    contentDescription = "Clear artist filter",
-                                    modifier = Modifier.size(16.dp),
-                                )
-                            },
-                        )
-                    }
-                    albumFilter?.let { al ->
-                        AssistChip(
-                            onClick = { albumFilter = null },
-                            label = { Text("Album: ${al.title}") },
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = Icons.Filled.Clear,
-                                    contentDescription = "Clear album filter",
-                                    modifier = Modifier.size(16.dp),
-                                )
-                            },
-                        )
-                    }
-                }
-            }
-
             when (selectedTab) {
                 LibraryTab.Songs -> {
                     // Quick text filter on the visible Songs view — substring
@@ -693,29 +640,12 @@ fun LibraryBrowserScreen(
                                 selectedTrackIds + id
                             }
                     }
-                    var artistTracks by remember(artistFilter, songsFilter) { mutableStateOf<List<Track>>(emptyList()) }
-                    LaunchedEffect(artistFilter, songsFilter) {
-                        artistTracks = if (artistFilter != null) {
-                            libraryRepo.tracksForArtist(artistFilter!!.id)
-                                .let { tracks ->
-                                    val q = songsFilter.trim()
-                                    if (q.isBlank()) tracks else tracks.filter {
-                                        it.title.contains(q, true) || it.fileName.contains(q, true)
-                                    }
-                                }
-                        } else {
-                            emptyList()
-                        }
-                    }
                     // Keep the album-id → title map in sync with the
                     // visible tracks only, instead of observing the full
                     // album table. The ids stay small even when the user
                     // scrolls deep into a huge library.
-                    val visibleAlbumIds = remember(songsPager.items, artistTracks) {
-                        (songsPager.items.asSequence() + artistTracks.asSequence())
-                            .mapNotNull { it.albumId }
-                            .distinct()
-                            .toList()
+                    val visibleAlbumIds = remember(songsPager.items) {
+                        songsPager.items.mapNotNull { it.albumId }.distinct()
                     }
                     LaunchedEffect(visibleAlbumIds) {
                         albumNameById = if (visibleAlbumIds.isEmpty()) {
@@ -724,83 +654,56 @@ fun LibraryBrowserScreen(
                             libraryRepo.albumsByIds(visibleAlbumIds).mapValues { it.value.title }
                         }
                     }
-                    if (artistFilter != null) {
-                        SongList(
-                            tracks = artistTracks,
-                            currentTrackId = currentTrackId,
-                            onPlay = { track ->
-                                val idx = artistTracks.indexOf(track).coerceAtLeast(0)
-                                stationPlayback.playTracks(artistTracks, startIndex = idx)
-                            },
-                            onLongPress = onSongLongPress,
-                            albumNameById = albumNameById,
-                            selectionMode = inSelectionMode,
-                            selectedIds = selectedTrackIds,
-                            onToggleSelection = onToggleSelection,
-                        )
-                    } else {
-                        val listState = rememberLazyListState()
-                        LaunchedEffect(listState, songsPager.hasMore, songsPager.isLoading) {
-                            snapshotFlow { listState.layoutInfo }
-                                .map { it.totalItemsCount to (it.visibleItemsInfo.lastOrNull()?.index ?: 0) }
-                                .distinctUntilChanged()
-                                .collect { (total, last) ->
-                                    if (total > 0 && last >= total - LOAD_AHEAD && songsPager.hasMore && !songsPager.isLoading) {
-                                        songsPager.loadPage { limit, offset ->
-                                            val base = libraryRepo.listAvailableTracksPaged(
-                                                limit = limit,
-                                                offset = offset,
-                                                sort = sortOrder.toLibrarySort(),
-                                                filter = songsFilter.takeIf { it.isNotBlank() },
-                                            )
-                                            when (sortOrder) {
-                                                SongSort.MostPlayed -> {
-                                                    val counts = stationRepo.playCountForTracks(base.map { it.id })
-                                                    base.sortedByDescending { counts[it.id] ?: 0L }
-                                                }
-                                                SongSort.TopRated -> {
-                                                    val ratings = ratingRepo.ratingsForTracks(base.map { it.id })
-                                                    base.sortedByDescending { ratings[it.id] ?: -1.0 }
-                                                }
-                                                else -> base
-                                            }
-                                        }
+                    val listState = rememberLazyListState()
+                    LaunchedEffect(listState, songsPager) {
+                        snapshotFlow { listState.layoutInfo }
+                            .map { it.totalItemsCount to (it.visibleItemsInfo.lastOrNull()?.index ?: 0) }
+                            .distinctUntilChanged()
+                            .collect { (total, last) ->
+                                if (total > 0 && last >= total - LOAD_AHEAD && songsPager.hasMore && !songsPager.isLoading) {
+                                    songsPager.loadPage { limit, offset ->
+                                        libraryRepo.listAvailableTracksPaged(
+                                            limit = limit,
+                                            offset = offset,
+                                            sort = sortOrder.toLibrarySort(),
+                                            filter = songsFilter.takeIf { it.isNotBlank() },
+                                        )
                                     }
                                 }
-                        }
-                        val displayedTracks = songsPager.items.let { tracks ->
-                            albumFilter?.let { al -> tracks.filter { it.albumId == al.id } } ?: tracks
-                        }
-                        SongList(
-                            tracks = displayedTracks,
-                            currentTrackId = currentTrackId,
-                            listState = listState,
-                            onPlay = { track ->
-                                val idx = displayedTracks.indexOf(track).coerceAtLeast(0)
-                                stationPlayback.playTracks(displayedTracks, startIndex = idx)
-                            },
-                            onLongPress = onSongLongPress,
-                            albumNameById = albumNameById,
-                            selectionMode = inSelectionMode,
-                            selectedIds = selectedTrackIds,
-                            onToggleSelection = onToggleSelection,
-                        )
+                            }
                     }
+                    SongList(
+                        tracks = songsPager.items,
+                        currentTrackId = currentTrackId,
+                        listState = listState,
+                        onPlay = { track ->
+                            val idx = songsPager.items.indexOf(track).coerceAtLeast(0)
+                            stationPlayback.playTracks(songsPager.items, startIndex = idx)
+                        },
+                        onLongPress = onSongLongPress,
+                        albumNameById = albumNameById,
+                        selectionMode = inSelectionMode,
+                        selectedIds = selectedTrackIds,
+                        onToggleSelection = onToggleSelection,
+                    )
                 }
                 LibraryTab.Artists -> {
                     val gridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
-                    LaunchedEffect(gridState, artistsPager.hasMore, artistsPager.isLoading) {
+                    LaunchedEffect(gridState, artistsPager) {
                         snapshotFlow { gridState.layoutInfo }
                             .map { it.totalItemsCount to (it.visibleItemsInfo.lastOrNull()?.index ?: 0) }
                             .distinctUntilChanged()
                             .collect { (total, last) ->
                                 if (total > 0 && last >= total - LOAD_AHEAD && artistsPager.hasMore && !artistsPager.isLoading) {
                                     artistsPager.loadPage { limit, offset ->
-                                        val base = libraryRepo.listArtistsPaged(limit, offset)
                                         when (artistSort) {
-                                            ArtistSort.NameAsc -> base.sortedBy { it.name.lowercase() }
-                                            ArtistSort.NameDesc -> base.sortedByDescending { it.name.lowercase() }
-                                            ArtistSort.MostPlayed -> base.sortedByDescending { artistPlayCounts[it.id] ?: 0L }
+                                            ArtistSort.NameAsc -> libraryRepo.listArtistsPaged(limit, offset)
+                                            ArtistSort.NameDesc -> libraryRepo.listArtistsPagedDesc(limit, offset)
+                                            ArtistSort.MostPlayed -> {
+                                                val entries = mostPlayedArtists.drop(offset.toInt()).take(limit.toInt())
+                                                libraryRepo.artistsByIds(entries.map { it.id }).values.toList()
+                                                    .sortedBy { artist -> entries.indexOfFirst { it.id == artist.id } }
+                                            }
                                         }
                                     }
                                 }
@@ -815,20 +718,23 @@ fun LibraryBrowserScreen(
                 }
                 LibraryTab.Albums -> {
                     val gridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
-                    LaunchedEffect(gridState, albumsPager.hasMore, albumsPager.isLoading) {
+                    LaunchedEffect(gridState, albumsPager) {
                         snapshotFlow { gridState.layoutInfo }
                             .map { it.totalItemsCount to (it.visibleItemsInfo.lastOrNull()?.index ?: 0) }
                             .distinctUntilChanged()
                             .collect { (total, last) ->
                                 if (total > 0 && last >= total - LOAD_AHEAD && albumsPager.hasMore && !albumsPager.isLoading) {
                                     albumsPager.loadPage { limit, offset ->
-                                        val base = libraryRepo.listAlbumsPaged(limit, offset)
                                         when (albumSort) {
-                                            AlbumSort.TitleAsc -> base.sortedBy { it.title.lowercase() }
-                                            AlbumSort.TitleDesc -> base.sortedByDescending { it.title.lowercase() }
-                                            AlbumSort.YearAsc -> base.sortedBy { it.year ?: Int.MAX_VALUE }
-                                            AlbumSort.YearDesc -> base.sortedByDescending { it.year ?: Int.MIN_VALUE }
-                                            AlbumSort.MostPlayed -> base.sortedByDescending { albumPlayCounts[it.id] ?: 0L }
+                                            AlbumSort.TitleAsc -> libraryRepo.listAlbumsPaged(limit, offset)
+                                            AlbumSort.TitleDesc -> libraryRepo.listAlbumsPagedDesc(limit, offset)
+                                            AlbumSort.YearAsc -> libraryRepo.listAlbumsPagedByYear(limit, offset, ascending = true)
+                                            AlbumSort.YearDesc -> libraryRepo.listAlbumsPagedByYear(limit, offset, ascending = false)
+                                            AlbumSort.MostPlayed -> {
+                                                val entries = mostPlayedAlbums.drop(offset.toInt()).take(limit.toInt())
+                                                libraryRepo.albumsByIds(entries.map { it.id }).values.toList()
+                                                    .sortedBy { album -> entries.indexOfFirst { it.id == album.id } }
+                                            }
                                         }
                                     }
                                 }
@@ -843,18 +749,18 @@ fun LibraryBrowserScreen(
                 }
                 LibraryTab.Genres -> {
                     val gridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
-                    LaunchedEffect(gridState, genresPager.hasMore, genresPager.isLoading) {
+                    LaunchedEffect(gridState, genresPager) {
                         snapshotFlow { gridState.layoutInfo }
                             .map { it.totalItemsCount to (it.visibleItemsInfo.lastOrNull()?.index ?: 0) }
                             .distinctUntilChanged()
                             .collect { (total, last) ->
                                 if (total > 0 && last >= total - LOAD_AHEAD && genresPager.hasMore && !genresPager.isLoading) {
                                     genresPager.loadPage { limit, offset ->
-                                        val base = libraryRepo.distinctTagValuesPaged("GENRE", limit, offset).filter { it.isNotBlank() }
-                                        when (genreSort) {
-                                            GenreSort.NameAsc -> base.sortedBy { it.lowercase() }
-                                            GenreSort.NameDesc -> base.sortedByDescending { it.lowercase() }
+                                        val values = when (genreSort) {
+                                            GenreSort.NameAsc -> libraryRepo.distinctTagValuesPaged("GENRE", limit, offset)
+                                            GenreSort.NameDesc -> libraryRepo.distinctTagValuesPagedDesc("GENRE", limit, offset)
                                         }
+                                        values.filter { it.isNotBlank() }
                                     }
                                 }
                             }
@@ -969,7 +875,9 @@ fun LibraryBrowserScreen(
         )
     }
     if (showBatchEditDialog) {
-        val selectedTracks = songsPager.items.filter { it.id in selectedTrackIds }
+        val selectedTracks by produceState<List<Track>>(initialValue = emptyList(), selectedTrackIds) {
+            value = libraryRepo.tracksByIds(selectedTrackIds).values.toList()
+        }
         BatchEditTagsDialog(
             tracks = selectedTracks,
             onDismiss = {
@@ -1003,7 +911,8 @@ private fun SongSort.toLibrarySort(): LibraryTrackSort =
         SongSort.TitleDesc -> LibraryTrackSort.TitleDesc
         SongSort.RecentlyAdded -> LibraryTrackSort.RecentlyAdded
         SongSort.Duration -> LibraryTrackSort.Duration
-        SongSort.MostPlayed, SongSort.TopRated -> LibraryTrackSort.TitleAsc
+        SongSort.MostPlayed -> LibraryTrackSort.MostPlayed
+        SongSort.TopRated -> LibraryTrackSort.TopRated
     }
 
 /**

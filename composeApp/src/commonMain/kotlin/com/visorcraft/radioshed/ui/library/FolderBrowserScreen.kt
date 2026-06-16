@@ -75,6 +75,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.unit.dp
 import com.visorcraft.radioshed.audio.AudioEngine
 import com.visorcraft.radioshed.audio.Playable
@@ -290,7 +291,7 @@ fun FolderBrowserScreen(
                                 // breadcrumb when active. Auto-focus
                                 // is handled by the field's own
                                 // FocusRequester pattern below.
-                                val keyboardController = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+                                val keyboardController = LocalSoftwareKeyboardController.current
                                 OutlinedTextField(
                                     value = searchQuery,
                                     onValueChange = { searchQuery = it },
@@ -1460,7 +1461,8 @@ private suspend fun playAudioPath(
     audioEngine: AudioEngine,
 ) {
     if (audioEntries.isEmpty()) return
-    val tracks = libraryRepo.tracksByExactPaths(audioEntries.map { it.path }).values.toList()
+    val pathToTrack = libraryRepo.tracksByExactPaths(audioEntries.map { it.path })
+    val tracks = audioEntries.mapNotNull { pathToTrack[it.path] }
     if (tracks.isNotEmpty()) {
         val startIdx =
             if (tappedEntry != null) {

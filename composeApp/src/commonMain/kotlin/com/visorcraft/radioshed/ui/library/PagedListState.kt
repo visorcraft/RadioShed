@@ -3,6 +3,8 @@ package com.visorcraft.radioshed.ui.library
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 private const val DEFAULT_PAGE_SIZE = 100
 internal const val LOAD_AHEAD = 20
@@ -20,11 +22,13 @@ class PagedListState<T> {
     var hasMore by mutableStateOf(true)
         private set
 
+    private val mutex = Mutex()
+
     suspend fun loadPage(
         pageSize: Int = DEFAULT_PAGE_SIZE,
         load: suspend (limit: Long, offset: Long) -> List<T>,
-    ) {
-        if (isLoading || !hasMore) return
+    ) = mutex.withLock {
+        if (isLoading || !hasMore) return@withLock
         isLoading = true
         try {
             val page = load(pageSize.toLong(), items.size.toLong())

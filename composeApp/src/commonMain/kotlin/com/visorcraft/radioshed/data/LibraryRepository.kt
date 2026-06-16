@@ -33,6 +33,8 @@ enum class LibraryTrackSort {
     TitleDesc,
     RecentlyAdded,
     Duration,
+    MostPlayed,
+    TopRated,
 }
 
 class LibraryRepository(private val db: RadioShedDatabase) {
@@ -234,6 +236,14 @@ class LibraryRepository(private val db: RadioShedDatabase) {
             db.libraryQueries.selectAllArtistsPaged(limit, offset).executeAsList().map { it.toDomain() }
         }
 
+    suspend fun listArtistsPagedDesc(
+        limit: Long,
+        offset: Long,
+    ): List<Artist> =
+        withContext(IODispatcher) {
+            db.libraryQueries.selectAllArtistsPagedDesc(limit, offset).executeAsList().map { it.toDomain() }
+        }
+
     suspend fun setArtistImage(
         id: Long,
         imageUri: String?,
@@ -305,6 +315,27 @@ class LibraryRepository(private val db: RadioShedDatabase) {
     ): List<Album> =
         withContext(IODispatcher) {
             db.libraryQueries.selectAllAlbumsPaged(limit, offset).executeAsList().map { it.toDomain() }
+        }
+
+    suspend fun listAlbumsPagedDesc(
+        limit: Long,
+        offset: Long,
+    ): List<Album> =
+        withContext(IODispatcher) {
+            db.libraryQueries.selectAllAlbumsPagedDesc(limit, offset).executeAsList().map { it.toDomain() }
+        }
+
+    suspend fun listAlbumsPagedByYear(
+        limit: Long,
+        offset: Long,
+        ascending: Boolean,
+    ): List<Album> =
+        withContext(IODispatcher) {
+            if (ascending) {
+                db.libraryQueries.selectAllAlbumsPagedByYearAsc(limit, offset).executeAsList().map { it.toDomain() }
+            } else {
+                db.libraryQueries.selectAllAlbumsPagedByYearDesc(limit, offset).executeAsList().map { it.toDomain() }
+            }
         }
 
     suspend fun setAlbumArtwork(
@@ -527,15 +558,6 @@ class LibraryRepository(private val db: RadioShedDatabase) {
         }
 
     /**
-     * Resilient path lookup for backup restore. Tries an exact match
-     * first; on miss, falls back to a path-suffix LIKE on the
-     * filename + parent directory ("…/parent/name.mp3"). When several
-     * tracks share that suffix (a duplicate-named file in two
-     * folders) we pick the one whose path is closest in length to
-     * the requested path — a reasonable tie-breaker for users who
-     * reorganized their library between export and import.
-     */
-    /**
      * Batched exact-(track_id ← path) lookup. Backup restore resolves a
      * bundle's worth of track paths in one chunked query instead of one
      * [getTrackByPathOrSuffix] round-trip per row; the per-row LIKE-suffix
@@ -550,6 +572,15 @@ class LibraryRepository(private val db: RadioShedDatabase) {
             }.associate { it.path to it.toDomain() }
         }
 
+    /**
+     * Resilient path lookup for backup restore. Tries an exact match
+     * first; on miss, falls back to a path-suffix LIKE on the
+     * filename + parent directory ("…/parent/name.mp3"). When several
+     * tracks share that suffix (a duplicate-named file in two
+     * folders) we pick the one whose path is closest in length to
+     * the requested path — a reasonable tie-breaker for users who
+     * reorganized their library between export and import.
+     */
     suspend fun getTrackByPathOrSuffix(path: String): Track? =
         withContext(IODispatcher) {
             val exact = db.libraryQueries.selectTrackByPath(path).executeAsOneOrNull()
@@ -629,11 +660,39 @@ class LibraryRepository(private val db: RadioShedDatabase) {
                             db.libraryQueries.selectAvailableTracksByCtimePaged(limit, offset).executeAsList()
                         LibraryTrackSort.Duration ->
                             db.libraryQueries.selectAvailableTracksByDurationPaged(limit, offset).executeAsList()
+                        LibraryTrackSort.MostPlayed ->
+                            db.libraryQueries.selectAvailableTracksByPlayCountPaged(limit, offset).executeAsList()
+                        LibraryTrackSort.TopRated ->
+                            db.libraryQueries.selectAvailableTracksByRatingPaged(limit, offset).executeAsList()
                     }
                 } else {
                     val pattern = q.toLikePattern()
-                    db.libraryQueries.selectAvailableTracksFilteredPaged(pattern, pattern, limit, offset)
-                        .executeAsList()
+                    when (sort) {
+                        LibraryTrackSort.TitleDesc ->
+                            db.libraryQueries.selectAvailableTracksFilteredDescPaged(pattern, pattern, limit, offset)
+                                .executeAsList()
+                        LibraryTrackSort.MostPlayed ->
+                            db.libraryQueries
+                                .selectAvailableTracksByPlayCountFilteredPaged(
+                                    pattern,
+                                    pattern,
+                                    limit,
+                                    offset,
+                                )
+                                .executeAsList()
+                        LibraryTrackSort.TopRated ->
+                            db.libraryQueries
+                                .selectAvailableTracksByRatingFilteredPaged(
+                                    pattern,
+                                    pattern,
+                                    limit,
+                                    offset,
+                                )
+                                .executeAsList()
+                        else ->
+                            db.libraryQueries.selectAvailableTracksFilteredPaged(pattern, pattern, limit, offset)
+                                .executeAsList()
+                    }
                 }
             rows.map { it.toDomain() }
         }
@@ -1075,6 +1134,15 @@ class LibraryRepository(private val db: RadioShedDatabase) {
     ): List<String> =
         withContext(IODispatcher) {
             db.libraryQueries.distinctTagValuesPaged(key, limit, offset).executeAsList()
+        }
+
+    suspend fun distinctTagValuesPagedDesc(
+        key: String,
+        limit: Long,
+        offset: Long,
+    ): List<String> =
+        withContext(IODispatcher) {
+            db.libraryQueries.distinctTagValuesPagedDesc(key, limit, offset).executeAsList()
         }
 
     fun observeGenreCount(key: String = "GENRE"): Flow<Long> =

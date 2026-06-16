@@ -376,8 +376,9 @@ class StationRepository(private val db: RadioShedDatabase) {
     ): Map<Long, List<String>> =
         withContext(IODispatcher) {
             if (stationIds.isEmpty()) return@withContext emptyMap()
-            db.stationsQueries.selectRecentAlbumArtworkForStations(stationIds)
-                .executeAsList()
+            stationIds.toSet().chunked(IN_CLAUSE_CHUNK).flatMap {
+                db.stationsQueries.selectRecentAlbumArtworkForStations(it).executeAsList()
+            }
                 .groupBy { it.station_id }
                 .mapValues { (_, rows) ->
                     rows.map { it.artwork_uri }.filter { it.isNotBlank() }.take(limitPerStation.toInt())
