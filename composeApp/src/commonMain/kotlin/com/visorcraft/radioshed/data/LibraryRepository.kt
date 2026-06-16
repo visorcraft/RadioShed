@@ -28,6 +28,13 @@ import kotlinx.coroutines.withContext
 // track in the library during the duplicates scan) don't blow the cap.
 private const val IN_CLAUSE_CHUNK = 900
 
+enum class LibraryTrackSort {
+    TitleAsc,
+    TitleDesc,
+    RecentlyAdded,
+    Duration,
+}
+
 class LibraryRepository(private val db: RadioShedDatabase) {
     // ---- Artist ----
 
@@ -219,6 +226,14 @@ class LibraryRepository(private val db: RadioShedDatabase) {
             .mapToList(IODispatcher)
             .map { rows -> rows.map { it.toDomain() } }
 
+    suspend fun listArtistsPaged(
+        limit: Long,
+        offset: Long,
+    ): List<Artist> =
+        withContext(IODispatcher) {
+            db.libraryQueries.selectAllArtistsPaged(limit, offset).executeAsList().map { it.toDomain() }
+        }
+
     suspend fun setArtistImage(
         id: Long,
         imageUri: String?,
@@ -237,6 +252,12 @@ class LibraryRepository(private val db: RadioShedDatabase) {
         withContext(IODispatcher) {
             db.libraryQueries.countArtists().executeAsOne()
         }
+
+    fun observeArtistCount(): Flow<Long> =
+        db.libraryQueries.countArtists()
+            .asFlow()
+            .map { it.executeAsOne() }
+            .flowOn(IODispatcher)
 
     // ---- Album ----
 
@@ -277,6 +298,14 @@ class LibraryRepository(private val db: RadioShedDatabase) {
             .asFlow()
             .mapToList(IODispatcher)
             .map { rows -> rows.map { it.toDomain() } }
+
+    suspend fun listAlbumsPaged(
+        limit: Long,
+        offset: Long,
+    ): List<Album> =
+        withContext(IODispatcher) {
+            db.libraryQueries.selectAllAlbumsPaged(limit, offset).executeAsList().map { it.toDomain() }
+        }
 
     suspend fun setAlbumArtwork(
         id: Long,
@@ -331,6 +360,12 @@ class LibraryRepository(private val db: RadioShedDatabase) {
         withContext(IODispatcher) {
             db.libraryQueries.countAlbums().executeAsOne()
         }
+
+    fun observeAlbumCount(): Flow<Long> =
+        db.libraryQueries.countAlbums()
+            .asFlow()
+            .map { it.executeAsOne() }
+            .flowOn(IODispatcher)
 
     // ---- Track ----
 
@@ -558,6 +593,14 @@ class LibraryRepository(private val db: RadioShedDatabase) {
             db.libraryQueries.selectTracksByFolder(folderId).executeAsList().map { it.toDomain() }
         }
 
+    suspend fun tracksByFolderIds(folderIds: Collection<Long>): List<Track> =
+        withContext(IODispatcher) {
+            if (folderIds.isEmpty()) return@withContext emptyList()
+            folderIds.toSet().chunked(IN_CLAUSE_CHUNK).flatMap {
+                db.libraryQueries.selectTracksByFolderIds(it).executeAsList()
+            }.map { it.toDomain() }.distinctBy { it.id }
+        }
+
     suspend fun listAvailableTracks(
         limit: Long,
         offset: Long,
@@ -566,6 +609,54 @@ class LibraryRepository(private val db: RadioShedDatabase) {
             db.libraryQueries.selectAvailableTracks(limit, offset).executeAsList()
                 .map { it.toDomain() }
         }
+
+    suspend fun listAvailableTracksPaged(
+        limit: Long,
+        offset: Long,
+        sort: LibraryTrackSort,
+        filter: String?,
+    ): List<Track> =
+        withContext(IODispatcher) {
+            val q = filter?.trim()?.takeIf { it.isNotEmpty() }
+            val rows =
+                if (q == null) {
+                    when (sort) {
+                        LibraryTrackSort.TitleAsc ->
+                            db.libraryQueries.selectAvailableTracksPaged(limit, offset).executeAsList()
+                        LibraryTrackSort.TitleDesc ->
+                            db.libraryQueries.selectAvailableTracksDescPaged(limit, offset).executeAsList()
+                        LibraryTrackSort.RecentlyAdded ->
+                            db.libraryQueries.selectAvailableTracksByCtimePaged(limit, offset).executeAsList()
+                        LibraryTrackSort.Duration ->
+                            db.libraryQueries.selectAvailableTracksByDurationPaged(limit, offset).executeAsList()
+                    }
+                } else {
+                    val pattern = q.toLikePattern()
+                    db.libraryQueries.selectAvailableTracksFilteredPaged(pattern, pattern, limit, offset)
+                        .executeAsList()
+                }
+            rows.map { it.toDomain() }
+        }
+
+    suspend fun listAvailableTrackIds(filter: String?): List<Long> =
+        withContext(IODispatcher) {
+            val q = filter?.trim()?.takeIf { it.isNotEmpty() }
+            if (q == null) {
+                db.libraryQueries.selectAvailableTrackIds().executeAsList()
+            } else {
+                val pattern = q.toLikePattern()
+                db.libraryQueries.selectAvailableTrackIdsFiltered(pattern, pattern).executeAsList()
+            }
+        }
+
+    private fun String.toLikePattern(): String {
+        val escaped =
+            this
+                .replace("\\", "\\\\")
+                .replace("%", "\\%")
+                .replace("_", "\\_")
+        return "%$escaped%"
+    }
 
     suspend fun newestTracks(limit: Long): List<Track> =
         withContext(IODispatcher) {
@@ -729,9 +820,49 @@ class LibraryRepository(private val db: RadioShedDatabase) {
             db.libraryQueries.selectArtistsByTrack(trackId).executeAsList().map { it.toDomain() }
         }
 
+    suspend fun artistsForTracks(trackIds: Collection<Long>): Map<Long, List<Artist>> =
+        withContext(IODispatcher) {
+            if (trackIds.isEmpty()) return@withContext emptyMap()
+            trackIds.toSet().chunked(IN_CLAUSE_CHUNK).flatMap {
+                db.libraryQueries.selectArtistsByTrackIds(it).executeAsList()
+            }.groupBy { it.track_id }
+                .mapValues { entry ->
+                    entry.value.map { row ->
+                        Artist(
+                            id = row.id,
+                            name = row.name,
+                            sortName = row.sort_name,
+                            musicbrainzId = row.musicbrainz_id,
+                            imageUri = row.image_uri,
+                            bio = row.bio,
+                            createdAt = row.created_at,
+                            updatedAt = row.updated_at,
+                        )
+                    }
+                }
+        }
+
     suspend fun tracksForArtist(artistId: Long): List<Track> =
         withContext(IODispatcher) {
             db.libraryQueries.selectTracksByArtist(artistId).executeAsList().map { it.toDomain() }
+        }
+
+    suspend fun tracksForArtistPaged(
+        artistId: Long,
+        limit: Long,
+        offset: Long,
+    ): List<Track> =
+        withContext(IODispatcher) {
+            db.libraryQueries.selectTracksByArtistPaged(artistId, limit, offset)
+                .executeAsList().map { it.toDomain() }
+        }
+
+    suspend fun tracksByArtistIds(artistIds: Collection<Long>): List<Track> =
+        withContext(IODispatcher) {
+            if (artistIds.isEmpty()) return@withContext emptyList()
+            artistIds.toSet().chunked(IN_CLAUSE_CHUNK).flatMap {
+                db.libraryQueries.selectTracksByArtistIds(it).executeAsList()
+            }.map { it.toDomain() }.distinctBy { it.id }
         }
 
     /**
@@ -798,6 +929,24 @@ class LibraryRepository(private val db: RadioShedDatabase) {
             db.libraryQueries.selectTracksByAlbum(albumId).executeAsList().map { it.toDomain() }
         }
 
+    suspend fun tracksForAlbumPaged(
+        albumId: Long,
+        limit: Long,
+        offset: Long,
+    ): List<Track> =
+        withContext(IODispatcher) {
+            db.libraryQueries.selectTracksByAlbumPaged(albumId, limit, offset)
+                .executeAsList().map { it.toDomain() }
+        }
+
+    suspend fun tracksByAlbumIds(albumIds: Collection<Long>): List<Track> =
+        withContext(IODispatcher) {
+            if (albumIds.isEmpty()) return@withContext emptyList()
+            albumIds.toSet().chunked(IN_CLAUSE_CHUNK).flatMap {
+                db.libraryQueries.selectTracksByAlbumIds(it).executeAsList()
+            }.map { it.toDomain() }.distinctBy { it.id }
+        }
+
     suspend fun albumsForArtist(artistId: Long): List<Album> =
         withContext(IODispatcher) {
             db.libraryQueries.selectAlbumsByArtist(artistId).executeAsList().map { it.toDomain() }
@@ -828,12 +977,32 @@ class LibraryRepository(private val db: RadioShedDatabase) {
             db.libraryQueries.selectTagsByTrack(trackId).executeAsList().map { it.toDomain() }
         }
 
+    suspend fun tagsForTracks(trackIds: Collection<Long>): Map<Long, List<Tag>> =
+        withContext(IODispatcher) {
+            if (trackIds.isEmpty()) return@withContext emptyMap()
+            trackIds.toSet().chunked(IN_CLAUSE_CHUNK).flatMap {
+                db.libraryQueries.selectTagsByTrackIds(it).executeAsList()
+            }.groupBy { it.track_id }
+                .mapValues { entry -> entry.value.map { it.toDomain() } }
+        }
+
     suspend fun tracksByTag(
         key: String,
         value: String,
     ): List<Track> =
         withContext(IODispatcher) {
             db.libraryQueries.selectTracksByTag(key, value).executeAsList().map { it.toDomain() }
+        }
+
+    suspend fun tracksByTagPaged(
+        key: String,
+        value: String,
+        limit: Long,
+        offset: Long,
+    ): List<Track> =
+        withContext(IODispatcher) {
+            db.libraryQueries.selectTracksByTagPaged(key, value, limit, offset)
+                .executeAsList().map { it.toDomain() }
         }
 
     /**
@@ -851,6 +1020,17 @@ class LibraryRepository(private val db: RadioShedDatabase) {
     ): List<Track> =
         withContext(IODispatcher) {
             db.libraryQueries.selectTracksByTagCi(key, value).executeAsList().map { it.toDomain() }
+        }
+
+    suspend fun tracksByTagValues(
+        key: String,
+        values: Collection<String>,
+    ): List<Track> =
+        withContext(IODispatcher) {
+            if (values.isEmpty()) return@withContext emptyList()
+            values.map { it.lowercase() }.toSet().chunked(IN_CLAUSE_CHUNK).flatMap { chunk ->
+                db.libraryQueries.selectTracksByTagValues(key, chunk).executeAsList()
+            }.map { it.toDomain() }.distinctBy { it.id }
         }
 
     /**
@@ -873,10 +1053,35 @@ class LibraryRepository(private val db: RadioShedDatabase) {
             }
         }
 
+    suspend fun tracksByArtistNames(names: Collection<String>): List<Track> =
+        withContext(IODispatcher) {
+            if (names.isEmpty()) return@withContext emptyList()
+            val sortNames = names.map { it.trim().lowercase() }.filter { it.isNotEmpty() }.toSet()
+            if (sortNames.isEmpty()) return@withContext emptyList()
+            sortNames.chunked(IN_CLAUSE_CHUNK).flatMap {
+                db.libraryQueries.selectTracksByArtistNames(it).executeAsList()
+            }.map { it.toDomain() }.distinctBy { it.id }
+        }
+
     suspend fun distinctTagValues(key: String): List<String> =
         withContext(IODispatcher) {
             db.libraryQueries.distinctTagValues(key).executeAsList()
         }
+
+    suspend fun distinctTagValuesPaged(
+        key: String,
+        limit: Long,
+        offset: Long,
+    ): List<String> =
+        withContext(IODispatcher) {
+            db.libraryQueries.distinctTagValuesPaged(key, limit, offset).executeAsList()
+        }
+
+    fun observeGenreCount(key: String = "GENRE"): Flow<Long> =
+        db.libraryQueries.countTagValues(key)
+            .asFlow()
+            .map { it.executeAsOne() }
+            .flowOn(IODispatcher)
 
     /**
      * Single-query (tag value → track count) for a tag key. Used by

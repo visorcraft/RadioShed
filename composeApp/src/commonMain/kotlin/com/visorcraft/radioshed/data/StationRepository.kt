@@ -13,6 +13,9 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import com.visorcraft.radioshed.db.Station as StationRow
 
+// SQLite allows at most 999 host parameters per statement.
+private const val IN_CLAUSE_CHUNK = 900
+
 class StationRepository(private val db: RadioShedDatabase) {
     fun observeAll(): Flow<List<Station>> =
         db.stationsQueries.selectAllStations()
@@ -271,8 +274,9 @@ class StationRepository(private val db: RadioShedDatabase) {
     suspend fun playCountForTracks(trackIds: Collection<Long>): Map<Long, Long> =
         withContext(IODispatcher) {
             if (trackIds.isEmpty()) return@withContext emptyMap()
-            db.stationsQueries.selectPlayCountForTracks(trackIds).executeAsList()
-                .associate { it.track_id to it.plays }
+            trackIds.toSet().chunked(IN_CLAUSE_CHUNK).flatMap {
+                db.stationsQueries.selectPlayCountForTracks(it).executeAsList()
+            }.associate { it.track_id to it.plays }
         }
 
     /**
@@ -364,6 +368,20 @@ class StationRepository(private val db: RadioShedDatabase) {
                 .executeAsList()
                 .map { it.artwork_uri }
                 .filter { it.isNotBlank() }
+        }
+
+    suspend fun recentAlbumArtworkForStations(
+        stationIds: Collection<Long>,
+        limitPerStation: Long = 4L,
+    ): Map<Long, List<String>> =
+        withContext(IODispatcher) {
+            if (stationIds.isEmpty()) return@withContext emptyMap()
+            db.stationsQueries.selectRecentAlbumArtworkForStations(stationIds)
+                .executeAsList()
+                .groupBy { it.station_id }
+                .mapValues { (_, rows) ->
+                    rows.map { it.artwork_uri }.filter { it.isNotBlank() }.take(limitPerStation.toInt())
+                }
         }
 
     // ---- Pinned tracks (per-station) ----

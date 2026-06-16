@@ -35,7 +35,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -75,19 +75,19 @@ fun MiniPlayer(
     stationPlayback: StationPlayback = koinInject(),
     sleepTimer: SleepTimer = koinInject(),
 ) {
-    val nowPlaying by audioEngine.nowPlaying.collectAsState()
-    val state by audioEngine.state.collectAsState()
-    val position by audioEngine.position.collectAsState()
-    val sleepState by sleepTimer.state.collectAsState()
+    val nowPlaying by audioEngine.nowPlaying.collectAsStateWithLifecycle()
+    val state by audioEngine.state.collectAsStateWithLifecycle()
+    val position by audioEngine.position.collectAsStateWithLifecycle()
+    val sleepState by sleepTimer.state.collectAsStateWithLifecycle()
     // Desktop-only inline volume slider state. On Android the
     // hardware volume rocker handles this; surfacing an in-app
     // slider on top would crowd the bar without adding value.
-    val userVolume by stationPlayback.userVolume.collectAsState()
+    val userVolume by stationPlayback.userVolume.collectAsStateWithLifecycle()
     // Keyed alongside playable.trackId / state below so the "Next:"
     // peek refreshes whenever the priority queue mutates (e.g., the
     // user adds a track via Play next while paused). Without this
     // signal a queue add wouldn't re-evaluate the remembered peek.
-    val priorityCount by stationPlayback.priorityCountFlow.collectAsState()
+    val priorityCount by stationPlayback.priorityCountFlow.collectAsStateWithLifecycle()
 
     val playable = nowPlaying ?: return
     var contextSheetOpen by remember { mutableStateOf(false) }

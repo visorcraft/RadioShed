@@ -279,7 +279,7 @@ fun BatchEditTagsDialog(
 
     LaunchedEffect(Unit) {
         runCatching {
-            val snapshots = tracks.map { loadTagSnapshot(it, libraryRepo) }
+            val snapshots = loadTagSnapshots(tracks, libraryRepo)
             val m = BatchTagMerge.merge(snapshots)
             merged = m
 
@@ -613,29 +613,47 @@ private suspend fun loadTagSnapshot(
     track: Track,
     libraryRepo: LibraryRepository,
 ): TrackTagSnapshot {
-    val artistRow = libraryRepo.artistsForTrack(track.id).firstOrNull()
-    val albumRow = track.albumId?.let { libraryRepo.getAlbumById(it) }
-    val albumArtistId = albumRow?.artistId
-    val albumArtist =
-        if (albumArtistId != null && albumArtistId != artistRow?.id) {
-            libraryRepo.getArtistById(albumArtistId)?.name ?: ""
-        } else {
-            ""
-        }
-    val genre =
-        libraryRepo.tagsForTrack(track.id)
-            .firstOrNull { it.key.equals("GENRE", ignoreCase = true) }
-            ?.value ?: ""
-    return TrackTagSnapshot(
-        title = track.title,
-        artist = artistRow?.name ?: "",
-        album = albumRow?.title ?: "",
-        albumArtist = albumArtist,
-        genre = genre,
-        year = albumRow?.year?.toString() ?: "",
-        trackNumber = track.trackNumber?.toString() ?: "",
-        discNumber = track.discNumber?.toString() ?: "",
-    )
+    val snapshots = loadTagSnapshots(listOf(track), libraryRepo)
+    return snapshots.first()
+}
+
+private suspend fun loadTagSnapshots(
+    tracks: List<Track>,
+    libraryRepo: LibraryRepository,
+): List<TrackTagSnapshot> {
+    if (tracks.isEmpty()) return emptyList()
+    val trackIds = tracks.map { it.id }
+    val artistsByTrack = libraryRepo.artistsForTracks(trackIds)
+    val albumIds = tracks.mapNotNull { it.albumId }.distinct()
+    val albumsById = libraryRepo.albumsByIds(albumIds)
+    val albumArtistIds = albumsById.values.mapNotNull { it.artistId }.distinct()
+    val artistsById = libraryRepo.artistsByIds(albumArtistIds)
+    val tagsByTrack = libraryRepo.tagsForTracks(trackIds)
+
+    return tracks.map { track ->
+        val artistRow = artistsByTrack[track.id]?.firstOrNull()
+        val albumRow = track.albumId?.let { albumsById[it] }
+        val albumArtist =
+            if (albumRow?.artistId != null && albumRow.artistId != artistRow?.id) {
+                artistsById[albumRow.artistId]?.name ?: ""
+            } else {
+                ""
+            }
+        val genre =
+            tagsByTrack[track.id]
+                ?.firstOrNull { it.key.equals("GENRE", ignoreCase = true) }
+                ?.value ?: ""
+        TrackTagSnapshot(
+            title = track.title,
+            artist = artistRow?.name ?: "",
+            album = albumRow?.title ?: "",
+            albumArtist = albumArtist,
+            genre = genre,
+            year = albumRow?.year?.toString() ?: "",
+            trackNumber = track.trackNumber?.toString() ?: "",
+            discNumber = track.discNumber?.toString() ?: "",
+        )
+    }
 }
 
 // Path-prefix match against registered folders; pick the longest prefix

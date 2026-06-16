@@ -76,9 +76,11 @@ class BackupService(
                 )
             }
 
+        val ratingRows = ratingRepo.listAll()
+        val tracksByIdForRatings = libraryRepo.tracksByIds(ratingRows.map { it.trackId })
         val ratings =
-            ratingRepo.listAll().mapNotNull { r ->
-                val track = libraryRepo.getTrackById(r.trackId) ?: return@mapNotNull null
+            ratingRows.mapNotNull { r ->
+                val track = tracksByIdForRatings[r.trackId] ?: return@mapNotNull null
                 BackupRating(
                     trackPath = track.path,
                     stars = r.stars,
@@ -90,12 +92,13 @@ class BackupService(
         // the same file on disk after a fresh install / new device.
         // liked_at metadata is preserved so the Liked Songs view's
         // "most recently liked first" sort survives the round-trip.
+        val likedRows = ratingRepo.likedTracksWithTimestamps()
+        val tracksByIdForLikes = libraryRepo.tracksByIds(likedRows.map { it.first })
         val likedTracks =
-            ratingRepo.likedTracksWithTimestamps()
-                .mapNotNull { (id, likedAt) ->
-                    val track = libraryRepo.getTrackById(id) ?: return@mapNotNull null
-                    BackupLikedTrack(trackPath = track.path, likedAt = likedAt)
-                }
+            likedRows.mapNotNull { (id, likedAt) ->
+                val track = tracksByIdForLikes[id] ?: return@mapNotNull null
+                BackupLikedTrack(trackPath = track.path, likedAt = likedAt)
+            }
 
         // Settings + custom EQ presets — round-tripped so a fresh
         // install fully reconstructs the user's config, not just
@@ -333,46 +336,48 @@ class BackupService(
 
         var playlistsAdded = 0
         var playlistsFailed = 0
+        var ratingsApplied = 0
+        var ratingsSkipped = 0
+        var ratingsFailed = 0
+        var likedApplied = 0
+        var likedSkipped = 0
+        var likedFailed = 0
         bundle.playlists.forEach { p ->
             runCatching {
                 val playlistId = playlistRepo.insert(name = p.name, description = p.description)
-                p.trackPaths.forEachIndexed { idx, path ->
-                    val track = resolvePath(path) ?: return@forEachIndexed
-                    playlistRepo.addTrack(playlistId, track.id, position = idx)
-                }
+                val trackIds = p.trackPaths.mapNotNull { resolvePath(it)?.id }
+                playlistRepo.appendTracks(playlistId, trackIds)
                 playlistsAdded += 1
             }.onFailure { playlistsFailed += 1 }
         }
 
-        var ratingsApplied = 0
-        var ratingsSkipped = 0
-        var ratingsFailed = 0
-        bundle.ratings.forEach { r ->
-            val track = resolvePath(r.trackPath)
-            if (track == null) {
-                ratingsSkipped += 1
-                return@forEach
+        val ratingsToApply =
+            bundle.ratings.mapNotNull { r ->
+                val track = resolvePath(r.trackPath)
+                if (track == null) {
+                    ratingsSkipped += 1
+                    null
+                } else {
+                    Triple(track.id, r.stars, r.ratedAt)
+                }
             }
-            runCatching {
-                ratingRepo.setRating(track.id, r.stars)
-                ratingsApplied += 1
-            }.onFailure { ratingsFailed += 1 }
-        }
+        runCatching { ratingRepo.setRatings(ratingsToApply) }
+            .onSuccess { ratingsApplied = ratingsToApply.size }
+            .onFailure { ratingsFailed = ratingsToApply.size }
 
-        var likedApplied = 0
-        var likedSkipped = 0
-        var likedFailed = 0
-        bundle.likedTracks.forEach { l ->
-            val track = resolvePath(l.trackPath)
-            if (track == null) {
-                likedSkipped += 1
-                return@forEach
+        val likesToApply =
+            bundle.likedTracks.mapNotNull { l ->
+                val track = resolvePath(l.trackPath)
+                if (track == null) {
+                    likedSkipped += 1
+                    null
+                } else {
+                    track.id to l.likedAt
+                }
             }
-            runCatching {
-                ratingRepo.like(track.id, l.likedAt)
-                likedApplied += 1
-            }.onFailure { likedFailed += 1 }
-        }
+        runCatching { ratingRepo.likeTracks(likesToApply) }
+            .onSuccess { likedApplied = likesToApply.size }
+            .onFailure { likedFailed = likesToApply.size }
 
         // Settings + EQ presets — only present in v3+ bundles.
         // SettingsStore.restoreFromBackup blocks per-device keys

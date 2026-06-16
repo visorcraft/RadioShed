@@ -38,7 +38,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -109,7 +109,7 @@ fun HistoryScreen(
     // doesn't get stuck with a stale "today" if the screen lingers
     // across midnight.
     var timeWindow by remember { mutableStateOf(HistoryTimeWindow.All) }
-    val nowPlaying by audioEngine.nowPlaying.collectAsState()
+    val nowPlaying by audioEngine.nowPlaying.collectAsStateWithLifecycle()
     val currentTrackId = nowPlaying?.trackId
     val scope = rememberCoroutineScope()
 

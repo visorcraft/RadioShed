@@ -8,7 +8,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -53,6 +53,8 @@ import com.visorcraft.radioshed.ui.stations.StationsHomeScreen
 import com.visorcraft.radioshed.ui.theme.RadioShedTheme
 import com.visorcraft.radioshed.ui.util.VlcRequiredDialog
 import com.visorcraft.radioshed.ui.util.openGetVlcPage
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
@@ -228,20 +230,25 @@ fun App(
             // with months of play history would see the app get slower
             // over time as the tables accumulated tens of thousands of
             // rows. 365 days retains a full year of stats; skips are kept
-            // for 180 days (only powers "most skipped" lists). Runs once
-            // per process lifetime, in the background.
+            // for 180 days (only powers "most skipped" lists). Runs on
+            // launch and then roughly every 24 hours while the process is
+            // alive, so long-running desktop sessions don't accumulate
+            // unbounded history.
             val stationRepo: com.visorcraft.radioshed.data.StationRepository = koinInject()
             val ratingRepo: com.visorcraft.radioshed.data.RatingRepository = koinInject()
             LaunchedEffect(Unit) {
-                if (settings.isOnboardingComplete()) {
-                    runCatching {
-                        val cutoff = nowMillis() - 365L * 24L * 60L * 60L * 1_000L
-                        stationRepo.trimHistoryOlderThan(cutoff)
+                while (isActive) {
+                    if (settings.isOnboardingComplete()) {
+                        runCatching {
+                            val cutoff = nowMillis() - 365L * 24L * 60L * 60L * 1_000L
+                            stationRepo.trimHistoryOlderThan(cutoff)
+                        }
+                        runCatching {
+                            val cutoff = nowMillis() - 180L * 24L * 60L * 60L * 1_000L
+                            ratingRepo.trimSkipsOlderThan(cutoff)
+                        }
                     }
-                    runCatching {
-                        val cutoff = nowMillis() - 180L * 24L * 60L * 60L * 1_000L
-                        ratingRepo.trimSkipsOlderThan(cutoff)
-                    }
+                    delay(86_400_000L)
                 }
             }
 
@@ -649,7 +656,7 @@ fun App(
                 // a silent no-op. Auto-dismisses after a short window so a
                 // stale message doesn't linger on Home. Tap-to-dismiss
                 // also clears it via clearPlaybackError.
-                val playbackError by stationPlayback.playbackError.collectAsState()
+                val playbackError by stationPlayback.playbackError.collectAsStateWithLifecycle()
                 playbackError?.let { msg ->
                     androidx.compose.runtime.LaunchedEffect(msg) {
                         kotlinx.coroutines.delay(5_000)
@@ -697,7 +704,7 @@ private fun VlcStateWatcher(audioEngine: AudioEngine) {
     LaunchedEffect(Unit) {
         if (!isMediaPlaybackAvailable()) showVlcDialog = true
     }
-    val playerState by audioEngine.state.collectAsState()
+    val playerState by audioEngine.state.collectAsStateWithLifecycle()
     LaunchedEffect(playerState) {
         if (playerState is PlayerState.Error && !isMediaPlaybackAvailable()) {
             showVlcDialog = true

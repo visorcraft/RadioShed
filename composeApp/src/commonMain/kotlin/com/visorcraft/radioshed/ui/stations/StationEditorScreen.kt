@@ -31,7 +31,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -104,8 +104,8 @@ fun StationEditorScreen(
     mediaSourceRegistry: MediaSourceRegistry = koinInject(),
 ) {
     val scope = rememberCoroutineScope()
-    val folders by folderRepo.observeAll().collectAsState(initial = emptyList())
-    val mediaSources by mediaSourceRegistry.sources.collectAsState()
+    val folders by folderRepo.observeAll().collectAsStateWithLifecycle(initialValue = emptyList())
+    val mediaSources by mediaSourceRegistry.sources.collectAsStateWithLifecycle()
 
     var existing by remember { mutableStateOf<Station?>(null) }
     var name by remember { mutableStateOf("") }

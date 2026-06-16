@@ -214,6 +214,21 @@ GROUP BY album.id
 ORDER BY last_played_at DESC
 LIMIT ?;
 
+selectRecentAlbumArtworkForStations:
+SELECT station_id, artwork_uri FROM (
+  SELECT sh.station_id, album.artwork_uri,
+    ROW_NUMBER() OVER (PARTITION BY sh.station_id, album.id ORDER BY sh.played_at DESC) AS rn
+  FROM station_history sh
+  JOIN track ON track.id = sh.track_id
+  JOIN album ON album.id = track.album_id
+  WHERE sh.station_id IN ?
+    AND track.album_id IS NOT NULL
+    AND album.artwork_uri IS NOT NULL
+    AND TRIM(album.artwork_uri) != ''
+)
+WHERE rn = 1
+ORDER BY station_id;
+
 countHistoryForStation:
 SELECT COUNT(*) FROM station_history WHERE station_id = ?;
 

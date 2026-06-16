@@ -30,7 +30,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -86,7 +86,7 @@ fun StationDetailScreen(
     var recent by remember { mutableStateOf<List<Track>>(emptyList()) }
     var top by remember { mutableStateOf<List<Pair<Track, Long>>>(emptyList()) }
     var refreshKey by remember { mutableStateOf(0) }
-    val nowPlaying by audioEngine.nowPlaying.collectAsState()
+    val nowPlaying by audioEngine.nowPlaying.collectAsStateWithLifecycle()
     val currentTrackId = nowPlaying?.trackId
     val scope = rememberCoroutineScope()
 

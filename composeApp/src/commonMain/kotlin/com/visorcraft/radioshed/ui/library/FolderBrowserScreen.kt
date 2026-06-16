@@ -1460,7 +1460,7 @@ private suspend fun playAudioPath(
     audioEngine: AudioEngine,
 ) {
     if (audioEntries.isEmpty()) return
-    val tracks = audioEntries.mapNotNull { libraryRepo.getTrackByPath(it.path) }
+    val tracks = libraryRepo.tracksByExactPaths(audioEntries.map { it.path }).values.toList()
     if (tracks.isNotEmpty()) {
         val startIdx =
             if (tappedEntry != null) {

@@ -48,7 +48,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -83,8 +83,8 @@ fun PlaylistsScreen(
     repo: PlaylistRepository = koinInject(),
     ratingRepo: RatingRepository = koinInject(),
 ) {
-    val playlists by repo.observeAll().collectAsState(initial = emptyList())
-    val likedCount by ratingRepo.observeLikedCount().collectAsState(initial = 0L)
+    val playlists by repo.observeAll().collectAsStateWithLifecycle(initialValue = emptyList())
+    val likedCount by ratingRepo.observeLikedCount().collectAsStateWithLifecycle(initialValue = 0L)
     var createOpen by remember { mutableStateOf(false) }
     // Long-pressing a playlist row opens an inline rename dialog —
     // matches the pattern users learn from station / track context
@@ -144,16 +144,18 @@ fun PlaylistsScreen(
                     com.visorcraft.radioshed.data.nowMillis(),
                 )})"
                 val playlistId = repo.insert(name = name, description = null)
-                paths.forEachIndexed { idx, path ->
-                    val track = libraryRepo.getTrackByPathOrSuffix(path)
-                    if (track != null) {
-                        runCatching { repo.addTrack(playlistId, track.id, position = idx) }
-                            .onSuccess { added += 1 }
-                            .onFailure { missing += 1 }
-                    } else {
-                        missing += 1
+                val exactPathMap = libraryRepo.tracksByExactPaths(paths)
+                val suffixMap =
+                    paths.filter { it !in exactPathMap }
+                        .associateWith { libraryRepo.getTrackByPathOrSuffix(it) }
+                val resolved =
+                    paths.mapNotNull { path ->
+                        (exactPathMap[path] ?: suffixMap[path])?.let { it to path }
                     }
-                }
+                val trackIds = resolved.map { it.first.id }
+                repo.appendTracks(playlistId, trackIds)
+                added = trackIds.size
+                missing = paths.size - trackIds.size
                 importStatus = "Imported $added track" +
                     (if (added == 1) "" else "s") +
                     (if (missing > 0) " · $missing not in library" else "") + "."
@@ -166,8 +168,9 @@ fun PlaylistsScreen(
     var coverByPlaylistId by remember { mutableStateOf<Map<Long, String?>>(emptyMap()) }
     var trackCountByPlaylistId by remember { mutableStateOf<Map<Long, Long>>(emptyMap()) }
     LaunchedEffect(playlists.map { it.id }) {
-        coverByPlaylistId = playlists.associate { it.id to repo.firstTrackArtwork(it.id) }
-        trackCountByPlaylistId = playlists.associate { it.id to repo.trackCount(it.id) }
+        val ids = playlists.map { it.id }
+        coverByPlaylistId = repo.firstTrackArtworkForPlaylists(ids)
+        trackCountByPlaylistId = repo.trackCountsForPlaylists(ids)
     }
 
     // Aggregate track count across every user playlist. Recomputed

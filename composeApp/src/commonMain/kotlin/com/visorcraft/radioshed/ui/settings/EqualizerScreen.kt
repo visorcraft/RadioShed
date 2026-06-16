@@ -33,7 +33,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -68,9 +68,9 @@ fun EqualizerScreen(
     settings: SettingsStore = koinInject(),
     sharer: com.visorcraft.radioshed.crash.CrashLogSharer = koinInject(),
 ) {
-    val gains by eq.bandGains.collectAsState()
-    val enabled by eq.enabled.collectAsState()
-    val available by eq.isAvailable.collectAsState()
+    val gains by eq.bandGains.collectAsStateWithLifecycle()
+    val enabled by eq.enabled.collectAsStateWithLifecycle()
+    val available by eq.isAvailable.collectAsStateWithLifecycle()
     var customPresets by remember { mutableStateOf(settings.getCustomEqPresets()) }
     var saveDialogOpen by remember { mutableStateOf(false) }
     var deleteCandidate by remember { mutableStateOf<CustomEqPreset?>(null) }

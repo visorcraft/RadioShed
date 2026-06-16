@@ -9,6 +9,9 @@ import com.visorcraft.radioshed.domain.Track
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
 
+// SQLite allows at most 999 host parameters per statement.
+private const val IN_CLAUSE_CHUNK = 900
+
 /**
  * Combines: ratings (1-5 stars), skip log, play counts, and per-station dislikes.
  * Conceptually all "judgements about a track."
@@ -23,6 +26,15 @@ class RatingRepository(private val db: RadioShedDatabase) {
     ) = withContext(IODispatcher) {
         db.ratingsQueries.setRating(trackId, stars, ratedAt)
     }
+
+    suspend fun setRatings(ratings: Collection<Triple<Long, Double, Long>>) =
+        withContext(IODispatcher) {
+            db.transaction {
+                for ((trackId, stars, ratedAt) in ratings) {
+                    db.ratingsQueries.setRating(trackId, stars, ratedAt)
+                }
+            }
+        }
 
     suspend fun getRating(trackId: Long): Double? =
         withContext(IODispatcher) {
@@ -46,8 +58,9 @@ class RatingRepository(private val db: RadioShedDatabase) {
     suspend fun ratingsForTracks(trackIds: Collection<Long>): Map<Long, Double> =
         withContext(IODispatcher) {
             if (trackIds.isEmpty()) return@withContext emptyMap()
-            db.ratingsQueries.selectRatingsForTracks(trackIds).executeAsList()
-                .associate { it.track_id to it.stars }
+            trackIds.toSet().chunked(IN_CLAUSE_CHUNK).flatMap {
+                db.ratingsQueries.selectRatingsForTracks(it).executeAsList()
+            }.associate { it.track_id to it.stars }
         }
 
     suspend fun topRatedTracks(
@@ -203,6 +216,15 @@ class RatingRepository(private val db: RadioShedDatabase) {
     ) = withContext(IODispatcher) {
         db.ratingsQueries.likeTrack(trackId, likedAt)
     }
+
+    suspend fun likeTracks(likes: Collection<Pair<Long, Long>>) =
+        withContext(IODispatcher) {
+            db.transaction {
+                for ((trackId, likedAt) in likes) {
+                    db.ratingsQueries.likeTrack(trackId, likedAt)
+                }
+            }
+        }
 
     suspend fun unlike(trackId: Long) =
         withContext(IODispatcher) {

@@ -51,8 +51,7 @@ class SourceRuleEvaluator(
         }
 
     private suspend fun evaluateFolders(rule: SourceRule.FolderSelector): List<Track> =
-        rule.folderIds.flatMap { libraryRepo.listTracksByFolder(it) }
-            .distinctBy { it.id }
+        libraryRepo.tracksByFolderIds(rule.folderIds).distinctBy { it.id }
 
     private suspend fun evaluateSmart(rule: SourceRule.SmartQuery): List<Track> {
         val limit = rule.limit.toLong().coerceAtMost(absoluteCeiling)
@@ -175,17 +174,10 @@ class SourceRuleEvaluator(
     }
 
     private suspend fun evaluateArtists(rule: SourceRule.ArtistSelector): List<Track> =
-        rule.artistIds.flatMap { libraryRepo.tracksForArtist(it) }
-            .distinctBy { it.id }
+        libraryRepo.tracksByArtistIds(rule.artistIds).distinctBy { it.id }
 
-    private suspend fun evaluateAlbums(rule: SourceRule.AlbumSelector): List<Track> {
-        // Use the indexed per-album query rather than scanning the
-        // whole library once per album id. The previous implementation
-        // was O(albums × N) where N could be 100k tracks; this is
-        // O(sum-of-albums) using the album_id index.
-        return rule.albumIds.flatMap { libraryRepo.tracksForAlbum(it) }
-            .distinctBy { it.id }
-    }
+    private suspend fun evaluateAlbums(rule: SourceRule.AlbumSelector): List<Track> =
+        libraryRepo.tracksByAlbumIds(rule.albumIds).distinctBy { it.id }
 
     private suspend fun evaluateTagFilter(rule: SourceRule.TagFilter): List<Track> {
         // Defensive: trim + drop empties so a trailing comma in the
@@ -219,11 +211,11 @@ class SourceRuleEvaluator(
             rule.key.equals("ALBUM_ARTIST", ignoreCase = true) ||
                 rule.key.equals("ARTIST", ignoreCase = true)
         val perValue =
-            cleanValues.map { value ->
-                if (isArtistKey) {
-                    libraryRepo.tracksByArtistName(value)
-                } else {
-                    libraryRepo.tracksByTagCaseInsensitive(rule.key, value)
+            if (isArtistKey) {
+                listOf(libraryRepo.tracksByArtistNames(cleanValues))
+            } else {
+                cleanValues.chunked(IN_CLAUSE_CHUNK).map { chunk ->
+                    libraryRepo.tracksByTagValues(rule.key, chunk)
                 }
             }
         return if (rule.matchAll) {
@@ -267,6 +259,9 @@ class SourceRuleEvaluator(
         /** AdaptiveMix candidate-pool multiplier: pull 3× the
          *  requested limit so the scorer has headroom to trim. */
         const val ADAPTIVE_MIX_POOL_MULT = 3L
+
+        /** SQLite host-parameter cap for IN(?) clauses. */
+        const val IN_CLAUSE_CHUNK = 900
     }
 
     private suspend fun evaluateTopN(rule: SourceRule.TopN): List<Track> {

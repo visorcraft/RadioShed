@@ -30,7 +30,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -72,7 +72,7 @@ fun ReorderStationsScreen(
     onDone: () -> Unit,
     stationRepo: StationRepository = koinInject(),
 ) {
-    val observed by stationRepo.observeAll().collectAsState(initial = emptyList())
+    val observed by stationRepo.observeAll().collectAsStateWithLifecycle(initialValue = emptyList())
     var working by remember { mutableStateOf<List<Station>>(emptyList()) }
     val scope = rememberCoroutineScope()
     // Re-sync the working copy whenever the observed list changes, but

@@ -46,7 +46,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -104,7 +104,7 @@ fun ArtistDetailScreen(
         )
     }
     LaunchedEffect(trackSort) { settings.setArtistTrackSort(trackSort.name) }
-    val nowPlaying by audioEngine.nowPlaying.collectAsState()
+    val nowPlaying by audioEngine.nowPlaying.collectAsStateWithLifecycle()
     val currentTrackId = nowPlaying?.trackId
 
     LaunchedEffect(artistId) {

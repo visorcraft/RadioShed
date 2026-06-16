@@ -82,7 +82,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -113,8 +113,16 @@ import com.visorcraft.radioshed.domain.Track
 import com.visorcraft.radioshed.stations.StationPlayback
 import com.visorcraft.radioshed.ui.playlists.AddToPlaylistSheet
 import com.visorcraft.radioshed.ui.util.dragReorderItem
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
+
+/** Lightweight projection for the TriplePane station list. Decoding the
+ *  full Station JSON on every [StationRepository.observeAll] emission
+ *  (which happens on every track start) is unnecessary for a list that
+ *  only shows id / name / subtitle.
+ */
+private data class StationTriplePaneEntry(val id: Long, val name: String, val customSubtitle: String?)
 
 /**
  * Full-screen Now Playing. BoxWithConstraints drives a single-column
@@ -147,16 +155,16 @@ fun NowPlayingScreen(
     // (e.g. settings opened in a different tab on a foldable). The
     // mirror StateFlow in SettingsStore propagates writes from any
     // setDriveMode() call.
-    val driveMode by settings.driveModeFlow.collectAsState()
-    val finiteQueueProgress by stationPlayback.finiteQueueProgress.collectAsState()
+    val driveMode by settings.driveModeFlow.collectAsStateWithLifecycle()
+    val finiteQueueProgress by stationPlayback.finiteQueueProgress.collectAsStateWithLifecycle()
     val reduceMotion = remember(settings) { settings.getReduceMotion() }
-    val nowPlaying by audioEngine.nowPlaying.collectAsState()
-    val state by audioEngine.state.collectAsState()
-    val position by audioEngine.position.collectAsState()
-    val currentStation by stationPlayback.currentStation.collectAsState()
-    val repeatMode by stationPlayback.repeatMode.collectAsState()
-    val shuffleSession by stationPlayback.shuffleSession.collectAsState()
-    val userVolume by stationPlayback.userVolume.collectAsState()
+    val nowPlaying by audioEngine.nowPlaying.collectAsStateWithLifecycle()
+    val state by audioEngine.state.collectAsStateWithLifecycle()
+    val position by audioEngine.position.collectAsStateWithLifecycle()
+    val currentStation by stationPlayback.currentStation.collectAsStateWithLifecycle()
+    val repeatMode by stationPlayback.repeatMode.collectAsStateWithLifecycle()
+    val shuffleSession by stationPlayback.shuffleSession.collectAsStateWithLifecycle()
+    val userVolume by stationPlayback.userVolume.collectAsStateWithLifecycle()
     // Station list for the TriplePane layout's left column.
     // Collected unconditionally — even when the user is on Compact
     // or TwoPane the cost is one observed flow whose collector is
@@ -164,7 +172,12 @@ fun NowPlayingScreen(
     // `if (resolvedLayout == TriplePane)` branch is illegal in
     // Compose: composables must be invoked unconditionally so the
     // composition slot table stays stable across layout-pref toggles.
-    val stationsForTriplePane by stationRepo.observeAll().collectAsState(initial = emptyList())
+    // We map to a lightweight projection so each emission doesn't
+    // force a full Station JSON decode for the whole list.
+    val stationsForTriplePane by remember(stationRepo) {
+        stationRepo.observeAll()
+            .map { list -> list.map { StationTriplePaneEntry(it.id, it.name, it.customSubtitle) } }
+    }.collectAsStateWithLifecycle(initialValue = emptyList())
     // Pre-mute level snapshot for the volume icon's tap-to-mute
     // toggle. Lives at screen scope rather than inside VolumeRow so
     // a layout-switch recomposition (Compact ↔ TwoPane on a Galaxy
@@ -172,7 +185,7 @@ fun NowPlayingScreen(
     // surprise the user with a different unmute level than what
     // they had before muting.
     var preMuteLevel by remember { mutableFloatStateOf(0.6f) }
-    val sleepState by sleepTimer.state.collectAsState()
+    val sleepState by sleepTimer.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     var sleepMenuOpen by remember { mutableStateOf(false) }
     var queueSheetOpen by remember { mutableStateOf(false) }
@@ -199,7 +212,7 @@ fun NowPlayingScreen(
     // the active session. A plain `remember { settings.getKeepScreenOn() }`
     // reads once at first composition and ignores subsequent writes
     // — a stale-toggle bug we hit before (see #292's fix-pattern).
-    val keepScreenOnPref by settings.keepScreenOnFlow.collectAsState()
+    val keepScreenOnPref by settings.keepScreenOnFlow.collectAsStateWithLifecycle()
     com.visorcraft.radioshed.ui.util.KeepScreenOn(
         active = keepScreenOnPref && state == com.visorcraft.radioshed.audio.PlayerState.Playing,
     )
@@ -275,7 +288,7 @@ fun NowPlayingScreen(
     // composition — fine for the AppSettings-back-then-NowPlaying
     // path that destroys composition, fragile for any future router
     // change that keeps NowPlaying alive across nav.
-    val layoutPref by settings.nowPlayingLayoutFlow.collectAsState()
+    val layoutPref by settings.nowPlayingLayoutFlow.collectAsStateWithLifecycle()
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val isNarrow = maxWidth < 360.dp
         val resolvedLayout =
@@ -459,7 +472,7 @@ fun NowPlayingScreen(
                                 }
                             }
                         } // close Tooltipped(repeatTooltip)
-                        val priorityBadgeCount by stationPlayback.priorityCountFlow.collectAsState()
+                        val priorityBadgeCount by stationPlayback.priorityCountFlow.collectAsStateWithLifecycle()
                         androidx.compose.material3.BadgedBox(
                             badge = {
                                 if (priorityBadgeCount > 0) {
@@ -3586,7 +3599,7 @@ private fun TriplePaneLayout(
     accent: Color,
     stationName: String?,
     formatLine: String?,
-    stations: List<com.visorcraft.radioshed.domain.Station>,
+    stations: List<StationTriplePaneEntry>,
     currentStationId: Long?,
     onStationTap: (Long) -> Unit,
     onSeek: (Long) -> Unit,

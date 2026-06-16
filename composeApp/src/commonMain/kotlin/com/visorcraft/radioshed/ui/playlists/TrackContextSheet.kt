@@ -37,7 +37,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -385,7 +385,7 @@ private fun AddToPlaylistInline(
     onBack: () -> Unit,
     repo: PlaylistRepository = koinInject(),
 ) {
-    val playlists by repo.observeAll().collectAsState(initial = emptyList())
+    val playlists by repo.observeAll().collectAsStateWithLifecycle(initialValue = emptyList())
     val scope = rememberCoroutineScope()
     var createOpen by remember { mutableStateOf(false) }
 

@@ -57,24 +57,26 @@ class SearchRepository(
                         addAll(ftsIds)
                         addAll(titleLikeIds)
                     }
-                val artistIds =
-                    db.libraryQueries.searchArtistsByNameLike(pattern, limit)
-                        .executeAsList()
-                        .flatMap { artist ->
-                            db.libraryQueries.selectTracksByArtist(artist.id)
-                                .executeAsList().map { it.id }
-                        }
-                val albumIds =
-                    db.libraryQueries.searchAlbumsByTitleLike(pattern, limit)
-                        .executeAsList()
-                        .flatMap { album ->
-                            db.libraryQueries.selectTracksByAlbum(album.id)
-                                .executeAsList().map { it.id }
-                        }
-                val merged = LinkedHashSet<Long>(titleIds.size + artistIds.size + albumIds.size)
+                val matchingArtists = db.libraryQueries.searchArtistsByNameLike(pattern, limit).executeAsList()
+                val artistTrackIds =
+                    if (matchingArtists.isEmpty()) {
+                        emptyList()
+                    } else {
+                        db.libraryQueries.selectTracksByArtistIds(matchingArtists.map { it.id })
+                            .executeAsList().map { it.id }
+                    }
+                val matchingAlbums = db.libraryQueries.searchAlbumsByTitleLike(pattern, limit).executeAsList()
+                val albumTrackIds =
+                    if (matchingAlbums.isEmpty()) {
+                        emptyList()
+                    } else {
+                        db.libraryQueries.selectTracksByAlbumIds(matchingAlbums.map { it.id })
+                            .executeAsList().map { it.id }
+                    }
+                val merged = LinkedHashSet<Long>(titleIds.size + artistTrackIds.size + albumTrackIds.size)
                 merged.addAll(titleIds)
-                merged.addAll(artistIds)
-                merged.addAll(albumIds)
+                merged.addAll(artistTrackIds)
+                merged.addAll(albumTrackIds)
                 if (merged.isEmpty()) return@withContext emptyList()
                 val capped = merged.take(limit.toInt())
                 db.libraryQueries.selectTracksByIds(capped)
@@ -261,22 +263,24 @@ class SearchRepository(
                 db.libraryQueries
                     .searchTracksByTitleLike(pattern, limit)
                     .executeAsList().map { it.id }
-            "artist" ->
-                db.libraryQueries
-                    .searchArtistsByNameLike(pattern, limit).executeAsList()
-                    .flatMap { artist ->
-                        db.libraryQueries.selectTracksByArtist(artist.id)
-                            .executeAsList().map { it.id }
-                    }
-                    .distinct()
-            "album" ->
-                db.libraryQueries
-                    .searchAlbumsByTitleLike(pattern, limit).executeAsList()
-                    .flatMap { album ->
-                        db.libraryQueries.selectTracksByAlbum(album.id)
-                            .executeAsList().map { it.id }
-                    }
-                    .distinct()
+            "artist" -> {
+                val artists = db.libraryQueries.searchArtistsByNameLike(pattern, limit).executeAsList()
+                if (artists.isEmpty()) {
+                    emptyList()
+                } else {
+                    db.libraryQueries.selectTracksByArtistIds(artists.map { it.id })
+                        .executeAsList().map { it.id }.distinct()
+                }
+            }
+            "album" -> {
+                val albums = db.libraryQueries.searchAlbumsByTitleLike(pattern, limit).executeAsList()
+                if (albums.isEmpty()) {
+                    emptyList()
+                } else {
+                    db.libraryQueries.selectTracksByAlbumIds(albums.map { it.id })
+                        .executeAsList().map { it.id }.distinct()
+                }
+            }
             "genre" -> {
                 // Genre matching uses the canonicalized GENRE tag value
                 // — exact + case-insensitive substring fallback. The

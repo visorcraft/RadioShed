@@ -76,7 +76,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -108,6 +108,23 @@ import androidx.compose.foundation.lazy.items as lazyItems
  *  `take(6)`. The action-sheet "Add to Drive Mode quick-list" row greys out
  *  once the list holds this many. */
 private const val DRIVE_QUICK_LIST_MAX = 6
+
+/**
+ * Lightweight identity of a station for sort/filter memoization.
+ * [StationRepository.observeAll] emits a new list every time stats change,
+ * which would otherwise rerun the expensive sort/filter pipeline on every
+ * track start. Keying on these fields instead of the full decoded Station
+ * objects avoids that churn while still refreshing when something that
+ * affects the grid actually changes.
+ */
+private data class StationGridKey(
+    val id: Long,
+    val name: String,
+    val customSubtitle: String?,
+    val isBuiltIn: Boolean,
+    val playCount: Long,
+    val lastPlayedAt: Long?,
+)
 
 /**
  * Stations Home — responsive grid of stations with tap-to-play.
@@ -161,10 +178,26 @@ fun StationsHomeScreen(
     // tile-size selector. Held in compose state so the grid
     // reorders instantly on selection without a screen leave.
     var currentSort by remember { mutableStateOf(settings.getStationsSort()) }
-    val stations by stationRepo.observeAll().collectAsState(initial = emptyList())
-    val currentStation by stationPlayback.currentStation.collectAsState()
-    val playerState by audioEngine.state.collectAsState()
-    val nowPlaying by audioEngine.nowPlaying.collectAsState()
+    val stations by stationRepo.observeAll().collectAsStateWithLifecycle(initialValue = emptyList())
+    // Stable projection used to key the expensive filter/sort chains.
+    // observeAll emits a new list on every stats bump, but the content
+    // equality of these keys means remember() won't recompute when only
+    // the list reference changed.
+    val stationKeys = remember(stations) {
+        stations.map {
+            StationGridKey(
+                id = it.id,
+                name = it.name,
+                customSubtitle = it.customSubtitle,
+                isBuiltIn = it.isBuiltIn,
+                playCount = it.stats.playCount,
+                lastPlayedAt = it.stats.lastPlayedAt,
+            )
+        }
+    }
+    val currentStation by stationPlayback.currentStation.collectAsStateWithLifecycle()
+    val playerState by audioEngine.state.collectAsStateWithLifecycle()
+    val nowPlaying by audioEngine.nowPlaying.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
 
     // Recently played snapshot. We re-query whenever the active station
@@ -188,17 +221,12 @@ fun StationsHomeScreen(
         recent = stationRepo.listRecentlyPlayed(limit = 6L)
         completionRates = stationRepo.stationCompletionRates()
     }
-    LaunchedEffect(stations.map { it.id }, currentStation?.id) {
+    LaunchedEffect(stationKeys.map { it.id }, currentStation?.id) {
         stationCollages =
-            stations.associate { s ->
-                s.id to (
-                    if (s.stats.playCount > 0L) {
-                        stationRepo.recentAlbumArtwork(s.id, 4L)
-                    } else {
-                        emptyList()
-                    }
-                )
-            }
+            stationRepo.recentAlbumArtworkForStations(
+                stationIds = stations.filter { it.stats.playCount > 0L }.map { it.id },
+                limitPerStation = 4L,
+            )
     }
 
     // Recently-added tracks — pulled from the library by file ctime
@@ -220,15 +248,14 @@ fun StationsHomeScreen(
     // 30-day-ago threshold). Previously the dep was only
     // nowPlaying?.trackId, which meant a fresh folder scan didn't
     // surface in the carousel until the user changed tracks.
-    val libraryTrackCount by libraryRepo.observeTrackCount().collectAsState(initial = -1L)
+    val libraryTrackCount by libraryRepo.observeTrackCount().collectAsStateWithLifecycle(initialValue = -1L)
     LaunchedEffect(nowPlaying?.trackId, libraryTrackCount) {
         if (libraryTrackCount < 0L) return@LaunchedEffect
         recentlyAdded = libraryRepo.newestTracks(limit = 12L)
         recentlyAddedArtwork =
-            recentlyAdded
-                .mapNotNull { it.albumId }
-                .distinct()
-                .associateWith { id -> libraryRepo.getAlbumById(id)?.artworkUri }
+            libraryRepo.albumsByIds(
+                recentlyAdded.mapNotNull { it.albumId }.distinct(),
+            ).mapValues { it.value.artworkUri }
 
         // Rediscover: tracks played at least once but not in the last
         // 30 days. Resolves track ids to full Track objects (skipping
@@ -239,16 +266,12 @@ fun StationsHomeScreen(
         val cutoff =
             com.visorcraft.radioshed.data.nowMillis() -
                 REDISCOVER_THRESHOLD_DAYS * 86_400_000L
-        rediscover =
-            stationRepo.rediscoverTrackIds(
-                olderThanMs = cutoff,
-                limit = 12L,
-            ).mapNotNull { libraryRepo.getTrackById(it) }
+        val rediscoverIds = stationRepo.rediscoverTrackIds(olderThanMs = cutoff, limit = 12L)
+        rediscover = libraryRepo.tracksByIds(rediscoverIds).values.toList()
         rediscoverArtwork =
-            rediscover
-                .mapNotNull { it.albumId }
-                .distinct()
-                .associateWith { id -> libraryRepo.getAlbumById(id)?.artworkUri }
+            libraryRepo.albumsByIds(
+                rediscover.mapNotNull { it.albumId }.distinct(),
+            ).mapValues { it.value.artworkUri }
     }
 
     // Long-press → action sheet state. Holds the station id whose sheet
@@ -473,7 +496,7 @@ fun StationsHomeScreen(
                                 .filter { it.id != currentStation?.id && it.stats.lastPlayedAt != null }
                         }
                     val mostPlayedMemo =
-                        remember(stations, currentStation?.id) {
+                        remember(stationKeys, currentStation?.id) {
                             stations
                                 .asSequence()
                                 .filter { it.stats.playCount > 0 && it.id != currentStation?.id }
@@ -482,7 +505,7 @@ fun StationsHomeScreen(
                                 .toList()
                         }
                     val displayedStationsMemo =
-                        remember(stations, stationFilter, hideBuiltIns, currentSort) {
+                        remember(stationKeys, stationFilter, hideBuiltIns, currentSort) {
                             stations
                                 .let { src ->
                                     if (hideBuiltIns) src.filterNot { it.isBuiltIn } else src
@@ -537,7 +560,7 @@ fun StationsHomeScreen(
                             // below — keep them in sync if either changes.
                             val visibleCountForHeader =
                                 remember(
-                                    stations,
+                                    stationKeys,
                                     stationFilter,
                                     hideBuiltIns,
                                 ) {

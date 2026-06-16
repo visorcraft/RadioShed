@@ -37,7 +37,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -80,8 +80,8 @@ fun LyricsScreen(
     lyricsCache: LyricsCacheRepository = koinInject(),
     settings: com.visorcraft.radioshed.data.SettingsStore = koinInject(),
 ) {
-    val nowPlaying by audioEngine.nowPlaying.collectAsState()
-    val position by audioEngine.position.collectAsState()
+    val nowPlaying by audioEngine.nowPlaying.collectAsStateWithLifecycle()
+    val position by audioEngine.position.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     // Lyrics font scale, persisted via SettingsStore so the
     // user's chosen size carries across sessions. A− and A+

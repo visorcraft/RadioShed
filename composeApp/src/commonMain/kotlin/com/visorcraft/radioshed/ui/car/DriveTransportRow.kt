@@ -25,7 +25,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -109,7 +109,7 @@ fun DriveTransportRow(
     val rejectHaptic = rememberHapticTick(HapticFeedbackType.Reject)
     val scope = rememberCoroutineScope()
 
-    val volume by stationPlayback.userVolume.collectAsState()
+    val volume by stationPlayback.userVolume.collectAsStateWithLifecycle()
     // Pre-mute level so unmute restores the prior level rather than a fixed
     // default. Hoisted to the NowPlaying screen scope (shared with the
     // VolumeRow mute toggle) so muting via one control and unmuting via the

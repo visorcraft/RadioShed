@@ -83,11 +83,11 @@ class PlaylistRepository(private val db: RadioShedDatabase) {
         newName: String,
     ): Long =
         withContext(IODispatcher) {
-            val sourceTracks =
+            val sourceTrackIds =
                 db.playlistsQueries
                     .selectTracksInPlaylist(sourceId)
                     .executeAsList()
-                    .map { it.toDomain() }
+                    .map { it.id }
             val now = nowMillis()
             var newId = 0L
             db.transaction {
@@ -99,13 +99,15 @@ class PlaylistRepository(private val db: RadioShedDatabase) {
                         created_at = now,
                         updated_at = now,
                     ).executeAsOne()
-                sourceTracks.forEachIndexed { idx, track ->
+                var pos = 0L
+                for (trackId in sourceTrackIds) {
                     db.playlistsQueries.addTrackToPlaylist(
                         playlist_id = newId,
-                        track_id = track.id,
-                        position = idx.toLong(),
+                        track_id = trackId,
+                        position = pos,
                         added_at = now,
                     )
+                    pos += 1
                 }
             }
             newId
@@ -230,5 +232,21 @@ class PlaylistRepository(private val db: RadioShedDatabase) {
             // wrapper class; flatten via executeAsOneOrNull + the column.
             db.playlistsQueries.firstPlaylistTrackArtwork(playlistId)
                 .executeAsOneOrNull()?.artwork_uri
+        }
+
+    suspend fun firstTrackArtworkForPlaylists(playlistIds: Collection<Long>): Map<Long, String?> =
+        withContext(IODispatcher) {
+            if (playlistIds.isEmpty()) return@withContext emptyMap()
+            db.playlistsQueries.firstTrackArtworkForPlaylists(playlistIds)
+                .executeAsList()
+                .associate { it.playlist_id to it.artwork_uri }
+        }
+
+    suspend fun trackCountsForPlaylists(playlistIds: Collection<Long>): Map<Long, Long> =
+        withContext(IODispatcher) {
+            if (playlistIds.isEmpty()) return@withContext emptyMap()
+            db.playlistsQueries.trackCountsForPlaylists(playlistIds)
+                .executeAsList()
+                .associate { it.playlist_id to it.track_count }
         }
 }

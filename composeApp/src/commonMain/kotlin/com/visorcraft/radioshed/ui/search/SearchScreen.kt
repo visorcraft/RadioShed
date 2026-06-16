@@ -36,7 +36,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -78,7 +78,7 @@ fun SearchScreen(
     var results by remember { mutableStateOf(SearchResults(emptyList(), emptyList(), emptyList())) }
     var isSearching by remember { mutableStateOf(false) }
     var contextTrackId by remember { mutableStateOf<Long?>(null) }
-    val nowPlaying by audioEngine.nowPlaying.collectAsState()
+    val nowPlaying by audioEngine.nowPlaying.collectAsStateWithLifecycle()
     val currentTrackId = nowPlaying?.trackId
     // Persisted across screen entries — a user who consistently
     // searches one scope shouldn't have to re-pick it on every visit.
@@ -99,7 +99,7 @@ fun SearchScreen(
     // without manual reload.
     var likedOnly by remember { mutableStateOf(false) }
     var likedSet by remember { mutableStateOf<Set<Long>>(emptySet()) }
-    val likedCount by ratingRepo.observeLikedCount().collectAsState(initial = 0L)
+    val likedCount by ratingRepo.observeLikedCount().collectAsStateWithLifecycle(initialValue = 0L)
     LaunchedEffect(likedCount, results, likedOnly) {
         // Only hit the DB when the chip is on. Toggling off clears
         // the set so a stale snapshot can't accidentally keep

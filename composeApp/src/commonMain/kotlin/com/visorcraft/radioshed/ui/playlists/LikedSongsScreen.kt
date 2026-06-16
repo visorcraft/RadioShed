@@ -48,7 +48,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -107,8 +107,8 @@ fun LikedSongsScreen(
     // losing the row with no undo path; this dialog makes the action
     // intentional. Long-press still goes to the track context sheet.
     var unlikeConfirm by remember { mutableStateOf<Track?>(null) }
-    val likedCount by ratingRepo.observeLikedCount().collectAsState(initial = 0L)
-    val nowPlaying by audioEngine.nowPlaying.collectAsState()
+    val likedCount by ratingRepo.observeLikedCount().collectAsStateWithLifecycle(initialValue = 0L)
+    val nowPlaying by audioEngine.nowPlaying.collectAsStateWithLifecycle()
     val currentTrackId = nowPlaying?.trackId
     val scope = rememberCoroutineScope()
 

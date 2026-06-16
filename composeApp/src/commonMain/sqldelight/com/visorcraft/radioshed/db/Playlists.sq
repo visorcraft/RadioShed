@@ -67,8 +67,25 @@ WHERE pt.playlist_id = ?
 ORDER BY pt.position
 LIMIT 1;
 
+firstTrackArtworkForPlaylists:
+SELECT playlist_id, artwork_uri FROM (
+  SELECT pt.playlist_id, album.artwork_uri,
+    ROW_NUMBER() OVER (PARTITION BY pt.playlist_id ORDER BY pt.position) AS rn
+  FROM playlist_track pt
+  JOIN track ON track.id = pt.track_id
+  LEFT JOIN album ON album.id = track.album_id
+  WHERE pt.playlist_id IN ?
+)
+WHERE rn = 1;
+
 countTracksInPlaylist:
 SELECT COUNT(*) FROM playlist_track WHERE playlist_id = ?;
+
+trackCountsForPlaylists:
+SELECT playlist_id, COUNT(*) AS track_count
+FROM playlist_track
+WHERE playlist_id IN ?
+GROUP BY playlist_id;
 
 reorderPlaylistTrack:
 UPDATE playlist_track SET position = ? WHERE playlist_id = ? AND track_id = ?;

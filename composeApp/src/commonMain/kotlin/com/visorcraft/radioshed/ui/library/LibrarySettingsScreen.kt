@@ -35,7 +35,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -78,7 +78,7 @@ fun LibrarySettingsScreen(
     storageVolumes: StorageVolumes = koinInject(),
 ) {
     val scope = rememberCoroutineScope()
-    val folders by folderRepo.observeAll().collectAsState(initial = emptyList())
+    val folders by folderRepo.observeAll().collectAsStateWithLifecycle(initialValue = emptyList())
     // Re-discovered each time the dialog opens so newly-inserted SD cards
     // / OTG drives appear without an app restart.
     val discoveredVolumes = remember { mutableStateOf(storageVolumes.discover()) }

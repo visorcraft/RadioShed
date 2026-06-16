@@ -41,7 +41,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -258,7 +258,7 @@ fun AppSettingsScreen(
                 // through `setNowPlayingLayout` updates both the
                 // underlying Settings and the flow, so NowPlayingScreen
                 // (also subscribed) sees the change live.
-                val npLayout by settings.nowPlayingLayoutFlow.collectAsState()
+                val npLayout by settings.nowPlayingLayoutFlow.collectAsStateWithLifecycle()
                 NowPlayingLayoutRow(
                     current = npLayout,
                     onPick = { v -> settings.setNowPlayingLayout(v) },
@@ -932,7 +932,7 @@ private fun LibrarySummaryCard(
     stationRepo: com.visorcraft.radioshed.data.StationRepository = koinInject(),
 ) {
     val trackCount by libraryRepo.observeTrackCount()
-        .collectAsState(initial = null)
+        .collectAsStateWithLifecycle(initialValue = null)
     var albumCount by remember { mutableStateOf<Long?>(null) }
     var artistCount by remember { mutableStateOf<Long?>(null) }
     var stationCount by remember { mutableStateOf<Long?>(null) }
