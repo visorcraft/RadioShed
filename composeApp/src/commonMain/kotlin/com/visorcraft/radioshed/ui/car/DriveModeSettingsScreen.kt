@@ -48,10 +48,10 @@ import com.visorcraft.radioshed.car.BluetoothWatcher
 import com.visorcraft.radioshed.car.BtPeer
 import com.visorcraft.radioshed.car.COMMON_DRIVE_KEY_CODES
 import com.visorcraft.radioshed.car.HARDWARE_DRIVE_KEY_ACTIONS
-import com.visorcraft.radioshed.car.UI_DRIVE_KEY_ACTIONS
 import com.visorcraft.radioshed.car.NullBluetoothWatcher
 import com.visorcraft.radioshed.car.NullSpeedWatcher
 import com.visorcraft.radioshed.car.SpeedWatcher
+import com.visorcraft.radioshed.car.UI_DRIVE_KEY_ACTIONS
 import com.visorcraft.radioshed.car.driveKeyCodeLabel
 import com.visorcraft.radioshed.data.SettingsStore
 import com.visorcraft.radioshed.data.StationRepository

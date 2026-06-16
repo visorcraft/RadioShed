@@ -20,6 +20,23 @@ plugins {
     alias(libs.plugins.detekt)
 }
 
+// ktlint: partial generated-source exclusion. The Compose resource plugin,
+// SQLDelight, and generateBuildInfo emit Kotlin into build/generated/ every
+// build. ktlint-gradle's filter matches globs relative to each source-set
+// srcDir, and for SQLDelight/Compose that srcDir root IS the generated dir —
+// so its files' relative paths ("com/visorcraft/...") carry no "generated"
+// segment and can't be matched from inside the filter (a Spec predicate hits
+// the same wall: per-srcDir-relative paths are identical to hand-written
+// ones). This glob still catches generateBuildInfo's output (registered as a
+// srcDir under commonMain, not rooted at the generated dir). The remaining
+// generated noise (~13.7k) is why CI keeps ktlintCheck on continue-on-error;
+// cleaning it needs a per-source-set task disable, tracked separately.
+ktlint {
+    filter {
+        exclude("**/generated/**")
+    }
+}
+
 // Load version.properties from the repo root. Single source of truth
 // for the app version — drives AGP versionCode/versionName, Compose
 // Desktop installer packageVersion, AND the generated BuildInfo

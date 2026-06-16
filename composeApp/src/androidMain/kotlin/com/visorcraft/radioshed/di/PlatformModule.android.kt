@@ -4,8 +4,8 @@ import android.content.Context
 import com.russhwolf.settings.Settings
 import com.russhwolf.settings.SharedPreferencesSettings
 import com.visorcraft.radioshed.audio.AndroidClipPlayer
-import com.visorcraft.radioshed.audio.AndroidTailSilenceAnalyzer
 import com.visorcraft.radioshed.audio.AndroidEqualizerController
+import com.visorcraft.radioshed.audio.AndroidTailSilenceAnalyzer
 import com.visorcraft.radioshed.audio.AndroidTtsEngine
 import com.visorcraft.radioshed.audio.AudioEngine
 import com.visorcraft.radioshed.audio.AudioEngineAndroid

@@ -4,8 +4,8 @@ import com.russhwolf.settings.PreferencesSettings
 import com.russhwolf.settings.Settings
 import com.visorcraft.radioshed.audio.AudioEngine
 import com.visorcraft.radioshed.audio.AudioEngineDesktop
-import com.visorcraft.radioshed.audio.DesktopTailSilenceAnalyzer
 import com.visorcraft.radioshed.audio.ClipPlayer
+import com.visorcraft.radioshed.audio.DesktopTailSilenceAnalyzer
 import com.visorcraft.radioshed.audio.EqualizerController
 import com.visorcraft.radioshed.audio.NullClipPlayer
 import com.visorcraft.radioshed.audio.NullEqualizerController

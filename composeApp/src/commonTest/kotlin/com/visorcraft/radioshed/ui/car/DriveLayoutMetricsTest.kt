@@ -7,7 +7,6 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class DriveLayoutMetricsTest {
-
     @Test
     fun phoneLayoutKeepsDefaultButtonSizes() {
         val metrics = driveLayoutMetrics(maxWidth = 400.dp, maxHeight = 800.dp)

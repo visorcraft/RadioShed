@@ -17,6 +17,14 @@ ij_kotlin_packages_to_use_import_on_demand = unset
 ij_kotlin_allow_trailing_comma = true
 ij_kotlin_allow_trailing_comma_on_call_site = true
 
+# ktlint rule overrides. Run via ./gradlew ktlintCheck / ktlintFormat.
+[*.{kt,kts}]
+# Compose @Composable functions are PascalCase nouns (NowPlayingScreen,
+# MiniPlayer, SettingsRow) — that is the framework's required convention,
+# but ktlint's function-naming rule only allows camelCase. Disable it
+# rather than rename every screen.
+ktlint_standard_function-naming = disabled
+
 [*.swift]
 indent_size = 4
 max_line_length = 120
