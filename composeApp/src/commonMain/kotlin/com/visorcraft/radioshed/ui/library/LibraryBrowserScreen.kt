@@ -73,6 +73,7 @@ import com.visorcraft.radioshed.nav.PlatformBackHandler
 import com.visorcraft.radioshed.stations.StationPlayback
 import com.visorcraft.radioshed.ui.playlists.TrackContextSheet
 import com.visorcraft.radioshed.ui.util.NowPlayingIndicator
+import com.visorcraft.radioshed.ui.util.rememberHapticTick
 import com.visorcraft.radioshed.ui.util.TooltipIconButton
 import com.visorcraft.radioshed.ui.util.onRightClick
 import kotlinx.coroutines.launch
@@ -1044,13 +1045,14 @@ private fun SongRow(
     onLongPress: () -> Unit = {},
     albumName: String? = null,
 ) {
+    val haptic = rememberHapticTick()
     Surface(
         modifier =
             Modifier
                 .fillMaxWidth()
                 .combinedClickable(
                     onClick = if (selectionMode) onToggleSelection else onTap,
-                    onLongClick = onLongPress,
+                    onLongClick = { haptic(); onLongPress() },
                 ),
         color =
             if (isSelected) {

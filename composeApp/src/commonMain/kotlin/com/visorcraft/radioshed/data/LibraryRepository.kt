@@ -22,6 +22,12 @@ import kotlinx.coroutines.withContext
  * in [db.transactionWithResult] / [db.transaction] so concurrent scanner runs
  * can't observe partially applied state or race on UNIQUE-constraint inserts.
  */
+
+// SQLite allows at most 999 host parameters per statement; the bulk
+// *ByIds lookups chunk under this so unbounded id sets (e.g. every
+// track in the library during the duplicates scan) don't blow the cap.
+private const val IN_CLAUSE_CHUNK = 900
+
 class LibraryRepository(private val db: RadioShedDatabase) {
     // ---- Artist ----
 
@@ -724,6 +730,39 @@ class LibraryRepository(private val db: RadioShedDatabase) {
             if (trackIds.isEmpty()) return@withContext emptyMap()
             db.libraryQueries.selectPrimaryArtistForTracks(trackIds).executeAsList()
                 .associate { it.track_id to it.artist_id }
+        }
+
+    /**
+     * Batched track lookup by id set. Replaces N serial [getTrackById]
+     * round-trips in screens that resolve a list of track ids at once
+     * (History, StationDetail, Stats, …). Inputs are deduped and chunked
+     * under SQLite's 999-host-parameter IN(?) cap; missing ids are simply
+     * absent from the result.
+     */
+    suspend fun tracksByIds(ids: Collection<Long>): Map<Long, Track> =
+        withContext(IODispatcher) {
+            if (ids.isEmpty()) return@withContext emptyMap()
+            ids.toSet().chunked(IN_CLAUSE_CHUNK).flatMap {
+                db.libraryQueries.selectTracksByIds(it).executeAsList()
+            }.associate { it.id to it.toDomain() }
+        }
+
+    /** Batched album lookup by id set — see [tracksByIds]. */
+    suspend fun albumsByIds(ids: Collection<Long>): Map<Long, Album> =
+        withContext(IODispatcher) {
+            if (ids.isEmpty()) return@withContext emptyMap()
+            ids.toSet().chunked(IN_CLAUSE_CHUNK).flatMap {
+                db.libraryQueries.selectAlbumsByIds(it).executeAsList()
+            }.associate { it.id to it.toDomain() }
+        }
+
+    /** Batched artist lookup by id set — see [tracksByIds]. */
+    suspend fun artistsByIds(ids: Collection<Long>): Map<Long, Artist> =
+        withContext(IODispatcher) {
+            if (ids.isEmpty()) return@withContext emptyMap()
+            ids.toSet().chunked(IN_CLAUSE_CHUNK).flatMap {
+                db.libraryQueries.selectArtistsByIds(it).executeAsList()
+            }.associate { it.id to it.toDomain() }
         }
 
     /**

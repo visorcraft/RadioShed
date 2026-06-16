@@ -115,12 +115,9 @@ fun HistoryScreen(
 
     suspend fun reload() {
         entries = stationRepo.allHistory(limit = 200L)
-        trackById =
-            entries
-                .map { it.trackId }
-                .distinct()
-                .mapNotNull { id -> libraryRepo.getTrackById(id)?.let { id to it } }
-                .toMap()
+        // Single batched lookup instead of one getTrackById per history row
+        // (was up to 200 serial SELECTs on every screen open).
+        trackById = libraryRepo.tracksByIds(entries.map { it.trackId }.distinct())
     }
 
     LaunchedEffect(Unit) { reload() }
@@ -214,23 +211,24 @@ fun HistoryScreen(
                                 onClick = {
                                     menuOpen = false
                                     scope.launch {
+                                        // Batch-resolve album titles and primary
+                                        // artist names once, instead of two serial
+                                        // SELECTs per history row (was up to 400
+                                        // round-trips for a 200-row export).
+                                        val albumTitles =
+                                            libraryRepo.albumsByIds(
+                                                entries.mapNotNull { trackById[it.trackId]?.albumId },
+                                            ).mapValues { it.value.title }
+                                        val artistNames =
+                                            libraryRepo.primaryArtistNameMap(entries.map { it.trackId })
                                         val rows =
                                             entries.map { e ->
                                                 val track = trackById[e.trackId]
-                                                val albumTitle =
-                                                    track?.albumId?.let {
-                                                        libraryRepo.getAlbumById(it)?.title
-                                                    }
-                                                val artistName =
-                                                    track?.id?.let {
-                                                        libraryRepo.artistsForTrack(it)
-                                                            .firstOrNull()?.name
-                                                    }
                                                 com.visorcraft.radioshed.source.HistoryCsvRow(
                                                     playedAtIso = formatIsoUtc(e.playedAt),
                                                     title = track?.title ?: "(missing)",
-                                                    artist = artistName,
-                                                    album = albumTitle,
+                                                    artist = track?.id?.let { artistNames[it] },
+                                                    album = track?.albumId?.let { albumTitles[it] },
                                                     stationName = e.stationName,
                                                     listenedMs = e.listenedMs,
                                                     completed = e.completed,

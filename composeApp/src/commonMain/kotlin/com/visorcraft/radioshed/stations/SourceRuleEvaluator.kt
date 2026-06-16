@@ -277,10 +277,20 @@ class SourceRuleEvaluator(
                 SortBy.Oldest -> all.sortedBy { it.fileCtime }
                 SortBy.Title -> all.sortedBy { it.title.lowercase() }
                 SortBy.Random -> all.shuffled()
-                // MostPlayed / HighestRated need joining with play_count / rating
-                // tables; v1 falls back to source order. Phase 5 part 2 wires these
-                // up properly via dedicated queries.
-                SortBy.MostPlayed, SortBy.HighestRated -> all
+                // Batch-fetch the play-count / rating maps once (a single
+                // IN(?) query each) and sort in memory. TopN sorts the already
+                // materialized result of arbitrary source rules, so a SQL join
+                // isn't viable — but two bounded batch lookups over the candidate
+                // ids is O(1) round-trips regardless of list size. Tracks
+                // without a play_count / rating row sort last (default 0).
+                SortBy.MostPlayed -> {
+                    val counts = ratingRepo.playCountsForTracks(all.map { it.id })
+                    all.sortedByDescending { counts[it.id]?.count ?: 0L }
+                }
+                SortBy.HighestRated -> {
+                    val ratings = ratingRepo.ratingsForTracks(all.map { it.id })
+                    all.sortedByDescending { ratings[it.id] ?: 0.0 }
+                }
             }
         return sorted.take(rule.limit)
     }

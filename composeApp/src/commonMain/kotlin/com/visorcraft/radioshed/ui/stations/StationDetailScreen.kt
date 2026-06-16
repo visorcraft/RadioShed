@@ -98,7 +98,11 @@ fun StationDetailScreen(
         pinned = stationRepo.pinnedTracks(stationId)
         // Recently played = last 20 history rows resolved to tracks.
         val recentRows = stationRepo.historyForStation(stationId, limit = 20L)
-        recent = recentRows.mapNotNull { libraryRepo.getTrackById(it.trackId) }
+        // One batched track lookup serves both the "recent" list and the
+        // client-side top-tracks aggregation (was two serial getTrackById
+        // passes — up to 40 SELECTs — over the same 20 rows).
+        val trackById = libraryRepo.tracksByIds(recentRows.map { it.trackId }.distinct())
+        recent = recentRows.mapNotNull { trackById[it.trackId] }
         // Top tracks aggregated client-side from history (the SQL
         // selectTopPlayedTrackIds is global across stations; this is
         // station-scoped).
@@ -108,7 +112,7 @@ fun StationDetailScreen(
                 .sortedByDescending { it.value }
                 .take(10)
                 .mapNotNull { (id, count) ->
-                    libraryRepo.getTrackById(id)?.let { it to count.toLong() }
+                    trackById[id]?.let { it to count.toLong() }
                 }
     }
 

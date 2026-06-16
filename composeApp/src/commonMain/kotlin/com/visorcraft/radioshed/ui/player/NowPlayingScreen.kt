@@ -244,10 +244,9 @@ fun NowPlayingScreen(
             priorityCount = stationPlayback.priorityCount()
             recent = stationPlayback.recentSnapshot().reversed() // newest first
             val albumIds = (upcoming + recent).mapNotNull { it.albumId }.distinct()
-            queueArtwork =
-                albumIds.associateWith { id ->
-                    libraryRepo.getAlbumById(id)?.artworkUri
-                }
+            // Batched album lookup — was one getAlbumById per distinct album
+            // (up to ~40) each time the queue sheet opens.
+            queueArtwork = libraryRepo.albumsByIds(albumIds).mapValues { it.value.artworkUri }
         }
     }
 

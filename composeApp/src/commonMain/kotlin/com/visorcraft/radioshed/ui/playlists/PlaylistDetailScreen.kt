@@ -62,6 +62,7 @@ import com.visorcraft.radioshed.domain.Playlist
 import com.visorcraft.radioshed.domain.Track
 import com.visorcraft.radioshed.stations.StationPlayback
 import com.visorcraft.radioshed.ui.util.NowPlayingIndicator
+import com.visorcraft.radioshed.ui.util.rememberHapticTick
 import com.visorcraft.radioshed.ui.util.TooltipIconButton
 import com.visorcraft.radioshed.ui.util.dragReorderItem
 import com.visorcraft.radioshed.ui.util.rememberDragReorderState
@@ -494,12 +495,13 @@ private fun PlaylistTrackRow(
     onLongPress: (() -> Unit)? = null,
     onRemove: () -> Unit,
 ) {
+    val haptic = rememberHapticTick()
     Surface(
         modifier =
             if (onLongPress != null) {
                 modifier
                     .fillMaxWidth()
-                    .combinedClickable(onClick = onTap, onLongClick = onLongPress)
+                    .combinedClickable(onClick = onTap, onLongClick = { haptic(); onLongPress() })
             } else {
                 modifier.fillMaxWidth().clickable(onClick = onTap)
             },

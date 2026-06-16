@@ -155,11 +155,9 @@ fun StatsScreen(
         }
         // top track ids → resolve to Track objects via LibraryRepo;
         // skip ids whose tracks have been deleted from the library.
-        topTracks =
-            stationRepo.topPlayedTracks(limit = 25L)
-                .mapNotNull { (id, count) ->
-                    libraryRepo.getTrackById(id)?.let { it to count }
-                }
+        val topPlayedRaw = stationRepo.topPlayedTracks(limit = 25L)
+        val topById = libraryRepo.tracksByIds(topPlayedRaw.map { (id, _) -> id })
+        topTracks = topPlayedRaw.mapNotNull { (id, count) -> topById[id]?.let { it to count } }
         topArtists = stationRepo.topPlayedArtists(limit = 10L)
         topAlbums = stationRepo.topPlayedAlbums(limit = 10L)
         topGenres = stationRepo.topPlayedGenres(limit = 8L)

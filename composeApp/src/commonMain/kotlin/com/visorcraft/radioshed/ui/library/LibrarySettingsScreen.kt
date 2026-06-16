@@ -95,6 +95,10 @@ fun LibrarySettingsScreen(
     var addDialogOpen by remember { mutableStateOf(false) }
     var editingFolder by remember { mutableStateOf<Folder?>(null) }
     var movingFolder by remember { mutableStateOf<Folder?>(null) }
+    // Folder awaiting the confirm dialog before delete. Removing a scanner
+    // root is disruptive enough to warrant a second tap, mirroring the
+    // station-delete confirm in StationsHomeScreen.
+    var pendingDeleteFolder by remember { mutableStateOf<Folder?>(null) }
     var scanStatus by remember { mutableStateOf<String?>(null) }
     var scanError by remember { mutableStateOf<String?>(null) }
     var scanJob by remember { mutableStateOf<Job?>(null) }
@@ -224,10 +228,9 @@ fun LibrarySettingsScreen(
                             },
                             onDelete = {
                                 if (scanInFlight) return@FolderCard
-                                scope.launch {
-                                    runCatching { folderRepo.delete(folder.id) }
-                                        .onFailure { scanError = it.message }
-                                }
+                                // Defer the actual delete to the confirm dialog
+                                // rendered at the bottom of this screen.
+                                pendingDeleteFolder = folder
                             },
                             onPickColor = { color ->
                                 scope.launch {
@@ -353,6 +356,35 @@ fun LibrarySettingsScreen(
             onError = { msg ->
                 scanError = "Move failed: $msg"
                 movingFolder = null
+            },
+        )
+    }
+
+    pendingDeleteFolder?.let { folder ->
+        AlertDialog(
+            onDismissRequest = { pendingDeleteFolder = null },
+            title = { Text("Remove folder?") },
+            text = {
+                Text(
+                    "Remove \"${folder.displayName}\" from the scanner? " +
+                        "Track files are not deleted from disk — they re-link " +
+                        "when you add a folder that covers them again.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val id = folder.id
+                    pendingDeleteFolder = null
+                    scope.launch {
+                        runCatching { folderRepo.delete(id) }
+                            .onFailure { scanError = it.message }
+                    }
+                }) {
+                    Text("Remove", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDeleteFolder = null }) { Text("Cancel") }
             },
         )
     }

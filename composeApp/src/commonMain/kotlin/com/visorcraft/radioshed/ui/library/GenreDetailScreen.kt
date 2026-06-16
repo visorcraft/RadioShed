@@ -58,6 +58,7 @@ import com.visorcraft.radioshed.data.LibraryRepository
 import com.visorcraft.radioshed.domain.Track
 import com.visorcraft.radioshed.stations.StationPlayback
 import com.visorcraft.radioshed.ui.playlists.TrackContextSheet
+import com.visorcraft.radioshed.ui.util.rememberHapticTick
 import com.visorcraft.radioshed.ui.util.TooltipIconButton
 import org.koin.compose.koinInject
 
@@ -297,11 +298,12 @@ private fun GenreTrackRow(
     onTap: () -> Unit,
     onLongPress: () -> Unit,
 ) {
+    val haptic = rememberHapticTick()
     Surface(
         modifier =
             Modifier
                 .fillMaxWidth()
-                .combinedClickable(onClick = onTap, onLongClick = onLongPress),
+                .combinedClickable(onClick = onTap, onLongClick = { haptic(); onLongPress() }),
         color = Color.Transparent,
     ) {
         Row(

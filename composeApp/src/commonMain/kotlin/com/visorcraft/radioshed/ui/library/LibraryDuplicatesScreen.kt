@@ -95,15 +95,11 @@ fun LibraryDuplicatesScreen(
                 // fuzz-key build runs in pure memory rather than re-hitting
                 // the DB for each row.
                 val artistNames: Map<Long, String> =
-                    artistIds.values
-                        .toSet()
-                        .mapNotNull { aid -> libraryRepo.getArtistById(aid)?.let { aid to it.name } }
-                        .toMap()
+                    libraryRepo.artistsByIds(artistIds.values.toSet())
+                        .mapValues { it.value.name }
                 val albumIds = all.mapNotNull { it.albumId }.toSet()
                 val albumTitles: Map<Long, String> =
-                    albumIds
-                        .mapNotNull { aid -> libraryRepo.getAlbumById(aid)?.let { aid to it.title } }
-                        .toMap()
+                    libraryRepo.albumsByIds(albumIds).mapValues { it.value.title }
 
                 val artistByTrackMap =
                     ids.mapNotNull { tid ->

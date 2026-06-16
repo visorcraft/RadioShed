@@ -147,6 +147,14 @@ SELECT id FROM artist WHERE sort_name = ?;
 selectArtistById:
 SELECT * FROM artist WHERE id = ?;
 
+-- Bulk artist lookup by id set. Mirrors selectAlbumsByIds /
+-- selectTracksByIds: collapses N serial selectArtistById round-trips
+-- (e.g. LibraryDuplicatesScreen resolves every primary artist in one
+-- query instead of one-per-artist). SQLite IN(?) cap of 999 applies;
+-- the repository wrapper chunks above that.
+selectArtistsByIds:
+SELECT * FROM artist WHERE id IN ?;
+
 selectArtistBySortName:
 SELECT * FROM artist WHERE sort_name = ?;
 

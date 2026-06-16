@@ -68,6 +68,7 @@ import com.visorcraft.radioshed.data.RatingRepository
 import com.visorcraft.radioshed.domain.Track
 import com.visorcraft.radioshed.stations.StationPlayback
 import com.visorcraft.radioshed.ui.util.NowPlayingIndicator
+import com.visorcraft.radioshed.ui.util.rememberHapticTick
 import com.visorcraft.radioshed.ui.util.TooltipIconButton
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
@@ -546,11 +547,12 @@ private fun LikedSongRow(
     onLongPress: () -> Unit,
     onUnlike: () -> Unit,
 ) {
+    val haptic = rememberHapticTick()
     Surface(
         modifier =
             Modifier
                 .fillMaxWidth()
-                .combinedClickable(onClick = onTap, onLongClick = onLongPress),
+                .combinedClickable(onClick = onTap, onLongClick = { haptic(); onLongPress() }),
         color = Color.Transparent,
     ) {
         Row(

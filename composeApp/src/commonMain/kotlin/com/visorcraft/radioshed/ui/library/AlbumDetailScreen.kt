@@ -68,6 +68,7 @@ import com.visorcraft.radioshed.domain.Artist
 import com.visorcraft.radioshed.domain.Track
 import com.visorcraft.radioshed.stations.StationPlayback
 import com.visorcraft.radioshed.ui.playlists.TrackContextSheet
+import com.visorcraft.radioshed.ui.util.rememberHapticTick
 import com.visorcraft.radioshed.ui.util.TooltipIconButton
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
@@ -557,11 +558,12 @@ private fun AlbumTrackRow(
     onTap: () -> Unit,
     onLongPress: () -> Unit = {},
 ) {
+    val haptic = rememberHapticTick()
     Surface(
         modifier =
             Modifier
                 .fillMaxWidth()
-                .combinedClickable(onClick = onTap, onLongClick = onLongPress),
+                .combinedClickable(onClick = onTap, onLongClick = { haptic(); onLongPress() }),
         color = Color.Transparent,
     ) {
         Row(
