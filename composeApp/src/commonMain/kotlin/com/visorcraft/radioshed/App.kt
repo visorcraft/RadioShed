@@ -105,27 +105,13 @@ fun App(
         // media playback available). Triggers at startup if libvlc is
         // absent, and re-shows on a play attempt that errors while libvlc
         // is still missing. Dismissible.
-        var showVlcDialog by remember { mutableStateOf(false) }
-        LaunchedEffect(Unit) {
-            if (!isMediaPlaybackAvailable()) showVlcDialog = true
-        }
-        // Re-check on a play-attempt failure: gating on PlayerState.Error
-        // AND a fresh availability re-check (rather than string-matching
-        // the message) means a normal file error with VLC present never
-        // triggers this, but a play attempt with libvlc still missing
-        // re-surfaces the modal even after the user dismissed it.
-        val playerState by audioEngine.state.collectAsState()
-        LaunchedEffect(playerState) {
-            if (playerState is PlayerState.Error && !isMediaPlaybackAvailable()) {
-                showVlcDialog = true
-            }
-        }
-        if (showVlcDialog) {
-            VlcRequiredDialog(
-                onDismiss = { showVlcDialog = false },
-                onGetVlc = { openGetVlcPage() },
-            )
-        }
+        //
+        // Extracted into its own composable so audioEngine.state is
+        // collected BELOW the App() root — collecting it at the root
+        // forced the entire App body (every screen, every lambda) to
+        // recompose on every Idle → Buffering → Playing → Paused → Ended
+        // transition, i.e. on every play/pause tap and track change.
+        VlcStateWatcher(audioEngine)
 
         // Composition-local nav handles for deep widgets (Track context
         // sheet, MiniPlayer overflow, etc.) that don't have a clean
@@ -232,6 +218,31 @@ fun App(
             val ftsSearch: FtsSearch = koinInject()
             LaunchedEffect(Unit) {
                 runCatching { ftsSearch.rebuildTrackIndex() }
+            }
+
+            // Prune append-only history tables that grow without bound
+            // and progressively slow every Stats / Top-N / Forgotten-Gems
+            // query (all of which GROUP-BY-scan the full table). The trim
+            // methods already existed but were only callable from the
+            // manual "Clear history" UI; without this auto-prune a user
+            // with months of play history would see the app get slower
+            // over time as the tables accumulated tens of thousands of
+            // rows. 365 days retains a full year of stats; skips are kept
+            // for 180 days (only powers "most skipped" lists). Runs once
+            // per process lifetime, in the background.
+            val stationRepo: com.visorcraft.radioshed.data.StationRepository = koinInject()
+            val ratingRepo: com.visorcraft.radioshed.data.RatingRepository = koinInject()
+            LaunchedEffect(Unit) {
+                if (settings.isOnboardingComplete()) {
+                    runCatching {
+                        val cutoff = nowMillis() - 365L * 24L * 60L * 60L * 1_000L
+                        stationRepo.trimHistoryOlderThan(cutoff)
+                    }
+                    runCatching {
+                        val cutoff = nowMillis() - 180L * 24L * 60L * 60L * 1_000L
+                        ratingRepo.trimSkipsOlderThan(cutoff)
+                    }
+                }
             }
 
             // Auto-rescan-on-launch safety net. Opt-in; for users who
@@ -672,5 +683,30 @@ fun App(
                 MiniPlayer(onExpand = { navTo(AppScreen.NowPlaying) })
             }
         } // CompositionLocalProvider
+    }
+}
+
+/**
+ * Collects [AudioEngine.state] in an isolated leaf so the App root
+ * doesn't recompose on every player-state transition. See the call
+ * site in [App] for the full rationale.
+ */
+@Composable
+private fun VlcStateWatcher(audioEngine: AudioEngine) {
+    var showVlcDialog by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        if (!isMediaPlaybackAvailable()) showVlcDialog = true
+    }
+    val playerState by audioEngine.state.collectAsState()
+    LaunchedEffect(playerState) {
+        if (playerState is PlayerState.Error && !isMediaPlaybackAvailable()) {
+            showVlcDialog = true
+        }
+    }
+    if (showVlcDialog) {
+        VlcRequiredDialog(
+            onDismiss = { showVlcDialog = false },
+            onGetVlc = { openGetVlcPage() },
+        )
     }
 }

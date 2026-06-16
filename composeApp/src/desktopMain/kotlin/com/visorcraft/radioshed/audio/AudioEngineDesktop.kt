@@ -176,6 +176,14 @@ class AudioEngineDesktop : AudioEngine {
             scope.launch {
                 while (isActive) {
                     delay(POLL_INTERVAL_MS)
+                    // Skip native calls when nothing is loaded — there's
+                    // no position to report and no state transition to
+                    // detect. Uses _nowPlaying (not _state) because the
+                    // poll loop must stay active through Paused → resume()
+                    // transitions: resume() calls libvlc play directly
+                    // without touching _state, so a _state-based guard
+                    // would freeze the UI at the pre-resume state.
+                    if (_nowPlaying.value == null) continue
                     val nativeState =
                         runCatching { loaded.libvlc_media_player_get_state(p) }
                             .getOrDefault(LibVlcState.ERROR)
@@ -316,6 +324,13 @@ class AudioEngineDesktop : AudioEngine {
         _state.value = PlayerState.Idle
         _position.value = Position(0L, 0L)
         lastPolledState = LibVlcState.STOPPED
+        // Null out nowPlaying so the poll-loop guard (which checks
+        // _nowPlaying.value == null) stops making native calls, and
+        // the MiniPlayer hides (matching Android's stop which also
+        // nulls nowPlaying). Without this, resume()/togglePlayPause()
+        // could call libvlc play on a stopped player while the poll
+        // loop is still gated, freezing the UI state at Idle.
+        _nowPlaying.value = null
     }
 
     override fun setVolume(fraction: Float) {

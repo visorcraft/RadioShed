@@ -14,6 +14,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -31,15 +32,19 @@ import com.visorcraft.radioshed.ui.util.TooltipIconButton
  * Playing top bar so users see the same thing wherever they reach
  * for it.
  *
- * The slider writes through [onChange] on every value change; the
- * caller routes that to `stationPlayback.setUserVolume(...)` which
- * persists to settings and applies effective volume after any
- * ReplayGain attenuation.
+ * The slider routes live changes through [onVolumeLive] on every
+ * tick (the engine responds in real time) but defers the persist hop
+ * to [onVolumeCommit] which only fires on drag-end — matching the
+ * touch [VolumeRow] pattern. Without this split, every frame of the
+ * drag persisted to disk: 30-60 settings writes per gesture and
+ * noticeable jank (the exact bug VolumeRow's comment at
+ * NowPlayingScreen.kt documents).
  */
 @Composable
 fun DesktopVolumeControl(
     volume: Float,
-    onChange: (Float) -> Unit,
+    onVolumeLive: (Float) -> Unit,
+    onVolumeCommit: (Float) -> Unit,
     modifier: Modifier = Modifier,
     sliderWidth: Dp = 100.dp,
 ) {
@@ -47,7 +52,13 @@ fun DesktopVolumeControl(
     // Defaulting to 1.0 so the un-mute on a never-touched session
     // takes the user to full volume rather than back to zero.
     var preMute by remember { mutableStateOf(if (volume > 0.02f) volume else 1f) }
-    val muted = volume < 0.02f
+    // Local pending value while the user is dragging — the engine
+    // responds to onVolumeLive in real time, but the persist hop
+    // through SharedPreferences fires only on onValueChangeFinished.
+    var dragging by remember { mutableStateOf(false) }
+    var pending by remember { mutableFloatStateOf(volume) }
+    val display = if (dragging) pending else volume
+    val muted = display < 0.02f
 
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -57,10 +68,13 @@ fun DesktopVolumeControl(
             tooltip = if (muted) "Unmute" else "Mute",
             onClick = {
                 if (muted) {
-                    onChange(preMute)
+                    preMute = preMute.coerceAtLeast(0.1f)
+                    onVolumeLive(preMute)
+                    onVolumeCommit(preMute)
                 } else {
-                    preMute = volume
-                    onChange(0f)
+                    preMute = display
+                    onVolumeLive(0f)
+                    onVolumeCommit(0f)
                 }
             },
             modifier = Modifier.size(32.dp),
@@ -69,7 +83,7 @@ fun DesktopVolumeControl(
                 imageVector =
                     when {
                         muted -> Icons.AutoMirrored.Filled.VolumeOff
-                        volume < 0.5f -> Icons.AutoMirrored.Filled.VolumeDown
+                        display < 0.5f -> Icons.AutoMirrored.Filled.VolumeDown
                         else -> Icons.AutoMirrored.Filled.VolumeUp
                     },
                 contentDescription = if (muted) "Unmute" else "Mute",
@@ -78,8 +92,16 @@ fun DesktopVolumeControl(
             )
         }
         Slider(
-            value = volume,
-            onValueChange = onChange,
+            value = display,
+            onValueChange = {
+                dragging = true
+                pending = it
+                onVolumeLive(it)
+            },
+            onValueChangeFinished = {
+                onVolumeCommit(pending)
+                dragging = false
+            },
             valueRange = 0f..1f,
             modifier = Modifier.width(sliderWidth),
             colors =

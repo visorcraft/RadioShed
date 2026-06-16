@@ -1,6 +1,7 @@
 package com.visorcraft.radioshed.stations
 
 import com.visorcraft.radioshed.audio.AudioEngine
+import com.visorcraft.radioshed.audio.CROSSFADE_MAX_SEC
 import com.visorcraft.radioshed.audio.CrossfadePlan
 import com.visorcraft.radioshed.audio.PlayerState
 import com.visorcraft.radioshed.audio.TailSilenceAnalyzer
@@ -446,6 +447,19 @@ class StationPlayback(
                     // outgoing track ends between this tick and the mutex
                     // acquisition inside maybeStartCrossfade.
                     if (!crossfadeArmed && !suppressEndedForCrossfade) {
+                        // Fast-path: skip the expensive upcoming(1) call
+                        // (which filters the entire candidate pool in
+                        // shuffle modes) when we're nowhere near the
+                        // arming window. The max arming window is the
+                        // longest possible crossfade plus trailing
+                        // silence; outside that, shouldArmCrossfade is
+                        // guaranteed to return false so there's nothing
+                        // to do.
+                        val maxArmWindowMs =
+                            (if (plan.smart) CROSSFADE_MAX_SEC * 1_000L else plan.durationMs) +
+                                (trailingSilenceMs ?: 0L)
+                        if (remainingMs > maxArmWindowMs) return@collect
+
                         val nextTrack = upcoming(1).firstOrNull()
                         val fadeMs =
                             effectiveCrossfadeDurationMs(

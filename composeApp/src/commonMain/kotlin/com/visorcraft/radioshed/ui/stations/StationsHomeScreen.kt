@@ -462,6 +462,56 @@ fun StationsHomeScreen(
                     }
                 }
                 androidx.compose.foundation.layout.Box(modifier = Modifier.fillMaxSize()) {
+                    // Memoize the filter/sort chains so play/pause/track-change
+                    // ticks (which recompose this screen via the playerState /
+                    // nowPlaying collections at the root) don't re-run them on
+                    // every tick. These live OUTSIDE the LazyVerticalGrid body
+                    // because LazyGridScope is not a @Composable scope.
+                    val recentToShowMemo =
+                        remember(recent, currentStation?.id) {
+                            recent
+                                .filter { it.id != currentStation?.id && it.stats.lastPlayedAt != null }
+                        }
+                    val mostPlayedMemo =
+                        remember(stations, currentStation?.id) {
+                            stations
+                                .asSequence()
+                                .filter { it.stats.playCount > 0 && it.id != currentStation?.id }
+                                .sortedByDescending { it.stats.playCount }
+                                .take(6)
+                                .toList()
+                        }
+                    val displayedStationsMemo =
+                        remember(stations, stationFilter, hideBuiltIns, currentSort) {
+                            stations
+                                .let { src ->
+                                    if (hideBuiltIns) src.filterNot { it.isBuiltIn } else src
+                                }
+                                .let { src ->
+                                    val q = stationFilter.trim()
+                                    if (q.isBlank()) {
+                                        src
+                                    } else {
+                                        src.filter {
+                                            it.name.contains(q, ignoreCase = true) ||
+                                                (it.customSubtitle?.contains(q, ignoreCase = true) == true)
+                                        }
+                                    }
+                                }
+                                .let { src ->
+                                    when (currentSort) {
+                                        "NameAsc" -> src.sortedBy { it.name.lowercase() }
+                                        "NameDesc" -> src.sortedByDescending { it.name.lowercase() }
+                                        "MostPlayed" -> src.sortedByDescending { it.stats.playCount }
+                                        "LeastPlayed" -> src.sortedBy { it.stats.playCount }
+                                        "RecentlyPlayed" ->
+                                            src.sortedByDescending {
+                                                it.stats.lastPlayedAt ?: Long.MIN_VALUE
+                                            }
+                                        else -> src
+                                    }
+                                }
+                        }
                     LazyVerticalGrid(
                         columns = columns,
                         state = gridState,
@@ -609,9 +659,7 @@ fun StationsHomeScreen(
                         // user has actually played something. Filters out the
                         // currently-playing station (it's already pinned above
                         // in the Continue Listening card).
-                        val recentToShow =
-                            recent
-                                .filter { it.id != currentStation?.id && it.stats.lastPlayedAt != null }
+                        val recentToShow = recentToShowMemo
                         if (recentToShow.isNotEmpty()) {
                             item(span = { GridItemSpan(maxLineSpan) }) {
                                 RecentlyPlayedRow(
@@ -626,13 +674,7 @@ fun StationsHomeScreen(
                         // user hasn't played anything yet, and skip if the only
                         // candidate is whatever's currently playing (Continue
                         // Listening already has it).
-                        val mostPlayed =
-                            stations
-                                .asSequence()
-                                .filter { it.stats.playCount > 0 && it.id != currentStation?.id }
-                                .sortedByDescending { it.stats.playCount }
-                                .take(6)
-                                .toList()
+                        val mostPlayed = mostPlayedMemo
                         if (mostPlayed.isNotEmpty()) {
                             item(span = { GridItemSpan(maxLineSpan) }) {
                                 MostPlayedRow(
@@ -671,46 +713,7 @@ fun StationsHomeScreen(
                         // before rendering tiles. Filter checks both name and
                         // customSubtitle so users can search "tag-driven" or
                         // "60s" if they remember the subtitle but not the name.
-                        val displayedStations =
-                            stations
-                                .let { src ->
-                                    if (hideBuiltIns) src.filterNot { it.isBuiltIn } else src
-                                }
-                                .let { src ->
-                                    val q = stationFilter.trim()
-                                    if (q.isBlank()) {
-                                        src
-                                    } else {
-                                        src.filter {
-                                            it.name.contains(q, ignoreCase = true) ||
-                                                (it.customSubtitle?.contains(q, ignoreCase = true) == true)
-                                        }
-                                    }
-                                }
-                                // Sort last so the user's filter / hide toggles
-                                // run against the original ordering (filter
-                                // result counts in the header are stable
-                                // regardless of sort) and only the on-screen
-                                // arrangement reacts to the sort preference.
-                                // "Custom" is the legacy pin / drag-reorder
-                                // ordering that the StationRepository.observeAll
-                                // flow already returns — pass through unchanged
-                                // so power users who hand-curated the order
-                                // don't see their layout reshuffle just because
-                                // the sort menu shipped.
-                                .let { src ->
-                                    when (currentSort) {
-                                        "NameAsc" -> src.sortedBy { it.name.lowercase() }
-                                        "NameDesc" -> src.sortedByDescending { it.name.lowercase() }
-                                        "MostPlayed" -> src.sortedByDescending { it.stats.playCount }
-                                        "LeastPlayed" -> src.sortedBy { it.stats.playCount }
-                                        "RecentlyPlayed" ->
-                                            src.sortedByDescending {
-                                                it.stats.lastPlayedAt ?: Long.MIN_VALUE
-                                            }
-                                        else -> src
-                                    }
-                                }
+                        val displayedStations = displayedStationsMemo
                         // Inline empty hint when an active filter (Hide
                         // built-ins toggle, or text filter) has reduced the
                         // visible grid to nothing. The full-screen EmptyState

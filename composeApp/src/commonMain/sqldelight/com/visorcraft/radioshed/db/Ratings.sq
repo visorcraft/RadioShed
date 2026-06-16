@@ -16,6 +16,7 @@ CREATE TABLE skip_log (
 
 CREATE INDEX skip_log_track_idx ON skip_log(track_id);
 CREATE INDEX skip_log_station_idx ON skip_log(station_id);
+CREATE INDEX skip_log_skipped_at_idx ON skip_log(skipped_at);
 
 CREATE TABLE play_count (
     track_id INTEGER NOT NULL PRIMARY KEY REFERENCES track(id) ON DELETE CASCADE,

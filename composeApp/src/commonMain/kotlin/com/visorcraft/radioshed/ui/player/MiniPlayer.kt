@@ -252,7 +252,8 @@ fun MiniPlayer(
                 if (isDesktopHost) {
                     DesktopVolumeControl(
                         volume = userVolume,
-                        onChange = { stationPlayback.setUserVolume(it) },
+                        onVolumeLive = { stationPlayback.previewUserVolume(it) },
+                        onVolumeCommit = { stationPlayback.commitUserVolume(it) },
                     )
                 }
                 // Skip prev/next bypass the MediaController and call

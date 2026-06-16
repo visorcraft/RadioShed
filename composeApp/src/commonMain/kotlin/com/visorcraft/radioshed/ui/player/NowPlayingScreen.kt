@@ -357,7 +357,8 @@ fun NowPlayingScreen(
                         if (com.visorcraft.radioshed.isDesktopHost) {
                             com.visorcraft.radioshed.ui.player.DesktopVolumeControl(
                                 volume = userVolume,
-                                onChange = { stationPlayback.setUserVolume(it) },
+                                onVolumeLive = { stationPlayback.previewUserVolume(it) },
+                                onVolumeCommit = { stationPlayback.commitUserVolume(it) },
                                 sliderWidth = 90.dp,
                             )
                         }
