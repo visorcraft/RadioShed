@@ -23,6 +23,12 @@ class JvmFileEnumerator : FileEnumerator {
             if (!root.exists() || !root.isDirectory) return@flow
             val rootAbs = root.canonicalFile
 
+            // Compile each glob once per scan, not once per file. A large
+            // library walk visits tens of thousands of files; recompiling the
+            // include/exclude patterns for every one of them was pure waste.
+            val excludeRegexes = filter.excludeGlobs.map(::globToRegex)
+            val includeRegexes = filter.includeGlobs.map(::globToRegex)
+
             val sequence =
                 if (recursive) {
                     rootAbs.walkTopDown()
@@ -35,9 +41,9 @@ class JvmFileEnumerator : FileEnumerator {
                 if (filter.formats.isNotEmpty() && ext !in filter.formats) continue
 
                 val relativePath = relativizeUnderRoot(rootAbs, file)
-                if (filter.excludeGlobs.any { matchesGlob(relativePath, it) }) continue
-                if (filter.includeGlobs.isNotEmpty() &&
-                    filter.includeGlobs.none { matchesGlob(relativePath, it) }
+                if (excludeRegexes.any { it.matches(relativePath) }) continue
+                if (includeRegexes.isNotEmpty() &&
+                    includeRegexes.none { it.matches(relativePath) }
                 ) {
                     continue
                 }

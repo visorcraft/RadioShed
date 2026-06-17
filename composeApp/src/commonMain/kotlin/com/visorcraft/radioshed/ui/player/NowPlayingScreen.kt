@@ -937,8 +937,8 @@ fun NowPlayingScreen(
                     TriplePaneLayout(
                         playable = playable,
                         state = state,
-                        positionMs = position.currentMs,
-                        durationMs = position.durationMs,
+                        positionMs = { position.currentMs },
+                        durationMs = { position.durationMs },
                         rating = rating,
                         liked = liked,
                         volume = userVolume,
@@ -1001,8 +1001,8 @@ fun NowPlayingScreen(
                     CompactLayout(
                         playable = playable,
                         state = state,
-                        positionMs = position.currentMs,
-                        durationMs = position.durationMs,
+                        positionMs = { position.currentMs },
+                        durationMs = { position.durationMs },
                         rating = rating,
                         liked = liked,
                         volume = userVolume,
@@ -1068,8 +1068,8 @@ fun NowPlayingScreen(
                     TwoPaneLayout(
                         playable = playable,
                         state = state,
-                        positionMs = position.currentMs,
-                        durationMs = position.durationMs,
+                        positionMs = { position.currentMs },
+                        durationMs = { position.durationMs },
                         rating = rating,
                         liked = liked,
                         volume = userVolume,
@@ -1245,8 +1245,8 @@ private fun OverflowSheetItem(
 private fun CompactLayout(
     playable: com.visorcraft.radioshed.audio.Playable,
     state: PlayerState,
-    positionMs: Long,
-    durationMs: Long,
+    positionMs: () -> Long,
+    durationMs: () -> Long,
     rating: Double,
     liked: Boolean,
     volume: Float,
@@ -1319,10 +1319,10 @@ private fun CompactLayout(
             onLongPressPrev = { onSeek(0L) },
             onNext = onNext,
             onSkipFive = onSkipFive,
-            onReplay = { delta -> onSeek((positionMs - delta).coerceAtLeast(0L)) },
+            onReplay = { delta -> onSeek((positionMs() - delta).coerceAtLeast(0L)) },
             onForward = { delta ->
-                val cap = if (durationMs > 0) (durationMs - 250L).coerceAtLeast(0L) else Long.MAX_VALUE
-                onSeek((positionMs + delta).coerceAtMost(cap))
+                val cap = if (durationMs() > 0) (durationMs() - 250L).coerceAtLeast(0L) else Long.MAX_VALUE
+                onSeek((positionMs() + delta).coerceAtMost(cap))
             },
             onDislikeOnStation = onDislikeOnStation,
             driveMode = driveMode,
@@ -1357,8 +1357,8 @@ private fun CompactLayout(
 private fun TwoPaneLayout(
     playable: com.visorcraft.radioshed.audio.Playable,
     state: PlayerState,
-    positionMs: Long,
-    durationMs: Long,
+    positionMs: () -> Long,
+    durationMs: () -> Long,
     rating: Double,
     liked: Boolean,
     volume: Float,
@@ -1451,10 +1451,10 @@ private fun TwoPaneLayout(
                 onLongPressPrev = { onSeek(0L) },
                 onNext = onNext,
                 onSkipFive = onSkipFive,
-                onReplay = { delta -> onSeek((positionMs - delta).coerceAtLeast(0L)) },
+                onReplay = { delta -> onSeek((positionMs() - delta).coerceAtLeast(0L)) },
                 onForward = { delta ->
-                    val cap = if (durationMs > 0) (durationMs - 250L).coerceAtLeast(0L) else Long.MAX_VALUE
-                    onSeek((positionMs + delta).coerceAtMost(cap))
+                    val cap = if (durationMs() > 0) (durationMs() - 250L).coerceAtLeast(0L) else Long.MAX_VALUE
+                    onSeek((positionMs() + delta).coerceAtMost(cap))
                 },
                 onDislikeOnStation = onDislikeOnStation,
                 driveMode = driveMode,
@@ -1773,14 +1773,22 @@ private fun TrackInfo(
 
 @Composable
 private fun Scrubber(
-    positionMs: Long,
-    durationMs: Long,
+    position: () -> Long,
+    duration: () -> Long,
     onSeek: (Long) -> Unit,
 ) {
     var isUserScrubbing by remember { mutableStateOf(false) }
     var pendingFraction by remember { mutableFloatStateOf(0f) }
     var seekDialogOpen by remember { mutableStateOf(false) }
 
+    // Deferred reads: the ~4 Hz position tick is a StateFlow that updates
+    // several times a second. Invoking the providers HERE — inside the
+    // Scrubber's own recompose scope — is what confines that tick to this
+    // seekbar. If the caller read position.currentMs eagerly and passed a
+    // Long, the whole NowPlaying screen (and the station side-pane it hosts)
+    // would recompose on every tick. Keep these reads local to Scrubber.
+    val positionMs = position()
+    val durationMs = duration()
     val durationSafe = durationMs.coerceAtLeast(0L)
     val currentFraction =
         if (durationSafe == 0L) {
@@ -3583,8 +3591,8 @@ private enum class NowPlayingLayoutChoice { Compact, TwoPane, TriplePane }
 private fun TriplePaneLayout(
     playable: com.visorcraft.radioshed.audio.Playable,
     state: PlayerState,
-    positionMs: Long,
-    durationMs: Long,
+    positionMs: () -> Long,
+    durationMs: () -> Long,
     rating: Double,
     liked: Boolean,
     volume: Float,
@@ -3720,15 +3728,15 @@ private fun TriplePaneLayout(
                 // column). The Scrubber above already covers seeking;
                 // the user just loses the long-press 30s shortcut.
                 compact = true,
-                onReplay = { delta -> onSeek((positionMs - delta).coerceAtLeast(0L)) },
+                onReplay = { delta -> onSeek((positionMs() - delta).coerceAtLeast(0L)) },
                 onForward = { delta ->
                     val cap =
-                        if (durationMs > 0) {
-                            (durationMs - 250L).coerceAtLeast(0L)
+                        if (durationMs() > 0) {
+                            (durationMs() - 250L).coerceAtLeast(0L)
                         } else {
                             Long.MAX_VALUE
                         }
-                    onSeek((positionMs + delta).coerceAtMost(cap))
+                    onSeek((positionMs() + delta).coerceAtMost(cap))
                 },
                 onDislikeOnStation = onDislikeOnStation,
                 driveMode = driveMode,

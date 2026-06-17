@@ -17,6 +17,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import coil3.ImageLoader
+import coil3.compose.setSingletonImageLoaderFactory
+import coil3.memory.MemoryCache
 import com.visorcraft.radioshed.audio.AudioEngine
 import com.visorcraft.radioshed.audio.PlayerState
 import com.visorcraft.radioshed.audio.isMediaPlaybackAvailable
@@ -72,6 +75,23 @@ fun App(
     mediaSourceRegistry: com.visorcraft.radioshed.source.MediaSourceRegistry = koinInject(),
     subsonicSource: com.visorcraft.radioshed.source.SubsonicSource = koinInject(),
 ) {
+    // Bound the Coil image cache explicitly. The default singleton loader
+    // caps its in-memory bitmap cache at ~25% of available heap, which on a
+    // large desktop heap (or a long browse through a big library's artwork)
+    // can grow into the hundreds of MB and drive sustained GC pressure that
+    // reads as "gets slow the longer it runs." A modest 15% bound keeps
+    // artwork snappy while leaving far more headroom. Set-once via Coil's
+    // idempotent singleton factory (safe to re-run on recomposition).
+    setSingletonImageLoaderFactory { context ->
+        ImageLoader.Builder(context)
+            .memoryCache {
+                MemoryCache.Builder()
+                    .maxSizePercent(context, 0.15)
+                    .build()
+            }
+            .build()
+    }
+
     // Live-mutable theme inputs: read once from the persisted settings,
     // then hold in state so the AppSettingsScreen picker can re-theme
     // the whole app instantly when the user changes anything (no app

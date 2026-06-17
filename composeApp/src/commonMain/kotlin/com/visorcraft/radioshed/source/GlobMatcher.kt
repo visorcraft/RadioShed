@@ -29,7 +29,16 @@ package com.visorcraft.radioshed.source
 fun matchesGlob(
     path: String,
     glob: String,
-): Boolean {
+): Boolean = globToRegex(glob).matches(path)
+
+/**
+ * Compile a single glob into its [Regex]. Hoisted out of [matchesGlob] so
+ * hot callers can compile each glob ONCE up front rather than recompiling
+ * it for every candidate path. The scanner walks tens of thousands of files
+ * per large library; recompiling the include/exclude patterns per file made
+ * `Regex` construction dominate the filter cost.
+ */
+fun globToRegex(glob: String): Regex {
     val regex = StringBuilder("^")
     var i = 0
     while (i < glob.length) {
@@ -58,5 +67,5 @@ fun matchesGlob(
         }
     }
     regex.append("$")
-    return Regex(regex.toString()).matches(path)
+    return Regex(regex.toString())
 }

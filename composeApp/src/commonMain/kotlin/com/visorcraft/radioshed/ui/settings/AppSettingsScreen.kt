@@ -47,6 +47,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -64,7 +65,9 @@ import com.visorcraft.radioshed.ui.theme.ThemeMode
 import com.visorcraft.radioshed.ui.theme.supportsMaterialYou
 import com.visorcraft.radioshed.ui.util.formatFixed
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
@@ -938,16 +941,22 @@ private fun LibrarySummaryCard(
     var artistCount by remember { mutableStateOf<Long?>(null) }
     var stationCount by remember { mutableStateOf<Long?>(null) }
     var totalRuntimeMs by remember { mutableStateOf<Long?>(null) }
-    LaunchedEffect(trackCount) {
+    LaunchedEffect(Unit) {
         // trackCount Flow emits on every track-row insert / update /
-        // delete, which is the scanner's primary write path. Use it
-        // as the "library changed" trigger to refresh the other
-        // counters that don't have their own Flow yet.
-        if (trackCount != null) {
-            albumCount = libraryRepo.countAlbums()
-            artistCount = libraryRepo.countArtists()
-            stationCount = stationRepo.list().size.toLong()
-            totalRuntimeMs = libraryRepo.totalLibraryDurationMs()
+        // delete, which is the scanner's primary write path — thousands
+        // of times during a full scan. Each tick would otherwise fire
+        // four aggregate queries. Debounce with a settle window: collectLatest
+        // cancels the pending delay whenever the count changes again, so the
+        // four counters refresh once the library stops churning rather than
+        // on every inserted row. (The headline trackCount above stays live.)
+        snapshotFlow { trackCount }.collectLatest { tc ->
+            if (tc != null) {
+                delay(400)
+                albumCount = libraryRepo.countAlbums()
+                artistCount = libraryRepo.countArtists()
+                stationCount = stationRepo.list().size.toLong()
+                totalRuntimeMs = libraryRepo.totalLibraryDurationMs()
+            }
         }
     }
     val copyToClipboard = com.visorcraft.radioshed.ui.util.rememberCopyToClipboard()
