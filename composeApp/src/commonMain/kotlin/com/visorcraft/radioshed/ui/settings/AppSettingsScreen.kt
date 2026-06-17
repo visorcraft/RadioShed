@@ -942,16 +942,18 @@ private fun LibrarySummaryCard(
     var stationCount by remember { mutableStateOf<Long?>(null) }
     var totalRuntimeMs by remember { mutableStateOf<Long?>(null) }
     LaunchedEffect(Unit) {
-        // trackCount Flow emits on every track-row insert / update /
-        // delete, which is the scanner's primary write path — thousands
-        // of times during a full scan. Each tick would otherwise fire
-        // four aggregate queries. Debounce with a settle window: collectLatest
-        // cancels the pending delay whenever the count changes again, so the
-        // four counters refresh once the library stops churning rather than
-        // on every inserted row. (The headline trackCount above stays live.)
+        // trackCount Flow emits on every track-row insert / update / delete,
+        // which is the scanner's primary write path — thousands of times during
+        // a full scan, each of which would otherwise fire four aggregate
+        // queries. Fetch the first value immediately so a cold open of Settings
+        // paints right away, then debounce: collectLatest cancels the pending
+        // delay whenever the count changes again, so later refreshes wait for
+        // the track count to settle rather than running per inserted row. (The
+        // headline trackCount above stays live regardless.)
+        var firstFetch = true
         snapshotFlow { trackCount }.collectLatest { tc ->
             if (tc != null) {
-                delay(400)
+                if (firstFetch) firstFetch = false else delay(400)
                 albumCount = libraryRepo.countAlbums()
                 artistCount = libraryRepo.countArtists()
                 stationCount = stationRepo.list().size.toLong()

@@ -32,6 +32,19 @@ class FormatTest {
     fun formatFixedZeroDecimalsRoundsToInteger() {
         assertEquals("4", 3.6.formatFixed(0))
         assertEquals("3", 3.4.formatFixed(0))
+        // Negative that rounds to a non-zero magnitude keeps its sign.
+        assertEquals("-1", (-0.6).formatFixed(0))
+    }
+
+    // A value that rounds away to zero magnitude must never render as
+    // "-0" / "-0.0" — and a genuine sub-unit negative that rounds UP to
+    // magnitude 1 must keep its sign.
+    @Test
+    fun formatFixedNeverRendersNegativeZero() {
+        assertEquals("0.0", (-0.0).formatFixed(1))
+        assertEquals("0.0", (-0.04).formatFixed(1))
+        assertEquals("0", (-0.4).formatFixed(0))
+        assertEquals("-1.0", (-0.96).formatFixed(1))
     }
 
     @Test
