@@ -56,12 +56,18 @@ fun formatFileSize(bytes: Long): String {
  */
 fun Double.formatFixed(decimals: Int): String {
     require(decimals >= 0) { "decimals must be non-negative" }
-    if (decimals == 0) return roundToLong().toString()
+    // Split the sign off first: integer division truncates toward zero, so a
+    // value in (-1, 0) would otherwise yield intPart == 0 and silently drop the
+    // minus (a -0.5 dB EQ cut rendering as "0.5", i.e. a boost). Mirrors
+    // formatSignedFixed, which takes absoluteValue for the same reason.
+    val sign = if (this < 0) "-" else ""
+    val magnitude = absoluteValue
+    if (decimals == 0) return sign + magnitude.roundToLong().toString()
     val factor = 10.0.pow(decimals)
-    val scaled = (this * factor).roundToLong()
+    val scaled = (magnitude * factor).roundToLong()
     val intPart = scaled / factor.toLong()
-    val frac = (scaled % factor.toLong()).absoluteValue
-    return "${intPart}.${frac.toString().padStart(decimals, '0')}"
+    val frac = scaled % factor.toLong()
+    return "$sign$intPart.${frac.toString().padStart(decimals, '0')}"
 }
 
 /** [Double.formatFixed] for `Float`. */
