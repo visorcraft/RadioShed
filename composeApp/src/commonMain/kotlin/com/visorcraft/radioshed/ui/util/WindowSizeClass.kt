@@ -1,7 +1,5 @@
 package com.visorcraft.radioshed.ui.util
 
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
@@ -41,14 +39,3 @@ fun rsWindowSizeClassOf(width: Dp): RsWindowSizeClass =
         else -> RsWindowSizeClass.Expanded
     }
 
-/**
- * Composable accessor — returns the class for the *measured*
- * width passed in. Call this from inside a `BoxWithConstraints`
- * with `rsWindowSizeClassOf(maxWidth)`. There is no
- * "current LocalWindowSizeClass" because a single screen can
- * legitimately host multiple panes that each compute their own
- * size class against their own slot.
- */
-@Composable
-@ReadOnlyComposable
-fun rememberWindowSizeClassFor(width: Dp): RsWindowSizeClass = rsWindowSizeClassOf(width)

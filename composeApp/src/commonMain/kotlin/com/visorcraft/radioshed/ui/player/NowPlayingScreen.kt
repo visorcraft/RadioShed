@@ -113,6 +113,8 @@ import com.visorcraft.radioshed.domain.Track
 import com.visorcraft.radioshed.stations.StationPlayback
 import com.visorcraft.radioshed.ui.playlists.AddToPlaylistSheet
 import com.visorcraft.radioshed.ui.util.dragReorderItem
+import com.visorcraft.radioshed.ui.util.formatFileSize
+import com.visorcraft.radioshed.ui.util.formatFixed
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
@@ -713,7 +715,7 @@ fun NowPlayingScreen(
                                 buildList {
                                     if (t.format.isNotBlank()) add(t.format.uppercase())
                                     t.bitrateKbps?.let { add("$it kbps") }
-                                    t.sampleRateHz?.let { add("${"%.1f".format(it / 1000.0)} kHz") }
+                                    t.sampleRateHz?.let { add("${(it / 1000.0).formatFixed(1)} kHz") }
                                 }
                             if (parts.isEmpty()) null else parts.joinToString(" · ")
                         }
@@ -2629,10 +2631,10 @@ private fun TrackInfoDialog(
                                     appendLine("**Duration:** ${formatMs(t.durationMs)}")
                                     t.bitrateKbps?.let { appendLine("**Bitrate:** $it kbps") }
                                     t.sampleRateHz?.let {
-                                        appendLine("**Sample rate:** ${"%.1f".format(it / 1000.0)} kHz")
+                                        appendLine("**Sample rate:** ${(it / 1000.0).formatFixed(1)} kHz")
                                     }
                                     t.trackNumber?.let { appendLine("**Track #:** $it") }
-                                    t.bpm?.let { appendLine("**BPM:** ${"%.1f".format(it)}") }
+                                    t.bpm?.let { appendLine("**BPM:** ${it.formatFixed(1)}") }
                                 }.trimEnd()
                             copyToClipboard(md)
                             ringtoneStatus = "Copied Track Info as Markdown."
@@ -2909,15 +2911,15 @@ private fun TrackInfoDialog(
                         }
                     }
                     t.bpm?.let { bpm ->
-                        InfoLineTappable("BPM", "%.1f".format(bpm)) {
-                            copyToClipboard("%.1f".format(bpm))
+                        InfoLineTappable("BPM", bpm.formatFixed(1)) {
+                            copyToClipboard(bpm.formatFixed(1))
                             ringtoneStatus = "BPM copied to clipboard."
                         }
                     }
                     InfoLine("File size", formatFileSize(t.fileSize))
                     InfoLine("Added", formatRelativeDate(t.addedAt))
-                    t.replayGainTrack?.let { InfoLine("ReplayGain (track)", "%.2f dB".format(it)) }
-                    t.replayGainAlbum?.let { InfoLine("ReplayGain (album)", "%.2f dB".format(it)) }
+                    t.replayGainTrack?.let { InfoLine("ReplayGain (track)", "${it.formatFixed(2)} dB") }
+                    t.replayGainAlbum?.let { InfoLine("ReplayGain (album)", "${it.formatFixed(2)} dB") }
                     // Listening stats from station_history. Hidden
                     // until the track has at least one play recorded
                     // — a 0-stat block is just noise on first listen.
@@ -2979,16 +2981,6 @@ private fun TrackInfoDialog(
             },
         )
     }
-}
-
-/** Bytes → human-readable size: "12.3 MB" / "942 KB" / "8 B". */
-private fun formatFileSize(bytes: Long): String {
-    if (bytes <= 0L) return "—"
-    val mb = bytes / 1_048_576.0
-    if (mb >= 1.0) return "%.1f MB".format(mb)
-    val kb = bytes / 1024.0
-    if (kb >= 1.0) return "%.0f KB".format(kb)
-    return "$bytes B"
 }
 
 /** "2 days ago" / "3 weeks ago" / "Jan 14, 2024" — same vocabulary

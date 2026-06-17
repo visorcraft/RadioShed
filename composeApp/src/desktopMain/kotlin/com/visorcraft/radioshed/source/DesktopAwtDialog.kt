@@ -35,10 +35,3 @@ internal suspend fun showSaveDialog(
         dialog.directory to dialog.file
     }
 
-/** Same EDT contract as [showSaveDialog] but for the LOAD variant. */
-internal suspend fun showLoadDialog(title: String): Pair<String?, String?> =
-    withContext(Dispatchers.Main) {
-        val dialog = FileDialog(null as Frame?, title, FileDialog.LOAD)
-        dialog.isVisible = true
-        dialog.directory to dialog.file
-    }

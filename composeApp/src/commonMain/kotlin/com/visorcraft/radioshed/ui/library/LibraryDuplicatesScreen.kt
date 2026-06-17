@@ -36,6 +36,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.visorcraft.radioshed.data.LibraryRepository
 import com.visorcraft.radioshed.domain.Track
+import com.visorcraft.radioshed.ui.util.formatDurationMs
+import com.visorcraft.radioshed.ui.util.formatFileSize
 import com.visorcraft.radioshed.ui.util.TooltipIconButton
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -222,7 +224,7 @@ fun LibraryDuplicatesScreen(
                             if (wastedBytes > 0) {
                                 Spacer(Modifier.height(2.dp))
                                 Text(
-                                    text = "≈ ${formatBytes(wastedBytes)} potentially recoverable",
+                                    text = "≈ ${formatFileSize(wastedBytes)} potentially recoverable",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                                 )
@@ -294,10 +296,10 @@ private fun DupGroupRow(
                                     append(it)
                                     append(" · ")
                                 }
-                                append(formatDuration(track.durationMs))
+                                append(formatDurationMs(track.durationMs))
                                 if (track.fileSize > 0) {
                                     append(" · ")
-                                    append(formatBytes(track.fileSize))
+                                    append(formatFileSize(track.fileSize))
                                 }
                             }
                         Text(
@@ -339,20 +341,3 @@ private fun fuzzKey(
     return "$a|$title|$sec"
 }
 
-private fun formatDuration(ms: Long): String {
-    if (ms <= 0L) return "—"
-    val totalSec = (ms / 1000L).toInt()
-    val m = totalSec / 60
-    val s = totalSec % 60
-    return "%d:%02d".format(m, s)
-}
-
-private fun formatBytes(bytes: Long): String {
-    if (bytes <= 0L) return "—"
-    val gb = bytes / 1_073_741_824.0
-    if (gb >= 1.0) return "%.2f GB".format(gb)
-    val mb = bytes / 1_048_576.0
-    if (mb >= 1.0) return "%.1f MB".format(mb)
-    val kb = bytes / 1024.0
-    return "%.0f KB".format(kb)
-}

@@ -34,7 +34,6 @@ import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Shuffle
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
@@ -76,6 +75,7 @@ import com.visorcraft.radioshed.domain.Track
 import com.visorcraft.radioshed.nav.PlatformBackHandler
 import com.visorcraft.radioshed.stations.StationPlayback
 import com.visorcraft.radioshed.ui.playlists.TrackContextSheet
+import com.visorcraft.radioshed.ui.util.formatDurationMs
 import com.visorcraft.radioshed.ui.util.NowPlayingIndicator
 import com.visorcraft.radioshed.ui.util.rememberHapticTick
 import com.visorcraft.radioshed.ui.util.TooltipIconButton
@@ -1087,7 +1087,7 @@ private fun SongRow(
                 // doesn't carry it directly — it'd require a per-row
                 // artistsForTrack call.
                 val subtitle =
-                    listOfNotNull(albumName, formatDuration(track.durationMs))
+                    listOfNotNull(albumName, formatDurationMs(track.durationMs))
                         .joinToString(" · ")
                 Text(
                     text = subtitle,
@@ -1407,10 +1407,3 @@ private fun EmptyHint(text: String) {
     }
 }
 
-private fun formatDuration(ms: Long): String {
-    if (ms <= 0L) return "—"
-    val totalSeconds = ms / 1000L
-    val mins = totalSeconds / 60L
-    val secs = totalSeconds % 60L
-    return "$mins:${secs.toString().padStart(2, '0')}"
-}

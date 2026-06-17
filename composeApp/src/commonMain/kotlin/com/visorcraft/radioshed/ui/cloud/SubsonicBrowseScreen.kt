@@ -47,6 +47,7 @@ import com.visorcraft.radioshed.source.SubsonicArtist
 import com.visorcraft.radioshed.source.SubsonicClient
 import com.visorcraft.radioshed.source.SubsonicServer
 import com.visorcraft.radioshed.source.SubsonicSong
+import com.visorcraft.radioshed.ui.util.formatDurationSeconds
 import com.visorcraft.radioshed.ui.util.TooltipIconButton
 import org.koin.compose.koinInject
 
@@ -450,7 +451,7 @@ private fun SongRow(
                             append(it.toString().padStart(2, '0'))
                             append(" · ")
                         }
-                        append(formatDuration(song.durationSec))
+                        append(formatDurationSeconds(song.durationSec.toLong()))
                         song.bitRateKbps?.let {
                             append(" · ")
                             append("$it kbps")
@@ -466,12 +467,6 @@ private fun SongRow(
     }
 }
 
-private fun formatDuration(seconds: Int): String {
-    if (seconds <= 0) return "—"
-    val m = seconds / 60
-    val s = seconds % 60
-    return "%d:%02d".format(m, s)
-}
 
 private sealed interface Level {
     data object Artists : Level

@@ -47,6 +47,7 @@ import com.visorcraft.radioshed.audio.EqPreset
 import com.visorcraft.radioshed.audio.EqualizerController
 import com.visorcraft.radioshed.data.CustomEqPreset
 import com.visorcraft.radioshed.data.SettingsStore
+import com.visorcraft.radioshed.ui.util.formatFixed
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
@@ -800,7 +801,7 @@ private fun BandSliderRow(
             contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
         ) { Text("+", style = MaterialTheme.typography.titleMedium) }
         Text(
-            text = "${if (pendingValue >= 0) "+" else ""}${"%.1f".format(pendingValue)} dB",
+            text = "${if (pendingValue >= 0) "+" else ""}${pendingValue.formatFixed(1)} dB",
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onBackground,
             modifier = Modifier.width(64.dp),

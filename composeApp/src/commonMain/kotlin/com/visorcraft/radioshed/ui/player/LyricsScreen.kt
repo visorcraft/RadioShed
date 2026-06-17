@@ -56,6 +56,7 @@ import com.visorcraft.radioshed.data.nowMillis
 import com.visorcraft.radioshed.domain.LyricLine
 import com.visorcraft.radioshed.domain.Lyrics
 import com.visorcraft.radioshed.source.LyricsService
+import com.visorcraft.radioshed.ui.util.formatSignedFixed
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
@@ -367,7 +368,7 @@ fun LyricsScreen(
                     Spacer(Modifier.height(12.dp))
                     Text(
                         text = "${(syncOffsetMs / 1000.0).let {
-                            if (it == 0.0) "0.0s" else "%+.1fs".format(it)
+                            if (it == 0.0) "0.0s" else "${it.formatSignedFixed(1)}s"
                         }}",
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.SemiBold,

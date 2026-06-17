@@ -1,7 +1,6 @@
 package com.visorcraft.radioshed.audio
 
 import kotlin.math.ln
-import kotlin.math.pow
 
 /**
  * Parser + mapper for AutoEQ-style Equalizer APO configs. APO is the
@@ -196,15 +195,3 @@ data class HeadphonePreset(
     val bands: List<ApoConfig.ApoBand>,
 )
 
-/**
- * Compute an attenuation factor (0..1) suitable for handing back via
- * the ReplayGain pre-amp slider. APO pre-amp values are expressed as
- * dB; our pre-amp slider is in dB too, so this is just a domain-typed
- * pass-through. Kept as a function so the call site explicitly uses
- * the conversion (and we can swap in a different scaling later
- * without hunting through callers).
- */
-fun apoPreampToSliderDb(apoDb: Double): Float = apoDb.toFloat()
-
-@Suppress("UnusedParameter")
-private fun dbToLinear(db: Double): Double = 10.0.pow(db / 20.0)

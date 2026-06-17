@@ -59,6 +59,7 @@ import com.visorcraft.radioshed.data.nowMillis
 import com.visorcraft.radioshed.domain.Track
 import com.visorcraft.radioshed.stations.StationPlayback
 import com.visorcraft.radioshed.ui.playlists.TrackContextSheet
+import com.visorcraft.radioshed.ui.util.formatFixed
 import com.visorcraft.radioshed.ui.util.TooltipIconButton
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
@@ -503,7 +504,7 @@ fun HistoryScreen(
                                 "$plays play" +
                                     (if (plays == 1) "" else "s") +
                                     " · ${formatHistoryListened(listenedMs)}" +
-                                    " · ${"%.1f/day".format(avgPerDay)}"
+                                    " · ${avgPerDay.formatFixed(1)}/day"
                             Surface(
                                 color =
                                     MaterialTheme.colorScheme.surfaceVariant
@@ -536,7 +537,7 @@ fun HistoryScreen(
                                         color = MaterialTheme.colorScheme.onSurface,
                                     )
                                     Text(
-                                        text = "%.1f/day".format(avgPerDay),
+                                        text = "${avgPerDay.formatFixed(1)}/day",
                                         style = MaterialTheme.typography.labelMedium,
                                         color = MaterialTheme.colorScheme.onSurface,
                                     )

@@ -89,6 +89,8 @@ import com.visorcraft.radioshed.source.FileBrowser
 import com.visorcraft.radioshed.source.TrackSharer
 import com.visorcraft.radioshed.stations.StationPlayback
 import com.visorcraft.radioshed.ui.playlists.AddToPlaylistSheet
+import com.visorcraft.radioshed.ui.util.formatDurationMs
+import com.visorcraft.radioshed.ui.util.formatFileSize
 import com.visorcraft.radioshed.ui.util.TooltipIconButton
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
@@ -1130,7 +1132,7 @@ private fun FolderEntryRow(
                 if (!entry.isDirectory && (entry.sizeBytes > 0L || durationMs != null)) {
                     val subtitle =
                         buildList {
-                            durationMs?.let { add(formatDuration(it)) }
+                            durationMs?.let { add(formatDurationMs(it, showHours = true)) }
                             if (entry.sizeBytes > 0L) add(formatFileSize(entry.sizeBytes))
                         }.joinToString(" · ")
                     Text(
@@ -1490,26 +1492,3 @@ private suspend fun playAudioPath(
     )
 }
 
-private fun formatDuration(ms: Long): String {
-    if (ms <= 0L) return "—"
-    val totalSec = (ms / 1000L).toInt()
-    val h = totalSec / 3600
-    val m = (totalSec % 3600) / 60
-    val s = totalSec % 60
-    return if (h > 0) {
-        "%d:%02d:%02d".format(h, m, s)
-    } else {
-        "%d:%02d".format(m, s)
-    }
-}
-
-private fun formatFileSize(bytes: Long): String {
-    if (bytes <= 0L) return "—"
-    val gb = bytes / 1_073_741_824.0
-    if (gb >= 1.0) return "%.2f GB".format(gb)
-    val mb = bytes / 1_048_576.0
-    if (mb >= 1.0) return "%.1f MB".format(mb)
-    val kb = bytes / 1024.0
-    if (kb >= 1.0) return "%.0f KB".format(kb)
-    return "$bytes B"
-}

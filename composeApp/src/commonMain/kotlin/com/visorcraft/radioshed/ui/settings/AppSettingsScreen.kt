@@ -62,6 +62,7 @@ import com.visorcraft.radioshed.source.MissingLyricsSync
 import com.visorcraft.radioshed.ui.theme.ColorPicker
 import com.visorcraft.radioshed.ui.theme.ThemeMode
 import com.visorcraft.radioshed.ui.theme.supportsMaterialYou
+import com.visorcraft.radioshed.ui.util.formatFixed
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
@@ -1555,7 +1556,7 @@ private fun PreampSlider(
                 }
                 Spacer(Modifier.size(12.dp))
                 Text(
-                    "${if (display >= 0f) "+" else ""}${"%.1f".format(display)} dB",
+                    "${if (display >= 0f) "+" else ""}${display.formatFixed(1)} dB",
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.onSurface,
                 )

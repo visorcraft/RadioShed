@@ -45,6 +45,7 @@ keystore.properties
 *.ipr
 *.iws
 PLAN.md
+.opencode/
 docs/superpowers/
 docs/decisions/
 

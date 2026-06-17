@@ -68,6 +68,7 @@ import com.visorcraft.radioshed.domain.Artist
 import com.visorcraft.radioshed.domain.Track
 import com.visorcraft.radioshed.stations.StationPlayback
 import com.visorcraft.radioshed.ui.playlists.TrackContextSheet
+import com.visorcraft.radioshed.ui.util.formatDurationMs
 import com.visorcraft.radioshed.ui.util.rememberHapticTick
 import com.visorcraft.radioshed.ui.util.TooltipIconButton
 import kotlinx.coroutines.launch
@@ -613,20 +614,12 @@ private fun AlbumTrackRow(
                 )
             }
             Text(
-                text = formatDurationShort(track.durationMs),
+                text = formatDurationMs(track.durationMs),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
             )
         }
     }
-}
-
-private fun formatDurationShort(ms: Long): String {
-    if (ms <= 0L) return "—"
-    val totalSeconds = ms / 1000L
-    val mins = totalSeconds / 60L
-    val secs = totalSeconds % 60L
-    return "$mins:${secs.toString().padStart(2, '0')}"
 }
 
 /**

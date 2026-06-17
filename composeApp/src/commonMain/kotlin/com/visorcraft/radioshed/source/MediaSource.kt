@@ -74,8 +74,6 @@ internal val SUPPORTED_AUDIO_EXTENSIONS: Set<String> =
         "dsf", "dff", "mpc", "mp+",
     )
 
-internal val SUPPORTED_CUE_EXTENSIONS: Set<String> = setOf("cue")
-
 internal fun String.audioExtensionOrNull(): String? {
     val ext = substringAfterLast('.', "").lowercase()
     return if (ext.isNotEmpty() && ext in SUPPORTED_AUDIO_EXTENSIONS) ext else null
