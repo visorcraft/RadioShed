@@ -1,11 +1,13 @@
 package com.visorcraft.radioshed.data
 
-import kotlin.system.getTimeMillis
+import platform.Foundation.NSDate
+import platform.Foundation.timeIntervalSince1970
 
-// Pure Kotlin. The previous NSDate factory calls do not resolve in the
-// current Kotlin/Native Foundation bindings, and this target is still a stub.
+// NSDate() and timeIntervalSince1970 resolve. The dateWithTimeIntervalSince1970
+// factory and the NSTimeZone accessors do not, so formatting stays pure Kotlin.
+// This target is still a stub.
 
-internal actual fun nowMillis(): Long = getTimeMillis()
+internal actual fun nowMillis(): Long = (NSDate().timeIntervalSince1970 * 1000.0).toLong()
 
 internal actual fun currentYear(): Int = civilFromEpochMs(nowMillis()).year
 
