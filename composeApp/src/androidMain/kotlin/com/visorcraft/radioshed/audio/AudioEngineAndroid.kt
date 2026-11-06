@@ -228,12 +228,26 @@ class AudioEngineAndroid(private val appContext: Context) : AudioEngine {
     }
 
     override fun resume() {
-        controller?.play()
+        val c = controller ?: return
+        retryIfFailed(c)
+        c.play()
     }
 
     override fun togglePlayPause() {
         val c = controller ?: return
-        if (c.isPlaying) c.pause() else c.play()
+        if (c.isPlaying) {
+            c.pause()
+        } else {
+            // After a source error ExoPlayer stays idle with playerError set,
+            // and play() alone does not open the file again. Prepare clears
+            // that so a NAS blip does not leave Play stuck on the error.
+            retryIfFailed(c)
+            c.play()
+        }
+    }
+
+    private fun retryIfFailed(c: MediaController) {
+        if (c.playerError != null) c.prepare()
     }
 
     override fun seekTo(positionMs: Long) {
