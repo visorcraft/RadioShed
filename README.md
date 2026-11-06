@@ -51,17 +51,33 @@ Three things we care about:
 **Metadata & discovery**
 - Optional Cover Art Archive artwork and LRClib lyrics with synced-line highlighting and seek
 - Smart Shuffle, Forgotten Gems, Adaptive Mix, and decade stations
+- Subsonic browsing and ListenBrainz scrobbling with offline queueing, plus Syncthing detection
 - Desktop audio through a direct JNA binding to the host's libvlc 3.x; Android audio through Media3
 
 **Android, desktop & portability**
 - Android Auto, Drive Mode with Bluetooth/schedule triggers, home-screen widgets, and backup sharing
+- Predictable D-pad navigation with visible focus and scrubber seeking on TVs and projectors
 - Import/export `.rsbak` backups with settings, stations, playlists, history, ratings, likes, and artwork
 - Linux AppImage and `.deb` packaging; Windows MSI packaging; macOS DMG configuration
 
-Android 11+ is the primary mobile target. Linux x86_64 and Windows 11 are the
-current desktop targets. The iOS source set remains a stub pending macOS
-development access. See [`SPEC.md`](SPEC.md) for the roadmap and
-[`USER_GUIDE.md`](USER_GUIDE.md) for detailed workflows.
+Android 11+ is the primary mobile target, including Android 14 on the HY450 Max
+projector. Linux x86_64 and Windows 11 are the current desktop targets. The iOS
+source set remains a stub pending macOS development access. See [`SPEC.md`](SPEC.md)
+for the roadmap and [`USER_GUIDE.md`](USER_GUIDE.md) for detailed workflows.
+
+---
+
+## A light show built for your music
+
+Nine distinct scenes turn playback into a living light show. The same Compose
+engine powers Android's live FFT/waveform analysis and clearly labeled ambient
+visuals on desktop. These are real renders from the app, not mockups.
+
+| | | |
+| :---: | :---: | :---: |
+| [![Prism Spectrum bars with peaks and reflections](docs/screenshots/spectrum.png)](docs/screenshots/spectrum.png)<br/>**Prism Spectrum**<br/>Frequency bars, luminous peaks, and mirrored reflections. | [![Neon Oscilloscope waveform with glowing echoes](docs/screenshots/oscilloscope.png)](docs/screenshots/oscilloscope.png)<br/>**Neon Oscilloscope**<br/>Live waveforms with a crisp core and luminous echoes. | [![Radial Bloom with album artwork at the center](docs/screenshots/bloom.png)](docs/screenshots/bloom.png)<br/>**Radial Bloom**<br/>Album art at the center of an audio-reactive sunburst. |
+| [![Layered Aurora ribbons](docs/screenshots/aurora.png)](docs/screenshots/aurora.png)<br/>**Aurora Ribbons**<br/>Silky layered fields that swell with musical tension. | [![Bass Ripples and impact rings](docs/screenshots/ripples.png)](docs/screenshots/ripples.png)<br/>**Bass Ripples**<br/>Beat-driven rings, particles, and radial waveforms. | [![Hyperspace star tunnel](docs/screenshots/hyperspace.png)](docs/screenshots/hyperspace.png)<br/>**Hyperspace**<br/>Star tunnels that accelerate into musical builds. |
+| [![Spectral Waterfall terrain](docs/screenshots/waterfall.png)](docs/screenshots/waterfall.png)<br/>**Spectral Waterfall**<br/>A flowing three-dimensional history of the track. | [![Backlit analog VU meters](docs/screenshots/vu.png)](docs/screenshots/vu.png)<br/>**Analog VU**<br/>Backlit stereo meters with smooth needle ballistics. | [![Vinyl Turntable with artwork, progress rim, and tonearm](docs/screenshots/vinyl.png)](docs/screenshots/vinyl.png)<br/>**Vinyl Turntable**<br/>Reactive grooves, rotating art, a progress rim, and tonearm. |
 
 ---
 
@@ -70,7 +86,7 @@ development access. See [`SPEC.md`](SPEC.md) for the roadmap and
 ### Prerequisites
 
 - [JDK 17+](https://adoptium.net/)
-- **Android builds:** Android SDK platform `android-37.2`, build-tools `36.0.0`, platform-tools, and cmdline-tools
+- **Android builds:** Android SDK platform `android-37`, build-tools `36.0.0`, platform-tools, and cmdline-tools
 - **Desktop playback:** VLC/libvlc 3.x installed on the host
 - **Linux packaging:** `dpkg-deb` for `.deb` packages; AppImageKit is downloaded automatically when not supplied
 
@@ -98,7 +114,9 @@ Without it, the app still launches, but playback is unavailable.
 ## Install
 
 Grab a prebuilt package from the [**Releases**](https://github.com/visorcraft/RadioShed/releases/latest)
-page, or build your own from the repository root:
+page, or build your own from the repository root. The current release,
+[**RadioShed 1.10.0**](https://github.com/visorcraft/RadioShed/releases/tag/v1.10.0),
+includes a signed Android APK, a Linux AppImage, and a `.deb` package.
 
 | Target | Command |
 | --- | --- |
@@ -109,14 +127,16 @@ page, or build your own from the repository root:
 | Windows - `.msi` / macOS - `.dmg` | `./gradlew :composeApp:packageDistributionForCurrentOS` on the matching host |
 | Desktop - unpacked app directory | `./gradlew :composeApp:createDistributable` |
 
-Android release APK/AAB output is unsigned by default. Desktop installers must
-be packaged on their target host OS. See [`AGENTS.md`](AGENTS.md#releases) for
-artifact paths and the release-signing recipe.
+Android release APK/AAB output is unsigned by default when built locally. Desktop
+installers must be packaged on their target host OS. See
+[`AGENTS.md`](AGENTS.md#releases) for artifact paths and the release-signing recipe.
 
-On Arch Linux and derivatives, install the x86_64 AppImage through the AUR:
+On Arch Linux and derivatives, install the x86_64 AppImage through the
+[AUR](https://aur.archlinux.org/packages/radioshed):
 
 ```sh
 yay -S radioshed
+# Or: paru -S radioshed
 ```
 
 The [release workflow](.github/workflows/release.yml) builds and publishes the
