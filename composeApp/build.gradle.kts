@@ -194,6 +194,16 @@ kotlin {
             dependsOn(jvmTest)
         }
 
+        // Explicit dependsOn() on androidMain/desktopMain disables Kotlin's
+        // default hierarchy template, which is what would otherwise attach
+        // iosMain to the iOS targets. Without this edge the simulator
+        // compilation is commonMain-only and every expect is missing.
+        val iosShared =
+            findByName("iosMain") ?: create("iosMain")
+        iosShared.dependsOn(commonMain.get())
+        getByName("iosArm64Main").dependsOn(iosShared)
+        getByName("iosSimulatorArm64Main").dependsOn(iosShared)
+
         androidMain.dependencies {
             implementation(libs.compose.uiToolingPreview)
             implementation(libs.androidx.activity.compose)
