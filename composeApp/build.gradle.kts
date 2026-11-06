@@ -174,14 +174,24 @@ kotlin {
         commonTest.dependencies {
             implementation(libs.kotlin.test)
             implementation(libs.kotlinx.coroutines.test)
-            // JDBC sqlite driver — gives the JVM-side unit tests a real
-            // in-memory RadioShedDatabase so integration tests can
-            // round-trip stations (save → reload → evaluate → enqueue)
-            // against the actual SQLDelight schema rather than mocking
-            // every repository. The same dep ships on the desktop
-            // target; pulling it into commonTest reuses it for free
-            // on the Android JVM test classpath.
-            implementation(libs.sqldelight.sqliteDriver)
+        }
+
+        // JDBC sqlite is JVM-only. commonTest is compiled for the iOS
+        // simulator too, and sqlite-driver has no native variant, so the
+        // in-memory database tests live here and are shared by the
+        // Android unit-test and desktop test compilations.
+        val jvmTest =
+            create("jvmTest") {
+                dependsOn(commonTest.get())
+                dependencies {
+                    implementation(libs.sqldelight.sqliteDriver)
+                }
+            }
+        named("desktopTest").configure {
+            dependsOn(jvmTest)
+        }
+        named("androidUnitTest").configure {
+            dependsOn(jvmTest)
         }
 
         androidMain.dependencies {
