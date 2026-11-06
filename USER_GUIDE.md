@@ -161,6 +161,11 @@ Tap the MiniPlayer to expand. Now Playing shows:
 - **Long-press play/pause** — toggles shuffle for the current session.
 - **Long-press queue button** — saves the current queue as a playlist.
 
+On TV and projector remotes, Play/Pause starts focused with a white ring.
+Left/Right follows the visible transport order, Up reaches the scrubber and
+Close, and Down reaches ratings and bottom actions. Enter activates the focused
+control. Left/Right on the scrubber seeks without moving focus.
+
 ### Fullscreen visualizer
 
 Open the visualizer from the equalizer icon in Now Playing's bottom action bar

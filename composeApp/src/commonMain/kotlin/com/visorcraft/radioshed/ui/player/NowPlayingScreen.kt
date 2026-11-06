@@ -4,6 +4,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculateZoom
@@ -76,43 +77,45 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
-import androidx.compose.material3.VerticalSlider
-import androidx.compose.material3.rememberSliderState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.VerticalSlider
 import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.rememberSliderState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.visorcraft.radioshed.audio.AudioEngine
 import com.visorcraft.radioshed.audio.PlayerState
 import com.visorcraft.radioshed.audio.SleepTimer
@@ -122,6 +125,7 @@ import com.visorcraft.radioshed.data.SettingsStore
 import com.visorcraft.radioshed.domain.Track
 import com.visorcraft.radioshed.domain.withoutBracketGroups
 import com.visorcraft.radioshed.stations.StationPlayback
+import com.visorcraft.radioshed.stations.StationPlayback.RepeatMode
 import com.visorcraft.radioshed.ui.playlists.AddToPlaylistSheet
 import com.visorcraft.radioshed.ui.util.dragReorderItem
 import com.visorcraft.radioshed.ui.util.formatFileSize
@@ -135,7 +139,11 @@ import org.koin.compose.koinInject
  *  (which happens on every track start) is unnecessary for a list that
  *  only shows id / name / subtitle.
  */
-private data class StationTriplePaneEntry(val id: Long, val name: String, val customSubtitle: String?)
+private data class StationTriplePaneEntry(
+    val id: Long,
+    val name: String,
+    val customSubtitle: String?,
+)
 
 /**
  * Full-screen Now Playing. BoxWithConstraints drives a single-column
@@ -189,7 +197,8 @@ fun NowPlayingScreen(
     // We map to a lightweight projection so each emission doesn't
     // force a full Station JSON decode for the whole list.
     val stationsForTriplePane by remember(stationRepo) {
-        stationRepo.observeAll()
+        stationRepo
+            .observeAll()
             .map { list -> list.map { StationTriplePaneEntry(it.id, it.name, it.customSubtitle) } }
     }.collectAsStateWithLifecycle(initialValue = emptyList())
     // Pre-mute level for the drive-mode transport mute button. Kept at
@@ -214,7 +223,9 @@ fun NowPlayingScreen(
     LaunchedEffect(nowPlaying?.trackId) {
         if (playbackSpeed != 1f) audioEngine.setPlaybackSpeed(playbackSpeed)
     }
-    val hapticTick = com.visorcraft.radioshed.ui.util.rememberHapticTick()
+    val hapticTick =
+        com.visorcraft.radioshed.ui.util
+            .rememberHapticTick()
     // Snapshot dialog: saves the current Up Next list as a new
     // playlist. We keep the candidate tracks alongside the open
     // flag so closing/reopening the queue sheet doesn't lose the
@@ -287,869 +298,943 @@ fun NowPlayingScreen(
     // path that destroys composition, fragile for any future router
     // change that keeps NowPlaying alive across nav.
     val layoutPref by settings.nowPlayingLayoutFlow.collectAsStateWithLifecycle()
-    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        val isNarrow = maxWidth < 360.dp
-        val resolvedLayout =
-            when (layoutPref) {
-                "Compact" -> NowPlayingLayoutChoice.Compact
-                "TwoPane" -> NowPlayingLayoutChoice.TwoPane
-                "TriplePane" -> NowPlayingLayoutChoice.TriplePane
-                else ->
-                    when {
-                        maxWidth < 600.dp -> NowPlayingLayoutChoice.Compact
-                        maxWidth >= 1100.dp -> NowPlayingLayoutChoice.TriplePane
-                        else -> NowPlayingLayoutChoice.TwoPane
-                    }
-            }
-        val isCompact = resolvedLayout == NowPlayingLayoutChoice.Compact
+    val focusRegistry = remember { NowPlayingFocusRegistry() }
+    androidx.compose.runtime.CompositionLocalProvider(LocalNowPlayingFocus provides focusRegistry) {
+        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            val isNarrow = maxWidth < 360.dp
+            val resolvedLayout =
+                when (layoutPref) {
+                    "Compact" -> NowPlayingLayoutChoice.Compact
+                    "TwoPane" -> NowPlayingLayoutChoice.TwoPane
+                    "TriplePane" -> NowPlayingLayoutChoice.TriplePane
+                    else ->
+                        when {
+                            maxWidth < 600.dp -> NowPlayingLayoutChoice.Compact
+                            maxWidth >= 1100.dp -> NowPlayingLayoutChoice.TriplePane
+                            else -> NowPlayingLayoutChoice.TwoPane
+                        }
+                }
+            val isCompact = resolvedLayout == NowPlayingLayoutChoice.Compact
 
-        Scaffold(
-            topBar = {
-                TopAppBar(
-                    title = {
-                        Column {
-                            // The TopAppBar title slot gets squeezed by
-                            // the many action icons (Lyrics / Shuffle /
-                            // Repeat / Queue / Sleep / MoreVert) on a
-                            // narrow phone. Without softWrap=false +
-                            // maxLines=1, the default Text wraps per-
-                            // character into "No w Pla yin g" rather
-                            // than ellipsizing. Hiding the title outright
-                            // on isNarrow would also be defensible since
-                            // the user knows they're on Now Playing — but
-                            // ellipsis keeps the affordance consistent
-                            // across breakpoints.
-                            Text(
-                                text = "Now Playing",
-                                style = MaterialTheme.typography.titleSmall,
-                                maxLines = 1,
-                                softWrap = false,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            SleepTimerLabel(sleepState)
-                        }
-                    },
-                    navigationIcon = {
-                        TextButton(onClick = onClose) {
-                            Icon(
-                                imageVector = Icons.Filled.KeyboardArrowDown,
-                                contentDescription = null,
-                                modifier = Modifier.size(20.dp),
-                            )
-                            Spacer(Modifier.width(4.dp))
-                            Text("Close")
-                        }
-                    },
-                    actions = { /* moved to Scaffold bottomBar — see below */ },
-                    colors =
-                        TopAppBarDefaults.topAppBarColors(
-                            containerColor = MaterialTheme.colorScheme.surface,
-                        ),
-                )
-            },
-            bottomBar = {
-                // Action bar — moved from the topBar so users coming from
-                // the main page (where the MiniPlayer lives at the bottom)
-                // don't have their navigation jump to the top mid-flight.
-                // Volume sits immediately left of the other actions, which
-                // stay grouped at the bottom right.
-                androidx.compose.material3.Surface(
-                    color = MaterialTheme.colorScheme.surface,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Row(
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 4.dp, vertical = 4.dp),
-                        horizontalArrangement = Arrangement.End,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        BottomVolumeButton(
-                            volume = userVolume,
-                            onVolumeLive = { stationPlayback.previewUserVolume(it) },
-                            onVolumeCommit = { stationPlayback.commitUserVolume(it) },
-                        )
-                        if (resolvedLayout != NowPlayingLayoutChoice.Compact) {
-                            com.visorcraft.radioshed.ui.util.TooltipIconButton(
-                                tooltip = "Visualizer",
-                                onClick = onOpenVisualizer,
+            Scaffold(
+                topBar = {
+                    TopAppBar(
+                        title = {
+                            Column {
+                                // The TopAppBar title slot gets squeezed by
+                                // the many action icons (Lyrics / Shuffle /
+                                // Repeat / Queue / Sleep / MoreVert) on a
+                                // narrow phone. Without softWrap=false +
+                                // maxLines=1, the default Text wraps per-
+                                // character into "No w Pla yin g" rather
+                                // than ellipsizing. Hiding the title outright
+                                // on isNarrow would also be defensible since
+                                // the user knows they're on Now Playing — but
+                                // ellipsis keeps the affordance consistent
+                                // across breakpoints.
+                                Text(
+                                    text = "Now Playing",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                SleepTimerLabel(sleepState)
+                            }
+                        },
+                        navigationIcon = {
+                            TextButton(
+                                onClick = onClose,
+                                modifier =
+                                    Modifier.nowPlayingFocusable(
+                                        NowPlayingControl.Close,
+                                        compact = isCompact,
+                                        onActivate = onClose,
+                                    ),
                             ) {
                                 Icon(
-                                    imageVector = Icons.Filled.GraphicEq,
-                                    contentDescription = "Visualizer",
-                                    tint = MaterialTheme.colorScheme.primary,
+                                    imageVector = Icons.Filled.KeyboardArrowDown,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(20.dp),
+                                )
+                                Spacer(Modifier.width(4.dp))
+                                Text("Close")
+                            }
+                        },
+                        actions = { /* moved to Scaffold bottomBar — see below */ },
+                        colors =
+                            TopAppBarDefaults.topAppBarColors(
+                                containerColor = MaterialTheme.colorScheme.surface,
+                            ),
+                    )
+                },
+                bottomBar = {
+                    // Action bar — moved from the topBar so users coming from
+                    // the main page (where the MiniPlayer lives at the bottom)
+                    // don't have their navigation jump to the top mid-flight.
+                    // Volume sits immediately left of the other actions, which
+                    // stay grouped at the bottom right.
+                    androidx.compose.material3.Surface(
+                        color = MaterialTheme.colorScheme.surface,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Row(
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 4.dp, vertical = 4.dp),
+                            horizontalArrangement = Arrangement.End,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            BottomVolumeButton(
+                                volume = userVolume,
+                                onVolumeLive = { stationPlayback.previewUserVolume(it) },
+                                onVolumeCommit = { stationPlayback.commitUserVolume(it) },
+                                compact = isCompact,
+                            )
+                            if (resolvedLayout != NowPlayingLayoutChoice.Compact) {
+                                com.visorcraft.radioshed.ui.util.TooltipIconButton(
+                                    tooltip = "Visualizer",
+                                    onClick = onOpenVisualizer,
+                                    modifier =
+                                        Modifier.nowPlayingFocusable(
+                                            NowPlayingControl.Visualizer,
+                                            isCompact,
+                                            onActivate = onOpenVisualizer,
+                                        ),
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.GraphicEq,
+                                        contentDescription = "Visualizer",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                    )
+                                }
+                            }
+                            com.visorcraft.radioshed.ui.util.TooltipIconButton(
+                                tooltip = "Lyrics",
+                                onClick = onOpenLyrics,
+                                modifier =
+                                    Modifier.nowPlayingFocusable(
+                                        NowPlayingControl.Lyrics,
+                                        isCompact,
+                                        onActivate = onOpenLyrics,
+                                    ),
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Lyrics,
+                                    contentDescription = "Lyrics",
+                                    tint = MaterialTheme.colorScheme.onSurface,
                                 )
                             }
-                        }
-                        com.visorcraft.radioshed.ui.util.TooltipIconButton(
-                            tooltip = "Lyrics",
-                            onClick = onOpenLyrics,
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.Lyrics,
-                                contentDescription = "Lyrics",
-                                tint = MaterialTheme.colorScheme.onSurface,
-                            )
-                        }
-                        // Shuffle session toggle. Doesn't persist to the
-                        // station — flips between Sequential and SmartShuffle
-                        // for the in-flight queue only, resets on station
-                        // change. The on-state glyph (ShuffleOn) carries a
-                        // dot indicator so colour-blind users can read it
-                        // without relying on the primary tint alone.
-                        com.visorcraft.radioshed.ui.util.TooltipIconButton(
-                            tooltip = if (shuffleSession) "Shuffle on" else "Shuffle off",
-                            onClick = { stationPlayback.toggleShuffle() },
-                        ) {
-                            Icon(
-                                imageVector =
-                                    if (shuffleSession) {
-                                        Icons.Filled.ShuffleOn
-                                    } else {
-                                        Icons.Filled.Shuffle
-                                    },
-                                contentDescription = if (shuffleSession) "Shuffle on" else "Shuffle off",
-                                tint =
-                                    if (shuffleSession) {
-                                        MaterialTheme.colorScheme.primary
-                                    } else {
-                                        MaterialTheme.colorScheme.onSurface
-                                    },
-                            )
-                        }
-                        // Repeat-mode cycler. Tap: Off → All → One → Off.
-                        // Long-press: reverse direction (One → All → Off →
-                        // One). Saves the over-shoot tap when the user
-                        // wants to back out of "Repeat one" without going
-                        // through Off and All again. Surface + combinedClickable
-                        // is the codebase pattern for tap-vs-long-press on
-                        // a single icon (matches the BigIconButton play /
-                        // pause + Stations Home Surprise tile).
-                        val repeatTooltip =
-                            when (repeatMode) {
-                                com.visorcraft.radioshed.stations.StationPlayback.RepeatMode.Off -> "Repeat off"
-                                com.visorcraft.radioshed.stations.StationPlayback.RepeatMode.All -> "Repeat all"
-                                com.visorcraft.radioshed.stations.StationPlayback.RepeatMode.One -> "Repeat one"
+                            // Shuffle session toggle. Doesn't persist to the
+                            // station — flips between Sequential and SmartShuffle
+                            // for the in-flight queue only, resets on station
+                            // change. The on-state glyph (ShuffleOn) carries a
+                            // dot indicator so colour-blind users can read it
+                            // without relying on the primary tint alone.
+                            com.visorcraft.radioshed.ui.util.TooltipIconButton(
+                                tooltip = if (shuffleSession) "Shuffle on" else "Shuffle off",
+                                onClick = { stationPlayback.toggleShuffle() },
+                                modifier =
+                                    Modifier.nowPlayingFocusable(
+                                        control = NowPlayingControl.Shuffle,
+                                        compact = isCompact,
+                                        onActivate = { stationPlayback.toggleShuffle() },
+                                    ),
+                            ) {
+                                Icon(
+                                    imageVector =
+                                        if (shuffleSession) {
+                                            Icons.Filled.ShuffleOn
+                                        } else {
+                                            Icons.Filled.Shuffle
+                                        },
+                                    contentDescription = if (shuffleSession) "Shuffle on" else "Shuffle off",
+                                    tint =
+                                        if (shuffleSession) {
+                                            MaterialTheme.colorScheme.primary
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurface
+                                        },
+                                )
                             }
-                        com.visorcraft.radioshed.ui.util.Tooltipped(tooltip = repeatTooltip) {
-                            androidx.compose.material3.Surface(
-                                color = androidx.compose.ui.graphics.Color.Transparent,
+                            // Repeat-mode cycler. Tap: Off → All → One → Off.
+                            // Long-press: reverse direction (One → All → Off →
+                            // One). Saves the over-shoot tap when the user
+                            // wants to back out of "Repeat one" without going
+                            // through Off and All again. Surface + combinedClickable
+                            // is the codebase pattern for tap-vs-long-press on
+                            // a single icon (matches the BigIconButton play /
+                            // pause + Stations Home Surprise tile).
+                            val repeatTooltip =
+                                when (repeatMode) {
+                                    RepeatMode.Off -> "Repeat off"
+                                    RepeatMode.All -> "Repeat all"
+                                    RepeatMode.One -> "Repeat one"
+                                }
+                            com.visorcraft.radioshed.ui.util.Tooltipped(tooltip = repeatTooltip) {
+                                androidx.compose.material3.Surface(
+                                    color = androidx.compose.ui.graphics.Color.Transparent,
+                                    modifier =
+                                        Modifier
+                                            .size(48.dp)
+                                            .nowPlayingFocusable(
+                                                control = NowPlayingControl.Repeat,
+                                                compact = isCompact,
+                                                onActivate = { stationPlayback.cycleRepeatMode() },
+                                            ).combinedClickable(
+                                                interactionSource = remember { MutableInteractionSource() },
+                                                indication = null,
+                                                onClick = { stationPlayback.cycleRepeatMode() },
+                                                onLongClick = {
+                                                    val next =
+                                                        when (repeatMode) {
+                                                            RepeatMode.Off ->
+                                                                RepeatMode.One
+                                                            RepeatMode.All ->
+                                                                RepeatMode.Off
+                                                            RepeatMode.One ->
+                                                                RepeatMode.All
+                                                        }
+                                                    stationPlayback.setRepeatMode(next)
+                                                    hapticTick()
+                                                },
+                                            ),
+                                ) {
+                                    androidx.compose.foundation.layout.Box(
+                                        contentAlignment = Alignment.Center,
+                                        modifier = Modifier.fillMaxSize(),
+                                    ) {
+                                        Icon(
+                                            imageVector =
+                                                if (repeatMode ==
+                                                    RepeatMode.One
+                                                ) {
+                                                    Icons.Filled.RepeatOne
+                                                } else {
+                                                    Icons.Filled.Repeat
+                                                },
+                                            contentDescription = repeatTooltip,
+                                            tint =
+                                                if (repeatMode ==
+                                                    RepeatMode.Off
+                                                ) {
+                                                    MaterialTheme.colorScheme.onSurface
+                                                } else {
+                                                    MaterialTheme.colorScheme.primary
+                                                },
+                                        )
+                                    }
+                                }
+                            } // close Tooltipped(repeatTooltip)
+                            val priorityBadgeCount by stationPlayback.priorityCountFlow.collectAsStateWithLifecycle()
+                            androidx.compose.material3.BadgedBox(
+                                badge = {
+                                    if (priorityBadgeCount > 0) {
+                                        androidx.compose.material3.Badge {
+                                            Text(priorityBadgeCount.toString())
+                                        }
+                                    }
+                                },
                                 modifier =
                                     Modifier
-                                        .size(48.dp)
+                                        .nowPlayingFocusable(NowPlayingControl.Queue, isCompact, onActivate = {
+                                            queueSheetOpen =
+                                                true
+                                        })
                                         .combinedClickable(
                                             interactionSource = remember { MutableInteractionSource() },
                                             indication = null,
-                                            onClick = { stationPlayback.cycleRepeatMode() },
+                                            onClick = { queueSheetOpen = true },
                                             onLongClick = {
-                                                val next =
-                                                    when (repeatMode) {
-                                                        com.visorcraft.radioshed.stations.StationPlayback.RepeatMode.Off ->
-                                                            com.visorcraft.radioshed.stations.StationPlayback.RepeatMode.One
-                                                        com.visorcraft.radioshed.stations.StationPlayback.RepeatMode.All ->
-                                                            com.visorcraft.radioshed.stations.StationPlayback.RepeatMode.Off
-                                                        com.visorcraft.radioshed.stations.StationPlayback.RepeatMode.One ->
-                                                            com.visorcraft.radioshed.stations.StationPlayback.RepeatMode.All
-                                                    }
-                                                stationPlayback.setRepeatMode(next)
-                                                hapticTick()
+                                                // Long-press on the queue icon
+                                                // jumps straight to the "Save
+                                                // queue as playlist" dialog —
+                                                // skips the bottom-sheet step
+                                                // when the user already knows
+                                                // they want to save what's
+                                                // queued. Snapshot the upcoming
+                                                // list so it doesn't drift if
+                                                // the queue mutates while the
+                                                // dialog is open.
+                                                val snap = stationPlayback.upcoming(64)
+                                                if (snap.isNotEmpty()) {
+                                                    saveQueueDialog = snap
+                                                    hapticTick()
+                                                }
                                             },
-                                        ),
-                            ) {
-                                androidx.compose.foundation.layout.Box(
-                                    contentAlignment = Alignment.Center,
-                                    modifier = Modifier.fillMaxSize(),
-                                ) {
-                                    Icon(
-                                        imageVector =
-                                            if (repeatMode == com.visorcraft.radioshed.stations.StationPlayback.RepeatMode.One) {
-                                                Icons.Filled.RepeatOne
-                                            } else {
-                                                Icons.Filled.Repeat
-                                            },
-                                        contentDescription = repeatTooltip,
-                                        tint =
-                                            if (repeatMode == com.visorcraft.radioshed.stations.StationPlayback.RepeatMode.Off) {
-                                                MaterialTheme.colorScheme.onSurface
-                                            } else {
-                                                MaterialTheme.colorScheme.primary
-                                            },
-                                    )
-                                }
-                            }
-                        } // close Tooltipped(repeatTooltip)
-                        val priorityBadgeCount by stationPlayback.priorityCountFlow.collectAsStateWithLifecycle()
-                        androidx.compose.material3.BadgedBox(
-                            badge = {
-                                if (priorityBadgeCount > 0) {
-                                    androidx.compose.material3.Badge {
-                                        Text(priorityBadgeCount.toString())
-                                    }
-                                }
-                            },
-                            modifier =
-                                Modifier
-                                    .combinedClickable(
-                                        interactionSource = remember { MutableInteractionSource() },
-                                        indication = null,
-                                        onClick = { queueSheetOpen = true },
-                                        onLongClick = {
-                                            // Long-press on the queue icon
-                                            // jumps straight to the "Save
-                                            // queue as playlist" dialog —
-                                            // skips the bottom-sheet step
-                                            // when the user already knows
-                                            // they want to save what's
-                                            // queued. Snapshot the upcoming
-                                            // list so it doesn't drift if
-                                            // the queue mutates while the
-                                            // dialog is open.
-                                            val snap = stationPlayback.upcoming(64)
-                                            if (snap.isNotEmpty()) {
-                                                saveQueueDialog = snap
-                                                hapticTick()
-                                            }
-                                        },
-                                    )
-                                    .semantics { contentDescription = "Queue" },
-                        ) {
-                            com.visorcraft.radioshed.ui.util.TooltipIconButton(
-                                tooltip = "Queue",
-                                onClick = { queueSheetOpen = true },
-                            ) {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.QueueMusic,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurface,
-                                )
-                            }
-                        }
-                        Box {
-                            // Long-press shortcut: when idle, arm 30min
-                            // (the median sleep-timer pick); when armed,
-                            // cancel without going through the menu. Tap
-                            // still opens the full menu either way.
-                            Box(
-                                modifier =
-                                    Modifier.combinedClickable(
-                                        interactionSource = remember { MutableInteractionSource() },
-                                        indication = null,
-                                        onClick = { sleepMenuOpen = true },
-                                        onLongClick = {
-                                            if (sleepState is SleepTimer.State.Idle) {
-                                                sleepTimer.start(30L * 60_000L)
-                                            } else {
-                                                sleepTimer.cancel()
-                                            }
-                                            hapticTick()
-                                        },
-                                    ),
+                                        ).semantics { contentDescription = "Queue" },
                             ) {
                                 com.visorcraft.radioshed.ui.util.TooltipIconButton(
-                                    tooltip = "Sleep timer",
-                                    onClick = { sleepMenuOpen = true },
+                                    tooltip = "Queue",
+                                    onClick = { queueSheetOpen = true },
+                                    modifier = Modifier.focusProperties { canFocus = false },
                                 ) {
                                     Icon(
-                                        imageVector =
-                                            if (sleepState is SleepTimer.State.Idle) {
-                                                Icons.Outlined.Bedtime
-                                            } else {
-                                                Icons.Filled.Bedtime
-                                            },
-                                        contentDescription = "Sleep timer",
-                                        tint =
-                                            if (sleepState is SleepTimer.State.Idle) {
-                                                MaterialTheme.colorScheme.onSurface
-                                            } else {
-                                                MaterialTheme.colorScheme.primary
-                                            },
+                                        imageVector = Icons.AutoMirrored.Filled.QueueMusic,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurface,
                                     )
                                 }
                             }
-                            SleepTimerMenu(
-                                expanded = sleepMenuOpen,
-                                currentState = sleepState,
-                                onDismiss = { sleepMenuOpen = false },
-                                onPickMinutes = { mins ->
-                                    sleepMenuOpen = false
-                                    sleepTimer.start(mins * 60_000L)
-                                },
-                                onEndOfTrack = {
-                                    sleepMenuOpen = false
-                                    sleepTimer.startEndOfTrack()
-                                },
-                                onExtend = { mins ->
-                                    sleepMenuOpen = false
-                                    sleepTimer.extend(mins * 60_000L)
-                                },
-                                onCancel = {
-                                    sleepMenuOpen = false
-                                    sleepTimer.cancel()
-                                },
-                            )
-                        }
-                        Box {
-                            com.visorcraft.radioshed.ui.util.TooltipIconButton(
-                                tooltip = "More",
-                                onClick = { overflowMenuOpen = true },
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.MoreVert,
-                                    contentDescription = "More",
-                                    tint = MaterialTheme.colorScheme.onSurface,
+                            Box {
+                                // Long-press shortcut: when idle, arm 30min
+                                // (the median sleep-timer pick); when armed,
+                                // cancel without going through the menu. Tap
+                                // still opens the full menu either way.
+                                Box(
+                                    modifier =
+                                        Modifier
+                                            .nowPlayingFocusable(NowPlayingControl.Sleep, isCompact, onActivate = {
+                                                sleepMenuOpen =
+                                                    true
+                                            })
+                                            .combinedClickable(
+                                                interactionSource = remember { MutableInteractionSource() },
+                                                indication = null,
+                                                onClick = { sleepMenuOpen = true },
+                                                onLongClick = {
+                                                    if (sleepState is SleepTimer.State.Idle) {
+                                                        sleepTimer.start(30L * 60_000L)
+                                                    } else {
+                                                        sleepTimer.cancel()
+                                                    }
+                                                    hapticTick()
+                                                },
+                                            ),
+                                ) {
+                                    com.visorcraft.radioshed.ui.util.TooltipIconButton(
+                                        tooltip = "Sleep timer",
+                                        onClick = { sleepMenuOpen = true },
+                                        modifier = Modifier.focusProperties { canFocus = false },
+                                    ) {
+                                        Icon(
+                                            imageVector =
+                                                if (sleepState is SleepTimer.State.Idle) {
+                                                    Icons.Outlined.Bedtime
+                                                } else {
+                                                    Icons.Filled.Bedtime
+                                                },
+                                            contentDescription = "Sleep timer",
+                                            tint =
+                                                if (sleepState is SleepTimer.State.Idle) {
+                                                    MaterialTheme.colorScheme.onSurface
+                                                } else {
+                                                    MaterialTheme.colorScheme.primary
+                                                },
+                                        )
+                                    }
+                                }
+                                SleepTimerMenu(
+                                    expanded = sleepMenuOpen,
+                                    currentState = sleepState,
+                                    onDismiss = { sleepMenuOpen = false },
+                                    onPickMinutes = { mins ->
+                                        sleepMenuOpen = false
+                                        sleepTimer.start(mins * 60_000L)
+                                    },
+                                    onEndOfTrack = {
+                                        sleepMenuOpen = false
+                                        sleepTimer.startEndOfTrack()
+                                    },
+                                    onExtend = { mins ->
+                                        sleepMenuOpen = false
+                                        sleepTimer.extend(mins * 60_000L)
+                                    },
+                                    onCancel = {
+                                        sleepMenuOpen = false
+                                        sleepTimer.cancel()
+                                    },
                                 )
                             }
-                            // Wide screens: classic anchored DropdownMenu.
-                            // Narrow screens get a ModalBottomSheet rendered
-                            // outside the topBar slot (below) — DropdownMenus
-                            // anchored to a tight icon position clip their
-                            // submenu items at <360dp.
-                            if (!isNarrow) {
-                                DropdownMenu(
-                                    expanded = overflowMenuOpen,
-                                    onDismissRequest = { overflowMenuOpen = false },
+                            Box {
+                                com.visorcraft.radioshed.ui.util.TooltipIconButton(
+                                    tooltip = "More",
+                                    onClick = { overflowMenuOpen = true },
+                                    modifier =
+                                        Modifier.nowPlayingFocusable(NowPlayingControl.More, isCompact, onActivate = {
+                                            overflowMenuOpen =
+                                                true
+                                        }),
                                 ) {
-                                    val track = nowPlaying
-                                    DropdownMenuItem(
-                                        text = { Text("Open visualizer") },
-                                        leadingIcon = { Icon(Icons.Filled.GraphicEq, null) },
-                                        onClick = {
-                                            overflowMenuOpen = false
-                                            onOpenVisualizer()
-                                        },
+                                    Icon(
+                                        imageVector = Icons.Filled.MoreVert,
+                                        contentDescription = "More",
+                                        tint = MaterialTheme.colorScheme.onSurface,
                                     )
-                                    DropdownMenuItem(
-                                        text = { Text("Add to playlist") },
-                                        leadingIcon = { Icon(Icons.AutoMirrored.Filled.PlaylistAdd, null) },
-                                        enabled = track != null,
-                                        onClick = {
-                                            overflowMenuOpen = false
-                                            track?.trackId?.let { addToPlaylistTrackId = it }
-                                        },
-                                    )
-                                    // For Go-to-album / Go-to-artist we use the
-                                    // metadata stamped on the Playable rather
-                                    // than DB lookups for the enabled state, so
-                                    // tracks with no album/artist tags don't
-                                    // appear actionable when they aren't.
-                                    DropdownMenuItem(
-                                        text = { Text("Go to album") },
-                                        leadingIcon = { Icon(Icons.Filled.Album, null) },
-                                        enabled = track != null && !track.album.isNullOrBlank(),
-                                        onClick = {
-                                            overflowMenuOpen = false
-                                            val tid = track?.trackId ?: return@DropdownMenuItem
-                                            scope.launch {
-                                                libraryRepo.getTrackById(tid)?.albumId?.let { onOpenAlbum(it) }
-                                            }
-                                        },
-                                    )
-                                    DropdownMenuItem(
-                                        text = { Text("Go to artist") },
-                                        leadingIcon = { Icon(Icons.Filled.Person, null) },
-                                        enabled = track != null && !track.artist.isNullOrBlank(),
-                                        onClick = {
-                                            overflowMenuOpen = false
-                                            val tid = track?.trackId ?: return@DropdownMenuItem
-                                            scope.launch {
-                                                libraryRepo.artistsForTrack(tid)
-                                                    .firstOrNull()?.id?.let { onOpenArtist(it) }
-                                            }
-                                        },
-                                    )
-                                    DropdownMenuItem(
-                                        text = { Text("Go to station") },
-                                        leadingIcon = {
-                                            Icon(Icons.Filled.Whatshot, null)
-                                        },
-                                        enabled = currentStation != null,
-                                        onClick = {
-                                            overflowMenuOpen = false
-                                            currentStation?.id?.let { onOpenStation(it) }
-                                        },
-                                    )
-                                    DropdownMenuItem(
-                                        text = { Text("Track info") },
-                                        leadingIcon = { Icon(Icons.Filled.Info, null) },
-                                        enabled = track != null,
-                                        onClick = {
-                                            overflowMenuOpen = false
-                                            trackInfoOpen = true
-                                        },
-                                    )
-                                    DropdownMenuItem(
-                                        text = {
-                                            val s = playbackSpeed
-                                            val label =
-                                                if (s == 1f) {
-                                                    "Speed (1×)"
-                                                } else {
-                                                    "Speed (${formatSpeed(s)}×)"
+                                }
+                                // Wide screens: classic anchored DropdownMenu.
+                                // Narrow screens get a ModalBottomSheet rendered
+                                // outside the topBar slot (below) — DropdownMenus
+                                // anchored to a tight icon position clip their
+                                // submenu items at <360dp.
+                                if (!isNarrow) {
+                                    DropdownMenu(
+                                        expanded = overflowMenuOpen,
+                                        onDismissRequest = { overflowMenuOpen = false },
+                                    ) {
+                                        val track = nowPlaying
+                                        DropdownMenuItem(
+                                            text = { Text("Open visualizer") },
+                                            leadingIcon = { Icon(Icons.Filled.GraphicEq, null) },
+                                            onClick = {
+                                                overflowMenuOpen = false
+                                                onOpenVisualizer()
+                                            },
+                                        )
+                                        DropdownMenuItem(
+                                            text = { Text("Add to playlist") },
+                                            leadingIcon = { Icon(Icons.AutoMirrored.Filled.PlaylistAdd, null) },
+                                            enabled = track != null,
+                                            onClick = {
+                                                overflowMenuOpen = false
+                                                track?.trackId?.let { addToPlaylistTrackId = it }
+                                            },
+                                        )
+                                        // For Go-to-album / Go-to-artist we use the
+                                        // metadata stamped on the Playable rather
+                                        // than DB lookups for the enabled state, so
+                                        // tracks with no album/artist tags don't
+                                        // appear actionable when they aren't.
+                                        DropdownMenuItem(
+                                            text = { Text("Go to album") },
+                                            leadingIcon = { Icon(Icons.Filled.Album, null) },
+                                            enabled = track != null && !track.album.isNullOrBlank(),
+                                            onClick = {
+                                                overflowMenuOpen = false
+                                                val tid = track?.trackId ?: return@DropdownMenuItem
+                                                scope.launch {
+                                                    libraryRepo.getTrackById(tid)?.albumId?.let { onOpenAlbum(it) }
                                                 }
-                                            Text(label)
-                                        },
-                                        leadingIcon = { Icon(Icons.Filled.Speed, null) },
-                                        onClick = {
-                                            overflowMenuOpen = false
-                                            speedSheetOpen = true
-                                        },
-                                    )
+                                            },
+                                        )
+                                        DropdownMenuItem(
+                                            text = { Text("Go to artist") },
+                                            leadingIcon = { Icon(Icons.Filled.Person, null) },
+                                            enabled = track != null && !track.artist.isNullOrBlank(),
+                                            onClick = {
+                                                overflowMenuOpen = false
+                                                val tid = track?.trackId ?: return@DropdownMenuItem
+                                                scope.launch {
+                                                    libraryRepo
+                                                        .artistsForTrack(tid)
+                                                        .firstOrNull()
+                                                        ?.id
+                                                        ?.let { onOpenArtist(it) }
+                                                }
+                                            },
+                                        )
+                                        DropdownMenuItem(
+                                            text = { Text("Go to station") },
+                                            leadingIcon = {
+                                                Icon(Icons.Filled.Whatshot, null)
+                                            },
+                                            enabled = currentStation != null,
+                                            onClick = {
+                                                overflowMenuOpen = false
+                                                currentStation?.id?.let { onOpenStation(it) }
+                                            },
+                                        )
+                                        DropdownMenuItem(
+                                            text = { Text("Track info") },
+                                            leadingIcon = { Icon(Icons.Filled.Info, null) },
+                                            enabled = track != null,
+                                            onClick = {
+                                                overflowMenuOpen = false
+                                                trackInfoOpen = true
+                                            },
+                                        )
+                                        DropdownMenuItem(
+                                            text = {
+                                                val s = playbackSpeed
+                                                val label =
+                                                    if (s == 1f) {
+                                                        "Speed (1×)"
+                                                    } else {
+                                                        "Speed (${formatSpeed(s)}×)"
+                                                    }
+                                                Text(label)
+                                            },
+                                            leadingIcon = { Icon(Icons.Filled.Speed, null) },
+                                            onClick = {
+                                                overflowMenuOpen = false
+                                                speedSheetOpen = true
+                                            },
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
-                }
-            },
-            containerColor = MaterialTheme.colorScheme.background,
-        ) { padding ->
-            val playable = nowPlaying
-            // One-line tech summary below the scrubber: format · bitrate ·
-            // sample rate. Lazy-fetched via getTrackById on each track
-            // change. The full breakdown still lives on the Track Info
-            // dialog; this just answers "what am I listening to right
-            // now" at a glance, the way Foobar/Winamp status bars used to.
-            var formatLine by remember { mutableStateOf<String?>(null) }
-            LaunchedEffect(playable?.trackId) {
-                // Clear before the async getTrackById so rapid track
-                // changes (skip-five) don't keep showing the previous
-                // track's format/bitrate while the next read resolves.
-                formatLine = null
-                val tid = playable?.trackId
-                formatLine =
-                    if (tid == null) {
-                        null
-                    } else {
-                        val t = libraryRepo.getTrackById(tid)
-                        if (t == null) {
+                },
+                containerColor = MaterialTheme.colorScheme.background,
+            ) { padding ->
+                val playable = nowPlaying
+                // One-line tech summary below the scrubber: format · bitrate ·
+                // sample rate. Lazy-fetched via getTrackById on each track
+                // change. The full breakdown still lives on the Track Info
+                // dialog; this just answers "what am I listening to right
+                // now" at a glance, the way Foobar/Winamp status bars used to.
+                var formatLine by remember { mutableStateOf<String?>(null) }
+                LaunchedEffect(playable?.trackId) {
+                    // Clear before the async getTrackById so rapid track
+                    // changes (skip-five) don't keep showing the previous
+                    // track's format/bitrate while the next read resolves.
+                    formatLine = null
+                    val tid = playable?.trackId
+                    formatLine =
+                        if (tid == null) {
                             null
                         } else {
-                            val parts =
-                                buildList {
-                                    if (t.format.isNotBlank()) add(t.format.uppercase())
-                                    t.bitrateKbps?.let { add("$it kbps") }
-                                    t.sampleRateHz?.let { add("${(it / 1000.0).formatFixed(1)} kHz") }
-                                }
-                            if (parts.isEmpty()) null else parts.joinToString(" · ")
+                            val t = libraryRepo.getTrackById(tid)
+                            if (t == null) {
+                                null
+                            } else {
+                                val parts =
+                                    buildList {
+                                        if (t.format.isNotBlank()) add(t.format.uppercase())
+                                        t.bitrateKbps?.let { add("$it kbps") }
+                                        t.sampleRateHz?.let { add("${(it / 1000.0).formatFixed(1)} kHz") }
+                                    }
+                                if (parts.isEmpty()) null else parts.joinToString(" · ")
+                            }
                         }
+                }
+                if (playable == null) {
+                    Box(
+                        modifier = Modifier.fillMaxSize().padding(padding),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            "Nothing playing.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
+                        )
                     }
-            }
-            if (playable == null) {
-                Box(
-                    modifier = Modifier.fillMaxSize().padding(padding),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        "Nothing playing.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
-                    )
+                    return@Scaffold
                 }
-                return@Scaffold
-            }
 
-            if (queueSheetOpen) {
-                QueueBottomSheet(
-                    upcoming = upcoming,
-                    recent = recent,
-                    artworkByAlbumId = queueArtwork,
-                    priorityCount = priorityCount,
-                    isShuffleMode =
-                        currentStation?.playback?.order != com.visorcraft.radioshed.domain.PlayOrder.Sequential &&
-                            currentStation != null,
-                    onDismiss = { queueSheetOpen = false },
-                    onJumpUpcoming = { idx ->
-                        if (upcoming.isNotEmpty()) {
-                            stationPlayback.playTracks(upcoming, startIndex = idx)
-                            queueSheetOpen = false
-                        }
-                    },
-                    onRemoveQueueItem = { idx ->
-                        // Optimistic local update — the UI removes the
-                        // row immediately so rapid taps don't address the
-                        // pre-removal indices. The mutex-protected async
-                        // remove on the queue then persists the change.
-                        // This avoids the off-by-one bug where two quick
-                        // taps would remove rows N and N+1 instead of N
-                        // and N+2 (because the second tap saw the stale
-                        // pre-first-remove list).
-                        if (idx in upcoming.indices && idx < priorityCount) {
-                            upcoming = upcoming.toMutableList().also { it.removeAt(idx) }
-                            priorityCount -= 1
-                            stationPlayback.removeFromQueue(idx)
-                        }
-                    },
-                    onClearQueue = {
-                        // Optimistic: drop all priority items from the
-                        // visible list immediately. Rule-driven peeks
-                        // remain so users still see what's coming up
-                        // from the station. The async clearQueue catches up.
-                        if (priorityCount > 0) {
-                            upcoming = upcoming.drop(priorityCount)
-                            priorityCount = 0
-                            stationPlayback.clearQueue()
-                        }
-                    },
-                    onMoveQueueItem = { from, to ->
-                        // Optimistic local reorder of the displayed list,
-                        // then mutex-protected commit to the queue. Both
-                        // indices must be in priority range — rule-driven
-                        // peeks aren't reorderable (they regenerate every
-                        // peek anyway).
-                        if (from in 0 until priorityCount && to in 0 until priorityCount) {
-                            upcoming =
-                                upcoming.toMutableList().also {
-                                    val item = it.removeAt(from)
-                                    it.add(to, item)
-                                }
-                            stationPlayback.moveQueueItem(from, to)
-                        }
-                    },
-                    onSaveAsPlaylist = {
-                        if (upcoming.isNotEmpty()) {
-                            saveQueueDialog = upcoming.toList()
-                            queueSheetOpen = false
-                        }
-                    },
-                    onReplayPlayed = { track ->
-                        // Re-inject at the head of the priority queue.
-                        // Distinct from "jumpUpcoming" — the played row
-                        // is no longer in `upcoming`, so we route through
-                        // stationPlayback.playNext for a fresh enqueue.
-                        stationPlayback.playNext(track)
-                        hapticTick()
-                    },
-                    onMoveUpcomingToTop = { idx ->
-                        // Optimistic local reorder + mutex-protected
-                        // commit, mirroring onMoveQueueItem. Bail when
-                        // the row is already at position 0 — saves a
-                        // wasted DB round-trip.
-                        if (idx in 1 until priorityCount) {
-                            upcoming =
-                                upcoming.toMutableList().also {
-                                    val item = it.removeAt(idx)
-                                    it.add(0, item)
-                                }
-                            stationPlayback.moveQueueItem(idx, 0)
+                if (queueSheetOpen) {
+                    QueueBottomSheet(
+                        upcoming = upcoming,
+                        recent = recent,
+                        artworkByAlbumId = queueArtwork,
+                        priorityCount = priorityCount,
+                        isShuffleMode =
+                            currentStation?.playback?.order != com.visorcraft.radioshed.domain.PlayOrder.Sequential &&
+                                currentStation != null,
+                        onDismiss = { queueSheetOpen = false },
+                        onJumpUpcoming = { idx ->
+                            if (upcoming.isNotEmpty()) {
+                                stationPlayback.playTracks(upcoming, startIndex = idx)
+                                queueSheetOpen = false
+                            }
+                        },
+                        onRemoveQueueItem = { idx ->
+                            // Optimistic local update — the UI removes the
+                            // row immediately so rapid taps don't address the
+                            // pre-removal indices. The mutex-protected async
+                            // remove on the queue then persists the change.
+                            // This avoids the off-by-one bug where two quick
+                            // taps would remove rows N and N+1 instead of N
+                            // and N+2 (because the second tap saw the stale
+                            // pre-first-remove list).
+                            if (idx in upcoming.indices && idx < priorityCount) {
+                                upcoming = upcoming.toMutableList().also { it.removeAt(idx) }
+                                priorityCount -= 1
+                                stationPlayback.removeFromQueue(idx)
+                            }
+                        },
+                        onClearQueue = {
+                            // Optimistic: drop all priority items from the
+                            // visible list immediately. Rule-driven peeks
+                            // remain so users still see what's coming up
+                            // from the station. The async clearQueue catches up.
+                            if (priorityCount > 0) {
+                                upcoming = upcoming.drop(priorityCount)
+                                priorityCount = 0
+                                stationPlayback.clearQueue()
+                            }
+                        },
+                        onMoveQueueItem = { from, to ->
+                            // Optimistic local reorder of the displayed list,
+                            // then mutex-protected commit to the queue. Both
+                            // indices must be in priority range — rule-driven
+                            // peeks aren't reorderable (they regenerate every
+                            // peek anyway).
+                            if (from in 0 until priorityCount && to in 0 until priorityCount) {
+                                upcoming =
+                                    upcoming.toMutableList().also {
+                                        val item = it.removeAt(from)
+                                        it.add(to, item)
+                                    }
+                                stationPlayback.moveQueueItem(from, to)
+                            }
+                        },
+                        onSaveAsPlaylist = {
+                            if (upcoming.isNotEmpty()) {
+                                saveQueueDialog = upcoming.toList()
+                                queueSheetOpen = false
+                            }
+                        },
+                        onReplayPlayed = { track ->
+                            // Re-inject at the head of the priority queue.
+                            // Distinct from "jumpUpcoming" — the played row
+                            // is no longer in `upcoming`, so we route through
+                            // stationPlayback.playNext for a fresh enqueue.
+                            stationPlayback.playNext(track)
                             hapticTick()
-                        }
-                    },
-                )
-            }
-            saveQueueDialog?.let { tracks ->
-                SaveQueueAsPlaylistDialog(
-                    trackCount = tracks.size,
-                    onDismiss = { saveQueueDialog = null },
-                    onConfirm = { name ->
-                        val toSave = tracks
-                        saveQueueDialog = null
-                        scope.launch {
-                            val pid = playlistRepo.insert(name = name, description = null)
-                            // One transaction via appendTracks — was one addTrack
-                            // call per queued track, each in its own transaction and
-                            // swallowing failures silently.
-                            runCatching { playlistRepo.appendTracks(pid, toSave.map { it.id }) }
-                        }
-                    },
-                )
-            }
-            addToPlaylistTrackId?.let { id ->
-                AddToPlaylistSheet(
-                    trackId = id,
-                    onDismiss = { addToPlaylistTrackId = null },
-                )
-            }
-            if (trackInfoOpen) {
-                val track = nowPlaying
-                if (track != null) {
-                    TrackInfoDialog(
-                        playable = track,
-                        libraryRepo = libraryRepo,
-                        onDismiss = { trackInfoOpen = false },
-                        onOpenAlbum = onOpenAlbum,
-                        onOpenArtist = onOpenArtist,
-                        onOpenFolder = onOpenFolder,
+                        },
+                        onMoveUpcomingToTop = { idx ->
+                            // Optimistic local reorder + mutex-protected
+                            // commit, mirroring onMoveQueueItem. Bail when
+                            // the row is already at position 0 — saves a
+                            // wasted DB round-trip.
+                            if (idx in 1 until priorityCount) {
+                                upcoming =
+                                    upcoming.toMutableList().also {
+                                        val item = it.removeAt(idx)
+                                        it.add(0, item)
+                                    }
+                                stationPlayback.moveQueueItem(idx, 0)
+                                hapticTick()
+                            }
+                        },
                     )
-                } else {
-                    trackInfoOpen = false
                 }
-            }
-            if (speedSheetOpen) {
-                PlaybackSpeedSheet(
-                    current = playbackSpeed,
-                    onPick = { v ->
-                        playbackSpeed = v
-                        settings.setPlaybackSpeed(v)
-                        audioEngine.setPlaybackSpeed(v)
-                        speedSheetOpen = false
-                    },
-                    onDismiss = { speedSheetOpen = false },
-                )
-            }
-            if (isNarrow && overflowMenuOpen) {
-                OverflowSheet(
-                    track = nowPlaying,
-                    stationId = currentStation?.id,
-                    playbackSpeed = playbackSpeed,
-                    onDismiss = { overflowMenuOpen = false },
-                    onOpenVisualizer = {
-                        overflowMenuOpen = false
-                        onOpenVisualizer()
-                    },
-                    onAddToPlaylist = { tid ->
-                        overflowMenuOpen = false
-                        addToPlaylistTrackId = tid
-                    },
-                    onGoToAlbum = { tid ->
-                        overflowMenuOpen = false
-                        scope.launch {
-                            libraryRepo.getTrackById(tid)?.albumId?.let { onOpenAlbum(it) }
-                        }
-                    },
-                    onGoToArtist = { tid ->
-                        overflowMenuOpen = false
-                        scope.launch {
-                            libraryRepo.artistsForTrack(tid)
-                                .firstOrNull()?.id?.let { onOpenArtist(it) }
-                        }
-                    },
-                    onGoToStation = { sid ->
-                        overflowMenuOpen = false
-                        onOpenStation(sid)
-                    },
-                    onTrackInfo = {
-                        overflowMenuOpen = false
-                        trackInfoOpen = true
-                    },
-                    onSpeedPicker = {
-                        overflowMenuOpen = false
-                        speedSheetOpen = true
-                    },
-                )
-            }
-            Box(modifier = Modifier.fillMaxSize().padding(padding)) {
-                val accent = stationAccent(currentStation?.color)
-
-                BlurredBackdrop(
-                    artworkUri = playable.artworkUri,
-                    reduceMotion = reduceMotion,
-                )
-
-                // Heart toggle handler — flips local state immediately for
-                // snappy UI, then writes through to the repo. The optimistic
-                // flip is safe because the repo is idempotent on like/unlike.
-                val onToggleLike: () -> Unit = {
-                    val target = !liked
-                    liked = target
-                    scope.launch {
-                        if (target) {
-                            ratingRepo.like(playable.trackId)
-                        } else {
-                            ratingRepo.unlike(playable.trackId)
-                        }
+                saveQueueDialog?.let { tracks ->
+                    SaveQueueAsPlaylistDialog(
+                        trackCount = tracks.size,
+                        onDismiss = { saveQueueDialog = null },
+                        onConfirm = { name ->
+                            val toSave = tracks
+                            saveQueueDialog = null
+                            scope.launch {
+                                val pid = playlistRepo.insert(name = name, description = null)
+                                // One transaction via appendTracks — was one addTrack
+                                // call per queued track, each in its own transaction and
+                                // swallowing failures silently.
+                                runCatching { playlistRepo.appendTracks(pid, toSave.map { it.id }) }
+                            }
+                        },
+                    )
+                }
+                addToPlaylistTrackId?.let { id ->
+                    AddToPlaylistSheet(
+                        trackId = id,
+                        onDismiss = { addToPlaylistTrackId = null },
+                    )
+                }
+                if (trackInfoOpen) {
+                    val track = nowPlaying
+                    if (track != null) {
+                        TrackInfoDialog(
+                            playable = track,
+                            libraryRepo = libraryRepo,
+                            onDismiss = { trackInfoOpen = false },
+                            onOpenAlbum = onOpenAlbum,
+                            onOpenArtist = onOpenArtist,
+                            onOpenFolder = onOpenFolder,
+                        )
+                    } else {
+                        trackInfoOpen = false
                     }
                 }
-
-                if (resolvedLayout == NowPlayingLayoutChoice.TriplePane) {
-                    TriplePaneLayout(
-                        playable = playable,
-                        state = state,
-                        positionMs = { position.currentMs },
-                        durationMs = { position.durationMs },
-                        rating = rating,
-                        liked = liked,
-                        accent = accent,
-                        stationName = currentStation?.name,
-                        formatLine = formatLine,
-                        stations = stationsForTriplePane,
-                        currentStationId = currentStation?.id,
-                        // playStation isn't a suspend fun — it launches
-                        // its own internal stationLoadJob. Calling it
-                        // directly avoids a misleading scope.launch
-                        // wrapper that would suggest otherwise.
-                        onStationTap = { id -> stationPlayback.playStation(id) },
-                        onSeek = { audioEngine.seekTo(it) },
-                        onTogglePlayPause = { audioEngine.togglePlayPause() },
-                        onLongPressTogglePlayPause = {
-                            stationPlayback.toggleShuffle()
-                            hapticTick()
+                if (speedSheetOpen) {
+                    PlaybackSpeedSheet(
+                        current = playbackSpeed,
+                        onPick = { v ->
+                            playbackSpeed = v
+                            settings.setPlaybackSpeed(v)
+                            audioEngine.setPlaybackSpeed(v)
+                            speedSheetOpen = false
                         },
-                        onPrev = { stationPlayback.skipPrevious() },
-                        onNext = { stationPlayback.skipNext() },
-                        onSkipFive = { repeat(5) { stationPlayback.skipNext() } },
-                        onRate = { stars ->
-                            scope.launch {
-                                ratingRepo.setRating(playable.trackId, stars)
-                                rating = stars
-                            }
-                        },
-                        onToggleLike = onToggleLike,
-                        preMuteLevel = preMuteLevel,
-                        onPreMuteLevelChange = { preMuteLevel = it },
-                        onDislikeOnStation = {
-                            val stationId = currentStation?.id ?: return@TriplePaneLayout
-                            scope.launch {
-                                ratingRepo.dislikeForStation(playable.trackId, stationId)
-                                stationPlayback.skipNext()
-                            }
-                        },
-                        onTapArtwork = { artworkLightboxOpen = true },
-                        onPinchOpenLyrics = onOpenLyrics,
-                        onTapArtist = {
-                            scope.launch {
-                                libraryRepo.artistsForTrack(playable.trackId)
-                                    .firstOrNull()?.id?.let { onOpenArtist(it) }
-                            }
-                        },
-                        onTapAlbum = {
-                            scope.launch {
-                                libraryRepo.getTrackById(playable.trackId)
-                                    ?.albumId?.let { onOpenAlbum(it) }
-                            }
-                        },
-                        onTapStation = { currentStation?.id?.let(onOpenStation) },
-                        driveMode = driveMode,
-                        queueProgress = finiteQueueProgress,
-                    )
-                } else if (isCompact) {
-                    CompactLayout(
-                        playable = playable,
-                        state = state,
-                        positionMs = { position.currentMs },
-                        durationMs = { position.durationMs },
-                        rating = rating,
-                        liked = liked,
-                        accent = accent,
-                        stationName = currentStation?.name,
-                        formatLine = formatLine,
-                        onSeek = { audioEngine.seekTo(it) },
-                        onTogglePlayPause = { audioEngine.togglePlayPause() },
-                        onLongPressTogglePlayPause = {
-                            stationPlayback.toggleShuffle()
-                            hapticTick()
-                        },
-                        onPrev = { stationPlayback.skipPrevious() },
-                        onNext = { stationPlayback.skipNext() },
-                        onSkipFive = {
-                            // Five rapid skipNext() calls. Each advances the
-                            // queue inside StationPlayback's mutex — running
-                            // them in a tight loop is safe because each
-                            // re-acquires the lock; we just want the user
-                            // to see five tracks fly past in their notification
-                            // / now-playing UI without separately tapping.
-                            repeat(5) { stationPlayback.skipNext() }
-                        },
-                        onRate = { stars ->
-                            scope.launch {
-                                ratingRepo.setRating(playable.trackId, stars)
-                                rating = stars
-                            }
-                        },
-                        onToggleLike = onToggleLike,
-                        preMuteLevel = preMuteLevel,
-                        onPreMuteLevelChange = { preMuteLevel = it },
-                        onDislikeOnStation = {
-                            val stationId = currentStation?.id ?: return@CompactLayout
-                            scope.launch {
-                                ratingRepo.dislikeForStation(playable.trackId, stationId)
-                                stationPlayback.skipNext()
-                            }
-                        },
-                        onTapArtwork = { artworkLightboxOpen = true },
-                        onPinchOpenLyrics = onOpenLyrics,
-                        onTapArtist = {
-                            scope.launch {
-                                libraryRepo.artistsForTrack(playable.trackId)
-                                    .firstOrNull()?.id?.let { onOpenArtist(it) }
-                            }
-                        },
-                        onTapAlbum = {
-                            scope.launch {
-                                libraryRepo.getTrackById(playable.trackId)
-                                    ?.albumId?.let { onOpenAlbum(it) }
-                            }
-                        },
-                        onTapStation = {
-                            currentStation?.id?.let(onOpenStation)
-                        },
-                        driveMode = driveMode,
-                        queueProgress = finiteQueueProgress,
-                    )
-                } else {
-                    TwoPaneLayout(
-                        playable = playable,
-                        state = state,
-                        positionMs = { position.currentMs },
-                        durationMs = { position.durationMs },
-                        rating = rating,
-                        liked = liked,
-                        accent = accent,
-                        stationName = currentStation?.name,
-                        formatLine = formatLine,
-                        onSeek = { audioEngine.seekTo(it) },
-                        onTogglePlayPause = { audioEngine.togglePlayPause() },
-                        onLongPressTogglePlayPause = {
-                            stationPlayback.toggleShuffle()
-                            hapticTick()
-                        },
-                        onPrev = { stationPlayback.skipPrevious() },
-                        onNext = { stationPlayback.skipNext() },
-                        onSkipFive = {
-                            // Five rapid skipNext() calls. Each advances the
-                            // queue inside StationPlayback's mutex — running
-                            // them in a tight loop is safe because each
-                            // re-acquires the lock; we just want the user
-                            // to see five tracks fly past in their notification
-                            // / now-playing UI without separately tapping.
-                            repeat(5) { stationPlayback.skipNext() }
-                        },
-                        onRate = { stars ->
-                            scope.launch {
-                                ratingRepo.setRating(playable.trackId, stars)
-                                rating = stars
-                            }
-                        },
-                        onToggleLike = onToggleLike,
-                        preMuteLevel = preMuteLevel,
-                        onPreMuteLevelChange = { preMuteLevel = it },
-                        onDislikeOnStation = {
-                            val stationId = currentStation?.id ?: return@TwoPaneLayout
-                            scope.launch {
-                                ratingRepo.dislikeForStation(playable.trackId, stationId)
-                                stationPlayback.skipNext()
-                            }
-                        },
-                        onTapArtwork = { artworkLightboxOpen = true },
-                        onPinchOpenLyrics = onOpenLyrics,
-                        onTapArtist = {
-                            scope.launch {
-                                libraryRepo.artistsForTrack(playable.trackId)
-                                    .firstOrNull()?.id?.let { onOpenArtist(it) }
-                            }
-                        },
-                        onTapAlbum = {
-                            scope.launch {
-                                libraryRepo.getTrackById(playable.trackId)
-                                    ?.albumId?.let { onOpenAlbum(it) }
-                            }
-                        },
-                        onTapStation = {
-                            currentStation?.id?.let(onOpenStation)
-                        },
-                        driveMode = driveMode,
-                        queueProgress = finiteQueueProgress,
+                        onDismiss = { speedSheetOpen = false },
                     )
                 }
-                if (artworkLightboxOpen) {
-                    ArtworkLightbox(
+                if (isNarrow && overflowMenuOpen) {
+                    OverflowSheet(
+                        track = nowPlaying,
+                        stationId = currentStation?.id,
+                        playbackSpeed = playbackSpeed,
+                        onDismiss = { overflowMenuOpen = false },
+                        onOpenVisualizer = {
+                            overflowMenuOpen = false
+                            onOpenVisualizer()
+                        },
+                        onAddToPlaylist = { tid ->
+                            overflowMenuOpen = false
+                            addToPlaylistTrackId = tid
+                        },
+                        onGoToAlbum = { tid ->
+                            overflowMenuOpen = false
+                            scope.launch {
+                                libraryRepo.getTrackById(tid)?.albumId?.let { onOpenAlbum(it) }
+                            }
+                        },
+                        onGoToArtist = { tid ->
+                            overflowMenuOpen = false
+                            scope.launch {
+                                libraryRepo
+                                    .artistsForTrack(tid)
+                                    .firstOrNull()
+                                    ?.id
+                                    ?.let { onOpenArtist(it) }
+                            }
+                        },
+                        onGoToStation = { sid ->
+                            overflowMenuOpen = false
+                            onOpenStation(sid)
+                        },
+                        onTrackInfo = {
+                            overflowMenuOpen = false
+                            trackInfoOpen = true
+                        },
+                        onSpeedPicker = {
+                            overflowMenuOpen = false
+                            speedSheetOpen = true
+                        },
+                    )
+                }
+                Box(modifier = Modifier.fillMaxSize().padding(padding)) {
+                    val accent = stationAccent(currentStation?.color)
+
+                    BlurredBackdrop(
                         artworkUri = playable.artworkUri,
-                        accent = accent,
-                        onDismiss = { artworkLightboxOpen = false },
+                        reduceMotion = reduceMotion,
                     )
+
+                    // Heart toggle handler — flips local state immediately for
+                    // snappy UI, then writes through to the repo. The optimistic
+                    // flip is safe because the repo is idempotent on like/unlike.
+                    val onToggleLike: () -> Unit = {
+                        val target = !liked
+                        liked = target
+                        scope.launch {
+                            if (target) {
+                                ratingRepo.like(playable.trackId)
+                            } else {
+                                ratingRepo.unlike(playable.trackId)
+                            }
+                        }
+                    }
+
+                    if (resolvedLayout == NowPlayingLayoutChoice.TriplePane) {
+                        TriplePaneLayout(
+                            playable = playable,
+                            state = state,
+                            positionMs = { position.currentMs },
+                            durationMs = { position.durationMs },
+                            rating = rating,
+                            liked = liked,
+                            accent = accent,
+                            stationName = currentStation?.name,
+                            formatLine = formatLine,
+                            stations = stationsForTriplePane,
+                            currentStationId = currentStation?.id,
+                            // playStation isn't a suspend fun — it launches
+                            // its own internal stationLoadJob. Calling it
+                            // directly avoids a misleading scope.launch
+                            // wrapper that would suggest otherwise.
+                            onStationTap = { id -> stationPlayback.playStation(id) },
+                            onSeek = { audioEngine.seekTo(it) },
+                            onTogglePlayPause = { audioEngine.togglePlayPause() },
+                            onLongPressTogglePlayPause = {
+                                stationPlayback.toggleShuffle()
+                                hapticTick()
+                            },
+                            onPrev = { stationPlayback.skipPrevious() },
+                            onNext = { stationPlayback.skipNext() },
+                            onSkipFive = { repeat(5) { stationPlayback.skipNext() } },
+                            onRate = { stars ->
+                                scope.launch {
+                                    ratingRepo.setRating(playable.trackId, stars)
+                                    rating = stars
+                                }
+                            },
+                            onToggleLike = onToggleLike,
+                            preMuteLevel = preMuteLevel,
+                            onPreMuteLevelChange = { preMuteLevel = it },
+                            onDislikeOnStation = {
+                                val stationId = currentStation?.id ?: return@TriplePaneLayout
+                                scope.launch {
+                                    ratingRepo.dislikeForStation(playable.trackId, stationId)
+                                    stationPlayback.skipNext()
+                                }
+                            },
+                            onTapArtwork = { artworkLightboxOpen = true },
+                            onPinchOpenLyrics = onOpenLyrics,
+                            onTapArtist = {
+                                scope.launch {
+                                    libraryRepo
+                                        .artistsForTrack(playable.trackId)
+                                        .firstOrNull()
+                                        ?.id
+                                        ?.let { onOpenArtist(it) }
+                                }
+                            },
+                            onTapAlbum = {
+                                scope.launch {
+                                    libraryRepo
+                                        .getTrackById(playable.trackId)
+                                        ?.albumId
+                                        ?.let { onOpenAlbum(it) }
+                                }
+                            },
+                            onTapStation = { currentStation?.id?.let(onOpenStation) },
+                            driveMode = driveMode,
+                            queueProgress = finiteQueueProgress,
+                        )
+                    } else if (isCompact) {
+                        CompactLayout(
+                            playable = playable,
+                            state = state,
+                            positionMs = { position.currentMs },
+                            durationMs = { position.durationMs },
+                            rating = rating,
+                            liked = liked,
+                            accent = accent,
+                            stationName = currentStation?.name,
+                            formatLine = formatLine,
+                            onSeek = { audioEngine.seekTo(it) },
+                            onTogglePlayPause = { audioEngine.togglePlayPause() },
+                            onLongPressTogglePlayPause = {
+                                stationPlayback.toggleShuffle()
+                                hapticTick()
+                            },
+                            onPrev = { stationPlayback.skipPrevious() },
+                            onNext = { stationPlayback.skipNext() },
+                            onSkipFive = {
+                                // Five rapid skipNext() calls. Each advances the
+                                // queue inside StationPlayback's mutex — running
+                                // them in a tight loop is safe because each
+                                // re-acquires the lock; we just want the user
+                                // to see five tracks fly past in their notification
+                                // / now-playing UI without separately tapping.
+                                repeat(5) { stationPlayback.skipNext() }
+                            },
+                            onRate = { stars ->
+                                scope.launch {
+                                    ratingRepo.setRating(playable.trackId, stars)
+                                    rating = stars
+                                }
+                            },
+                            onToggleLike = onToggleLike,
+                            preMuteLevel = preMuteLevel,
+                            onPreMuteLevelChange = { preMuteLevel = it },
+                            onDislikeOnStation = {
+                                val stationId = currentStation?.id ?: return@CompactLayout
+                                scope.launch {
+                                    ratingRepo.dislikeForStation(playable.trackId, stationId)
+                                    stationPlayback.skipNext()
+                                }
+                            },
+                            onTapArtwork = { artworkLightboxOpen = true },
+                            onPinchOpenLyrics = onOpenLyrics,
+                            onTapArtist = {
+                                scope.launch {
+                                    libraryRepo
+                                        .artistsForTrack(playable.trackId)
+                                        .firstOrNull()
+                                        ?.id
+                                        ?.let { onOpenArtist(it) }
+                                }
+                            },
+                            onTapAlbum = {
+                                scope.launch {
+                                    libraryRepo
+                                        .getTrackById(playable.trackId)
+                                        ?.albumId
+                                        ?.let { onOpenAlbum(it) }
+                                }
+                            },
+                            onTapStation = {
+                                currentStation?.id?.let(onOpenStation)
+                            },
+                            driveMode = driveMode,
+                            queueProgress = finiteQueueProgress,
+                        )
+                    } else {
+                        TwoPaneLayout(
+                            playable = playable,
+                            state = state,
+                            positionMs = { position.currentMs },
+                            durationMs = { position.durationMs },
+                            rating = rating,
+                            liked = liked,
+                            accent = accent,
+                            stationName = currentStation?.name,
+                            formatLine = formatLine,
+                            onSeek = { audioEngine.seekTo(it) },
+                            onTogglePlayPause = { audioEngine.togglePlayPause() },
+                            onLongPressTogglePlayPause = {
+                                stationPlayback.toggleShuffle()
+                                hapticTick()
+                            },
+                            onPrev = { stationPlayback.skipPrevious() },
+                            onNext = { stationPlayback.skipNext() },
+                            onSkipFive = {
+                                // Five rapid skipNext() calls. Each advances the
+                                // queue inside StationPlayback's mutex — running
+                                // them in a tight loop is safe because each
+                                // re-acquires the lock; we just want the user
+                                // to see five tracks fly past in their notification
+                                // / now-playing UI without separately tapping.
+                                repeat(5) { stationPlayback.skipNext() }
+                            },
+                            onRate = { stars ->
+                                scope.launch {
+                                    ratingRepo.setRating(playable.trackId, stars)
+                                    rating = stars
+                                }
+                            },
+                            onToggleLike = onToggleLike,
+                            preMuteLevel = preMuteLevel,
+                            onPreMuteLevelChange = { preMuteLevel = it },
+                            onDislikeOnStation = {
+                                val stationId = currentStation?.id ?: return@TwoPaneLayout
+                                scope.launch {
+                                    ratingRepo.dislikeForStation(playable.trackId, stationId)
+                                    stationPlayback.skipNext()
+                                }
+                            },
+                            onTapArtwork = { artworkLightboxOpen = true },
+                            onPinchOpenLyrics = onOpenLyrics,
+                            onTapArtist = {
+                                scope.launch {
+                                    libraryRepo
+                                        .artistsForTrack(playable.trackId)
+                                        .firstOrNull()
+                                        ?.id
+                                        ?.let { onOpenArtist(it) }
+                                }
+                            },
+                            onTapAlbum = {
+                                scope.launch {
+                                    libraryRepo
+                                        .getTrackById(playable.trackId)
+                                        ?.albumId
+                                        ?.let { onOpenAlbum(it) }
+                                }
+                            },
+                            onTapStation = {
+                                currentStation?.id?.let(onOpenStation)
+                            },
+                            driveMode = driveMode,
+                            queueProgress = finiteQueueProgress,
+                        )
+                    }
+                    if (artworkLightboxOpen) {
+                        ArtworkLightbox(
+                            artworkUri = playable.artworkUri,
+                            accent = accent,
+                            onDismiss = { artworkLightboxOpen = false },
+                        )
+                    }
                 }
             }
-        }
-    } // BoxWithConstraints
+        } // BoxWithConstraints
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -1347,6 +1432,7 @@ private fun CompactLayout(
             liked = liked,
             onRate = onRate,
             onToggleLike = onToggleLike,
+            compact = true,
         )
     }
 }
@@ -1523,7 +1609,8 @@ private fun ArtworkLightbox(
     accent: Color,
     onDismiss: () -> Unit,
 ) {
-    com.visorcraft.radioshed.nav.PlatformBackHandler(onBack = onDismiss)
+    com.visorcraft.radioshed.nav
+        .PlatformBackHandler(onBack = onDismiss)
     Box(
         modifier =
             Modifier
@@ -1585,8 +1672,7 @@ private fun AlbumArtPlaceholder(
                     Brush.linearGradient(
                         colors = listOf(accent, accent.copy(alpha = 0.55f)),
                     ),
-                )
-                .clickable(onClick = onTap)
+                ).clickable(onClick = onTap)
                 // Pinch-to-lyrics gesture: a quick outward pinch on the
                 // artwork jumps to the lyrics screen, mirroring the
                 // gestural pattern of "zoom in to see more". Cumulative
@@ -1797,7 +1883,17 @@ private fun Scrubber(
                 isUserScrubbing = false
             },
             colors = SliderDefaults.colors(),
-            modifier = Modifier.fillMaxWidth(),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .nowPlayingFocusable(
+                        control = NowPlayingControl.Scrubber,
+                        shape = RoundedCornerShape(12.dp),
+                        onHorizontalStep = { direction ->
+                            val stepMs = (durationSafe / 100L).coerceIn(1_000L, 10_000L)
+                            onSeek((positionMs + direction * stepMs).coerceIn(0L, durationSafe))
+                        },
+                    ),
         )
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -1807,7 +1903,9 @@ private fun Scrubber(
             // dialog. The slider handles coarse seeks; a typed input
             // is the right tool for "skip to 1:23" on long
             // podcasts/sets where the slider's hit zone is ~10s wide.
-            val positionClipboard = com.visorcraft.radioshed.ui.util.rememberCopyToClipboard()
+            val positionClipboard =
+                com.visorcraft.radioshed.ui.util
+                    .rememberCopyToClipboard()
             Text(
                 text = formatMs(if (isUserScrubbing) (pendingFraction * durationSafe).toLong() else positionMs),
                 style = MaterialTheme.typography.bodySmall,
@@ -1999,6 +2097,8 @@ private fun TransportRow(
             iconSize = iconSize,
             onClick = onPrev,
             onLongClick = onLongPressPrev,
+            compact = compact,
+            control = NowPlayingControl.Previous,
         )
 
         if (!compact) {
@@ -2011,13 +2111,13 @@ private fun TransportRow(
                         Modifier
                             .size(seekButtonSize)
                             .clip(RoundedCornerShape(seekButtonSize / 2))
+                            .nowPlayingFocusable(NowPlayingControl.Replay, compact, onActivate = { onReplay(10_000L) })
                             .combinedClickable(
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = null,
                                 onClick = { onReplay(10_000L) },
                                 onLongClick = { onReplay(30_000L) },
-                            )
-                            .semantics { contentDescription = "Back 10 seconds (long-press 30)" },
+                            ).semantics { contentDescription = "Back 10 seconds (long-press 30)" },
                 ) {
                     Box(
                         modifier = Modifier.fillMaxSize(),
@@ -2041,6 +2141,8 @@ private fun TransportRow(
             iconSize = emphasizedIconSize,
             onClick = onTogglePlayPause,
             onLongClick = onLongPressTogglePlayPause,
+            compact = compact,
+            control = NowPlayingControl.PlayPause,
         )
 
         if (!compact) {
@@ -2053,13 +2155,16 @@ private fun TransportRow(
                         Modifier
                             .size(seekButtonSize)
                             .clip(RoundedCornerShape(seekButtonSize / 2))
-                            .combinedClickable(
+                            .nowPlayingFocusable(
+                                NowPlayingControl.Forward,
+                                compact,
+                                onActivate = { onForward(10_000L) },
+                            ).combinedClickable(
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = null,
                                 onClick = { onForward(10_000L) },
                                 onLongClick = { onForward(30_000L) },
-                            )
-                            .semantics { contentDescription = "Forward 10 seconds (long-press 30)" },
+                            ).semantics { contentDescription = "Forward 10 seconds (long-press 30)" },
                 ) {
                     Box(
                         modifier = Modifier.fillMaxSize(),
@@ -2084,13 +2189,13 @@ private fun TransportRow(
                     Modifier
                         .size(baseSize)
                         .clip(RoundedCornerShape(baseSize / 2))
+                        .nowPlayingFocusable(NowPlayingControl.Next, compact, onActivate = onNext)
                         .combinedClickable(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null,
                             onClick = onNext,
                             onLongClick = { dislikeMenuOpen = true },
-                        )
-                        .semantics { contentDescription = "Next (long-press for options)" },
+                        ).semantics { contentDescription = "Next (long-press for options)" },
             ) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
@@ -2145,6 +2250,8 @@ private fun BigIconButton(
     iconSize: androidx.compose.ui.unit.Dp,
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
+    compact: Boolean = false,
+    control: NowPlayingControl? = null,
 ) {
     // Vector icons everywhere — see MiniPlayer.TransportIconButton for why
     // we don't use Unicode media glyphs (Samsung Noto vs Roboto vs SF Pro
@@ -2152,6 +2259,22 @@ private fun BigIconButton(
     // The Tooltipped wrapper is no-op on touch builds and adds the
     // hover tooltip on desktop, so every transport button gets one
     // for free.
+    val focusRegistry = LocalNowPlayingFocus.current
+    val focusRequester = if (control != null) focusRegistry?.get(control) else null
+    val focusModifier =
+        if (control !=
+            null
+        ) {
+            Modifier.nowPlayingFocusable(control, compact, onActivate = onClick)
+        } else {
+            Modifier
+        }
+    LaunchedEffect(control) {
+        if (control == NowPlayingControl.PlayPause && focusRegistry?.hasFocusedControl != true) {
+            withFrameNanos { }
+            focusRequester?.requestFocus()
+        }
+    }
     if (onLongClick == null) {
         com.visorcraft.radioshed.ui.util.TooltipIconButton(
             tooltip = description,
@@ -2159,6 +2282,7 @@ private fun BigIconButton(
             modifier =
                 Modifier
                     .size(buttonSize)
+                    .then(focusModifier)
                     .semantics { contentDescription = description },
         ) {
             Icon(
@@ -2180,11 +2304,11 @@ private fun BigIconButton(
                     Modifier
                         .size(buttonSize)
                         .clip(RoundedCornerShape(buttonSize / 2))
+                        .then(focusModifier)
                         .combinedClickable(
                             onClick = onClick,
                             onLongClick = onLongClick,
-                        )
-                        .semantics { contentDescription = description },
+                        ).semantics { contentDescription = description },
             ) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
@@ -2208,6 +2332,7 @@ private fun RatingRow(
     liked: Boolean,
     onRate: (Double) -> Unit,
     onToggleLike: () -> Unit,
+    compact: Boolean = false,
 ) {
     // Half-star precision: each star is split into two 24dp-wide tap zones.
     // Tapping the LEFT half sets rating to (n - 0.5), RIGHT half sets to n.
@@ -2228,7 +2353,11 @@ private fun RatingRow(
         com.visorcraft.radioshed.ui.util.TooltipIconButton(
             tooltip = if (liked) "Unlike" else "Like",
             onClick = onToggleLike,
-            modifier = Modifier.size(48.dp),
+            modifier =
+                Modifier
+                    .size(
+                        48.dp,
+                    ).nowPlayingFocusable(NowPlayingControl.Like, compact, onActivate = onToggleLike),
         ) {
             Icon(
                 imageVector =
@@ -2262,10 +2391,23 @@ private fun RatingRow(
             // → half-star value, right half → full-star value). Compose
             // dispatches taps to the topmost composable, so the overlay
             // wins.
+            val control = NowPlayingControl.entries[NowPlayingControl.Star1.ordinal + n - 1]
             Box(
                 modifier =
                     Modifier
                         .size(48.dp)
+                        .nowPlayingFocusable(control, compact, onActivate = {
+                            onRate(
+                                if (current ==
+                                    nDouble
+                                ) {
+                                    0.0
+                                } else {
+                                    nDouble
+                                },
+                            )
+                        })
+                        .clickable { onRate(if (current == nDouble) 0.0 else nDouble) }
                         .semantics { contentDescription = "Rating star $n" },
                 contentAlignment = Alignment.Center,
             ) {
@@ -2293,7 +2435,7 @@ private fun RatingRow(
                                 .clickable {
                                     val target = if (current == halfValue) 0.0 else halfValue
                                     onRate(target)
-                                },
+                                }.focusProperties { canFocus = false },
                     )
                     Box(
                         modifier =
@@ -2303,7 +2445,7 @@ private fun RatingRow(
                                 .clickable {
                                     val target = if (current == nDouble) 0.0 else nDouble
                                     onRate(target)
-                                },
+                                }.focusProperties { canFocus = false },
                     )
                 }
             }
@@ -2322,6 +2464,7 @@ private fun BottomVolumeButton(
     volume: Float,
     onVolumeLive: (Float) -> Unit,
     onVolumeCommit: (Float) -> Unit,
+    compact: Boolean,
 ) {
     var open by remember { mutableStateOf(false) }
     val focusRequester = remember { FocusRequester() }
@@ -2336,6 +2479,7 @@ private fun BottomVolumeButton(
         com.visorcraft.radioshed.ui.util.TooltipIconButton(
             tooltip = "Volume",
             onClick = { open = !open },
+            modifier = Modifier.nowPlayingFocusable(NowPlayingControl.Volume, compact, onActivate = { open = !open }),
         ) {
             Icon(
                 imageVector =
@@ -2441,7 +2585,8 @@ private fun TrackInfoDialog(
         track = libraryRepo.getTrackById(playable.trackId)
         stats = stationRepo.historyStatsForTrack(playable.trackId)
         genres =
-            libraryRepo.tagsForTrack(playable.trackId)
+            libraryRepo
+                .tagsForTrack(playable.trackId)
                 .filter { it.key.equals("GENRE", ignoreCase = true) }
                 .map { it.value }
                 .filter { it.isNotBlank() }
@@ -2492,7 +2637,8 @@ private fun TrackInfoDialog(
                         // path returned the default "/" on Windows
                         // because Windows paths contain no '/'.)
                         val parent =
-                            com.visorcraft.radioshed.source.parentPath(t.path)
+                            com.visorcraft.radioshed.source
+                                .parentPath(t.path)
                                 .ifBlank { "/" }
                         onDismiss()
                         onOpenFolder(parent)
@@ -2519,7 +2665,9 @@ private fun TrackInfoDialog(
                 // shown on Windows" report.
                 Column(
                     modifier = Modifier.verticalScroll(rememberScrollState()),
-                    verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(4.dp),
+                    verticalArrangement =
+                        androidx.compose.foundation.layout.Arrangement
+                            .spacedBy(4.dp),
                 ) {
                     ringtoneStatus?.let { msg ->
                         Text(
@@ -2530,7 +2678,9 @@ private fun TrackInfoDialog(
                         )
                     }
                     Row(
-                        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+                        horizontalArrangement =
+                            androidx.compose.foundation.layout.Arrangement
+                                .spacedBy(8.dp),
                     ) {
                         androidx.compose.material3.OutlinedButton(
                             onClick = {
@@ -2593,7 +2743,9 @@ private fun TrackInfoDialog(
                     // pasting into a chat or Spotify/YouTube search
                     // when the user wants to share what they're
                     // hearing without sending the actual file.
-                    val copyToClipboard = com.visorcraft.radioshed.ui.util.rememberCopyToClipboard()
+                    val copyToClipboard =
+                        com.visorcraft.radioshed.ui.util
+                            .rememberCopyToClipboard()
                     val combined =
                         remember(playable.artist, t.title, t.fileName) {
                             val artistPart = playable.artist?.takeIf { it.isNotBlank() }
@@ -2839,7 +2991,8 @@ private fun TrackInfoDialog(
                             color = MaterialTheme.colorScheme.primary,
                             modifier =
                                 Modifier.clickable {
-                                    com.visorcraft.radioshed.source.openWebUrl(bio.pageUrl)
+                                    com.visorcraft.radioshed.source
+                                        .openWebUrl(bio.pageUrl)
                                 },
                         )
                         Spacer(Modifier.height(4.dp))
@@ -2986,7 +3139,11 @@ private fun TrackInfoDialog(
  *  as backups but without the "Just now" cutoff since added-at is
  *  always in the past from when this dialog opens. */
 private fun formatRelativeDate(ms: Long): String {
-    val deltaMs = (com.visorcraft.radioshed.data.nowMillis() - ms).coerceAtLeast(0L)
+    val deltaMs =
+        (
+            com.visorcraft.radioshed.data
+                .nowMillis() - ms
+        ).coerceAtLeast(0L)
     val day = deltaMs / 86_400_000L
     return when {
         day < 1L -> "Today"
@@ -3074,7 +3231,9 @@ private fun QueueBottomSheet(
     onMoveUpcomingToTop: (Int) -> Unit = {},
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val listState =
+        androidx.compose.foundation.lazy
+            .rememberLazyListState()
     // Convert between LazyColumn-absolute indices (which the
     // DragReorderState reasons over) and upcoming-list indices
     // (0..upcoming.size). The header offset is the count of
@@ -3148,9 +3307,10 @@ private fun QueueBottomSheet(
                             // queue is empty.
                             .clickable(enabled = upcoming.isNotEmpty()) {
                                 val text =
-                                    upcoming.mapIndexed { i, t ->
-                                        "${i + 1}. ${t.displayTitle()}"
-                                    }.joinToString("\n")
+                                    upcoming
+                                        .mapIndexed { i, t ->
+                                            "${i + 1}. ${t.displayTitle()}"
+                                        }.joinToString("\n")
                                 queueHeaderClipboard(text)
                             },
                     verticalAlignment = Alignment.CenterVertically,
@@ -3737,6 +3897,7 @@ private fun TriplePaneLayout(
                 liked = liked,
                 onRate = onRate,
                 onToggleLike = onToggleLike,
+                compact = true,
             )
         }
         Spacer(Modifier.width(16.dp))
