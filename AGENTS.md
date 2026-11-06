@@ -26,7 +26,7 @@ There is **one Gradle module** — `:composeApp` — with source sets:
 - `iosMain`
 - `desktopTest`
 
-There is no separate `shared/`, `androidApp/`, or `iosApp` module. Current source is **v1.9.0 / versionCode 14**; the latest GitHub release is **v1.7.1 / versionCode 12**.
+There is no separate `shared/`, `androidApp/`, or `iosApp` module. Current source is **v1.10.0 / versionCode 15**; the latest GitHub release is **v1.7.1 / versionCode 12**.
 
 The desktop JVM target is named `desktop` (`kotlin { jvm("desktop") }` in `composeApp/build.gradle.kts`); the source set follows that convention as `desktopMain`. Linux desktop compile, run, single-file `.AppImage`, and `.deb` packaging are verified and useful for iterating on Compose UI without an emulator.
 
