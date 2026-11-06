@@ -1,0 +1,42 @@
+-- Offline scrobble queue. Each row is a "now-playing has finished"
+-- event captured locally so the Last.fm / ListenBrainz submission
+-- survives an app restart or a network outage and gets flushed later
+-- by the scrobble sender. Rows are deleted once successfully
+-- submitted; attempts is bumped on each failed flush so the sender
+-- can back off / give up on a poisoned row. The queue is capped at
+-- 500 rows (pruneOverCap) so a long offline stretch can't grow the
+-- DB unbounded — the newest 500 plays are the ones worth keeping.
+
+CREATE TABLE scrobble_queue (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    artist TEXT NOT NULL,
+    track TEXT NOT NULL,
+    album TEXT,
+    listened_at_seconds INTEGER NOT NULL,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL
+);
+
+enqueue:
+INSERT INTO scrobble_queue (artist, track, album, listened_at_seconds, attempts, created_at)
+VALUES (?, ?, ?, ?, 0, ?);
+
+oldestBatch:
+SELECT * FROM scrobble_queue ORDER BY id ASC LIMIT :limit;
+
+deleteById:
+DELETE FROM scrobble_queue WHERE id = ?;
+
+bumpAttempts:
+UPDATE scrobble_queue SET attempts = attempts + 1 WHERE id = ?;
+
+countAll:
+SELECT COUNT(*) FROM scrobble_queue;
+
+-- Keep only the newest 500 rows by id, dropping the oldest overflow.
+-- Keep only the newest 500 rows (= ScrobbleQueueRepository.CAP — update both together).
+-- Run inside the same transaction as enqueue so the queue never
+-- exceeds the cap between writes.
+pruneOverCap:
+DELETE FROM scrobble_queue
+WHERE id NOT IN (SELECT id FROM scrobble_queue ORDER BY id DESC LIMIT 500);

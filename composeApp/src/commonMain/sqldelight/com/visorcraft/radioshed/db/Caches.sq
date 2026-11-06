@@ -1,0 +1,142 @@
+CREATE TABLE artwork_cache (
+    cache_key TEXT NOT NULL PRIMARY KEY,
+    blob_path TEXT NOT NULL,
+    source TEXT NOT NULL,
+    fetched_at INTEGER NOT NULL,
+    size_bytes INTEGER NOT NULL DEFAULT 0,
+    last_accessed_at INTEGER NOT NULL
+);
+
+CREATE INDEX artwork_cache_accessed_idx ON artwork_cache(last_accessed_at);
+
+CREATE TABLE lyrics_cache (
+    track_id INTEGER NOT NULL PRIMARY KEY REFERENCES track(id) ON DELETE CASCADE,
+    synced_lrc TEXT,
+    plain_text TEXT,
+    source TEXT NOT NULL,
+    fetched_at INTEGER NOT NULL
+);
+
+-- User-supplied (artist, title) override for lyrics lookups. Used
+-- when LRClib's auto-fallback chain misses but the user knows the
+-- correct metadata. Persisted per track so the next playback /
+-- forced refresh keeps using it without re-asking.
+CREATE TABLE lyrics_query_override (
+    track_id INTEGER NOT NULL PRIMARY KEY REFERENCES track(id) ON DELETE CASCADE,
+    artist TEXT NOT NULL,
+    title TEXT NOT NULL,
+    set_at INTEGER NOT NULL
+);
+
+CREATE TABLE dj_cache (
+    cache_key TEXT NOT NULL PRIMARY KEY,
+    blob_path TEXT NOT NULL,
+    template_hash TEXT NOT NULL,
+    voice_id TEXT NOT NULL,
+    variables_json TEXT NOT NULL,
+    generated_at INTEGER NOT NULL,
+    last_used_at INTEGER NOT NULL,
+    duration_ms INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX dj_cache_used_idx ON dj_cache(last_used_at);
+
+-- ==== Artwork cache ====
+
+putArtwork:
+INSERT OR REPLACE INTO artwork_cache (cache_key, blob_path, source, fetched_at, size_bytes, last_accessed_at)
+VALUES (?, ?, ?, ?, ?, ?);
+
+getArtwork:
+SELECT * FROM artwork_cache WHERE cache_key = ?;
+
+touchArtwork:
+UPDATE artwork_cache SET last_accessed_at = ? WHERE cache_key = ?;
+
+selectArtworkOlderThan:
+SELECT * FROM artwork_cache WHERE last_accessed_at < ? ORDER BY last_accessed_at;
+
+deleteArtwork:
+DELETE FROM artwork_cache WHERE cache_key = ?;
+
+-- Wipe every artwork_cache row. Paired with deleting the on-disk
+-- blobs (`ArtworkPersister.clearAll`) and clearing the
+-- `album.artwork_uri` pointers, this is the user-facing "Clear
+-- artwork cache" action — the next CoverArt sweep will refetch.
+deleteAllArtwork:
+DELETE FROM artwork_cache;
+
+-- ==== Lyrics cache ====
+
+putLyrics:
+INSERT OR REPLACE INTO lyrics_cache (track_id, synced_lrc, plain_text, source, fetched_at)
+VALUES (?, ?, ?, ?, ?);
+
+getLyrics:
+SELECT * FROM lyrics_cache WHERE track_id = ?;
+
+deleteLyrics:
+DELETE FROM lyrics_cache WHERE track_id = ?;
+
+-- Wipes the entire lyrics_cache. User-facing action: "Clear lyrics
+-- cache" in settings, used when LRClib improves their database and
+-- the user wants a full re-fetch on next track plays. Overrides
+-- (lyrics_query_override) are preserved separately so manual
+-- corrections aren't lost.
+deleteAllLyrics:
+DELETE FROM lyrics_cache;
+
+-- Find every available track that has no lyrics cached at all, OR a
+-- "lrclib:miss" entry older than the supplied threshold. The threshold
+-- is the negative-cache TTL boundary (caller computes `now - 30 days`)
+-- so a sweep doesn't keep re-asking LRClib for tracks confirmed-not-
+-- present in the last month — but it WILL retry tracks that were
+-- marked miss long enough ago for LRClib to have potentially added
+-- them. Used by `MissingLyricsSync.sweep`.
+selectTrackIdsMissingLyrics:
+SELECT track.id FROM track
+LEFT JOIN lyrics_cache ON track.id = lyrics_cache.track_id
+WHERE track.is_available = 1
+  AND (
+    lyrics_cache.track_id IS NULL
+    OR (lyrics_cache.source = 'lrclib:miss' AND lyrics_cache.fetched_at < ?)
+  )
+ORDER BY track.id;
+
+-- ==== Lyrics query override ====
+
+putLyricsOverride:
+INSERT OR REPLACE INTO lyrics_query_override (track_id, artist, title, set_at)
+VALUES (?, ?, ?, ?);
+
+getLyricsOverride:
+SELECT artist, title FROM lyrics_query_override WHERE track_id = ?;
+
+deleteLyricsOverride:
+DELETE FROM lyrics_query_override WHERE track_id = ?;
+
+-- ==== DJ TTS cache ====
+
+putDjAudio:
+INSERT OR REPLACE INTO dj_cache (cache_key, blob_path, template_hash, voice_id, variables_json, generated_at, last_used_at, duration_ms)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+
+getDjAudio:
+SELECT * FROM dj_cache WHERE cache_key = ?;
+
+touchDjAudio:
+UPDATE dj_cache SET last_used_at = ? WHERE cache_key = ?;
+
+selectDjAudioOlderThan:
+SELECT * FROM dj_cache WHERE last_used_at < ? ORDER BY last_used_at;
+
+deleteDjAudio:
+DELETE FROM dj_cache WHERE cache_key = ?;
+
+-- Wipes the entire dj_cache. User-facing "Clear DJ cache" action —
+-- regenerated audio is cheap to refetch from the TTS pipeline next
+-- time the DJ chimes in, but the on-disk blobs accrue over time on
+-- a heavily-used setup so giving the user a manual reset valve is
+-- worth the SQL line.
+deleteAllDjAudio:
+DELETE FROM dj_cache;

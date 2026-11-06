@@ -1,0 +1,19 @@
+-- Migration v3 → v4: Liked Songs.
+--
+CREATE TABLE IF NOT EXISTS track (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT
+);
+
+-- Adds a per-track liked marker so users can heart-toggle a track
+-- without piping it through the playlist system. Modeled as a
+-- separate table (rather than a column on track) to keep the
+-- track-row write hot path free and avoid schema-bumping the
+-- indexed core columns. Indexed on liked_at so the Liked Songs
+-- view sorts cheaply.
+
+CREATE TABLE liked_track (
+    track_id INTEGER NOT NULL PRIMARY KEY REFERENCES track(id) ON DELETE CASCADE,
+    liked_at INTEGER NOT NULL
+);
+
+CREATE INDEX liked_track_liked_at_idx ON liked_track(liked_at);

@@ -1,0 +1,4 @@
+package com.visorcraft.radioshed.source
+
+/** Android tag reader — shared [JvmTagReader] jaudiotagger implementation. */
+class AndroidTagReader : TagReader by JvmTagReader()

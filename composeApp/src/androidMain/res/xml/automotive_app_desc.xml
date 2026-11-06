@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android Auto / Automotive OS app-capability declaration.
+
+  Pointed at via:
+    AndroidManifest.xml → <application>
+      → <meta-data android:name="com.google.android.gms.car.application"
+                   android:resource="@xml/automotive_app_desc" />
+
+  `<uses name="media" />` makes RadioShed appear in Android Auto's media
+  picker (the "Music" / "Audio" surface alongside Spotify, YouTube Music,
+  etc.) and lets Auto query our MediaLibraryService for the browse tree.
+
+  Other capability slugs Auto recognizes: "notification", "template" (for
+  messaging apps), "playscreen" (for video apps in Automotive OS — not
+  permitted on Android Auto). We only need "media".
+-->
+<automotiveApp>
+    <uses name="media" />
+</automotiveApp>

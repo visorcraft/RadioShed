@@ -1,0 +1,219 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Phase 3: library scanner needs broad file access. We're sideloaded
+         (proprietary distribution), not Play Store, so MANAGE_EXTERNAL_STORAGE
+         is acceptable. SAF fallback (READ_MEDIA_AUDIO) handles scoped storage
+         when the user denies the all-files prompt. -->
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- Coarse location for the DJ {weather} token: AndroidWeatherFetcher reads
+         a last-known coarse fix to query Open-Meteo. Declared here only; the
+         runtime grant stays user-initiated (system settings or a future
+         permission-request task). The fetcher checks the grant before reading
+         and returns null when it's absent, so weather is silently skipped. -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
+    <!-- Auto Drive Mode bt_device trigger: AndroidBluetoothWatcher reads the
+         connected/bonded device list + names to match a configured device's
+         MAC. Declared here only; the runtime grant stays user-initiated (the
+         Drive Mode config UI requests it). Without the grant the watcher
+         populates nothing and bonded-device enumeration returns empty, so the
+         trigger is silently inert. -->
+    <!-- Legacy install-time permission for API 30; BLUETOOTH_CONNECT supersedes from API 31. -->
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+
+    <!-- Required for the "Set as ringtone" Track Info action. WRITE_SETTINGS
+         is a special-permission grant the user toggles via the system
+         Settings activity (not a runtime dialog) — we only need to declare
+         it here. AndroidRingtoneSetter routes the user to the grant screen
+         when the permission is missing. -->
+    <uses-permission android:name="android.permission.WRITE_SETTINGS"
+        tools:ignore="ProtectedPermissions" />
+
+    <!-- API 30+ package-visibility declarations. Without these,
+         PackageManager.getPackageInfo throws NameNotFoundException for
+         apps the user has installed but our app hasn't been told to
+         "see". Used by the Syncthing setup wizard to detect whether
+         either Syncthing fork is already installed. -->
+    <queries>
+        <package android:name="com.github.catfriend1.syncthingandroid" />
+        <package android:name="com.nutomic.syncthingandroid" />
+    </queries>
+
+    <!-- allowBackup=false: the app stores the Subsonic password and the
+         ListenBrainz token in multiplatform-settings (plaintext app prefs).
+         With allowBackup=true they're extractable via `adb backup` on a
+         USB-debugging-enabled device. The in-app Backup & Restore feature
+         is unaffected — it writes its own bundle to filesDir/backups/ and
+         deliberately excludes both credentials (SettingsStore.dumpForBackup),
+         so this flag only disables the system's adb/auto backup path. -->
+    <application
+        android:allowBackup="false"
+        android:name=".RadioShedApp"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@android:style/Theme.Material.Light.NoActionBar">
+
+        <!-- Android Auto: declares RadioShed as an Auto-compatible media app.
+             Required for the app to appear in Auto's media picker alongside
+             Spotify / YouTube Music. The descriptor lists which Auto surfaces
+             we participate in (just "media" for now). Without this meta-data
+             Auto won't query our MediaLibraryService no matter how cleanly
+             it's implemented. -->
+        <meta-data
+            android:name="com.google.android.gms.car.application"
+            android:resource="@xml/automotive_app_desc" />
+
+        <activity
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:name=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!-- Audio file association — declares RadioShed as a handler for
+                 audio files so it appears in "Open with" pickers. Both file://
+                 and content:// schemes covered; content:// is what modern
+                 file managers send via MediaStore (Android 11+). The broad
+                 audio/* match catches MP3/FLAC/OGG/M4A/WAV/etc. without
+                 enumerating each MIME type. -->
+            <intent-filter android:label="@string/app_name">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:mimeType="audio/*" />
+                <data android:mimeType="application/ogg" />
+                <data android:mimeType="application/x-flac" />
+            </intent-filter>
+
+            <!-- Google Assistant / Voice Actions: declares this app as a
+                 routable target for "Hey Google, play X on RadioShed".
+                 Without this filter Assistant decides up-front that we're
+                 not a voice-action-capable platform and surfaces "can't
+                 play music on Radio Shed because it's not a supported
+                 platform" — even with a fully-functional MediaLibrarySession
+                 + SEARCH_SUPPORTED browse-root flag underneath. The
+                 filter is a discovery hook; the spoken query lands on
+                 MainActivity.handleSearchIntent() which resolves it via
+                 SearchRepository and starts playback. -->
+            <intent-filter>
+                <action android:name="android.media.action.MEDIA_PLAY_FROM_SEARCH" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+
+            <!-- Some file managers (older ES-style ones especially) pass
+                 the file via path-only without a MIME, relying on extension
+                 sniffing. Declare common audio extensions explicitly so we
+                 still appear in those pickers. -->
+            <intent-filter android:label="@string/app_name">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:host="*" />
+                <data android:pathPattern=".*\\.mp3" />
+                <data android:pathPattern=".*\\.flac" />
+                <data android:pathPattern=".*\\.ogg" />
+                <data android:pathPattern=".*\\.opus" />
+                <data android:pathPattern=".*\\.m4a" />
+                <data android:pathPattern=".*\\.aac" />
+                <data android:pathPattern=".*\\.wav" />
+                <data android:pathPattern=".*\\.wma" />
+            </intent-filter>
+        </activity>
+
+        <!-- Phase 4: media-playback foreground service. Hosts ExoPlayer +
+             MediaLibrarySession; Media3 promotes it to foreground automatically
+             when playback starts and posts a notification with transport
+             controls + lock-screen / Bluetooth metadata.
+
+             This service ALSO acts as the MediaBrowserService that Android
+             Auto queries to build its browse UI. The two intent-filter
+             actions cover both cases: in-app MediaController access uses
+             `androidx.media3.session.MediaSessionService`, while Auto and
+             other system browsers (Bluetooth, Assistant) use
+             `android.media.browse.MediaBrowserService`. -->
+        <service
+            android:name=".audio.RadioShedMediaSessionService"
+            android:exported="true"
+            android:foregroundServiceType="mediaPlayback">
+            <intent-filter>
+                <action android:name="androidx.media3.session.MediaSessionService" />
+                <action android:name="android.media.browse.MediaBrowserService" />
+            </intent-filter>
+        </service>
+
+        <!-- Home-screen widget. Updates are pushed from
+             RadioShedMediaSessionService whenever the now-playing
+             track or play state changes; `updatePeriodMillis="0"`
+             in the info XML disables the system's auto-refresh so
+             we own the cadence. -->
+        <receiver
+            android:name=".widget.NowPlayingWidget"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_now_playing_info" />
+        </receiver>
+
+        <!-- Station-launcher widget. Displays a grid of station tiles;
+             tapping a tile opens the app and starts that station. -->
+        <receiver
+            android:name=".widget.StationLauncherWidget"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_station_launcher_info" />
+        </receiver>
+
+        <activity
+            android:name=".widget.StationLauncherWidgetConfigActivity"
+            android:exported="true"
+            android:theme="@android:style/Theme.Material.Light.NoActionBar">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
+
+        <!-- FileProvider for the Backup &amp; Restore screen's "Share"
+             action. Backups live under filesDir/backups/ which other
+             apps can't read directly; FileProvider hands out content://
+             URIs scoped to the receiving app via FLAG_GRANT_READ_URI_PERMISSION.
+             The authority must match the one we build into the URI in
+             BackupRestoreScreen. -->
+        <provider
+            android:name=".source.RadioShedFileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_provider_paths" />
+        </provider>
+    </application>
+
+</manifest>

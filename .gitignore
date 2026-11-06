@@ -1,0 +1,153 @@
+# =============================================================================
+# RadioShed .gitignore
+# Covers: Gradle / Kotlin / Android / Xcode / iOS / Swift / JetBrains IDEs /
+# macOS / Windows / Linux / common editors / secrets
+# =============================================================================
+
+# ---- Gradle ----
+.gradle/
+build/
+out/
+!gradle/wrapper/gradle-wrapper.jar
+gradle-app.setting
+
+# ---- Local-only working directory (device backups, scratch, etc.) ----
+.local/
+
+# ---- makepkg leftovers from packaging/aur ----
+packaging/aur/src/
+packaging/aur/pkg/
+packaging/aur/*.pkg.tar.*
+packaging/aur/*.AppImage
+
+# ---- Kotlin / Kotlin Native ----
+.kotlin/
+.konan/
+kotlin-js-store/
+*.klib
+
+# ---- Android ----
+local.properties
+*.apk
+*.aab
+*.dex
+*.class
+*.ap_
+captures/
+proguard/
+.cxx/
+.externalNativeBuild/
+release/
+*.keystore
+*.jks
+keystore.properties
+
+# ---- IntelliJ / Android Studio ----
+.idea/
+!.idea/codeStyles/
+!.idea/inspectionProfiles/
+!.idea/icon.png
+*.iml
+*.ipr
+*.iws
+PLAN.md
+.opencode/
+docs/superpowers/
+docs/decisions/
+
+# ---- Xcode / iOS ----
+xcuserdata/
+*.xcuserstate
+DerivedData/
+*.xcscmblueprint
+*.xccheckout
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM
+*.dSYM.zip
+*.xcworkspace/xcuserdata/
+
+# ---- Swift Package Manager ----
+.build/
+Packages/
+.swiftpm/
+Package.resolved
+
+# ---- CocoaPods ----
+Pods/
+Podfile.lock
+
+# ---- Fastlane ----
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/**/*.png
+fastlane/test_output
+
+# ---- macOS ----
+.DS_Store
+.AppleDouble
+.LSOverride
+# macOS Finder custom-folder icon file is literally "Icon" + a carriage
+# return. Match "Icon?" (a trailing char is required) instead of a bare
+# "Icon": with core.ignorecase=true a bare "Icon" also matches our
+# composeApp/src/desktopMain/resources/icon/ directory and hides the
+# Windows installer's radioshed.ico from git.
+Icon?
+._*
+.Spotlight-V100
+.Trashes
+
+# ---- Windows ----
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# ---- Linux ----
+*~
+.directory
+
+# ---- Editors ----
+.vscode/
+.fleet/
+.history/
+*.swp
+*.swo
+
+# ---- Claude Code local state ----
+# Whole `.claude/` is local — settings.local.json, scheduled_tasks.lock,
+# transcripts, agent runtime state. CLAUDE.md at the repo root is the
+# project instructions doc and stays tracked separately.
+.claude/
+# Codex CLI's per-project state directory (sibling to .claude/).
+.codex/
+
+# ---- Logs / temp ----
+*.log
+logs/
+tmp/
+temp/
+*.bak
+*.tmp
+*.orig
+
+# ---- Secrets / local config ----
+.env
+.env.local
+.env.*.local
+secrets.properties
+api-keys.properties
+*.p12
+google-services.json
+GoogleService-Info.plist
+
+# ---- Project-specific ----
+# Crash logs exported from the app during testing
+crashlogs/
+# Backup zips created during testing
+*-backup-*.zip
+.qwen/
+
+# Local release-artifact cache kept by clean_visorcraft_repos
+/_releases/

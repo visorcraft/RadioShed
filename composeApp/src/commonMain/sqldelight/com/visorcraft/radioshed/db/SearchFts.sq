@@ -1,0 +1,8 @@
+-- FTS5 track title index. Populated via [FtsSearch.rebuildTrackIndex] after
+-- scan / on startup; queries use raw SqlDriver MATCH (not SQLDelight queries).
+
+CREATE VIRTUAL TABLE IF NOT EXISTS track_fts USING fts5(
+    track_id UNINDEXED,
+    title,
+    tokenize='unicode61'
+);

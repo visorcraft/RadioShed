@@ -1,0 +1,32 @@
+-- Migration v9 → v10: Add standalone indexes on the timestamp columns
+-- of station_history and skip_log.
+--
+-- The existing composite index station_history_station_idx(station_id,
+-- played_at) is unusable for the windowed Stats queries that filter on
+-- played_at WITHOUT a station_id constraint (selectPlaysPerDayWindow,
+-- selectActivePlayDays, listenedMsBetween, trimHistoryOlderThan, …) —
+-- those degrade to full-table scans as station_history grows. A
+-- standalone index on played_at lets SQLite seek directly into the
+-- relevant time range. Same story for skip_log.skipped_at.
+--
+-- Verifier stub (see AGENTS.md — verifyMigrations is intentionally off
+-- because the verifier cannot see FK targets in the baseline .sq files):
+CREATE TABLE IF NOT EXISTS station_history (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    station_id INTEGER NOT NULL,
+    track_id INTEGER NOT NULL,
+    played_at INTEGER NOT NULL,
+    completed INTEGER NOT NULL DEFAULT 0,
+    listened_ms INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS skip_log (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    track_id INTEGER NOT NULL,
+    station_id INTEGER,
+    skipped_at INTEGER NOT NULL,
+    position_ms INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS station_history_played_at_idx ON station_history(played_at);
+CREATE INDEX IF NOT EXISTS skip_log_skipped_at_idx ON skip_log(skipped_at);

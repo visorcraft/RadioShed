@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Paths that FileProvider is allowed to expose as content:// URIs.
+    Currently we only share backup files from filesDir/backups/. The
+    `name` attribute is the URI segment that will appear after the
+    authority — receiving apps see e.g.
+    content://com.visorcraft.radioshed.fileprovider/backups/foo.json
+-->
+<paths>
+    <files-path
+        name="backups"
+        path="backups/" />
+    <!-- Artwork files exposed so Android Auto, Bluetooth AVRCP cover-art
+         consumers, and the system lock screen can fetch the image
+         directly (their processes can't read from our filesDir).
+         AudioEngineAndroid translates the persisted file:// URI to
+         content://<authority>/artwork/<sha256> when populating
+         MediaMetadata; the host then issues a normal URI fetch over the
+         media-session IPC. Without this entry the host gets only the
+         (host-unreadable) file:// URI and cover art shows as blank. -->
+    <files-path
+        name="artwork"
+        path="artwork/" />
+    <!-- Track sharing: expose the user's primary external storage so
+         the Track Info "Share" action can hand audio files to other
+         apps via content:// URIs. /storage/emulated/0 is the canonical
+         user-storage root on Android; non-primary volumes (SD cards)
+         aren't covered here — Android disallows FileProvider exports
+         from removable storage anyway. -->
+    <external-path
+        name="external"
+        path="." />
+</paths>

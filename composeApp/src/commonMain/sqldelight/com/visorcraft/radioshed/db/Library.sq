@@ -1,0 +1,835 @@
+CREATE TABLE artist (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    sort_name TEXT NOT NULL UNIQUE,
+    musicbrainz_id TEXT,
+    image_uri TEXT,
+    bio TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+
+-- Note: `sort_name TEXT NOT NULL UNIQUE` already creates an implicit index;
+-- no separate artist_sort_idx is required.
+
+-- Alternate display names that all resolve to the same canonical
+-- artist. Two use-cases:
+--   1. Stage name collisions ("Slim Shady" / "Eminem") — the user
+--      adds the second name as an alias and any future tagged
+--      track that lists either name links to the same artist row.
+--   2. Merge target back-reference: when the user merges artist A
+--      into artist B, A's name becomes an alias on B so future
+--      scans of files tagged with A's name resolve to B instead
+--      of recreating A.
+--
+-- alias_sort_name is UNIQUE globally (across the whole table) so
+-- two artists can't both claim "eminem" — the most-recent merge
+-- wins because the prior alias gets deleted on conflict.
+CREATE TABLE artist_alias (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    artist_id INTEGER NOT NULL REFERENCES artist(id) ON DELETE CASCADE,
+    alias_name TEXT NOT NULL,
+    alias_sort_name TEXT NOT NULL UNIQUE,
+    created_at INTEGER NOT NULL
+);
+
+CREATE INDEX artist_alias_artist_id_idx ON artist_alias(artist_id);
+
+CREATE TABLE album (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    artist_id INTEGER REFERENCES artist(id) ON DELETE SET NULL,
+    sort_title TEXT NOT NULL,
+    year INTEGER,
+    musicbrainz_id TEXT,
+    artwork_uri TEXT,
+    track_count INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    UNIQUE (sort_title, artist_id)
+);
+
+CREATE INDEX album_artist_idx ON album(artist_id);
+CREATE INDEX album_sort_idx ON album(sort_title);
+
+CREATE TABLE track (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    path TEXT NOT NULL UNIQUE,
+    file_name TEXT NOT NULL,
+    file_size INTEGER NOT NULL,
+    file_ctime INTEGER NOT NULL,
+    file_mtime INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    album_id INTEGER REFERENCES album(id) ON DELETE SET NULL,
+    track_number INTEGER,
+    disc_number INTEGER,
+    duration_ms INTEGER NOT NULL,
+    bitrate_kbps INTEGER,
+    sample_rate_hz INTEGER,
+    channels INTEGER,
+    format TEXT NOT NULL,
+    replay_gain_track REAL,
+    replay_gain_album REAL,
+    replay_gain_track_peak REAL,
+    bpm REAL,
+    musicbrainz_id TEXT,
+    acoustid_fingerprint TEXT,
+    cue_offset_start_ms INTEGER,
+    cue_offset_end_ms INTEGER,
+    is_available INTEGER NOT NULL DEFAULT 1,
+    added_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+
+CREATE INDEX track_album_idx ON track(album_id);
+CREATE INDEX track_added_idx ON track(added_at);
+CREATE INDEX track_format_idx ON track(format);
+CREATE INDEX track_available_idx ON track(is_available);
+
+-- Track ↔ Folder junction. Many-to-many because a single audio file can be
+-- inside multiple registered folders simultaneously (e.g. user registers
+-- both `/Music` and `/Music/Rock` — every Rock track belongs to both, and
+-- a station scoped to either folder should include it). Replaces the
+-- single `track.folder_id` column from v1, which silently moved tracks
+-- between folders depending on scan order.
+--
+-- ON DELETE CASCADE on both sides: deleting a track or a folder cleanly
+-- removes its junction entries. Deleting a folder NEVER deletes tracks
+-- anymore — they may still be referenced from other registered folders.
+CREATE TABLE track_folder (
+    track_id INTEGER NOT NULL REFERENCES track(id) ON DELETE CASCADE,
+    folder_id INTEGER NOT NULL REFERENCES folder(id) ON DELETE CASCADE,
+    PRIMARY KEY (track_id, folder_id)
+);
+
+CREATE INDEX track_folder_folder_idx ON track_folder(folder_id);
+
+CREATE TABLE track_artist (
+    track_id INTEGER NOT NULL REFERENCES track(id) ON DELETE CASCADE,
+    artist_id INTEGER NOT NULL REFERENCES artist(id) ON DELETE CASCADE,
+    role TEXT NOT NULL DEFAULT 'primary',
+    position INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (track_id, artist_id, role)
+);
+
+CREATE INDEX track_artist_a_idx ON track_artist(artist_id);
+
+CREATE TABLE track_tag (
+    track_id INTEGER NOT NULL REFERENCES track(id) ON DELETE CASCADE,
+    key TEXT NOT NULL,
+    value TEXT NOT NULL,
+    position INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (track_id, key, position)
+);
+
+CREATE INDEX track_tag_kv_idx ON track_tag(key, value);
+
+CREATE TABLE track_personnel (
+    track_id INTEGER NOT NULL REFERENCES track(id) ON DELETE CASCADE,
+    role TEXT NOT NULL,
+    name TEXT NOT NULL,
+    position INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (track_id, role, position)
+);
+
+-- ==== Artist queries ====
+
+-- Race-safe insert: ignores conflict on `sort_name UNIQUE` so concurrent
+-- scanner coroutines can both call this and the second silently no-ops.
+-- Pair with selectArtistIdBySortName to retrieve the resulting id.
+insertArtistOrIgnore:
+INSERT OR IGNORE INTO artist (name, sort_name, musicbrainz_id, image_uri, bio, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?);
+
+selectArtistIdBySortName:
+SELECT id FROM artist WHERE sort_name = ?;
+
+selectArtistById:
+SELECT * FROM artist WHERE id = ?;
+
+-- Bulk artist lookup by id set. Mirrors selectAlbumsByIds /
+-- selectTracksByIds: collapses N serial selectArtistById round-trips
+-- (e.g. LibraryDuplicatesScreen resolves every primary artist in one
+-- query instead of one-per-artist). SQLite IN(?) cap of 999 applies;
+-- the repository wrapper chunks above that.
+selectArtistsByIds:
+SELECT * FROM artist WHERE id IN ?;
+
+selectArtistBySortName:
+SELECT * FROM artist WHERE sort_name = ?;
+
+selectAllArtists:
+SELECT * FROM artist ORDER BY sort_name;
+
+selectAllArtistsPaged:
+SELECT * FROM artist ORDER BY sort_name LIMIT ? OFFSET ?;
+
+selectAllArtistsPagedDesc:
+SELECT * FROM artist ORDER BY sort_name DESC LIMIT ? OFFSET ?;
+
+countArtists:
+SELECT COUNT(*) FROM artist;
+
+updateArtistImage:
+UPDATE artist SET image_uri = ?, updated_at = ? WHERE id = ?;
+
+updateArtistBio:
+UPDATE artist SET bio = ?, updated_at = ? WHERE id = ?;
+
+deleteArtistById:
+DELETE FROM artist WHERE id = ?;
+
+-- Rename an artist. Used by the Edit Artist dialog. sort_name is
+-- re-normalized on the Kotlin side so this single statement updates
+-- both columns atomically.
+updateArtistName:
+UPDATE artist SET name = ?, sort_name = ?, updated_at = ? WHERE id = ?;
+
+-- ==== Artist aliases ====
+
+-- Insert a new alias on an artist. INSERT OR IGNORE so a duplicate
+-- (alias_sort_name UNIQUE collision) doesn't crash the scanner —
+-- the caller can probe selectArtistIdByAliasSortName after to find
+-- out who already owns it.
+insertArtistAlias:
+INSERT OR IGNORE INTO artist_alias (artist_id, alias_name, alias_sort_name, created_at)
+VALUES (?, ?, ?, ?);
+
+-- Aliased-lookup used by Scanner.upsertArtist: when an incoming
+-- track's tag normalizes to a sort_name that matches an alias,
+-- return the canonical artist id so the track links to the right
+-- row instead of creating a new one.
+selectArtistIdByAliasSortName:
+SELECT artist_id FROM artist_alias WHERE alias_sort_name = ?;
+
+-- All aliases for an artist (Edit Artist dialog).
+selectAliasesForArtist:
+SELECT * FROM artist_alias WHERE artist_id = ? ORDER BY alias_name;
+
+deleteArtistAlias:
+DELETE FROM artist_alias WHERE id = ?;
+
+-- ==== Artist merge primitives ====
+--
+-- Used together inside a single transaction by
+-- LibraryRepository.mergeArtists. The order matters:
+--   1. Move track_artist links from source to target (INSERT OR
+--      IGNORE handles the case where the target already has a
+--      link with the same role on a shared track).
+--   2. Delete the source's track_artist rows (the moved ones are
+--      now duplicated on target, originals must go before the
+--      source artist row is removed).
+--   3. Re-assign every album whose artist_id was the source to
+--      the target.
+--   4. Move the source's existing aliases to the target.
+--   5. Record the source's name + sort_name as a new alias on the
+--      target so future scans of tagged files using the source's
+--      old name resolve to the target instead of recreating the
+--      source.
+--   6. Delete the source artist row (cascade-cleans any straggling
+--      track_artist links that didn't survive step 2).
+
+reassignTrackArtistLinks:
+INSERT OR IGNORE INTO track_artist (track_id, artist_id, role, position)
+SELECT track_id, :targetArtistId, role, position
+FROM track_artist WHERE artist_id = :sourceArtistId;
+
+deleteTrackArtistLinksForArtist:
+DELETE FROM track_artist WHERE artist_id = ?;
+
+reassignAlbumsForArtist:
+UPDATE album SET artist_id = :targetArtistId, updated_at = :updatedAt
+WHERE artist_id = :sourceArtistId;
+
+reassignAliasesForArtist:
+UPDATE artist_alias SET artist_id = :targetArtistId
+WHERE artist_id = :sourceArtistId;
+
+-- ==== Album queries ====
+
+-- Race-safe insert: ignores conflict on `(sort_title, artist_id)` UNIQUE so
+-- concurrent scanner coroutines can both call this. Pair with
+-- selectAlbumIdByTitleAndArtist to retrieve the resulting id.
+insertAlbumOrIgnore:
+INSERT OR IGNORE INTO album (title, artist_id, sort_title, year, musicbrainz_id, artwork_uri, track_count, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+selectAlbumIdByTitleAndArtist:
+SELECT id FROM album WHERE sort_title = ? AND artist_id IS ?;
+
+selectAlbumById:
+SELECT * FROM album WHERE id = ?;
+
+-- Bulk album lookup by id set. Used by SearchRepository's DSL year
+-- filter so a "year:>1980" query against 200 candidate tracks does
+-- a single IN(?) lookup rather than 200 serial selectAlbumById
+-- round-trips. SQLite IN(?) cap of 999 applies; callers should
+-- chunk above that, but DSL search is bounded by perLeafLimit.
+selectAlbumsByIds:
+SELECT * FROM album WHERE id IN ?;
+
+selectAlbumByTitleAndArtist:
+SELECT * FROM album WHERE sort_title = ? AND artist_id IS ?;
+
+selectAlbumsByArtist:
+SELECT * FROM album WHERE artist_id = ? ORDER BY year, sort_title;
+
+selectAllAlbums:
+SELECT * FROM album ORDER BY sort_title;
+
+selectAllAlbumsPaged:
+SELECT * FROM album ORDER BY sort_title LIMIT ? OFFSET ?;
+
+selectAllAlbumsPagedDesc:
+SELECT * FROM album ORDER BY sort_title DESC LIMIT ? OFFSET ?;
+
+selectAllAlbumsPagedByYearAsc:
+SELECT * FROM album ORDER BY year ASC, sort_title ASC LIMIT ? OFFSET ?;
+
+selectAllAlbumsPagedByYearDesc:
+SELECT * FROM album ORDER BY year DESC, sort_title ASC LIMIT ? OFFSET ?;
+
+-- Album IDs whose `year` falls within [minYear, maxYear] (inclusive).
+-- Used by the "Generate decade stations" bulk action to seed
+-- `AlbumSelector` rules per decade. Albums with NULL year are
+-- excluded — a decade station shouldn't sweep up unspecified-year
+-- albums that happen to slot incorrectly.
+selectAlbumIdsByYearRange:
+SELECT id FROM album WHERE year IS NOT NULL AND year >= ? AND year <= ?;
+
+countAlbums:
+SELECT COUNT(*) FROM album;
+
+updateAlbumArtwork:
+UPDATE album SET artwork_uri = ?, updated_at = ? WHERE id = ?;
+
+-- Clear every album's artwork pointer in one pass. Used by the
+-- "Clear artwork cache" action — paired with deleting the on-disk
+-- blobs and the artwork_cache table, this is the reset path for a
+-- corrupted / oversized cache. The next CoverArt sweep refetches.
+clearAllAlbumArtwork:
+UPDATE album SET artwork_uri = NULL, updated_at = ?;
+
+-- First-seen-wins variant for the scanner: only write artwork if the
+-- album row has none yet. Avoids the "scrolling library flickers as
+-- different tracks of the same album report different embedded art"
+-- bug — the scanner used to overwrite album art on every track scan
+-- regardless of order, making the visible art depend on enumeration
+-- order rather than first-discovered.
+updateAlbumArtworkIfMissing:
+UPDATE album SET artwork_uri = ?, updated_at = ?
+WHERE id = ?
+  AND (artwork_uri IS NULL OR TRIM(artwork_uri) = '');
+
+-- Albums whose embedded scan didn't find art but which DO carry a
+-- MusicBrainz Release ID (extracted from the file's tags). These are
+-- the candidates for Cover Art Archive auto-fetch — we already know the
+-- exact release, so no MusicBrainz search step is needed.
+selectAlbumsMissingArtwork:
+SELECT id, musicbrainz_id FROM album
+WHERE musicbrainz_id IS NOT NULL
+  AND TRIM(musicbrainz_id) != ''
+  AND (artwork_uri IS NULL OR TRIM(artwork_uri) = '')
+ORDER BY id;
+
+countAlbumsMissingArtwork:
+SELECT COUNT(*) FROM album
+WHERE musicbrainz_id IS NOT NULL
+  AND TRIM(musicbrainz_id) != ''
+  AND (artwork_uri IS NULL OR TRIM(artwork_uri) = '');
+
+updateAlbumTrackCount:
+UPDATE album SET track_count = ?, updated_at = ? WHERE id = ?;
+
+deleteAlbumById:
+DELETE FROM album WHERE id = ?;
+
+-- ==== Track queries ====
+
+-- Real upsert: race-safe AND rescan-aware. On first insert, every column is
+-- written. On rescan (path UNIQUE conflict), every metadata column is
+-- refreshed from `excluded.*` so re-tagged files reflect their new state.
+-- We deliberately preserve `added_at` (when first scanned) — only `updated_at`
+-- moves forward. Re-availability is implicit: a track that gets re-scanned
+-- is by definition available, so is_available resets to 1.
+upsertTrack:
+INSERT INTO track (
+    path, file_name, file_size, file_ctime, file_mtime,
+    title, album_id, track_number, disc_number, duration_ms,
+    bitrate_kbps, sample_rate_hz, channels, format,
+    replay_gain_track, replay_gain_album, replay_gain_track_peak,
+    bpm, musicbrainz_id, acoustid_fingerprint,
+    cue_offset_start_ms, cue_offset_end_ms,
+    added_at, updated_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT(path) DO UPDATE SET
+    file_name = excluded.file_name,
+    file_size = excluded.file_size,
+    file_ctime = excluded.file_ctime,
+    file_mtime = excluded.file_mtime,
+    title = excluded.title,
+    album_id = excluded.album_id,
+    track_number = excluded.track_number,
+    disc_number = excluded.disc_number,
+    duration_ms = excluded.duration_ms,
+    bitrate_kbps = excluded.bitrate_kbps,
+    sample_rate_hz = excluded.sample_rate_hz,
+    channels = excluded.channels,
+    format = excluded.format,
+    replay_gain_track = excluded.replay_gain_track,
+    replay_gain_album = excluded.replay_gain_album,
+    replay_gain_track_peak = excluded.replay_gain_track_peak,
+    bpm = excluded.bpm,
+    musicbrainz_id = excluded.musicbrainz_id,
+    acoustid_fingerprint = excluded.acoustid_fingerprint,
+    cue_offset_start_ms = excluded.cue_offset_start_ms,
+    cue_offset_end_ms = excluded.cue_offset_end_ms,
+    is_available = 1,
+    updated_at = excluded.updated_at;
+
+selectTrackIdByPath:
+SELECT id FROM track WHERE path = ?;
+
+selectTrackById:
+SELECT * FROM track WHERE id = ?;
+
+-- Bulk track lookup by id set. Replaces N serial selectTrackById
+-- calls in SearchRepository.searchTracksDsl (per-id round-trips
+-- dominated query time on >50-result DSL searches).
+-- Note: SQLite has a default IN(?) parameter cap of 999; callers
+-- should chunk inputs above that, but DSL searches are bounded by
+-- perLeafLimit (typically <=200) so a single call is sufficient.
+selectTracksByIds:
+SELECT * FROM track WHERE id IN ?;
+
+selectTrackByPath:
+SELECT * FROM track WHERE path = ?;
+
+-- Bulk exact-path lookup by id set. Backup restore resolves a bundle's
+-- trackPaths in one query instead of one selectTrackByPath per row; paths
+-- that don't match exactly fall back to selectTracksByPathSuffix in
+-- LibraryRepository.getTrackByPathOrSuffix. SQLite IN(?) cap of 999 applies;
+-- the repository wrapper chunks above that.
+selectTracksByPaths:
+SELECT * FROM track WHERE path IN ?;
+
+selectTracksByFolder:
+SELECT track.* FROM track
+JOIN track_folder tf ON tf.track_id = track.id
+WHERE tf.folder_id = ?
+ORDER BY track.path;
+
+-- Multi-folder selector (used by SourceRule.FolderSelector). Returns each
+-- track at most once even if it belongs to several of the requested
+-- folders.
+selectTracksByFolderIds:
+SELECT DISTINCT track.* FROM track
+JOIN track_folder tf ON tf.track_id = track.id
+WHERE tf.folder_id IN ?
+ORDER BY track.path;
+
+selectTracksByAlbum:
+SELECT * FROM track WHERE album_id = ? ORDER BY disc_number, track_number;
+
+selectTracksByAlbumPaged:
+SELECT * FROM track WHERE album_id = ? ORDER BY disc_number, track_number LIMIT ? OFFSET ?;
+
+selectTracksByAlbumIds:
+SELECT * FROM track WHERE album_id IN ? AND is_available = 1
+ORDER BY disc_number, track_number;
+
+selectAvailableTracks:
+SELECT * FROM track WHERE is_available = 1 ORDER BY title LIMIT ? OFFSET ?;
+
+selectAvailableTracksPaged:
+SELECT * FROM track WHERE is_available = 1 ORDER BY title COLLATE NOCASE LIMIT ? OFFSET ?;
+
+selectAvailableTracksDescPaged:
+SELECT * FROM track WHERE is_available = 1 ORDER BY title COLLATE NOCASE DESC LIMIT ? OFFSET ?;
+
+selectAvailableTracksByCtimePaged:
+SELECT * FROM track WHERE is_available = 1 ORDER BY file_ctime DESC LIMIT ? OFFSET ?;
+
+selectAvailableTracksByDurationPaged:
+SELECT * FROM track WHERE is_available = 1 ORDER BY duration_ms LIMIT ? OFFSET ?;
+
+selectAvailableTracksByPlayCountPaged:
+SELECT track.* FROM track
+JOIN station_history sh ON sh.track_id = track.id
+WHERE track.is_available = 1
+GROUP BY track.id
+ORDER BY COUNT(*) DESC, track.title COLLATE NOCASE LIMIT ? OFFSET ?;
+
+selectAvailableTracksByPlayCountFilteredPaged:
+SELECT track.* FROM track
+JOIN station_history sh ON sh.track_id = track.id
+WHERE track.is_available = 1
+  AND (track.title LIKE ? ESCAPE '\' OR track.file_name LIKE ? ESCAPE '\')
+GROUP BY track.id
+ORDER BY COUNT(*) DESC, track.title COLLATE NOCASE LIMIT ? OFFSET ?;
+
+selectAvailableTracksByRatingPaged:
+SELECT track.* FROM track
+JOIN rating r ON r.track_id = track.id
+WHERE track.is_available = 1
+ORDER BY r.stars DESC, track.title COLLATE NOCASE LIMIT ? OFFSET ?;
+
+selectAvailableTracksByRatingFilteredPaged:
+SELECT track.* FROM track
+JOIN rating r ON r.track_id = track.id
+WHERE track.is_available = 1
+  AND (track.title LIKE ? ESCAPE '\' OR track.file_name LIKE ? ESCAPE '\')
+ORDER BY r.stars DESC, track.title COLLATE NOCASE LIMIT ? OFFSET ?;
+
+selectAvailableTracksFilteredPaged:
+SELECT * FROM track
+WHERE is_available = 1
+  AND (title LIKE ? ESCAPE '\' OR file_name LIKE ? ESCAPE '\')
+ORDER BY title COLLATE NOCASE LIMIT ? OFFSET ?;
+
+selectAvailableTracksFilteredDescPaged:
+SELECT * FROM track
+WHERE is_available = 1
+  AND (title LIKE ? ESCAPE '\' OR file_name LIKE ? ESCAPE '\')
+ORDER BY title COLLATE NOCASE DESC LIMIT ? OFFSET ?;
+
+selectAvailableTrackIds:
+SELECT id FROM track WHERE is_available = 1 ORDER BY title COLLATE NOCASE;
+
+selectAvailableTrackIdsFiltered:
+SELECT id FROM track
+WHERE is_available = 1
+  AND (title LIKE ? ESCAPE '\' OR file_name LIKE ? ESCAPE '\')
+ORDER BY title COLLATE NOCASE;
+
+-- Path-suffix lookup for backup restore. Falls back to "any track
+-- whose path ends with this filename" so users who reorganized
+-- their music folder between export and import still recover
+-- ratings/likes/playlists. The repo layer prefers the longest
+-- match (most specific) when multiple tracks share a filename.
+selectTracksByPathSuffix:
+SELECT * FROM track WHERE path LIKE ? ESCAPE '\' LIMIT 50;
+
+selectNewestTracks:
+SELECT * FROM track WHERE is_available = 1 ORDER BY file_ctime DESC LIMIT ?;
+
+-- Single random available track. RANDOM() in SQLite is computed per-
+-- row, so ORDER BY RANDOM() LIMIT 1 is the canonical "give me one
+-- arbitrary row" pattern. Cheap on a library of any realistic size
+-- because LIMIT 1 short-circuits as soon as the first row is picked.
+-- Used by the Stations Home "Play random track" / "Surprise me"
+-- shortcut to seed playback without committing to a station.
+selectRandomTrack:
+SELECT * FROM track WHERE is_available = 1 ORDER BY RANDOM() LIMIT 1;
+
+-- N random available tracks. Used by Stations Home → "Shuffle 25"
+-- (long-press on the Surprise icon). LIMIT bounds the cost; on a
+-- 100k-track library SQLite still scans the index but the
+-- short-circuit at LIMIT keeps wall-clock under a second.
+selectRandomTracks:
+SELECT * FROM track WHERE is_available = 1 ORDER BY RANDOM() LIMIT ?;
+
+selectTracksByFormat:
+SELECT * FROM track WHERE format = ? AND is_available = 1 ORDER BY title;
+
+-- LIKE-based search. Caller must already have escaped % and _ and
+-- wrapped the user's query as `%escaped%`. Slow for huge libraries
+-- (full table scan); FTS5 was attempted but SQLDelight 2.1's parser
+-- chokes on FTS5 MATCH and on virtual tables with multi-statement
+-- compound blocks. Revisit when SQLDelight 3.x or a successor handles
+-- FTS5 cleanly.
+searchTracksByTitleLike:
+SELECT * FROM track
+WHERE is_available = 1 AND title LIKE ? ESCAPE '\'
+ORDER BY title COLLATE NOCASE
+LIMIT ?;
+
+searchArtistsByNameLike:
+SELECT * FROM artist
+WHERE name LIKE ? ESCAPE '\'
+ORDER BY sort_name
+LIMIT ?;
+
+searchAlbumsByTitleLike:
+SELECT * FROM album
+WHERE title LIKE ? ESCAPE '\'
+ORDER BY sort_title
+LIMIT ?;
+
+countTracks:
+SELECT COUNT(*) FROM track;
+
+-- Total library runtime in milliseconds across every indexed track.
+-- Surfaced by Settings → About so the user has a sense of "how much
+-- music do I actually have?". IFNULL keeps the cold-start case
+-- (zero rows) returning 0 rather than NULL.
+totalLibraryDurationMs:
+SELECT IFNULL(SUM(duration_ms), 0) FROM track;
+
+countTracksInFolder:
+SELECT COUNT(DISTINCT track_id) FROM track_folder WHERE folder_id = ?;
+
+setTrackAvailable:
+UPDATE track SET is_available = ?, updated_at = ? WHERE id = ?;
+
+setTracksAvailableByFolder:
+UPDATE track SET is_available = ?, updated_at = ?
+WHERE id IN (SELECT track_id FROM track_folder WHERE folder_id = ?);
+
+-- Mark every track in a folder as unavailable EXCEPT those whose path
+-- is in the supplied set. Used by Scanner after a re-scan to flag
+-- files that have been deleted from disk since the last scan — without
+-- this step, deleted files keep showing up in stations and the user
+-- gets "could not load" errors mid-playback. The is_available flag
+-- preserves ratings, play counts, and playlist memberships in case
+-- the file later reappears at the same path.
+markFolderTracksUnavailableExcept:
+UPDATE track SET is_available = 0, updated_at = ?
+WHERE id IN (
+    SELECT track_id FROM track_folder WHERE folder_id = :folderId
+)
+AND path NOT IN :keptPaths;
+
+updateTrackReplayGain:
+UPDATE track SET replay_gain_track = ?, replay_gain_album = ?, replay_gain_track_peak = ?, updated_at = ? WHERE id = ?;
+
+-- Bulk path-prefix remap. Used by the "Move folder" action in
+-- Library Settings: when a NAS host changes IP or a folder is
+-- relocated, every track row whose path starts with the old prefix
+-- gets the new prefix substituted. Preserves track ids (and
+-- therefore ratings, play counts, station-pin membership).
+--
+-- Implementation: splice the new prefix in front of everything AFTER
+-- the old-prefix characters via `substr(path, :oldPrefixLengthPlus1)`.
+-- An earlier version used `replace(path, oldPrefix, newPrefix)`,
+-- which is wrong: SQLite's `replace` swaps EVERY non-overlapping
+-- occurrence of the search string, so a path like
+-- `\\server\music\music archive\foo.flac` (where the old prefix
+-- `\\server\music` appears both at the head AND inside a subdir
+-- name) would be doubly-rewritten and silently corrupt. The
+-- substr-based form only touches the head.
+--
+-- :oldPrefixLengthPlus1 is precomputed Kotlin-side (`oldPrefix.length
+-- + 1`) so SQLDelight's parameter-type inference doesn't conflate
+-- the same name across `length(:p)` (Long context) and `LIKE :p`
+-- (String context). Three distinct named params, three distinct
+-- types, no ambiguity.
+remapTrackPathPrefix:
+UPDATE track
+SET path = :newPrefix || substr(path, CAST(:oldPrefixLengthPlus1 AS INTEGER)),
+    updated_at = :updatedAt
+WHERE path LIKE :oldPrefixLike;
+
+-- Companion read-only count so the UI can show "this will move N
+-- tracks" before the user commits the destructive prefix swap.
+countTracksWithPathPrefix:
+SELECT COUNT(*) FROM track WHERE path LIKE :prefixLike;
+
+deleteTrackById:
+DELETE FROM track WHERE id = ?;
+
+-- Removes the folder's claim on its tracks. Tracks themselves stay (they
+-- may still be referenced from other registered folders); orphan-cleanup
+-- of tracks with no remaining track_folder rows is a separate optional
+-- maintenance pass. ON DELETE CASCADE on track_folder.folder_id makes
+-- this query a no-op when called as part of folder deletion — it's
+-- here for explicit "remove from this folder" use cases.
+deleteTracksByFolder:
+DELETE FROM track_folder WHERE folder_id = ?;
+
+-- Junction-table writes. Called by the scanner once per discovered track
+-- per folder being scanned; INSERT OR IGNORE so re-scans don't error on
+-- the existing PK.
+addTrackToFolder:
+INSERT OR IGNORE INTO track_folder (track_id, folder_id) VALUES (?, ?);
+
+removeTrackFromFolder:
+DELETE FROM track_folder WHERE track_id = ? AND folder_id = ?;
+
+-- How many folders does this track currently live in? Useful for orphan
+-- cleanup decisions.
+countFoldersForTrack:
+SELECT COUNT(*) FROM track_folder WHERE track_id = ?;
+
+-- ==== Track-artist junction ====
+
+linkTrackArtist:
+INSERT OR IGNORE INTO track_artist (track_id, artist_id, role, position) VALUES (?, ?, ?, ?);
+
+selectArtistsByTrack:
+SELECT artist.* FROM artist
+JOIN track_artist ta ON ta.artist_id = artist.id
+WHERE ta.track_id = ?
+ORDER BY ta.role, ta.position;
+
+selectArtistsByTrackIds:
+SELECT artist.*, ta.track_id FROM artist
+JOIN track_artist ta ON ta.artist_id = artist.id
+WHERE ta.track_id IN ?
+ORDER BY ta.track_id, ta.role, ta.position;
+
+-- Batch lookup of primary artist id per track. Used by Smart Shuffle's
+-- artist-spacing filter — we need (trackId → artistId) for every track
+-- in the candidate set without paying N round-trips. Returns one row
+-- per track that has a 'primary' artist link; tracks without a primary
+-- link don't appear in the result.
+selectPrimaryArtistForTracks:
+SELECT track_id, artist_id FROM track_artist
+WHERE role = 'primary' AND track_id IN ?;
+
+-- Same as above but joins through to artist.name so the caller gets
+-- name resolution in a single query. Used by .m3u export and
+-- anywhere else we need (trackId → artistName) without a second
+-- batch fetch on artist ids.
+selectPrimaryArtistNamesForTracks:
+SELECT ta.track_id, a.name FROM track_artist ta
+JOIN artist a ON a.id = ta.artist_id
+WHERE ta.role = 'primary' AND ta.track_id IN ?;
+
+selectTracksByArtist:
+SELECT track.* FROM track
+JOIN track_artist ta ON ta.track_id = track.id
+WHERE ta.artist_id = ? AND track.is_available = 1
+ORDER BY track.title;
+
+selectTracksByArtistPaged:
+SELECT track.* FROM track
+JOIN track_artist ta ON ta.track_id = track.id
+WHERE ta.artist_id = ? AND track.is_available = 1
+ORDER BY track.title LIMIT ? OFFSET ?;
+
+selectTracksByArtistIds:
+SELECT DISTINCT track.* FROM track
+JOIN track_artist ta ON ta.track_id = track.id
+WHERE ta.artist_id IN ? AND track.is_available = 1
+ORDER BY track.title;
+
+selectTracksByArtistNames:
+SELECT DISTINCT track.* FROM track
+JOIN track_artist ta ON ta.track_id = track.id
+JOIN artist a ON a.id = ta.artist_id
+WHERE a.sort_name IN ? AND track.is_available = 1
+ORDER BY track.title;
+
+unlinkAllArtistsFromTrack:
+DELETE FROM track_artist WHERE track_id = ?;
+
+-- ==== Track tags ====
+
+insertTrackTag:
+INSERT INTO track_tag (track_id, key, value, position) VALUES (?, ?, ?, ?);
+
+selectTagsByTrack:
+SELECT * FROM track_tag WHERE track_id = ? ORDER BY key, position;
+
+selectTagsByTrackIds:
+SELECT * FROM track_tag WHERE track_id IN ? ORDER BY key, position;
+
+-- Update every track_tag row whose key = 'GENRE' and whose lower-cased
+-- value matches the supplied lower-cased target, replacing it with a
+-- canonical-cased value. Used by the one-time genre-case backfill —
+-- consolidates "Rock", "rock", "ROCK" into a single canonical entry
+-- (typically Title Case) so the Genres tab in Library Browser doesn't
+-- show three near-duplicate tiles.
+canonicalizeGenreCase:
+UPDATE track_tag SET value = ?
+WHERE key = 'GENRE' AND LOWER(value) = ? AND value != ?;
+
+selectTracksByTag:
+SELECT track.* FROM track
+JOIN track_tag tt ON tt.track_id = track.id
+WHERE tt.key = ? AND tt.value = ? AND track.is_available = 1;
+
+selectTracksByTagPaged:
+SELECT track.* FROM track
+JOIN track_tag tt ON tt.track_id = track.id
+WHERE tt.key = ? AND tt.value = ? AND track.is_available = 1
+ORDER BY track.title LIMIT ? OFFSET ?;
+
+-- Case-insensitive variant for user-driven station rules where the
+-- user's typed values almost never match the original tag casing
+-- (e.g., user types "blackpink" and the file's ALBUM_ARTIST tag
+-- stores "BLACKPINK"). The exact-match form above stays in place
+-- for callers that need it (genre auto-station consolidation
+-- already canonicalizes GENRE to title case on scan).
+--
+-- Performance note: `LOWER(tt.value)` is NOT sargable against the
+-- `(key, value)` index defined on track_tag — SQLite will use the
+-- index for the `tt.key = ?` predicate, then scan all rows with
+-- that key applying `LOWER()` per row. Acceptable today because:
+-- (a) GENRE is already canonical-cased at scan so users hit the
+-- index-friendly exact-match path for the most populous key; (b)
+-- ALBUM_ARTIST / ARTIST route to the artist table via
+-- `selectTracksByArtistSortName` (artist.sort_name is pre-
+-- lowercased, indexed, and sargable); (c) the keys that actually
+-- hit this query (MOOD, LABEL, COMPOSER, etc.) typically have
+-- modest cardinality. A proper fix would be an expression index
+-- like `CREATE INDEX track_tag_kv_ci_idx ON track_tag(key,
+-- LOWER(value))`; SQLite 3.9+ supports it (we ship 3.45 on
+-- Android via requery, well past the cutoff). Tracked for a
+-- future Phase 18 SPEC item rather than added inline because
+-- migrations are paused pending the verifier-friendly schema
+-- restate (see CLAUDE.md).
+selectTracksByTagCi:
+SELECT track.* FROM track
+JOIN track_tag tt ON tt.track_id = track.id
+WHERE tt.key = ? AND LOWER(tt.value) = LOWER(?) AND track.is_available = 1;
+
+selectTracksByTagValues:
+SELECT DISTINCT track.* FROM track
+JOIN track_tag tt ON tt.track_id = track.id
+WHERE tt.key = ? AND LOWER(tt.value) IN ? AND track.is_available = 1;
+
+-- Case-insensitive tracks-by-artist-name. Joins through track_artist
+-- with any role, since the user typing "Blackpink" as an ALBUM_ARTIST
+-- value expects to see every track tagged with that artist regardless
+-- of whether their library splits primary-vs-album-artist links.
+-- artist.sort_name is already lowercase-normalized at scan time
+-- (Scanner.normalizeForSort), so we lowercase the input and compare
+-- against sort_name. DISTINCT collapses the (rare) case where a
+-- track has both "primary" and "album_artist" links to the same
+-- artist row.
+selectTracksByArtistSortName:
+SELECT DISTINCT track.* FROM track
+JOIN track_artist ta ON ta.track_id = track.id
+JOIN artist a ON a.id = ta.artist_id
+WHERE a.sort_name = ? AND track.is_available = 1;
+
+distinctTagValues:
+SELECT DISTINCT value FROM track_tag WHERE key = ? ORDER BY value;
+
+countTagValues:
+SELECT COUNT(DISTINCT value) FROM track_tag WHERE key = ?;
+
+distinctTagValuesPaged:
+SELECT DISTINCT value FROM track_tag WHERE key = ? ORDER BY value LIMIT ? OFFSET ?;
+
+distinctTagValuesPagedDesc:
+SELECT DISTINCT value FROM track_tag WHERE key = ? ORDER BY value DESC LIMIT ? OFFSET ?;
+
+-- Bulk (value → COUNT(track)) for a tag key, restricted to available
+-- tracks. Replaces an N+1 pattern in the genre auto-station generator
+-- where each `tracksByTag(GENRE, v).size` round-tripped a full row
+-- fetch just to read .size.
+selectTagValueTrackCounts:
+SELECT tt.value AS value, COUNT(*) AS track_count
+FROM track_tag tt
+JOIN track ON track.id = tt.track_id
+WHERE tt.key = ? AND track.is_available = 1
+GROUP BY tt.value
+ORDER BY track_count DESC;
+
+deleteAllTagsForTrack:
+DELETE FROM track_tag WHERE track_id = ?;
+
+-- ==== Track personnel ====
+
+insertTrackPersonnel:
+INSERT INTO track_personnel (track_id, role, name, position) VALUES (?, ?, ?, ?);
+
+selectPersonnelByTrack:
+SELECT * FROM track_personnel WHERE track_id = ? ORDER BY role, position;
+
+deleteAllPersonnelForTrack:
+DELETE FROM track_personnel WHERE track_id = ?;
+

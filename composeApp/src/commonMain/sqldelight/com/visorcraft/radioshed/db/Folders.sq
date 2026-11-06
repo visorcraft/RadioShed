@@ -1,0 +1,65 @@
+CREATE TABLE folder (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    display_name TEXT NOT NULL,
+    uri TEXT NOT NULL UNIQUE,
+    recursive INTEGER NOT NULL DEFAULT 1,
+    include_globs TEXT,
+    exclude_globs TEXT,
+    last_scanned_at INTEGER,
+    track_count INTEGER NOT NULL DEFAULT 0,
+    is_available INTEGER NOT NULL DEFAULT 1,
+    -- Optional ARGB color tag for visual organization in the folder
+    -- list. NULL = no tag (default styling).
+    accent_color INTEGER,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+
+-- Note: `uri TEXT NOT NULL UNIQUE` already creates an implicit index;
+-- no separate folder_uri_idx is required.
+
+insert:
+INSERT INTO folder (display_name, uri, recursive, include_globs, exclude_globs, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?)
+RETURNING id;
+
+selectAll:
+SELECT * FROM folder ORDER BY display_name;
+
+selectById:
+SELECT * FROM folder WHERE id = ?;
+
+selectByUri:
+SELECT * FROM folder WHERE uri = ?;
+
+updateScanResult:
+UPDATE folder SET last_scanned_at = ?, track_count = ?, updated_at = ? WHERE id = ?;
+
+setAvailable:
+UPDATE folder SET is_available = ?, updated_at = ? WHERE id = ?;
+
+setRecursive:
+UPDATE folder SET recursive = ?, updated_at = ? WHERE id = ?;
+
+setGlobs:
+UPDATE folder SET include_globs = ?, exclude_globs = ?, updated_at = ? WHERE id = ?;
+
+renameDisplayName:
+UPDATE folder SET display_name = ?, updated_at = ? WHERE id = ?;
+
+setAccentColor:
+UPDATE folder SET accent_color = ?, updated_at = ? WHERE id = ?;
+
+-- Repoint a folder at a new URI prefix. Used by the "Move folder"
+-- action when the user's network share / drive letter / mount point
+-- changes underneath them — paired with the track-table remap in
+-- Library.sq so existing rows keep their ids, ratings, play counts,
+-- and station-pin membership while pointing at the new location.
+updateUri:
+UPDATE folder SET uri = ?, updated_at = ? WHERE id = ?;
+
+deleteById:
+DELETE FROM folder WHERE id = ?;
+
+count:
+SELECT COUNT(*) FROM folder;

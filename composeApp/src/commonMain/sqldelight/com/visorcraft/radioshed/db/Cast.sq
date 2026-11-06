@@ -1,0 +1,52 @@
+CREATE TABLE cast_target (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    target_type TEXT NOT NULL,
+    name TEXT NOT NULL,
+    address TEXT NOT NULL UNIQUE,
+    capabilities_json TEXT NOT NULL DEFAULT '{}',
+    last_seen_at INTEGER NOT NULL,
+    is_paired INTEGER NOT NULL DEFAULT 0,
+    auto_cast INTEGER NOT NULL DEFAULT 0,
+    transcoding_bitrate_kbps INTEGER,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+
+CREATE INDEX cast_target_type_idx ON cast_target(target_type);
+CREATE INDEX cast_target_seen_idx ON cast_target(last_seen_at);
+
+upsertCastTarget:
+INSERT INTO cast_target (target_type, name, address, capabilities_json, last_seen_at, is_paired, auto_cast, transcoding_bitrate_kbps, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT(address) DO UPDATE SET
+    name = excluded.name,
+    capabilities_json = excluded.capabilities_json,
+    last_seen_at = excluded.last_seen_at,
+    updated_at = excluded.updated_at;
+
+selectCastTargetById:
+SELECT * FROM cast_target WHERE id = ?;
+
+selectCastTargetByAddress:
+SELECT * FROM cast_target WHERE address = ?;
+
+selectAllCastTargets:
+SELECT * FROM cast_target ORDER BY name;
+
+selectPairedCastTargets:
+SELECT * FROM cast_target WHERE is_paired = 1 ORDER BY name;
+
+selectAutoCastTargets:
+SELECT * FROM cast_target WHERE auto_cast = 1;
+
+setCastTargetPaired:
+UPDATE cast_target SET is_paired = ?, updated_at = ? WHERE id = ?;
+
+setCastTargetAutoCast:
+UPDATE cast_target SET auto_cast = ?, updated_at = ? WHERE id = ?;
+
+setCastTargetTranscodingBitrate:
+UPDATE cast_target SET transcoding_bitrate_kbps = ?, updated_at = ? WHERE id = ?;
+
+deleteCastTarget:
+DELETE FROM cast_target WHERE id = ?;

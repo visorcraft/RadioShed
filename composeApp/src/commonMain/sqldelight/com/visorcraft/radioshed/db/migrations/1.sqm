@@ -1,0 +1,41 @@
+-- Migration v1 → v2: track ↔ folder becomes many-to-many via track_folder.
+--
+-- Verifier schema (SQLDelight verifyMigrations): v1 tables referenced below.
+CREATE TABLE IF NOT EXISTS folder (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT
+);
+CREATE TABLE IF NOT EXISTS track (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    folder_id INTEGER NOT NULL REFERENCES folder(id)
+);
+CREATE INDEX IF NOT EXISTS track_folder_idx ON track(folder_id);
+
+-- Why: in v1 each track had a single folder_id NOT NULL. When the user
+-- registered overlapping folders (e.g. both /Music and /Music/Rock), the
+-- last scan won — Rock tracks would silently switch to belonging to
+-- whichever of the two was scanned most recently. This broke stations
+-- scoped to the more-specific folder. The v2 model stores membership in
+-- a junction table so a track can belong to N folders simultaneously.
+
+-- 1. Junction table (matches the post-migration schema in Library.sq).
+CREATE TABLE track_folder (
+    track_id INTEGER NOT NULL REFERENCES track(id) ON DELETE CASCADE,
+    folder_id INTEGER NOT NULL REFERENCES folder(id) ON DELETE CASCADE,
+    PRIMARY KEY (track_id, folder_id)
+);
+
+CREATE INDEX track_folder_folder_idx ON track_folder(folder_id);
+
+-- 2. Preserve existing (track → folder) relationships. INSERT OR IGNORE
+-- guards against any stray duplicates that might have crept in via an
+-- inconsistent v1 state (shouldn't happen, but cheap insurance).
+INSERT OR IGNORE INTO track_folder (track_id, folder_id)
+SELECT id, folder_id FROM track;
+
+-- 3. Drop the now-redundant single-folder column + its index. ALTER TABLE
+-- DROP COLUMN requires SQLite ≥ 3.35; we ship a bundled SQLite (~3.45) on
+-- Android via requery, and iOS 16+ system SQLite is recent enough, so
+-- this works on every supported target.
+DROP INDEX IF EXISTS track_folder_idx;
+
+ALTER TABLE track DROP COLUMN folder_id;

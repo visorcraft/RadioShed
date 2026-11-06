@@ -1,0 +1,31 @@
+-- Migration v5 → v6: backfill station_pinned_track for older DBs.
+--
+CREATE TABLE IF NOT EXISTS station (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT
+);
+CREATE TABLE IF NOT EXISTS track (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT
+);
+
+-- The station_pinned_track table was added to Stations.sq's baseline
+-- when "Pinned tracks per station" landed (#180), but no migration
+-- was written at the same time. Users whose DB was created before
+-- that schema change therefore never got the table — every query
+-- that joins station_pinned_track (selectPinnedTracksForStation,
+-- countPinnedTracksForStation, etc.) fails at runtime with "no such
+-- table". The crash surfaces every time the user taps Play on a
+-- station because StationPlayback.playStation calls
+-- stationRepo.pinnedTracks before building the candidate pool.
+--
+-- IF NOT EXISTS so this is a clean no-op on fresh installs (which
+-- get the table from the Stations.sq baseline) and on installs
+-- that somehow already have the table from prior reinstalls.
+
+CREATE TABLE IF NOT EXISTS station_pinned_track (
+    station_id INTEGER NOT NULL REFERENCES station(id) ON DELETE CASCADE,
+    track_id INTEGER NOT NULL REFERENCES track(id) ON DELETE CASCADE,
+    pinned_at INTEGER NOT NULL,
+    PRIMARY KEY (station_id, track_id)
+);
+
+CREATE INDEX IF NOT EXISTS station_pinned_station_idx ON station_pinned_track(station_id);

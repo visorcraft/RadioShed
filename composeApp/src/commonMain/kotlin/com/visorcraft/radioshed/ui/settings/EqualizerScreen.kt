@@ -1,0 +1,828 @@
+package com.visorcraft.radioshed.ui.settings
+
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import com.visorcraft.radioshed.audio.EqPreset
+import com.visorcraft.radioshed.audio.EqualizerController
+import com.visorcraft.radioshed.data.CustomEqPreset
+import com.visorcraft.radioshed.data.SettingsStore
+import com.visorcraft.radioshed.ui.util.formatFixed
+import kotlinx.coroutines.launch
+import org.koin.compose.koinInject
+
+/**
+ * Equalizer screen — toggle, preset row, vertical band sliders.
+ *
+ * Sliders are vertical-style (rotated horizontal Slider) so the EQ
+ * reads like classic mixer-board hardware. The controller's
+ * [isAvailable] StateFlow gates the UI: until ExoPlayer reports an
+ * audio session id, sliders are present but show a "Start playback to
+ * activate" hint — sliders themselves still mutate state, just have
+ * no audible effect yet.
+ */
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@Composable
+fun EqualizerScreen(
+    onBack: () -> Unit,
+    eq: EqualizerController = koinInject(),
+    settings: SettingsStore = koinInject(),
+    sharer: com.visorcraft.radioshed.crash.CrashLogSharer = koinInject(),
+) {
+    val gains by eq.bandGains.collectAsStateWithLifecycle()
+    val enabled by eq.enabled.collectAsStateWithLifecycle()
+    val available by eq.isAvailable.collectAsStateWithLifecycle()
+    var customPresets by remember { mutableStateOf(settings.getCustomEqPresets()) }
+    var saveDialogOpen by remember { mutableStateOf(false) }
+    var deleteCandidate by remember { mutableStateOf<CustomEqPreset?>(null) }
+    var importStatus by remember { mutableStateOf<String?>(null) }
+    var apoImportOpen by remember { mutableStateOf(false) }
+    var headphonePickerOpen by remember { mutableStateOf(false) }
+    // A/B compare state — `abSnapshot` stashes the user's
+    // pre-comparison band gains (the "A" side); `abPresetGains`
+    // captures the just-applied preset gains (the "B" side) so the
+    // banner can swap between them indefinitely. Tapping the banner
+    // toggles A ↔ B; "Done" releases comparison and leaves whichever
+    // side is currently audible. Picking a different preset chip,
+    // applying a custom preset, or moving a band slider clears
+    // comparison automatically. Reset on screen exit by remember
+    // semantics — comparison is intentionally session-local.
+    var abSnapshot by remember { mutableStateOf<List<Float>?>(null) }
+    var abPresetGains by remember { mutableStateOf<List<Float>?>(null) }
+    var abLabel by remember { mutableStateOf<String?>(null) }
+    var abShowingB by remember { mutableStateOf(true) }
+    val applyGains: (List<Float>) -> Unit = { gainsToApply ->
+        val n = minOf(gainsToApply.size, eq.numBands)
+        for (i in 0 until n) eq.setBand(i, gainsToApply[i])
+    }
+    val clearAB: () -> Unit = {
+        abSnapshot = null
+        abPresetGains = null
+        abLabel = null
+        abShowingB = true
+    }
+    val startAB: (label: String, presetGains: List<Float>) -> Unit = { label, presetGains ->
+        abSnapshot = gains.toList()
+        abPresetGains = presetGains
+        abLabel = label
+        abShowingB = true
+        applyGains(presetGains)
+    }
+    val scope = rememberCoroutineScope()
+    val pickFile =
+        com.visorcraft.radioshed.ui.util.rememberFilePicker { bytes ->
+            scope.launch {
+                val parsed = com.visorcraft.radioshed.data.EqPresetIO.fromJson(bytes.decodeToString())
+                if (parsed == null) {
+                    importStatus = "Couldn't parse preset file."
+                    return@launch
+                }
+                // Merge — overwrites by name, preserves other custom presets.
+                parsed.presets.forEach { settings.saveCustomEqPreset(it) }
+                customPresets = settings.getCustomEqPresets()
+                importStatus = "Imported ${parsed.presets.size} preset" +
+                    if (parsed.presets.size == 1) "." else "s."
+            }
+        }
+
+    val copyToClipboard = com.visorcraft.radioshed.ui.util.rememberCopyToClipboard()
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Equalizer") },
+                navigationIcon = { TextButton(onClick = onBack) { Text("Back") } },
+                actions = {
+                    // Quick clipboard dump of the live gain vector.
+                    // Useful for sharing a tuning in a chat / paste
+                    // bin without going through the full preset
+                    // export flow. JSON array form (`[1.5, -2, 0,
+                    // 0.5, ...]`) so a future "Paste gains from
+                    // clipboard" reverse action can re-parse it
+                    // without a wrapper schema. Disabled until the
+                    // EQ surface has activated (i.e. there are
+                    // bands to copy).
+                    TextButton(
+                        enabled = available && gains.isNotEmpty(),
+                        onClick = {
+                            val text =
+                                gains.joinToString(
+                                    separator = ", ",
+                                    prefix = "[",
+                                    postfix = "]",
+                                ) { dbFormatForCopy(it) }
+                            copyToClipboard(text)
+                        },
+                    ) { Text("Copy gains") }
+                    // One-tap "Flat" — sets every band to 0 dB. Useful
+                    // when the user has been A/B-ing presets and wants
+                    // back to the reference curve without picking
+                    // through bands manually. Goes through the existing
+                    // applyGains lambda so SettingsStore + the EQ
+                    // session both update; no separate persistence
+                    // path means no risk of drift.
+                    TextButton(
+                        enabled = available && gains.isNotEmpty(),
+                        onClick = {
+                            applyGains(List(gains.size) { 0f })
+                        },
+                    ) { Text("Reset") }
+                },
+                colors =
+                    TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                    ),
+            )
+        },
+        containerColor = MaterialTheme.colorScheme.background,
+    ) { padding ->
+        Column(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .padding(16.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        if (enabled) "On" else "Off",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        text =
+                            buildString {
+                                append(if (available) "Active on this session" else "Start playback to activate")
+                                if (available) {
+                                    append(" · ${eq.numBands} bands")
+                                }
+                            },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                    )
+                }
+                Switch(checked = enabled, onCheckedChange = eq::setEnabled)
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "Presets",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f),
+                )
+                Row {
+                    TextButton(onClick = { pickFile("application/json") }) { Text("Import…") }
+                    TextButton(
+                        onClick = {
+                            scope.launch {
+                                val json = com.visorcraft.radioshed.data.EqPresetIO.toJson(customPresets)
+                                val ok = sharer.share("RadioShed EQ presets", json)
+                                if (!ok) importStatus = "Couldn't share presets."
+                            }
+                        },
+                        enabled = customPresets.isNotEmpty(),
+                    ) { Text("Export") }
+                    TextButton(
+                        onClick = { saveDialogOpen = true },
+                        enabled = gains.isNotEmpty(),
+                    ) { Text("Save current…") }
+                }
+            }
+            importStatus?.let { msg ->
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    msg,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+            Spacer(Modifier.height(6.dp))
+            // A/B compare banner — only when the user has armed a
+            // comparison via long-press on a preset chip. Tapping the
+            // banner swaps A ↔ B; the X dismisses comparison and
+            // restores whichever side is currently showing.
+            abLabel?.let { label ->
+                Surface(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 8.dp)
+                            .clickable {
+                                val snap = abSnapshot ?: return@clickable
+                                val bGains = abPresetGains ?: return@clickable
+                                if (abShowingB) {
+                                    applyGains(snap)
+                                    abShowingB = false
+                                } else {
+                                    applyGains(bGains)
+                                    abShowingB = true
+                                }
+                            },
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.tertiaryContainer,
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text =
+                                if (abShowingB) {
+                                    "Comparing $label · tap to hear original"
+                                } else {
+                                    "Original tones · tap to hear $label"
+                                },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer,
+                            modifier = Modifier.weight(1f),
+                        )
+                        TextButton(onClick = clearAB) { Text("Done") }
+                    }
+                }
+            }
+            // Horizontal-scroll chip row holds both built-in + custom
+            // presets; long-press a custom one to delete, long-press a
+            // built-in to A/B-compare it against the current bands.
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            ) {
+                listOf(EqPreset.Flat, EqPreset.BassBoost, EqPreset.Vocal, EqPreset.Treble).forEach { preset ->
+                    val presetGains = remember(preset) { preset.gainsDb.toList() }
+                    // The chip's `onClick` is unreachable because the
+                    // outer `combinedClickable` consumes the gesture
+                    // first; we keep AssistChip purely for its label
+                    // + color affordance and drive both tap and
+                    // long-press through the modifier.
+                    AssistChip(
+                        onClick = {},
+                        label = { Text(preset.label) },
+                        colors =
+                            AssistChipDefaults.assistChipColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            ),
+                        modifier =
+                            Modifier.combinedClickable(
+                                onClick = {
+                                    clearAB()
+                                    eq.applyPreset(preset)
+                                },
+                                onLongClick = { startAB(preset.label, presetGains) },
+                            ),
+                    )
+                }
+                customPresets.forEach { preset ->
+                    AssistChip(
+                        onClick = {},
+                        label = { Text(preset.name) },
+                        colors =
+                            AssistChipDefaults.assistChipColors(
+                                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            ),
+                        modifier =
+                            Modifier.combinedClickable(
+                                onClick = {
+                                    // Apply: write each saved gain back to
+                                    // the controller. Lengths mismatch when
+                                    // the device's band count differs from
+                                    // when the preset was saved — we
+                                    // tolerate that by applying min-length
+                                    // and leaving extras at their current
+                                    // value.
+                                    clearAB()
+                                    applyGains(preset.gainsDb)
+                                },
+                                onLongClick = { deleteCandidate = preset },
+                            ),
+                    )
+                }
+            }
+
+            // Headphone preset + APO import row. Two outlined buttons —
+            // "Headphones…" opens a list of bundled AutoEQ-derived
+            // tunings; "Import APO…" accepts a paste of a Filter line
+            // config. Both end up applying gains via [applyGains] and
+            // updating the pre-amp via SettingsStore so the existing
+            // pre-amp slider reflects the change.
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                androidx.compose.material3.OutlinedButton(
+                    onClick = { headphonePickerOpen = true },
+                    enabled = available,
+                    modifier = Modifier.weight(1f),
+                ) { Text("Headphones…") }
+                androidx.compose.material3.OutlinedButton(
+                    onClick = { apoImportOpen = true },
+                    enabled = available,
+                    modifier = Modifier.weight(1f),
+                ) { Text("Import APO…") }
+            }
+
+            Spacer(Modifier.height(24.dp))
+
+            BandSliders(
+                gains = gains,
+                frequencies = eq.bandFrequenciesHz,
+                gainRangeDb = eq.gainRangeDb,
+                // A manual band edit ends the A/B comparison — the
+                // user has just made the bands their own; we don't
+                // want a subsequent banner tap to overwrite their
+                // tweak with a stale snapshot. clearAB() resets the
+                // comparison state and hides the banner; the actual
+                // bands stay where the user moved them.
+                onChange = { idx, gain ->
+                    clearAB()
+                    eq.setBand(idx, gain)
+                },
+            )
+        }
+    }
+
+    if (saveDialogOpen) {
+        var nameText by remember { mutableStateOf("") }
+        val confirmSave: () -> Unit = {
+            val n = nameText.trim()
+            if (n.isNotBlank()) {
+                settings.saveCustomEqPreset(
+                    CustomEqPreset(name = n, gainsDb = gains.toList()),
+                )
+                customPresets = settings.getCustomEqPresets()
+                saveDialogOpen = false
+            }
+        }
+        AlertDialog(
+            onDismissRequest = { saveDialogOpen = false },
+            title = { Text("Save EQ preset") },
+            text = {
+                Column {
+                    Text(
+                        "Snapshots the current band gains as a named " +
+                            "preset. Tap the chip to recall it.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = nameText,
+                        onValueChange = { nameText = it },
+                        label = { Text("Name") },
+                        singleLine = true,
+                        keyboardOptions =
+                            androidx.compose.foundation.text.KeyboardOptions(
+                                imeAction = androidx.compose.ui.text.input.ImeAction.Done,
+                            ),
+                        keyboardActions =
+                            androidx.compose.foundation.text.KeyboardActions(
+                                onDone = { confirmSave() },
+                            ),
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = confirmSave,
+                    enabled = nameText.isNotBlank(),
+                ) { Text("Save") }
+            },
+            dismissButton = {
+                TextButton(onClick = { saveDialogOpen = false }) { Text("Cancel") }
+            },
+        )
+    }
+
+    deleteCandidate?.let { preset ->
+        AlertDialog(
+            onDismissRequest = { deleteCandidate = null },
+            title = { Text("Delete preset?") },
+            text = { Text("\"${preset.name}\" will be removed.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    settings.deleteCustomEqPreset(preset.name)
+                    customPresets = settings.getCustomEqPresets()
+                    deleteCandidate = null
+                }) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { deleteCandidate = null }) { Text("Cancel") }
+            },
+        )
+    }
+
+    if (apoImportOpen) {
+        ApoImportDialog(
+            targetCenters = eq.bandFrequenciesHz,
+            onDismiss = { apoImportOpen = false },
+            onApply = { mapped ->
+                clearAB()
+                applyGains(mapped.gains.toList())
+                if (mapped.preampDb != 0.0) {
+                    settings.setReplayGainPreampDb(mapped.preampDb.toFloat())
+                }
+                val skipped =
+                    if (mapped.unsupportedFilters > 0) {
+                        " (${mapped.unsupportedFilters} non-PK filter${
+                            if (mapped.unsupportedFilters == 1) "" else "s"
+                        } skipped)"
+                    } else {
+                        ""
+                    }
+                importStatus = "Applied APO config: ${mapped.sourceBandCount} band${
+                    if (mapped.sourceBandCount == 1) "" else "s"
+                }$skipped."
+                apoImportOpen = false
+            },
+        )
+    }
+
+    if (headphonePickerOpen) {
+        HeadphonePickerDialog(
+            targetCenters = eq.bandFrequenciesHz,
+            onDismiss = { headphonePickerOpen = false },
+            onPick = { preset, gains ->
+                clearAB()
+                applyGains(gains.toList())
+                if (preset.preampDb != 0.0) {
+                    settings.setReplayGainPreampDb(preset.preampDb.toFloat())
+                }
+                importStatus = "Applied ${preset.brand} ${preset.name}."
+                headphonePickerOpen = false
+            },
+        )
+    }
+}
+
+@Composable
+private fun ApoImportDialog(
+    targetCenters: List<Int>,
+    onDismiss: () -> Unit,
+    onApply: (com.visorcraft.radioshed.audio.ApoConfig.MappedApo) -> Unit,
+) {
+    var text by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(
+                enabled = text.isNotBlank(),
+                onClick = {
+                    val mapped =
+                        com.visorcraft.radioshed.audio.ApoConfig
+                            .parseAndMap(text, targetCenters)
+                    if (mapped == null) {
+                        error = "Couldn't find any usable filter lines. " +
+                            "Expected format: Filter 1: ON PK Fc 105 Hz Gain -2.5 dB Q 0.71"
+                    } else {
+                        error = null
+                        onApply(mapped)
+                    }
+                },
+            ) { Text("Apply") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        },
+        title = { Text("Import APO config") },
+        text = {
+            Column {
+                Text(
+                    "Paste an Equalizer APO config (e.g. AutoEQ output). " +
+                        "Only PK (peaking) filters are applied; shelves and " +
+                        "notches are skipped because the system EQ can't " +
+                        "represent them.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = {
+                        text = it
+                        error = null
+                    },
+                    placeholder = {
+                        Text(
+                            "Preamp: -6.7 dB\nFilter 1: ON PK Fc 105 Hz Gain -2.5 dB Q 0.71\n…",
+                        )
+                    },
+                    singleLine = false,
+                    minLines = 6,
+                    maxLines = 10,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                error?.let {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+        },
+    )
+}
+
+@Composable
+private fun HeadphonePickerDialog(
+    targetCenters: List<Int>,
+    onDismiss: () -> Unit,
+    onPick: (
+        com.visorcraft.radioshed.audio.HeadphonePreset,
+        FloatArray,
+    ) -> Unit,
+) {
+    var query by remember { mutableStateOf("") }
+    val all =
+        remember {
+            com.visorcraft.radioshed.audio.BundledHeadphonePresets.all
+        }
+    val filtered =
+        remember(query) {
+            if (query.isBlank()) {
+                all
+            } else {
+                all.filter {
+                    "${it.brand} ${it.name}".contains(query, ignoreCase = true)
+                }
+            }
+        }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Close") }
+        },
+        title = { Text("Headphone presets") },
+        text = {
+            Column {
+                Text(
+                    "Curated AutoEQ-derived tunings. Tap to apply. " +
+                        "Pre-amp is applied to ReplayGain headroom slider.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    placeholder = { Text("Filter…") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(8.dp))
+                LazyColumn(
+                    modifier = Modifier.fillMaxWidth().heightIn(max = 360.dp),
+                ) {
+                    items(
+                        filtered,
+                        key = { "${it.brand}|${it.name}" },
+                    ) { preset ->
+                        Surface(
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        val gains =
+                                            com.visorcraft.radioshed.audio.ApoConfig
+                                                .mapToBands(preset.bands, targetCenters)
+                                        onPick(preset, gains)
+                                    }
+                                    .padding(vertical = 4.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Text(
+                                    text = "${preset.brand} ${preset.name}",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium,
+                                )
+                                Text(
+                                    text = "Pre-amp: ${preset.preampDb} dB",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                                )
+                            }
+                        }
+                    }
+                    if (filtered.isEmpty()) {
+                        item {
+                            Text(
+                                "No matches.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                                modifier = Modifier.padding(8.dp),
+                            )
+                        }
+                    }
+                }
+            }
+        },
+    )
+}
+
+@Composable
+private fun BandSliders(
+    gains: FloatArray,
+    frequencies: List<Int>,
+    gainRangeDb: ClosedFloatingPointRange<Float>,
+    onChange: (Int, Float) -> Unit,
+) {
+    if (gains.isEmpty()) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                "Equalizer not available on this device.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+            )
+        }
+        return
+    }
+    // Horizontal row of band sliders. Each slider is laid out vertically
+    // by giving the container fixed height + putting the Slider in a
+    // weighted Row child (Compose's Slider is horizontal-only — we
+    // render it horizontally and stack vertically). Simpler than rotating.
+    Column(modifier = Modifier.fillMaxWidth()) {
+        gains.forEachIndexed { i, value ->
+            BandSliderRow(
+                index = i,
+                authoritativeGain = value,
+                centerHz = frequencies.getOrNull(i) ?: 0,
+                gainRangeDb = gainRangeDb,
+                onChange = onChange,
+            )
+        }
+        // Hint footer: discoverability for the long-press gesture. Quiet
+        // styling (small label, dim alpha) so it doesn't dominate the EQ
+        // panel for users who already know.
+        Text(
+            text = "Long-press a band's frequency label to reset that band to 0 dB.",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
+            modifier = Modifier.padding(top = 6.dp, start = 4.dp, end = 4.dp),
+        )
+    }
+}
+
+/**
+ * One band's row. Holds a local `pendingValue` state that the slider
+ * binds to, calling `onChange` only on `onValueChangeFinished` —
+ * dragging used to fire setBandLevel hundreds of times per second,
+ * which produces audible level stuttering and burns the audiofx
+ * dispatcher. The `pendingValue` resets to the authoritative gain
+ * whenever the parent's gain changes (preset applied, restored from
+ * cache, etc.).
+ */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@Composable
+private fun BandSliderRow(
+    index: Int,
+    authoritativeGain: Float,
+    centerHz: Int,
+    gainRangeDb: ClosedFloatingPointRange<Float>,
+    onChange: (Int, Float) -> Unit,
+) {
+    var pendingValue by remember(authoritativeGain) {
+        mutableStateOf(authoritativeGain)
+    }
+    val hapticTick = com.visorcraft.radioshed.ui.util.rememberHapticTick()
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = formatHz(centerHz),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
+            modifier =
+                Modifier
+                    .width(56.dp)
+                    // Long-press the frequency label to flatten this single
+                    // band. Localising the gesture to the label (not the
+                    // slider track) keeps drags from accidentally firing it
+                    // — the slider needs the full hit area for fine control.
+                    .combinedClickable(
+                        onClick = {},
+                        onLongClick = {
+                            pendingValue = 0f
+                            onChange(index, 0f)
+                            hapticTick()
+                        },
+                    ),
+        )
+        // -1 dB nudge. Useful for fine-tuning past the slider's
+        // hit-test resolution — Compose's Slider on a 56-px-wide
+        // band column produces ~0.4 dB minimum step. The buttons
+        // are unbounded by gainRangeDb at the call site so we
+        // clamp here.
+        androidx.compose.material3.TextButton(
+            onClick = {
+                val next =
+                    (pendingValue - 1f).coerceIn(
+                        gainRangeDb.start,
+                        gainRangeDb.endInclusive,
+                    )
+                pendingValue = next
+                onChange(index, next)
+            },
+            modifier = Modifier.width(36.dp),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
+        ) { Text("−", style = MaterialTheme.typography.titleMedium) }
+        Slider(
+            value = pendingValue,
+            onValueChange = { pendingValue = it },
+            onValueChangeFinished = { onChange(index, pendingValue) },
+            valueRange = gainRangeDb,
+            steps = 0,
+            modifier = Modifier.weight(1f),
+        )
+        androidx.compose.material3.TextButton(
+            onClick = {
+                val next =
+                    (pendingValue + 1f).coerceIn(
+                        gainRangeDb.start,
+                        gainRangeDb.endInclusive,
+                    )
+                pendingValue = next
+                onChange(index, next)
+            },
+            modifier = Modifier.width(36.dp),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
+        ) { Text("+", style = MaterialTheme.typography.titleMedium) }
+        Text(
+            text = "${if (pendingValue >= 0) "+" else ""}${pendingValue.formatFixed(1)} dB",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onBackground,
+            modifier = Modifier.width(64.dp),
+        )
+    }
+}
+
+private fun formatHz(hz: Int): String =
+    when {
+        hz <= 0 -> "—"
+        hz >= 1000 -> "${hz / 1000}k"
+        else -> "$hz"
+    }
+
+/**
+ * Render a single band gain for clipboard JSON. Drops trailing
+ * zeros (1.5 → "1.5", 2.0 → "2", 0.0 → "0") so the copied string
+ * stays compact while still being a valid JSON number.
+ */
+private fun dbFormatForCopy(value: Float): String {
+    if (value == value.toInt().toFloat()) return value.toInt().toString()
+    val rounded = (value * 100f).toInt() / 100f
+    return rounded.toString().trimEnd('0').trimEnd('.')
+}

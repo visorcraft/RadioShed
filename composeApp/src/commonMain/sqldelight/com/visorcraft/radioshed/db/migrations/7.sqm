@@ -1,0 +1,30 @@
+-- Migration v6 → v7: artist alias table.
+--
+CREATE TABLE IF NOT EXISTS artist (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT
+);
+
+-- Supports two user workflows:
+--   1. "Slim Shady" / "Eminem" style stage-name aliases — the user
+--      adds an alternate display name on the canonical artist so
+--      any future tagged track listing either name resolves to the
+--      same artist row.
+--   2. Merge fallthrough — when artist A is merged into artist B,
+--      A's name is recorded as an alias on B so future scans of
+--      tracks tagged with A's old name resolve to B instead of
+--      recreating A. Without this, every fresh scan after a merge
+--      undoes the merge for any newly-discovered files.
+--
+-- IF NOT EXISTS so the baseline-creation path on a brand-new
+-- install (which already gets the table from Library.sq's CREATE
+-- statement) doesn't double-fail when this migration runs.
+
+CREATE TABLE IF NOT EXISTS artist_alias (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    artist_id INTEGER NOT NULL REFERENCES artist(id) ON DELETE CASCADE,
+    alias_name TEXT NOT NULL,
+    alias_sort_name TEXT NOT NULL UNIQUE,
+    created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS artist_alias_artist_id_idx ON artist_alias(artist_id);

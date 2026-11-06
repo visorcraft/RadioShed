@@ -1,0 +1,30 @@
+CREATE TABLE backup (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    file_uri TEXT NOT NULL,
+    size_bytes INTEGER NOT NULL,
+    encrypted INTEGER NOT NULL DEFAULT 0,
+    contents_summary_json TEXT NOT NULL DEFAULT '{}',
+    created_at INTEGER NOT NULL
+);
+
+CREATE INDEX backup_created_idx ON backup(created_at);
+
+insertBackup:
+INSERT INTO backup (file_uri, size_bytes, encrypted, contents_summary_json, created_at)
+VALUES (?, ?, ?, ?, ?)
+RETURNING id;
+
+selectBackupById:
+SELECT * FROM backup WHERE id = ?;
+
+selectAllBackups:
+SELECT * FROM backup ORDER BY created_at DESC;
+
+selectBackupsOlderThan:
+SELECT * FROM backup WHERE created_at < ?;
+
+deleteBackup:
+DELETE FROM backup WHERE id = ?;
+
+countBackups:
+SELECT COUNT(*) FROM backup;

@@ -1,0 +1,51 @@
+-- Migration v11 → v12: normalize folder column order across fresh and upgraded DBs.
+--
+-- v2 appended accent_color with ALTER TABLE, while fresh schemas declared it
+-- before created_at/updated_at. SELECT * mappings are positional, so rebuild
+-- both historical layouts into the canonical Folders.sq order.
+
+PRAGMA defer_foreign_keys = 1;
+PRAGMA legacy_alter_table = 1;
+
+CREATE TABLE folder_v12 (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    display_name TEXT NOT NULL,
+    uri TEXT NOT NULL UNIQUE,
+    recursive INTEGER NOT NULL DEFAULT 1,
+    include_globs TEXT,
+    exclude_globs TEXT,
+    last_scanned_at INTEGER,
+    track_count INTEGER NOT NULL DEFAULT 0,
+    is_available INTEGER NOT NULL DEFAULT 1,
+    accent_color INTEGER,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+
+INSERT INTO folder_v12 (
+    id, display_name, uri, recursive, include_globs, exclude_globs,
+    last_scanned_at, track_count, is_available, accent_color, created_at, updated_at
+)
+SELECT
+    id, display_name, uri, recursive, include_globs, exclude_globs,
+    last_scanned_at, track_count, is_available, accent_color, created_at, updated_at
+FROM folder;
+
+-- Dropping the old parent cascades through track_folder even with deferred
+-- foreign keys, so preserve the junction rows without their FK clauses.
+CREATE TABLE track_folder_v12 (
+    track_id INTEGER NOT NULL,
+    folder_id INTEGER NOT NULL,
+    PRIMARY KEY (track_id, folder_id)
+);
+INSERT INTO track_folder_v12 (track_id, folder_id)
+SELECT track_id, folder_id FROM track_folder;
+
+DROP TABLE folder;
+ALTER TABLE folder_v12 RENAME TO folder;
+
+INSERT OR IGNORE INTO track_folder (track_id, folder_id)
+SELECT track_id, folder_id FROM track_folder_v12;
+DROP TABLE track_folder_v12;
+
+PRAGMA legacy_alter_table = 0;

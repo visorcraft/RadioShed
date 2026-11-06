@@ -1,0 +1,234 @@
+CREATE TABLE rating (
+    track_id INTEGER NOT NULL PRIMARY KEY REFERENCES track(id) ON DELETE CASCADE,
+    stars REAL NOT NULL,
+    rated_at INTEGER NOT NULL
+);
+
+CREATE INDEX rating_stars_idx ON rating(stars);
+
+CREATE TABLE skip_log (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    track_id INTEGER NOT NULL REFERENCES track(id) ON DELETE CASCADE,
+    station_id INTEGER REFERENCES station(id) ON DELETE SET NULL,
+    skipped_at INTEGER NOT NULL,
+    position_ms INTEGER NOT NULL
+);
+
+CREATE INDEX skip_log_track_idx ON skip_log(track_id);
+CREATE INDEX skip_log_station_idx ON skip_log(station_id);
+CREATE INDEX skip_log_skipped_at_idx ON skip_log(skipped_at);
+
+CREATE TABLE play_count (
+    track_id INTEGER NOT NULL PRIMARY KEY REFERENCES track(id) ON DELETE CASCADE,
+    count INTEGER NOT NULL DEFAULT 0,
+    last_played_at INTEGER,
+    total_listen_ms INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE station_dislike (
+    track_id INTEGER NOT NULL REFERENCES track(id) ON DELETE CASCADE,
+    station_id INTEGER NOT NULL REFERENCES station(id) ON DELETE CASCADE,
+    disliked_at INTEGER NOT NULL,
+    PRIMARY KEY (track_id, station_id)
+);
+
+-- Per-track Liked Songs marker. Modeled as a separate table rather
+-- than a column on track so we keep track-row writes hot-path-free
+-- and don't need a schema migration touching the indexed core
+-- columns. Liking a track is idempotent (INSERT OR REPLACE so
+-- re-liking just refreshes liked_at without growing duplicates).
+CREATE TABLE liked_track (
+    track_id INTEGER NOT NULL PRIMARY KEY REFERENCES track(id) ON DELETE CASCADE,
+    liked_at INTEGER NOT NULL
+);
+
+CREATE INDEX liked_track_liked_at_idx ON liked_track(liked_at);
+
+-- Global track dislike: "never play this anywhere". Distinct from
+-- station_dislike (per-station hide) because the user wants a way
+-- to permanently exclude a track from every station's pool — Smart
+-- Shuffle, sequential, Forgotten Gems, all of them. Modeled as a
+-- track row's existence in this table; no payload other than the
+-- timestamp of when the user banned it.
+CREATE TABLE track_global_dislike (
+    track_id INTEGER NOT NULL PRIMARY KEY REFERENCES track(id) ON DELETE CASCADE,
+    disliked_at INTEGER NOT NULL
+);
+
+-- ==== Rating queries ====
+
+setRating:
+INSERT OR REPLACE INTO rating (track_id, stars, rated_at) VALUES (?, ?, ?);
+
+selectRating:
+SELECT stars FROM rating WHERE track_id = ?;
+
+selectAllRatings:
+SELECT * FROM rating ORDER BY stars DESC, rated_at DESC;
+
+-- Batch (track_id → stars) for a candidate set. Counterpart to
+-- selectPlayCountForTracks; used by PlaybackQueue's
+-- FavorHigherRated weighting.
+selectRatingsForTracks:
+SELECT track_id, stars FROM rating WHERE track_id IN ?;
+
+selectTopRatedTracks:
+SELECT track.* FROM track
+JOIN rating r ON r.track_id = track.id
+WHERE r.stars >= ? AND track.is_available = 1
+ORDER BY r.stars DESC, r.rated_at DESC LIMIT ?;
+
+-- "Forgotten Gems" — highly-rated tracks the user hasn't played
+-- recently. Joins rating + station_history; tracks never played
+-- (NULL last_played_at via the LEFT JOIN aggregate) match too via
+-- the IFNULL coalesce. Sort by recency ASC so the longest-forgotten
+-- one comes first.
+selectForgottenGemTracks:
+SELECT track.* FROM track
+JOIN rating r ON r.track_id = track.id
+LEFT JOIN station_history sh ON sh.track_id = track.id
+WHERE r.stars >= ? AND track.is_available = 1
+GROUP BY track.id
+HAVING IFNULL(MAX(sh.played_at), 0) < ?
+ORDER BY IFNULL(MAX(sh.played_at), 0) ASC, r.stars DESC
+LIMIT ?;
+
+-- Same set as selectForgottenGemTracks but sorted by rating DESC,
+-- ties broken by oldest-played-first. Powers the "highest-rated
+-- forgotten" sort variant of the Forgotten Gems preset.
+selectForgottenGemTracksByRating:
+SELECT track.* FROM track
+JOIN rating r ON r.track_id = track.id
+LEFT JOIN station_history sh ON sh.track_id = track.id
+WHERE r.stars >= ? AND track.is_available = 1
+GROUP BY track.id
+HAVING IFNULL(MAX(sh.played_at), 0) < ?
+ORDER BY r.stars DESC, IFNULL(MAX(sh.played_at), 0) ASC
+LIMIT ?;
+
+clearRating:
+DELETE FROM rating WHERE track_id = ?;
+
+-- ==== Skip log queries ====
+
+insertSkip:
+INSERT INTO skip_log (track_id, station_id, skipped_at, position_ms) VALUES (?, ?, ?, ?);
+
+countSkipsForTrack:
+SELECT COUNT(*) FROM skip_log WHERE track_id = ?;
+
+selectRecentSkipsForStation:
+SELECT * FROM skip_log WHERE station_id = ? ORDER BY skipped_at DESC LIMIT ?;
+
+-- Most-skipped tracks across all stations. Returned as
+-- (track row, total skip count). Tracks that no longer exist on
+-- disk are filtered via is_available so we don't surface ghosts.
+selectMostSkippedTracks:
+SELECT track.*, COUNT(skip_log.track_id) AS skip_count
+FROM track
+JOIN skip_log ON skip_log.track_id = track.id
+WHERE track.is_available = 1
+GROUP BY track.id
+ORDER BY skip_count DESC
+LIMIT ?;
+
+trimSkipsOlderThan:
+DELETE FROM skip_log WHERE skipped_at < ?;
+
+-- ==== Play count queries ====
+
+incrementPlayCount:
+INSERT INTO play_count (track_id, count, last_played_at, total_listen_ms)
+VALUES (?, 1, ?, ?)
+ON CONFLICT(track_id) DO UPDATE SET
+    count = count + 1,
+    last_played_at = excluded.last_played_at,
+    total_listen_ms = total_listen_ms + excluded.total_listen_ms;
+
+selectPlayCount:
+SELECT * FROM play_count WHERE track_id = ?;
+
+-- Batch fetch (track_id → count, last_played_at) for the AdaptiveMix
+-- scoring path. Mirrors the shape of selectRatingsForTracks; rows
+-- without a play_count entry simply don't appear in the result.
+selectPlayCountsForTracks:
+SELECT track_id, count, last_played_at FROM play_count WHERE track_id IN ?;
+
+selectMostPlayedTracks:
+SELECT track.* FROM track
+JOIN play_count pc ON pc.track_id = track.id
+WHERE track.is_available = 1
+ORDER BY pc.count DESC LIMIT ?;
+
+selectLeastPlayedTracks:
+SELECT track.* FROM track
+LEFT JOIN play_count pc ON pc.track_id = track.id
+WHERE track.is_available = 1
+ORDER BY COALESCE(pc.count, 0) ASC, track.title LIMIT ?;
+
+selectNeverPlayedTracks:
+SELECT track.* FROM track
+LEFT JOIN play_count pc ON pc.track_id = track.id
+WHERE track.is_available = 1 AND pc.track_id IS NULL
+ORDER BY track.title LIMIT ?;
+
+-- ==== Liked-tracks queries ====
+
+likeTrack:
+INSERT OR REPLACE INTO liked_track (track_id, liked_at) VALUES (?, ?);
+
+unlikeTrack:
+DELETE FROM liked_track WHERE track_id = ?;
+
+isTrackLiked:
+SELECT COUNT(*) FROM liked_track WHERE track_id = ?;
+
+selectLikedTracks:
+SELECT track.* FROM track
+JOIN liked_track lt ON lt.track_id = track.id
+WHERE track.is_available = 1
+ORDER BY lt.liked_at DESC;
+
+selectLikedTrackIds:
+SELECT track_id FROM liked_track ORDER BY liked_at DESC;
+
+-- Used by backup: track_id + the original liked_at so the order
+-- and per-row metadata round-trip through an export/import cycle.
+selectLikedTracksWithTimestamps:
+SELECT track_id, liked_at FROM liked_track ORDER BY liked_at DESC;
+
+countLikedTracks:
+SELECT COUNT(*) FROM liked_track;
+
+-- Live count for the Playlists list — observed via SQLDelight's
+-- coroutines extension to update the row instantly on like/unlike.
+observeLikedCount:
+SELECT COUNT(*) FROM liked_track;
+
+-- ==== Station-dislike queries ====
+
+dislikeForStation:
+INSERT OR REPLACE INTO station_dislike (track_id, station_id, disliked_at) VALUES (?, ?, ?);
+
+undislikeForStation:
+DELETE FROM station_dislike WHERE track_id = ? AND station_id = ?;
+
+isDislikedForStation:
+SELECT COUNT(*) FROM station_dislike WHERE track_id = ? AND station_id = ?;
+
+selectDislikedTrackIdsForStation:
+SELECT track_id FROM station_dislike WHERE station_id = ?;
+
+-- ==== Global-dislike queries ====
+
+globalDislikeTrack:
+INSERT OR REPLACE INTO track_global_dislike (track_id, disliked_at) VALUES (?, ?);
+
+undoGlobalDislike:
+DELETE FROM track_global_dislike WHERE track_id = ?;
+
+isGloballyDisliked:
+SELECT COUNT(*) FROM track_global_dislike WHERE track_id = ?;
+
+selectGloballyDislikedIds:
+SELECT track_id FROM track_global_dislike;

@@ -1,0 +1,19 @@
+-- Migration v5 → v6: global track dislike.
+--
+CREATE TABLE IF NOT EXISTS track (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT
+);
+
+-- Adds a per-track "never play this anywhere" flag, distinct from
+-- station_dislike (per-station hide). User-facing entry point is the
+-- track context sheet: "Don't play this anywhere". Filtered out of
+-- every station's candidate pool by SourceRuleEvaluator before
+-- per-station dislikes are applied.
+--
+-- No payload beyond the timestamp the user banned it — useful only
+-- for backup ordering and a future "Banned tracks" admin view.
+
+CREATE TABLE track_global_dislike (
+    track_id INTEGER NOT NULL PRIMARY KEY REFERENCES track(id) ON DELETE CASCADE,
+    disliked_at INTEGER NOT NULL
+);

@@ -1,0 +1,263 @@
+package com.visorcraft.radioshed.source
+
+import com.visorcraft.radioshed.data.IODispatcher
+import com.visorcraft.radioshed.domain.Personnel
+import com.visorcraft.radioshed.domain.Tag
+import kotlinx.coroutines.withContext
+import org.jaudiotagger.audio.AudioFileIO
+import org.jaudiotagger.audio.AudioHeader
+import org.jaudiotagger.tag.FieldKey
+import org.jaudiotagger.tag.Tag as JTag
+import org.jaudiotagger.tag.id3.AbstractID3v2Tag
+import org.jaudiotagger.tag.id3.framebody.FrameBodyUSLT
+import java.io.File
+import java.util.logging.Level
+import java.util.logging.Logger
+
+/**
+ * jaudiotagger-backed tag reader. Handles MP3 (ID3v1/v2.3/v2.4), FLAC + Vorbis
+ * comments, Opus, OGG Vorbis, M4A/AAC (iTunes-style atoms), WAV, AIFF, WMA.
+ *
+ * Errors are swallowed and surfaced as `null` — the scanner skips files that
+ * can't be parsed rather than aborting the whole scan.
+ */
+class JvmTagReader : TagReader {
+
+    init {
+        // jaudiotagger logs at INFO/FINER for every successful read. Mute it.
+        Logger.getLogger("org.jaudiotagger").level = Level.OFF
+    }
+
+    override suspend fun read(uri: String): ParsedTags? = withContext(IODispatcher) {
+        val file = File(uri)
+        if (!file.exists() || !file.canRead()) return@withContext null
+        runCatching {
+            val audioFile = AudioFileIO.read(file)
+            val header: AudioHeader? = audioFile.audioHeader
+            val tag: JTag? = audioFile.tag
+            buildParsedTags(header, tag)
+        }.getOrNull()
+    }
+
+    private fun buildParsedTags(header: AudioHeader?, tag: JTag?): ParsedTags {
+        val customTags = mutableListOf<Tag>()
+        val personnel = mutableListOf<Personnel>()
+
+        // Multi-value artists -> custom tags so we don't lose them
+        if (tag != null) {
+            collectMultiValue(tag, FieldKey.ARTIST, "ARTIST", customTags)
+            collectMultiValue(tag, FieldKey.ALBUM_ARTIST, "ALBUM_ARTIST", customTags)
+            collectMultiValue(tag, FieldKey.GENRE, "GENRE", customTags)
+            collectMultiValue(tag, FieldKey.MOOD, "MOOD", customTags)
+            collectMultiValue(tag, FieldKey.LANGUAGE, "LANGUAGE", customTags)
+            collectMultiValue(tag, FieldKey.RECORD_LABEL, "LABEL", customTags)
+            collectMultiValue(tag, FieldKey.GROUPING, "GROUPING", customTags)
+
+            // Personnel-style fields — stored separately for clean queries
+            collectPersonnel(tag, FieldKey.COMPOSER, "composer", personnel)
+            collectPersonnel(tag, FieldKey.CONDUCTOR, "conductor", personnel)
+            collectPersonnel(tag, FieldKey.PRODUCER, "producer", personnel)
+            collectPersonnel(tag, FieldKey.ARRANGER, "arranger", personnel)
+            collectPersonnel(tag, FieldKey.LYRICIST, "lyricist", personnel)
+            collectPersonnel(tag, FieldKey.REMIXER, "remixer", personnel)
+        }
+
+        return ParsedTags(
+            title = tag?.firstOrNull(FieldKey.TITLE),
+            artist = tag?.firstOrNull(FieldKey.ARTIST),
+            albumArtist = tag?.firstOrNull(FieldKey.ALBUM_ARTIST),
+            album = tag?.firstOrNull(FieldKey.ALBUM),
+            year = tag?.firstOrNull(FieldKey.YEAR)?.take(4)?.toIntOrNull(),
+            trackNumber = tag?.firstOrNull(FieldKey.TRACK)?.substringBefore('/')?.toIntOrNull(),
+            discNumber = tag?.firstOrNull(FieldKey.DISC_NO)?.substringBefore('/')?.toIntOrNull(),
+            genre = tag?.firstOrNull(FieldKey.GENRE),
+            composer = tag?.firstOrNull(FieldKey.COMPOSER),
+            durationMs = (header?.preciseTrackLength?.let { (it * 1000L).toLong() }
+                ?: header?.trackLength?.toLong()?.let { it * 1000L } ?: 0L),
+            bitrateKbps = header?.bitRateAsNumber?.toInt()?.takeIf { it > 0 },
+            sampleRateHz = header?.sampleRateAsNumber?.takeIf { it > 0 },
+            channels = header?.channels?.let { parseChannels(it) },
+            bpm = tag?.firstOrNull(FieldKey.BPM)?.toDoubleOrNull(),
+            musicbrainzTrackId = tag?.firstOrNull(FieldKey.MUSICBRAINZ_TRACK_ID),
+            musicbrainzAlbumId = tag?.firstOrNull(FieldKey.MUSICBRAINZ_RELEASEID),
+            musicbrainzArtistId = tag?.firstOrNull(FieldKey.MUSICBRAINZ_ARTISTID),
+            replayGainTrack = tag?.let { readReplayGainGain(it, "REPLAYGAIN_TRACK_GAIN") },
+            replayGainAlbum = tag?.let { readReplayGainGain(it, "REPLAYGAIN_ALBUM_GAIN") },
+            replayGainTrackPeak = tag?.let { readReplayGainPeak(it, "REPLAYGAIN_TRACK_PEAK") },
+            customTags = customTags,
+            personnel = personnel,
+            artworkBytes = tag?.let(::extractArtwork),
+            embeddedLyrics = tag?.let(::extractBestUnsyncedLyrics),
+            embeddedSyncedLrc = tag?.let(::extractSyncedLyrics),
+        )
+    }
+
+    /**
+     * Pick the most useful USLT frame from an ID3v2 tag (or fall back
+     * to jaudiotagger's flattened FieldKey.LYRICS for non-ID3 formats).
+     *
+     * USLT frames carry a 3-letter language code and a free-text
+     * "description" (commonly "" or "Lyrics"). Files mastered for
+     * international release routinely carry one frame per language —
+     * grabbing just the first one (which is what FieldKey.LYRICS does)
+     * picks essentially at random from the order the tag editor
+     * happened to write them. We prefer:
+     *   1. English ("eng") frames
+     *   2. "XXX" / "und" / blank language frames (often the canonical)
+     *   3. Whichever frame has the longest non-blank text
+     *
+     * Strips a leading BOM and trailing nulls — both common
+     * jaudiotagger artifacts when the tag was written with
+     * Windows-1252 encoding flagged as UTF-16.
+     */
+    private fun extractBestUnsyncedLyrics(tag: JTag): String? {
+        val candidates = if (tag is AbstractID3v2Tag) {
+            tag.allUsltFrames()
+        } else {
+            // Vorbis / M4A / WAV: jaudiotagger's flat field already
+            // does the right thing — there's only one canonical lyrics
+            // tag per file in those formats.
+            listOf(LyricsCandidate(text = tag.firstOrNull(FieldKey.LYRICS).orEmpty(), lang = ""))
+        }
+        if (candidates.isEmpty()) return null
+        val cleaned = candidates
+            .map { it.copy(text = sanitizeLyricsText(it.text)) }
+            .filter { it.text.isNotBlank() }
+        if (cleaned.isEmpty()) return null
+        val best = cleaned.firstOrNull { it.lang.equals("eng", ignoreCase = true) }
+            ?: cleaned.firstOrNull { it.lang.isBlank() || it.lang.equals("xxx", ignoreCase = true) || it.lang.equals("und", ignoreCase = true) }
+            ?: cleaned.maxByOrNull { it.text.length }
+        return best?.text
+    }
+
+    /**
+     * SYLT (Synchronised Lyrics) extraction is a TODO. The
+     * jaudiotagger frame-body surface for SYLT varies meaningfully
+     * between library versions and the format itself uses a
+     * compact binary encoding that we'd need to walk by hand.
+     * USLT covers the vast majority of tagged-lyrics files in the
+     * wild — we can tackle SYLT in a follow-up pass that pins a
+     * specific jaudiotagger version we've validated against.
+     */
+    @Suppress("UNUSED_PARAMETER")
+    private fun extractSyncedLyrics(tag: JTag): String? = null
+
+    /**
+     * Strip leading byte-order-mark and stray null bytes that some
+     * tag editors leave behind when re-encoding text frames. Empty
+     * input passes through unchanged so the caller can still
+     * distinguish "no tag" from "blank tag".
+     */
+    private fun sanitizeLyricsText(raw: String): String {
+        var work = raw
+        // Strip UTF-16 BOMs left in payload after re-encoding.
+        if (work.startsWith('\uFEFF')) work = work.removePrefix("\uFEFF")
+        // Remove embedded NULs and the form-feed used as a section
+        // separator by some tools.
+        work = work.replace("\u0000", "").replace("\u000C", "\n")
+        // Normalize CRLF → LF.
+        work = work.replace("\r\n", "\n").replace('\r', '\n')
+        return work.trim()
+    }
+
+    /**
+     * Iterate every USLT frame on an ID3v2 tag (multi-language
+     * tagging). Returns plain text + language code per frame.
+     * Reflective access to the language field — jaudiotagger
+     * exposes it as a 3-letter String getter whose name has shifted
+     * between releases (`getLanguage` vs `getLanguageAsString`); we
+     * accept either.
+     */
+    private fun AbstractID3v2Tag.allUsltFrames(): List<LyricsCandidate> = runCatching {
+        getFields("USLT").mapNotNull { field ->
+            val frame = field as? org.jaudiotagger.tag.id3.AbstractID3v2Frame
+                ?: return@mapNotNull null
+            val body = frame.body as? FrameBodyUSLT ?: return@mapNotNull null
+            val text = runCatching { body.lyric }.getOrNull().orEmpty()
+            val lang = readUsltLanguage(body)
+            LyricsCandidate(text = text, lang = lang)
+        }
+    }.getOrNull().orEmpty()
+
+    private fun readUsltLanguage(body: FrameBodyUSLT): String = runCatching {
+        val cls = body.javaClass
+        val getter = sequenceOf("getLanguageAsString", "getLanguage")
+            .mapNotNull { name -> runCatching { cls.getMethod(name) }.getOrNull() }
+            .firstOrNull()
+        getter?.invoke(body)?.toString().orEmpty()
+    }.getOrDefault("")
+
+    private data class LyricsCandidate(val text: String, val lang: String)
+
+    /**
+     * Pull embedded album art from the tag. jaudiotagger normalizes APIC
+     * (ID3v2), METADATA_BLOCK_PICTURE (FLAC/Opus), iTunes "covr" atom (M4A),
+     * and Vorbis-comment "COVERART" into the same Artwork interface — we
+     * just take the first one. Files with no embedded art return null.
+     *
+     * Returns null on any exception; tag readers see all kinds of malformed
+     * art frames in the wild and we don't want one bad file aborting a scan.
+     */
+    private fun extractArtwork(tag: JTag): ByteArray? = runCatching {
+        tag.firstArtwork?.binaryData?.takeIf { it.isNotEmpty() }
+    }.getOrNull()
+
+    private fun JTag.firstOrNull(key: FieldKey): String? =
+        runCatching { getFirst(key)?.takeUnless { it.isBlank() } }.getOrNull()
+
+    private fun collectMultiValue(
+        tag: JTag,
+        key: FieldKey,
+        canonicalKey: String,
+        sink: MutableList<Tag>,
+    ) {
+        val all = runCatching { tag.getAll(key) }.getOrNull().orEmpty()
+        // jaudiotagger sometimes returns the joined-string in [0] when the
+        // underlying format only stores one value; treat that as "one value"
+        // and skip the position bookkeeping. For multi-value formats (FLAC
+        // Vorbis) each entry is a real distinct value.
+        all.filter { it.isNotBlank() }
+            .forEachIndexed { idx, value -> sink += Tag(canonicalKey, value, idx) }
+    }
+
+    private fun collectPersonnel(
+        tag: JTag,
+        key: FieldKey,
+        role: String,
+        sink: MutableList<Personnel>,
+    ) {
+        val all = runCatching { tag.getAll(key) }.getOrNull().orEmpty()
+        all.filter { it.isNotBlank() }
+            .forEachIndexed { idx, name -> sink += Personnel(role, name, idx) }
+    }
+
+    private fun parseChannels(s: String): Int? = when (s.lowercase().trim()) {
+        "mono", "1" -> 1
+        "stereo", "2" -> 2
+        "5.1", "6 channels", "6" -> 6
+        "7.1", "8 channels", "8" -> 8
+        else -> s.toIntOrNull()
+    }
+
+    /**
+     * Read ReplayGain track/album gain by raw Vorbis-comment key. Works
+     * directly for FLAC/OGG/Opus where these are first-class tags. For
+     * ID3v2 (MP3) ReplayGain lives in TXXX frames whose description is
+     * the same string — jaudiotagger's [JTag.getFirst]`(String)` does the
+     * lookup for some but not all formats; we accept null on failure.
+     *
+     * Values are dB strings like `"-3.42 dB"` — strip the optional unit.
+     */
+    private fun readReplayGainGain(tag: JTag, vorbisKey: String): Double? {
+        val raw = runCatching { tag.getFirst(vorbisKey) }.getOrNull()?.takeUnless { it.isBlank() }
+            ?: return null
+        return raw.replace(Regex("(?i)\\s*db\\s*$"), "").trim().toDoubleOrNull()
+    }
+
+    /** Peak is a linear ratio, no dB suffix. */
+    private fun readReplayGainPeak(tag: JTag, vorbisKey: String): Double? {
+        val raw = runCatching { tag.getFirst(vorbisKey) }.getOrNull()?.takeUnless { it.isBlank() }
+            ?: return null
+        return raw.trim().toDoubleOrNull()
+    }
+}

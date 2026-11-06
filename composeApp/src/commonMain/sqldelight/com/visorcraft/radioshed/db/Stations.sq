@@ -1,0 +1,456 @@
+CREATE TABLE station (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    color INTEGER NOT NULL DEFAULT 0,
+    icon TEXT,
+    artwork_uri TEXT,
+    sort_position INTEGER NOT NULL DEFAULT 0,
+    custom_subtitle TEXT,
+    source_json TEXT NOT NULL,
+    playback_json TEXT NOT NULL,
+    play_count INTEGER NOT NULL DEFAULT 0,
+    last_played_at INTEGER,
+    total_listen_ms INTEGER NOT NULL DEFAULT 0,
+    skip_rate REAL NOT NULL DEFAULT 0.0,
+    is_pinned INTEGER NOT NULL DEFAULT 0,
+    is_built_in INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+
+CREATE INDEX station_sort_idx ON station(sort_position);
+CREATE INDEX station_last_played_idx ON station(last_played_at);
+
+CREATE TABLE station_history (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    station_id INTEGER NOT NULL REFERENCES station(id) ON DELETE CASCADE,
+    track_id INTEGER NOT NULL REFERENCES track(id) ON DELETE CASCADE,
+    played_at INTEGER NOT NULL,
+    completed INTEGER NOT NULL DEFAULT 0,
+    listened_ms INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX station_history_station_idx ON station_history(station_id, played_at);
+CREATE INDEX station_history_track_idx ON station_history(track_id);
+CREATE INDEX station_history_played_at_idx ON station_history(played_at);
+
+-- Per-station "always include" pins. Tracks listed here are unioned
+-- with the station's source-rule result during playback queue
+-- evaluation, regardless of whether they'd otherwise match. Use case:
+-- "the Forgotten Gems preset normally only surfaces ≥4★ tracks, but I
+-- want this one specific 3★ I keep forgetting to also reliably show
+-- up." Per-station so the same track can be pinned to multiple
+-- stations independently.
+CREATE TABLE station_pinned_track (
+    station_id INTEGER NOT NULL REFERENCES station(id) ON DELETE CASCADE,
+    track_id INTEGER NOT NULL REFERENCES track(id) ON DELETE CASCADE,
+    pinned_at INTEGER NOT NULL,
+    PRIMARY KEY (station_id, track_id)
+);
+
+CREATE INDEX station_pinned_station_idx ON station_pinned_track(station_id);
+
+-- ==== Station queries ====
+
+insertStation:
+INSERT INTO station (name, color, icon, artwork_uri, sort_position, custom_subtitle, source_json, playback_json, is_built_in, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+RETURNING id;
+
+selectStationById:
+SELECT * FROM station WHERE id = ?;
+
+selectAllStations:
+SELECT * FROM station ORDER BY sort_position, name;
+
+selectPinnedStations:
+SELECT * FROM station WHERE is_pinned = 1 ORDER BY sort_position;
+
+selectRecentlyPlayedStations:
+SELECT * FROM station WHERE last_played_at IS NOT NULL ORDER BY last_played_at DESC LIMIT ?;
+
+countStations:
+SELECT COUNT(*) FROM station;
+
+updateStation:
+UPDATE station SET name = ?, color = ?, icon = ?, artwork_uri = ?, custom_subtitle = ?,
+    source_json = ?, playback_json = ?, updated_at = ? WHERE id = ?;
+
+-- Focused update for the user-uploaded station artwork. Set to NULL
+-- to revert back to the auto-collage / preset gradient.
+updateStationArtwork:
+UPDATE station SET artwork_uri = ?, updated_at = ? WHERE id = ?;
+
+updateStationStats:
+UPDATE station SET play_count = ?, last_played_at = ?, total_listen_ms = ?, skip_rate = ?, updated_at = ? WHERE id = ?;
+
+-- Atomic +1 increment on play_count + last_played_at refresh. Race-
+-- safe across concurrent station starts (two read-modify-write callers
+-- would clobber each other; this single statement can't).
+bumpStationPlayCount:
+UPDATE station SET
+    play_count = play_count + 1,
+    last_played_at = ?,
+    updated_at = ?
+WHERE id = ?;
+
+-- Atomic accumulation of listened time (called per-track-end).
+bumpStationListenedMs:
+UPDATE station SET
+    total_listen_ms = total_listen_ms + ?,
+    updated_at = ?
+WHERE id = ?;
+
+-- Wipe denormalized per-station counters. Paired with clearAllHistory
+-- so the Stats screen's Top Stations section actually resets when
+-- the user clears history (Top Stations reads station.play_count, not
+-- station_history aggregates).
+resetAllStationStats:
+UPDATE station SET
+    play_count = 0,
+    last_played_at = NULL,
+    total_listen_ms = 0,
+    skip_rate = 0.0,
+    updated_at = ?;
+
+-- Per-station counterpart used by the "Reset stats" action on the
+-- station long-press sheet. Wipes the cached counters on a single
+-- station row without touching `station_history` — paired with
+-- `deleteHistoryByStation` (already exists) when the user wants
+-- the full reset, or applied alone when they just want to zero
+-- the visible play_count / skip_rate.
+resetStationStatsById:
+UPDATE station SET
+    play_count = 0,
+    last_played_at = NULL,
+    total_listen_ms = 0,
+    skip_rate = 0.0,
+    updated_at = ?
+WHERE id = ?;
+
+-- Batch (track_id → play_count) for the candidate set of a station.
+-- Used by PlaybackQueue's FavorUnderPlayed / FavorHigherRated
+-- weighting so it can bias the random pick without a per-pick lookup.
+selectPlayCountForTracks:
+SELECT track_id, COUNT(*) AS plays
+FROM station_history
+WHERE track_id IN ?
+GROUP BY track_id;
+
+-- Per-station completion stats. Returns (station_id, plays, skips)
+-- so the Home tile can render "X plays · Y% skip" without per-row
+-- queries. plays = total history rows; skips = rows with
+-- completed = 0 (listened < 80% of duration). Stations with no
+-- history are absent from the result and treated as zero by callers.
+selectStationCompletionRates:
+SELECT station_id,
+       COUNT(*) AS plays,
+       SUM(CASE WHEN completed = 0 THEN 1 ELSE 0 END) AS skips
+FROM station_history
+GROUP BY station_id;
+
+-- Track-level play/skip stats for the Track Info dialog. Unlike the
+-- batched version above, this is a single-track aggregate including
+-- skip count (incomplete plays) and total listened time so the
+-- Track Info dialog can show real listening numbers, not just the
+-- total play count.
+selectTrackHistoryStats:
+SELECT
+    COUNT(*) AS plays,
+    SUM(CASE WHEN completed = 1 THEN 1 ELSE 0 END) AS completes,
+    SUM(CASE WHEN completed = 0 THEN 1 ELSE 0 END) AS skips,
+    IFNULL(SUM(listened_ms), 0) AS listened_ms
+FROM station_history
+WHERE track_id = ?;
+
+reorderStation:
+UPDATE station SET sort_position = ?, updated_at = ? WHERE id = ?;
+
+setStationPinned:
+UPDATE station SET is_pinned = ?, updated_at = ? WHERE id = ?;
+
+deleteStationById:
+DELETE FROM station WHERE id = ?;
+
+-- ==== Station history queries ====
+
+recordPlay:
+INSERT INTO station_history (station_id, track_id, played_at, completed, listened_ms)
+VALUES (?, ?, ?, ?, ?)
+RETURNING id;
+
+selectHistoryByStation:
+SELECT * FROM station_history WHERE station_id = ? ORDER BY played_at DESC LIMIT ?;
+
+-- Global play history across all stations, newest first. Joins station
+-- name in so the UI doesn't have to do a per-row station lookup.
+selectAllHistory:
+SELECT sh.id AS history_id, sh.track_id, sh.station_id, sh.played_at,
+       sh.completed, sh.listened_ms, station.name AS station_name
+FROM station_history sh
+JOIN station ON station.id = sh.station_id
+ORDER BY sh.played_at DESC
+LIMIT ?;
+
+selectRecentTrackIdsForStation:
+SELECT track_id FROM station_history WHERE station_id = ? ORDER BY played_at DESC LIMIT ?;
+
+-- Up to N distinct album artwork URIs for the station's recent
+-- history. Used to build the per-station collage thumbnail when
+-- the station has no custom artwork uploaded. ROW_NUMBER OVER
+-- partitions by album so we keep one row per album (the most
+-- recent play) and ORDER BY recency. NULL artwork rows are
+-- filtered out at the application layer.
+selectRecentAlbumArtworkForStation:
+SELECT album.artwork_uri AS artwork_uri, MAX(sh.played_at) AS last_played_at
+FROM station_history sh
+JOIN track ON track.id = sh.track_id
+JOIN album ON album.id = track.album_id
+WHERE sh.station_id = ?
+  AND track.album_id IS NOT NULL
+  AND album.artwork_uri IS NOT NULL
+  AND TRIM(album.artwork_uri) != ''
+GROUP BY album.id
+ORDER BY last_played_at DESC
+LIMIT ?;
+
+selectRecentAlbumArtworkForStations:
+SELECT station_id, artwork_uri FROM (
+  SELECT sh.station_id, album.artwork_uri,
+    ROW_NUMBER() OVER (PARTITION BY sh.station_id, album.id ORDER BY sh.played_at DESC) AS rn
+  FROM station_history sh
+  JOIN track ON track.id = sh.track_id
+  JOIN album ON album.id = track.album_id
+  WHERE sh.station_id IN ?
+    AND track.album_id IS NOT NULL
+    AND album.artwork_uri IS NOT NULL
+    AND TRIM(album.artwork_uri) != ''
+)
+WHERE rn = 1
+ORDER BY station_id;
+
+countHistoryForStation:
+SELECT COUNT(*) FROM station_history WHERE station_id = ?;
+
+deleteHistoryByStation:
+DELETE FROM station_history WHERE station_id = ?;
+
+trimHistoryOlderThan:
+DELETE FROM station_history WHERE played_at < ?;
+
+-- Inverse of trimHistoryOlderThan — drops rows from the *recent*
+-- side of the timeline, used by the "Clear last hour" / "Clear last
+-- 24 hours" menu items in the History screen. Doesn't touch the
+-- denormalized station counters (caller must follow up if they
+-- want a Stats reset).
+trimHistoryNewerThan:
+DELETE FROM station_history WHERE played_at >= ?;
+
+clearAllHistory:
+DELETE FROM station_history;
+
+-- Aggregated listening stats. Used by the Listening Stats screen.
+-- Top tracks across all stations (most plays first); ties broken by
+-- most-recent play so the user always sees something fresh.
+selectTopPlayedTrackIds:
+SELECT track_id, COUNT(*) AS play_count, MAX(played_at) AS last_played_at
+FROM station_history
+GROUP BY track_id
+ORDER BY play_count DESC, last_played_at DESC
+LIMIT ?;
+
+-- Total cumulative listened time across all stations / tracks. Used
+-- as a header stat on the Listening Stats screen. IFNULL handles the
+-- cold-start case where there are no rows yet.
+totalListenedMs:
+SELECT IFNULL(SUM(listened_ms), 0) FROM station_history;
+
+-- Listening time inside an arbitrary [from, to) window, in epoch
+-- milliseconds. Used by the Stats screen to compute this-week vs
+-- last-week deltas.
+listenedMsBetween:
+SELECT IFNULL(SUM(listened_ms), 0) FROM station_history
+WHERE played_at >= ? AND played_at < ?;
+
+countAllPlays:
+SELECT COUNT(*) FROM station_history;
+
+-- Earliest play timestamp across all of station_history. Used by the
+-- Stats screen as a "listening since…" tile so the user has a sense
+-- of how much of their listening lifetime is captured. Returns NULL
+-- when the table is empty (cold-start) — the screen hides the tile
+-- in that case rather than rendering a placeholder.
+earliestPlayedAt:
+SELECT MIN(played_at) AS earliest_ms FROM station_history;
+
+-- Distinct artist / album reach across all of station_history. The
+-- track_id column joins to library tables for the artist/album
+-- resolution; tracks deleted from the library after their history
+-- row was recorded simply drop out (LEFT JOIN would over-count
+-- by re-attributing them to NULL, so INNER JOIN is intentional).
+distinctArtistsPlayed:
+SELECT COUNT(DISTINCT ta.artist_id) AS distinct_artists
+FROM station_history sh
+JOIN track_artist ta ON ta.track_id = sh.track_id;
+
+distinctAlbumsPlayed:
+SELECT COUNT(DISTINCT t.album_id) AS distinct_albums
+FROM station_history sh
+JOIN track t ON t.id = sh.track_id
+WHERE t.album_id IS NOT NULL;
+
+-- Daily play counts within a rolling window. ?1 is "now" in epoch
+-- ms, ?2 is the cutoff (now - windowMs). Returns one row per day
+-- with at least one play, with days_ago=0 = today's bucket. The
+-- chart renderer fills in zero-play days client-side.
+selectPlaysPerDayWindow:
+SELECT
+    CAST((:nowMs - played_at) / (24 * 60 * 60 * 1000) AS INTEGER) AS days_ago,
+    COUNT(*) AS plays,
+    IFNULL(SUM(listened_ms), 0) AS listened_ms
+FROM station_history
+WHERE played_at >= :sinceMs
+GROUP BY days_ago
+ORDER BY days_ago;
+
+-- Plays bucketed by local weekday (0=Sunday..6=Saturday per SQLite's
+-- strftime('%w')) within a rolling window. Returns one row per
+-- weekday with at least one play; the renderer fills in zero-play
+-- weekdays. Same windowing semantics as the hour-of-day query.
+selectPlaysPerWeekdayWindow:
+SELECT
+    CAST(strftime('%w', played_at / 1000, 'unixepoch', 'localtime') AS INTEGER) AS weekday,
+    COUNT(*) AS plays
+FROM station_history
+WHERE played_at >= :sinceMs
+GROUP BY weekday
+ORDER BY weekday;
+
+-- Distinct calendar dates (in the user's local timezone) on which at
+-- least one play happened, within a rolling window. Returned newest-
+-- first as integer days-since-epoch so the streak calculator can
+-- check consecutiveness with subtraction. Window is 90 days because
+-- the streak card stops being interesting past ~3 months and the
+-- query stays tiny.
+selectActivePlayDays:
+SELECT DISTINCT
+    CAST(strftime('%s', played_at / 1000, 'unixepoch', 'localtime', 'start of day') AS INTEGER) / 86400 AS day_epoch
+FROM station_history
+WHERE played_at >= :sinceMs
+ORDER BY day_epoch DESC;
+
+-- Hour-of-day play distribution within a rolling window. SQLite's
+-- strftime needs seconds, hence /1000, and 'localtime' tells it to
+-- use the JVM/process timezone so 'hour 19' means the user's local
+-- 7 pm regardless of where they are. Returns one row per hour with
+-- at least one play; the renderer fills in zero-play hours.
+selectPlaysPerHourWindow:
+SELECT
+    CAST(strftime('%H', played_at / 1000, 'unixepoch', 'localtime') AS INTEGER) AS hour,
+    COUNT(*) AS plays
+FROM station_history
+WHERE played_at >= :sinceMs
+GROUP BY hour
+ORDER BY hour;
+
+-- Completion-rate aggregates over all of station_history. Two
+-- counts in one query is cheaper than two scans even on a tiny
+-- index; SQLite does it in one pass. IFNULL keeps SUM non-null
+-- on cold-start (zero rows) so callers don't need a `?: 0L`.
+selectCompletionStats:
+SELECT
+    IFNULL(SUM(CASE WHEN completed = 1 THEN 1 ELSE 0 END), 0) AS completed,
+    COUNT(*) AS total
+FROM station_history;
+
+-- Atomic next-sort-position lookup used inside the duplicate-station
+-- transaction. IFNULL handles the empty-table case so callers don't
+-- need a coalesce. Wrapped in a transaction with the subsequent
+-- INSERT so two concurrent duplicates can't compute the same sort
+-- position.
+selectMaxStationSort:
+SELECT IFNULL(MAX(sort_position), 0) AS max_sort FROM station;
+
+-- Top artists by play count, joining through track_artist (primary
+-- role only — features / album-artist links would over-count). Returns
+-- (artistId, artistName, plays). Album/album-artist counted as plays
+-- of the primary artist of each track regardless.
+selectTopPlayedArtists:
+SELECT artist.id AS artist_id, artist.name AS artist_name, COUNT(*) AS plays
+FROM station_history sh
+JOIN track t ON t.id = sh.track_id
+JOIN track_artist ta ON ta.track_id = t.id
+JOIN artist ON artist.id = ta.artist_id
+WHERE ta.role = 'primary'
+GROUP BY artist.id
+ORDER BY plays DESC, MAX(sh.played_at) DESC
+LIMIT ?;
+
+-- "Rediscover" feed — track ids that the user has played at least
+-- once but whose most-recent play is older than the threshold passed
+-- in. Sorted oldest-first so we surface the longest-forgotten tracks.
+-- The HAVING clause filters on the aggregate so the index on
+-- played_at can still drive the scan.
+selectRediscoverTrackIds:
+SELECT track_id, MAX(played_at) AS last_played_at, COUNT(*) AS plays
+FROM station_history
+GROUP BY track_id
+HAVING last_played_at < ? AND plays >= 1
+ORDER BY last_played_at ASC
+LIMIT ?;
+
+-- ==== Station pinned-track queries ====
+
+pinTrackToStation:
+INSERT OR REPLACE INTO station_pinned_track (station_id, track_id, pinned_at)
+VALUES (?, ?, ?);
+
+unpinTrackFromStation:
+DELETE FROM station_pinned_track WHERE station_id = ? AND track_id = ?;
+
+isTrackPinnedToStation:
+SELECT COUNT(*) FROM station_pinned_track
+WHERE station_id = ? AND track_id = ?;
+
+selectPinnedTracksForStation:
+SELECT track.* FROM track
+JOIN station_pinned_track p ON p.track_id = track.id
+WHERE p.station_id = ? AND track.is_available = 1
+ORDER BY p.pinned_at DESC;
+
+selectPinnedTrackIdsForStation:
+SELECT track_id FROM station_pinned_track WHERE station_id = ?;
+
+countPinnedTracksForStation:
+SELECT COUNT(*) FROM station_pinned_track WHERE station_id = ?;
+
+-- Top genres by play count. Joins station_history → track →
+-- track_tag (key='GENRE') and aggregates plays per tag value.
+-- Filters to GENRE tag specifically; case-sensitive match because
+-- the genre canonicalization migration already collapsed casing
+-- variants. Empty/blank values are excluded so a track with a stray
+-- empty GENRE tag doesn't dilute the count.
+selectTopPlayedGenres:
+SELECT tt.value AS genre, COUNT(*) AS plays
+FROM station_history sh
+JOIN track t ON t.id = sh.track_id
+JOIN track_tag tt ON tt.track_id = t.id
+WHERE tt.key = 'GENRE'
+  AND TRIM(tt.value) != ''
+GROUP BY tt.value
+ORDER BY plays DESC, MAX(sh.played_at) DESC
+LIMIT ?;
+
+-- Top albums by play count. Tracks without album_id are excluded from
+-- the count. Album artwork URI included so the UI doesn't need a
+-- second per-row query.
+selectTopPlayedAlbums:
+SELECT album.id AS album_id, album.title AS album_title,
+       album.artwork_uri AS artwork_uri, COUNT(*) AS plays
+FROM station_history sh
+JOIN track t ON t.id = sh.track_id
+JOIN album ON album.id = t.album_id
+WHERE t.album_id IS NOT NULL
+GROUP BY album.id
+ORDER BY plays DESC, MAX(sh.played_at) DESC
+LIMIT ?;

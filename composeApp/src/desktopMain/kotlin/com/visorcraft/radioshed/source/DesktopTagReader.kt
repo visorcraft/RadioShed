@@ -1,0 +1,4 @@
+package com.visorcraft.radioshed.source
+
+/** Desktop tag reader — shared [JvmTagReader] jaudiotagger implementation. */
+class DesktopTagReader : TagReader by JvmTagReader()
