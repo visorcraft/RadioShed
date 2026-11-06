@@ -295,27 +295,6 @@ fun VisualizerScreen(
                         }
                         else -> false
                     }
-                }.pointerInput(controlsVisible, mode) {
-                    var distance = 0f
-                    detectHorizontalDragGestures(
-                        onDragStart = { distance = 0f },
-                        onDragEnd = {
-                            if (!controlsVisible && abs(distance) > 80f) {
-                                selectMode(if (distance < 0f) mode.next() else mode.previous())
-                            }
-                        },
-                        onHorizontalDrag = { _, amount -> distance += amount },
-                    )
-                }.pointerInput(Unit) {
-                    detectTapGestures(
-                        onDoubleTap = {
-                            audioEngine.togglePlayPause()
-                            revealControls()
-                        },
-                        onTap = {
-                            if (controlsVisible) controlsVisible = false else revealControls()
-                        },
-                    )
                 },
     ) {
         VisualizerCanvas(
@@ -349,6 +328,33 @@ fun VisualizerScreen(
                 playing = playing,
             )
         }
+        Box(
+            modifier =
+                Modifier
+                    .matchParentSize()
+                    .pointerInput(controlsVisible, mode) {
+                        var distance = 0f
+                        detectHorizontalDragGestures(
+                            onDragStart = { distance = 0f },
+                            onDragEnd = {
+                                if (!controlsVisible && abs(distance) > 80f) {
+                                    selectMode(if (distance < 0f) mode.next() else mode.previous())
+                                }
+                            },
+                            onHorizontalDrag = { _, amount -> distance += amount },
+                        )
+                    }.pointerInput(Unit) {
+                        detectTapGestures(
+                            onDoubleTap = {
+                                audioEngine.togglePlayPause()
+                                revealControls()
+                            },
+                            onTap = {
+                                if (controlsVisible) controlsVisible = false else revealControls()
+                            },
+                        )
+                    },
+        )
 
         AnimatedVisibility(
             visible = !controlsVisible,
@@ -520,7 +526,12 @@ fun VisualizerScreen(
                                 revealControls()
                             },
                         )
-                        TooltipIconButton(tooltip = "Next mode", onClick = { selectMode(mode.next()) }) {
+                        TooltipIconButton(
+                            tooltip = "Next mode",
+                            onClick = {
+                                selectMode(mode.next())
+                            },
+                        ) {
                             Icon(
                                 Icons.AutoMirrored.Filled.KeyboardArrowRight,
                                 contentDescription = "Next mode",
