@@ -87,7 +87,7 @@ Local install on the Linux dev box (CachyOS / KDE Plasma) is the AUR package `ra
 - `AudioEngineAndroid.retryIfFailed()` calls `MediaController.prepare()` when `playerError` is set before Play/Resume. Calling `play()` alone leaves ExoPlayer idle after a NAS/source error.
 - Display titles go through `Track.displayTitle()` (or `String.withoutBracketGroups()` for ad-hoc/media-session titles). Square-bracket groups such as YouTube IDs are hidden; parentheses remain, and a title consisting only of bracket groups is preserved.
 - `PackageSingleFileAppImageTask` must make `AppRun` executable for everyone with `setExecutable(true, false)`. Owner-only `0744` is rejected by current appimagetool.
-- Dated install state (2026-11-06): the Linux dev box has AUR `radioshed 1.6.1-1`; checked-in AUR metadata is 1.10.0. The HY450 Max has 1.9.0/code 14 with a 3,318-track NAS library and launch auto-rescan disabled. Projector connection, mount, validation, and undo details live only in the private `/work/repos/visorcraft/HY450 Max/MANAGEMENT.md`; do not copy credentials or device identifiers into this repo.
+- Dated install state (2026-11-06): the Linux dev box has AUR `radioshed 1.6.1-1`; checked-in AUR metadata is 1.10.0. The HY450 Max has 1.10.0/code 15 with a 3,318-track NAS library and launch auto-rescan disabled. Projector connection, mount, validation, and undo details live only in the private `/work/repos/visorcraft/HY450 Max/MANAGEMENT.md`; do not copy credentials or device identifiers into this repo.
 
 ## Architecture
 
