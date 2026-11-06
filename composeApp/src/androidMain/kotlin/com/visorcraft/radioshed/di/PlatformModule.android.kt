@@ -118,6 +118,9 @@ actual val platformModule: Module =
         // Equalizer — attaches to ExoPlayer's audio session lazily when
         // RadioShedMediaSessionService reports onAudioSessionIdChanged.
         single<EqualizerController> { AndroidEqualizerController(get()) }
+        single<com.visorcraft.radioshed.audio.visualizer.VisualizerAudioSource> {
+            com.visorcraft.radioshed.audio.visualizer.AndroidVisualizerAudioSource(androidContext())
+        }
         single<TtsEngine> { AndroidTtsEngine(androidContext()) } // Phase DJ: Android TTS
         single<ClipPlayer> { AndroidClipPlayer() } // Phase DJ: plays synthesized clips
         single<TailSilenceAnalyzer> { AndroidTailSilenceAnalyzer() }

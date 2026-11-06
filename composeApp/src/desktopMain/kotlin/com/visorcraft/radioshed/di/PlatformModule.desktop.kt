@@ -127,6 +127,9 @@ actual val platformModule: Module =
         // rather than crashing app startup.
         single<AudioEngine> { AudioEngineDesktop() }
         single<EqualizerController> { NullEqualizerController() }
+        single<com.visorcraft.radioshed.audio.visualizer.VisualizerAudioSource> {
+            com.visorcraft.radioshed.audio.visualizer.UnavailableVisualizerAudioSource()
+        }
         single<TtsEngine> { NullTtsEngine() }
         single<ClipPlayer> { NullClipPlayer() }
 

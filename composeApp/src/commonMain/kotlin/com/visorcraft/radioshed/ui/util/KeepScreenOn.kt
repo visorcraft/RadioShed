@@ -7,10 +7,10 @@ import androidx.compose.runtime.Composable
  * `WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON` on Android and
  * `UIApplication.idleTimerDisabled` on iOS (when wired in).
  *
- * Composes as a `DisposableEffect` so the flag is automatically
- * cleared when the screen leaves composition (the user navigates
- * away from Now Playing) — without that, the flag would leak across
- * the rest of the app and stop honouring system display-timeout.
+ * Composes as a `DisposableEffect` so the flag is cleared when
+ * [active] becomes false or this composable leaves the tree. The
+ * app root owns it for the whole playback session; a screen that
+ * also called it would clear the window flag on navigation.
  */
 @Composable
 expect fun KeepScreenOn(active: Boolean)

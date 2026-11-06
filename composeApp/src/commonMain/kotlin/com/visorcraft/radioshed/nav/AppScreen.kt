@@ -36,6 +36,9 @@ sealed interface AppScreen {
     /** Full-screen Now Playing: art, scrubber, transport, rating. */
     data object NowPlaying : AppScreen
 
+    /** Immersive audio visualizer, opened from Now Playing. */
+    data object Visualizer : AppScreen
+
     /**
      * Station Editor — create a new station from scratch.
      * The editor itself is the same screen used for [EditStation] but

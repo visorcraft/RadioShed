@@ -232,6 +232,32 @@ class SettingsStoreBackupTest {
     }
 
     @Test
+    fun visualizerSettingsRoundTripAndClamp() {
+        val src = newStore()
+        src.setVisualizerMode("Nebula")
+        src.setVisualizerPalette("Synthwave")
+        src.setVisualizerIntensity(9f)
+        src.setVisualizerSpeed(-2f)
+        src.setVisualizerAutoCycle(true)
+
+        val dst = newStore()
+        dst.restoreFromBackup(src.dumpForBackup())
+
+        assertEquals("Nebula", dst.getVisualizerMode())
+        assertEquals("Synthwave", dst.getVisualizerPalette())
+        assertEquals(2f, dst.getVisualizerIntensity())
+        assertEquals(0.25f, dst.getVisualizerSpeed())
+        assertEquals(true, dst.getVisualizerAutoCycle())
+
+        dst.resetAllUserSettings()
+        assertEquals("Spectrum", dst.getVisualizerMode())
+        assertEquals("Prism", dst.getVisualizerPalette())
+        assertEquals(1f, dst.getVisualizerIntensity())
+        assertEquals(1f, dst.getVisualizerSpeed())
+        assertEquals(false, dst.getVisualizerAutoCycle())
+    }
+
+    @Test
     fun unknownTypeInBundle_isIgnored() {
         // A bundle from a different/older app version may carry a
         // key whose type doesn't match what dumpForBackup writes

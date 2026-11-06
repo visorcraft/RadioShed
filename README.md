@@ -46,6 +46,7 @@ Three things we care about:
 - Built-in and custom stations with source rules, pinned tracks, playback weighting, no-repeat memory, and artist/album spacing
 - Priority queue, playlists, likes, five-star ratings, listening history, and listening statistics
 - Gapless playback, configurable crossfade, ReplayGain, a five-band equalizer, and a sleep timer
+- Cinematic fullscreen visualizer with nine beat-reactive scenes, musical build/drop choreography, luminous trails and particles, five palettes, live Android FFT/waveform capture, and clearly labeled ambient desktop visuals
 
 **Metadata & discovery**
 - Optional Cover Art Archive artwork and LRClib lyrics with synced-line highlighting and seek

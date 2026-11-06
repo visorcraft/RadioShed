@@ -161,6 +161,47 @@ Tap the MiniPlayer to expand. Now Playing shows:
 - **Long-press play/pause** — toggles shuffle for the current session.
 - **Long-press queue button** — saves the current queue as a playlist.
 
+### Fullscreen visualizer
+
+Open the visualizer from the equalizer icon in Now Playing's bottom action bar
+(on compact phones, use More → **Open visualizer**). It runs full-bleed over the
+player, keeps the display awake, and continues across track changes.
+
+Choose among nine distinct renderers: **Prism Spectrum**, **Neon Oscilloscope**,
+**Radial Bloom**, **Aurora Ribbons**, **Bass Ripples**, **Hyperspace**,
+**Spectral Waterfall**, **Analog VU**, and **Vinyl Turntable**. Vinyl rotates
+with the music, shows track progress on its outer rim, and moves its tonearm as
+the track plays. Bloom, Ripples, and Vinyl incorporate available album artwork
+at the center of the light show. Five palettes, speed and intensity controls,
+and optional 20-second auto-cycling persist across launches and backup / restore.
+
+A Musical Director watches rolling energy for sustained builds and coordinated
+drops, adding gentle camera movement, scene swells, and staggered impact rings
+without changing your settings. Desktop ambient mode includes deterministic
+musical arcs so it demonstrates the same choreography without pretending to
+sample live audio.
+
+- **Live audio (Android):** tap **Ambient · enable live audio** and grant
+  microphone access to analyze the audible ExoPlayer session. Permission denial
+  or an unsupported OEM effect falls back to generated visuals without
+  interrupting playback. RadioShed does not record or save microphone data.
+- **Ambient (desktop / unsupported devices):** deterministic, track-seeded
+  visuals. The badge always says when visuals are generated rather than sampled
+  from live audio.
+- **Controls:** tap/click to show or hide them; double-tap to play or pause.
+  Swipe left or right while controls are hidden to change scene. Controls
+  auto-hide after inactivity. Use the floating deck for transport, direct mode
+  selection, palettes, auto-cycle, speed, and intensity. Open menus stay visible
+  until dismissed.
+- **Keyboard / remote:** **V** or Left/Right changes mode, **P** changes palette,
+  **A** toggles auto-cycle, **H** shows or hides controls, **Space** / **Enter**
+  plays or pauses, and **Esc** exits. When controls are hidden, D-pad Up/Down
+  adjusts volume. With controls visible, D-pad navigation reaches every button
+  and slider.
+- **Reduced motion:** follows the existing Display setting, slowing animation,
+  reducing particles, disabling impact rings, camera drift/punch, beat flashes,
+  scene light sweeps, and auto-cycle. Scene changes use a short fade only.
+
 ### Up Next
 
 Drag-to-reorder the priority queue (the "Play next" / "Add to queue"

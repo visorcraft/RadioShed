@@ -42,6 +42,7 @@ import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Forward10
+import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Lyrics
@@ -150,6 +151,7 @@ private data class StationTriplePaneEntry(val id: Long, val name: String, val cu
 fun NowPlayingScreen(
     onClose: () -> Unit,
     onOpenLyrics: () -> Unit = {},
+    onOpenVisualizer: () -> Unit = {},
     onOpenAlbum: (Long) -> Unit = {},
     onOpenArtist: (Long) -> Unit = {},
     onOpenStation: (Long) -> Unit = {},
@@ -212,18 +214,6 @@ fun NowPlayingScreen(
     LaunchedEffect(nowPlaying?.trackId) {
         if (playbackSpeed != 1f) audioEngine.setPlaybackSpeed(playbackSpeed)
     }
-    // Keep-screen-on: only while actively playing AND the user
-    // opted in. Pause/Idle release the flag so the screen times out
-    // normally between tracks, mirroring how Spotify / Apple Music
-    // behave when the user has tapped "keep screen on".
-    // Live-observed so toggling the Settings switch takes effect on
-    // the active session. A plain `remember { settings.getKeepScreenOn() }`
-    // reads once at first composition and ignores subsequent writes
-    // — a stale-toggle bug we hit before (see #292's fix-pattern).
-    val keepScreenOnPref by settings.keepScreenOnFlow.collectAsStateWithLifecycle()
-    com.visorcraft.radioshed.ui.util.KeepScreenOn(
-        active = keepScreenOnPref && state == com.visorcraft.radioshed.audio.PlayerState.Playing,
-    )
     val hapticTick = com.visorcraft.radioshed.ui.util.rememberHapticTick()
     // Snapshot dialog: saves the current Up Next list as a new
     // playlist. We keep the candidate tracks alongside the open
@@ -380,6 +370,18 @@ fun NowPlayingScreen(
                             onVolumeLive = { stationPlayback.previewUserVolume(it) },
                             onVolumeCommit = { stationPlayback.commitUserVolume(it) },
                         )
+                        if (resolvedLayout != NowPlayingLayoutChoice.Compact) {
+                            com.visorcraft.radioshed.ui.util.TooltipIconButton(
+                                tooltip = "Visualizer",
+                                onClick = onOpenVisualizer,
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.GraphicEq,
+                                    contentDescription = "Visualizer",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                )
+                            }
+                        }
                         com.visorcraft.radioshed.ui.util.TooltipIconButton(
                             tooltip = "Lyrics",
                             onClick = onOpenLyrics,
@@ -609,6 +611,14 @@ fun NowPlayingScreen(
                                     onDismissRequest = { overflowMenuOpen = false },
                                 ) {
                                     val track = nowPlaying
+                                    DropdownMenuItem(
+                                        text = { Text("Open visualizer") },
+                                        leadingIcon = { Icon(Icons.Filled.GraphicEq, null) },
+                                        onClick = {
+                                            overflowMenuOpen = false
+                                            onOpenVisualizer()
+                                        },
+                                    )
                                     DropdownMenuItem(
                                         text = { Text("Add to playlist") },
                                         leadingIcon = { Icon(Icons.AutoMirrored.Filled.PlaylistAdd, null) },
@@ -882,6 +892,10 @@ fun NowPlayingScreen(
                     stationId = currentStation?.id,
                     playbackSpeed = playbackSpeed,
                     onDismiss = { overflowMenuOpen = false },
+                    onOpenVisualizer = {
+                        overflowMenuOpen = false
+                        onOpenVisualizer()
+                    },
                     onAddToPlaylist = { tid ->
                         overflowMenuOpen = false
                         addToPlaylistTrackId = tid
@@ -1145,6 +1159,7 @@ private fun OverflowSheet(
     stationId: Long?,
     playbackSpeed: Float,
     onDismiss: () -> Unit,
+    onOpenVisualizer: () -> Unit,
     onAddToPlaylist: (Long) -> Unit,
     onGoToAlbum: (Long) -> Unit,
     onGoToArtist: (Long) -> Unit,
@@ -1155,6 +1170,12 @@ private fun OverflowSheet(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
         Column(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+            OverflowSheetItem(
+                icon = Icons.Filled.GraphicEq,
+                label = "Open visualizer",
+                enabled = true,
+                onClick = onOpenVisualizer,
+            )
             OverflowSheetItem(
                 icon = Icons.AutoMirrored.Filled.PlaylistAdd,
                 label = "Add to playlist",

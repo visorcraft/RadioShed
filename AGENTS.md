@@ -20,12 +20,13 @@ There is **one Gradle module** — `:composeApp` — with source sets:
 
 - `commonMain` / `commonTest`
 - `jvmMain` — shared JVM code (jaudiotagger tag read/write, file enumeration) depended on by both `androidMain` and `desktopMain`
+- `jvmTest` — JDBC SQLite integration tests shared by `androidUnitTest` and `desktopTest`; kept out of `commonTest` because the driver has no native iOS variant
 - `androidMain`
 - `desktopMain`
 - `iosMain`
 - `desktopTest`
 
-There is no separate `shared/`, `androidApp/`, or `iosApp` module.
+There is no separate `shared/`, `androidApp/`, or `iosApp` module. Current source is **v1.9.0 / versionCode 14**; the latest GitHub release is **v1.7.1 / versionCode 12**.
 
 The desktop JVM target is named `desktop` (`kotlin { jvm("desktop") }` in `composeApp/build.gradle.kts`); the source set follows that convention as `desktopMain`. Linux desktop compile, run, single-file `.AppImage`, and `.deb` packaging are verified and useful for iterating on Compose UI without an emulator.
 
@@ -73,11 +74,19 @@ Linux packaging details:
 - `APPIMAGETOOL=/path/to/appimagetool` or `appimagetool` on PATH takes precedence; otherwise Gradle downloads the x86_64 tool into `composeApp/build/compose/tools/`.
 - `.deb` packaging needs `dpkg-deb` on PATH; Arch/CachyOS provide it via the `dpkg` package.
 
-Local install on the Linux dev box (CachyOS / KDE Plasma) — exactly **one** install, updated in place:
+Local install on the Linux dev box (CachyOS / KDE Plasma) is the AUR package `radioshed`, not a copy under `~/Applications`:
 
-- The single-file AppImage lives at `~/Applications/RadioShed.AppImage` (`chmod +x`). Never point the launcher into `composeApp/build/…` or at a versioned filename — those go stale on `clean` / version bumps.
-- Launcher `~/.local/share/applications/radioshed.desktop`: `Exec`/`TryExec` → that stable path, `Icon=radioshed` (PNGs under `~/.local/share/icons/hicolor/<size>/apps/`), pinned in the KDE Task Manager.
-- **To update:** `./gradlew :composeApp:packageSingleFileAppImage`, overwrite `~/Applications/RadioShed.AppImage`, `chmod +x`. Launcher and pin need no changes. All user-level — no `sudo`; playback still needs host libvlc.
+- `pacman -Q radioshed` should show the installed package. `/usr/bin/radioshed` links to `/opt/radioshed/RadioShed.AppImage`. The launcher is `/usr/share/applications/radioshed.desktop`. Do not add a `~/.local/share/applications/radioshed.desktop` that points somewhere else; that file overrides the package.
+- **To update:** publish the new release to the AUR, then `paru -S radioshed` (or `makepkg -si` from the AUR checkout). Playback still needs host libvlc.
+
+## Platform notes and current install state
+
+- `ui/player/visualizer/` is the full-bleed `AppScreen.Visualizer` route from Now Playing. Its Signature Light System has nine scenes (including progress-aware Vinyl), energy-mapped `VisualizerTheme` palettes, 48 cached paths (24 Waterfall crests + 24 fills), beat/drop impact rings, single-render scene intros, and waveform/spectral history. `audio/visualizer/` owns normalized 48-band/192-point frames, ambient generation, FFT decoding, raw-bass onset detection, rolling `MusicStructureAnalyzer` build/drop choreography, smoothing, peaks, VU dynamics, and allocation-free render history. Android binds `AndroidVisualizerAudioSource`; desktop/iOS use `UnavailableVisualizerAudioSource` with an explicit Ambient badge. `RadioShedMediaSessionService` forwards the active audio session at bind and every crossfade swap. Capture starts/stops with screen visibility; do not add libvlc audio callbacks or pretend desktop visuals are live. Reduced motion disables impact rings, camera drift/punch, drop flashes, and scene light sweeps. Never start audible playback for automated verification; use generated frames or a silent preview instead.
+- `HomeScreen` must work by height as well as width. Below 640 dp it uses a compact header and vertical scrolling; focused cards get a high-contrast ring and are brought into view. This keeps Settings reachable by D-pad on the projector's 960×540 dp viewport. Stations takes initial focus, D-pad Up and station clicks open Now Playing, and volume controls live on the bottom bar.
+- `AudioEngineAndroid.retryIfFailed()` calls `MediaController.prepare()` when `playerError` is set before Play/Resume. Calling `play()` alone leaves ExoPlayer idle after a NAS/source error.
+- Display titles go through `Track.displayTitle()` (or `String.withoutBracketGroups()` for ad-hoc/media-session titles). Square-bracket groups such as YouTube IDs are hidden; parentheses remain, and a title consisting only of bracket groups is preserved.
+- `PackageSingleFileAppImageTask` must make `AppRun` executable for everyone with `setExecutable(true, false)`. Owner-only `0744` is rejected by current appimagetool.
+- Dated install state (2026-11-06): the Linux dev box has AUR `radioshed 1.6.1-1`; checked-in AUR metadata is 1.7.0. The HY450 Max has 1.7.0/code 11 with a 3,318-track NAS library and launch auto-rescan disabled. Neither install has 1.7.1 yet. Projector connection, mount, validation, and undo details live only in the private `/work/repos/visorcraft/HY450 Max/MANAGEMENT.md`; do not copy credentials or device identifiers into this repo.
 
 ## Architecture
 
@@ -101,8 +110,8 @@ Common-side declarations use `expect val` / `expect fun` / `expect class`. Actua
 - `data/DatabaseDriverFactory`, `data/Time.kt`, `data/IODispatcher`
 - `source/FileEnumerator`, `source/TagReader`, `source/FileOps`, `source/StorageVolumes`, `source/DefaultMusicPath`, `source/SyncthingDetector`, `source/WebOpener`, `source/ArtworkPersister`, `source/FolderRevealer`, `source/BackupSharer`, `source/TrackSharer`, `source/PlaylistExporter`, `source/HistoryExporter`
 - `audio/MediaPlaybackAvailability`
-- `permissions/StoragePermissions`, `permissions/LocationPermissions`, `permissions/BluetoothPermissions`
-- `ui/util/KeepScreenOn`, `ui/util/Haptics`, `ui/util/VoiceInput`, `ui/util/ImagePicker`, `ui/util/FilePicker`, `ui/util/PlatformScrollbar`, `ui/util/VlcInstallHint`, `ui/util/DragReorder`
+- `permissions/StoragePermissions`, `permissions/LocationPermissions`, `permissions/BluetoothPermissions`, `permissions/AudioCaptureGate`
+- `ui/util/KeepScreenOn`, `ui/util/Haptics`, `ui/util/VoiceInput`, `ui/util/ImagePicker`, `ui/util/FilePicker`, `ui/util/PlatformScrollbar`, `ui/util/VlcInstallHint`, `ui/util/DragReorder`, `ui/util/ImmersiveMode`
 - `nav/PlatformBackHandler`
 - `Platform.kt`
 
@@ -239,9 +248,9 @@ DO NOT:
 - Test classes: `<ClassUnderTest>Test`, e.g. `SearchDslTest`, `PlaybackQueueTest`.
 - Test methods: descriptive `camelCase` (e.g. `quotedValuePreservesWhitespace`).
 - Use `kotlin.test` (`@Test`, `assertEquals`, `assertTrue`); for coroutine tests use `kotlinx-coroutines-test`.
-- Tests live in `composeApp/src/commonTest/kotlin/...` (and a small amount in `desktopTest`) mirroring the `commonMain` package path. They execute via `testDebugUnitTest` (Android variant) and `desktopTest`.
+- Platform-neutral tests live in `composeApp/src/commonTest/kotlin/...`; JDBC/SQLite-backed tests live in `composeApp/src/jvmTest/kotlin/...` (with a small amount in `desktopTest`). `jvmTest` depends on `commonTest` and feeds both `androidUnitTest` and `desktopTest`, so those tests run through `testDebugUnitTest` and `desktopTest` without adding JVM-only dependencies to iOS test compilations.
 - The `android.testOptions` block in `composeApp/build.gradle.kts` is load-bearing: `isReturnDefaultValues = true` plus the compose-resource assets dir on the unit-test classpath let `Res.readBytes()` resolve under `testDebugUnitTest` (`LicenseCatalogTest` fails without both).
-- DB-backed tests build a real in-memory database — `JdbcSqliteDriver(IN_MEMORY)` + `RadioShedDatabase.Schema.create(driver)` — instead of mocking repositories (see `StationRoundTripCrashTest`).
+- DB-backed tests in `jvmTest` build a real in-memory database — `JdbcSqliteDriver(IN_MEMORY)` + `RadioShedDatabase.Schema.create(driver)` — instead of mocking repositories (see `StationRoundTripCrashTest`). Keep these tests and `libs.sqldelight.sqliteDriver` out of `commonTest`.
 
 ### Build & Tooling
 
@@ -294,6 +303,7 @@ apksigner verify <name>.apk
 - **Attribution (IMPORTANT):** Commits are authored solely by the human committer. Never attribute code changes to any AI agent, assistant, or tool — including, but not limited to, **Cursor**, **cursoragent**, **Claude**, and **Codex**. Do **not** add `Co-Authored-By` trailers, "Generated with…" / "Assisted-by" lines, or any other AI attribution in commit messages, PR titles/descriptions, code, or comments.
 - Imperative present tense, ≤ 72-char subject.
 - Reference SPEC items by phase number or task id (e.g. `#142`, `Phase 4`).
+- History through the dependency/GPL batch was intentionally squashed into root commit `b303091` on 2026-11-05. Subsequent commits are normal incremental history; do not squash or rewrite `master` again unless the user explicitly asks.
 
 ### Prohibited Practices
 

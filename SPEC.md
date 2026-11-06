@@ -1415,7 +1415,7 @@ Each is a self-contained module, tackled as user demand surfaces.
 - [ ] Apple Watch companion app (WatchKit + WidgetKit)
 - [ ] Watch ↔ phone playlist/library sync
 - [ ] Tasker plugin (Android automation)
-- [ ] Visualizer (audio-reactive Now Playing background)
+- [x] Visualizer (audio-reactive Now Playing background) — `ui/player/visualizer/`, `audio/visualizer/`, nine Signature Light System scenes with rolling build/drop choreography, Vinyl progress, artwork emblems, and render history, Android live capture, desktop ambient mode
 - [ ] Android TV app
 - [ ] tvOS app
 

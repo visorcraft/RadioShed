@@ -133,7 +133,6 @@ fun AppSettingsScreen(
     var connectivityPolicy by remember { mutableStateOf(settings.getConnectivityPolicy()) }
     var backupRetention by remember { mutableStateOf(settings.getBackupRetention()) }
     var sleepStopOnExpire by remember { mutableStateOf(settings.getSleepStopOnExpire()) }
-    var keepScreenOn by remember { mutableStateOf(settings.getKeepScreenOn()) }
     var autoFetchLyrics by remember { mutableStateOf(settings.getAutoFetchLyrics()) }
     var hapticsEnabled by remember { mutableStateOf(settings.getHapticsEnabled()) }
     var resetConfirmOpen by remember { mutableStateOf(false) }
@@ -151,7 +150,6 @@ fun AppSettingsScreen(
         connectivityPolicy = settings.getConnectivityPolicy()
         backupRetention = settings.getBackupRetention()
         sleepStopOnExpire = settings.getSleepStopOnExpire()
-        keepScreenOn = settings.getKeepScreenOn()
         autoFetchLyrics = settings.getAutoFetchLyrics()
         hapticsEnabled = settings.getHapticsEnabled()
     }
@@ -280,20 +278,6 @@ fun AppSettingsScreen(
                         settings.setHapticsEnabled(v)
                     },
                 )
-                Spacer(Modifier.height(8.dp))
-                SettingsToggleRow(
-                    title = "Keep screen on while playing",
-                    subtitle =
-                        "Holds the display on while a track is actually playing. " +
-                            "Pause / idle releases the lock so the screen times out normally " +
-                            "between tracks. Off by default to save battery.",
-                    checked = keepScreenOn,
-                    onCheckedChange = { v ->
-                        keepScreenOn = v
-                        settings.setKeepScreenOn(v)
-                    },
-                )
-
                 Spacer(Modifier.height(24.dp))
 
                 // ---- Audio ----
@@ -849,7 +833,6 @@ fun AppSettingsScreen(
                     connectivityPolicy = settings.getConnectivityPolicy()
                     backupRetention = settings.getBackupRetention()
                     sleepStopOnExpire = settings.getSleepStopOnExpire()
-                    keepScreenOn = settings.getKeepScreenOn()
                     autoFetchLyrics = settings.getAutoFetchLyrics()
                     hapticsEnabled = settings.getHapticsEnabled()
                     onThemeModeChange(settings.getThemeMode())

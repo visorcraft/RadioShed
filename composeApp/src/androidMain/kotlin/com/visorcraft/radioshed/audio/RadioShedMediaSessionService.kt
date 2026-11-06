@@ -372,6 +372,7 @@ class RadioShedMediaSessionService : MediaLibraryService() {
                     // must not steal the equalizer away from what's audible.
                     if (exoPlayer !== playerPair?.active) return
                     forwardAudioSessionToEqualizer(audioSessionId)
+                    forwardAudioSessionToVisualizer(audioSessionId)
                 }
 
                 override fun onMediaItemTransition(
@@ -435,6 +436,17 @@ class RadioShedMediaSessionService : MediaLibraryService() {
                     .get<com.visorcraft.radioshed.audio.EqualizerController>()
             if (ctrl is com.visorcraft.radioshed.audio.AndroidEqualizerController) {
                 ctrl.onAudioSessionIdChanged(audioSessionId)
+            }
+        }
+    }
+
+    private fun forwardAudioSessionToVisualizer(audioSessionId: Int) {
+        runCatching {
+            val source =
+                GlobalContext.get()
+                    .get<com.visorcraft.radioshed.audio.visualizer.VisualizerAudioSource>()
+            if (source is com.visorcraft.radioshed.audio.visualizer.AndroidVisualizerAudioSource) {
+                source.onAudioSessionIdChanged(audioSessionId)
             }
         }
     }
@@ -529,6 +541,7 @@ class RadioShedMediaSessionService : MediaLibraryService() {
         // player's session and the EQ would audibly stop applying after
         // the first crossfade.
         forwardAudioSessionToEqualizer(newActive.audioSessionId)
+        forwardAudioSessionToVisualizer(newActive.audioSessionId)
         // Repaint the home-screen widget. The incoming player's
         // onMediaItemTransition / onIsPlayingChanged fired pre-swap while
         // it was still standby (suppressed by the same guard), so this is

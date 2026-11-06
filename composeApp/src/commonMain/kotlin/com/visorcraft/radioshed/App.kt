@@ -43,6 +43,7 @@ import com.visorcraft.radioshed.ui.onboarding.OnboardingScreen
 import com.visorcraft.radioshed.ui.player.LyricsScreen
 import com.visorcraft.radioshed.ui.player.MiniPlayer
 import com.visorcraft.radioshed.ui.player.NowPlayingScreen
+import com.visorcraft.radioshed.ui.player.visualizer.VisualizerScreen
 import com.visorcraft.radioshed.ui.playlists.PlaylistDetailScreen
 import com.visorcraft.radioshed.ui.playlists.PlaylistsScreen
 import com.visorcraft.radioshed.ui.search.SearchScreen
@@ -54,6 +55,7 @@ import com.visorcraft.radioshed.ui.settings.StatsScreen
 import com.visorcraft.radioshed.ui.stations.StationEditorScreen
 import com.visorcraft.radioshed.ui.stations.StationsHomeScreen
 import com.visorcraft.radioshed.ui.theme.RadioShedTheme
+import com.visorcraft.radioshed.ui.util.KeepScreenOn
 import com.visorcraft.radioshed.ui.util.VlcRequiredDialog
 import com.visorcraft.radioshed.ui.util.openGetVlcPage
 import kotlinx.coroutines.delay
@@ -134,6 +136,11 @@ fun App(
         // recompose on every Idle → Buffering → Playing → Paused → Ended
         // transition, i.e. on every play/pause tap and track change.
         VlcStateWatcher(audioEngine)
+        // Playback only holds a CPU wake lock. On a charging projector the
+        // system dream (screensaver) starts as soon as the display is
+        // allowed to sleep, which covers the app mid-track. Hold the
+        // screen for the whole session, not just the Now Playing page.
+        PlaybackKeepScreenOn(audioEngine, visualizerActive = current == AppScreen.Visualizer)
 
         // Composition-local nav handles for deep widgets (Track context
         // sheet, MiniPlayer overflow, etc.) that don't have a clean
@@ -356,6 +363,7 @@ fun App(
                         nowPlayingReturnTo = null
                     },
                     onOpenLyrics = { current = AppScreen.Lyrics },
+                    onOpenVisualizer = { current = AppScreen.Visualizer },
                     onOpenAlbum = { id -> current = AppScreen.AlbumDetail(id) },
                     onOpenArtist = { id -> current = AppScreen.ArtistDetail(id) },
                     onOpenStation = { id ->
@@ -373,6 +381,15 @@ fun App(
             if (current == AppScreen.Lyrics) {
                 PlatformBackHandler { current = AppScreen.NowPlaying }
                 LyricsScreen(onBack = { current = AppScreen.NowPlaying })
+                return@CompositionLocalProvider
+            }
+
+            if (current == AppScreen.Visualizer) {
+                PlatformBackHandler { current = AppScreen.NowPlaying }
+                VisualizerScreen(
+                    onClose = { current = AppScreen.NowPlaying },
+                    onOpenLyrics = { current = AppScreen.Lyrics },
+                )
                 return@CompositionLocalProvider
             }
 
@@ -664,6 +681,7 @@ fun App(
                         AppScreen.Onboarding,
                         AppScreen.NowPlaying,
                         AppScreen.Lyrics,
+                        AppScreen.Visualizer,
                         AppScreen.NewStation,
                         is AppScreen.EditStation,
                         -> Unit
@@ -737,4 +755,26 @@ private fun VlcStateWatcher(audioEngine: AudioEngine) {
             onGetVlc = { openGetVlcPage() },
         )
     }
+}
+
+/**
+ * Keeps the display awake for the whole time audio is actually going.
+ * Isolated from [App] so player-state changes don't recompose every screen.
+ * [PlayerState.Buffering] and [PlayerState.Ended] stay included: a track
+ * change reports those briefly, and dropping the flag after the system
+ * inactivity timeout has already elapsed starts the screensaver between songs.
+ */
+@Composable
+private fun PlaybackKeepScreenOn(
+    audioEngine: AudioEngine,
+    visualizerActive: Boolean,
+) {
+    val playerState by audioEngine.state.collectAsStateWithLifecycle()
+    KeepScreenOn(
+        active =
+            visualizerActive ||
+                playerState == PlayerState.Playing ||
+                playerState == PlayerState.Buffering ||
+                playerState == PlayerState.Ended,
+    )
 }

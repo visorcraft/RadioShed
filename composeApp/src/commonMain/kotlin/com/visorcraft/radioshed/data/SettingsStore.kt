@@ -309,6 +309,30 @@ class SettingsStore(private val settings: Settings) {
         _nowPlayingLayoutFlow.value = name
     }
 
+    fun getVisualizerMode(): String = settings.getStringOrNull(KEY_VISUALIZER_MODE) ?: "Spectrum"
+
+    fun setVisualizerMode(value: String) = settings.putString(KEY_VISUALIZER_MODE, value)
+
+    fun getVisualizerPalette(): String = settings.getStringOrNull(KEY_VISUALIZER_PALETTE) ?: "Prism"
+
+    fun setVisualizerPalette(value: String) = settings.putString(KEY_VISUALIZER_PALETTE, value)
+
+    fun getVisualizerIntensity(): Float = settings.getFloat(KEY_VISUALIZER_INTENSITY, 1f).coerceIn(0.25f, 2f)
+
+    fun setVisualizerIntensity(value: Float) {
+        settings.putFloat(KEY_VISUALIZER_INTENSITY, value.coerceIn(0.25f, 2f))
+    }
+
+    fun getVisualizerSpeed(): Float = settings.getFloat(KEY_VISUALIZER_SPEED, 1f).coerceIn(0.25f, 2f)
+
+    fun setVisualizerSpeed(value: Float) {
+        settings.putFloat(KEY_VISUALIZER_SPEED, value.coerceIn(0.25f, 2f))
+    }
+
+    fun getVisualizerAutoCycle(): Boolean = settings.getBoolean(KEY_VISUALIZER_AUTO_CYCLE, false)
+
+    fun setVisualizerAutoCycle(enabled: Boolean) = settings.putBoolean(KEY_VISUALIZER_AUTO_CYCLE, enabled)
+
     fun getKeepScreenOn(): Boolean = settings.getBoolean(KEY_KEEP_SCREEN_ON, false)
 
     fun setKeepScreenOn(enabled: Boolean) {
@@ -632,6 +656,8 @@ class SettingsStore(private val settings: Settings) {
             KEY_KEEP_SCREEN_ON, KEY_AUTO_FETCH_LYRICS, KEY_HAPTICS_ENABLED,
             KEY_LISTENBRAINZ_ENABLED,
             KEY_SEARCH_SCOPE, KEY_NOW_PLAYING_LAYOUT,
+            KEY_VISUALIZER_MODE, KEY_VISUALIZER_PALETTE, KEY_VISUALIZER_INTENSITY,
+            KEY_VISUALIZER_SPEED, KEY_VISUALIZER_AUTO_CYCLE,
             // Cloud connection setup is part of the user-portable
             // surface (round-trips via backup, see dumpForBackup), so
             // a "reset all settings" wipes it too. Credentials
@@ -1061,7 +1087,7 @@ class SettingsStore(private val settings: Settings) {
             KEY_LIB_ARTIST_SORT, KEY_LIB_ALBUM_SORT, KEY_LIB_GENRE_SORT,
             KEY_FILE_BROWSER_SORT, KEY_SEARCH_SCOPE,
             KEY_ALBUM_TRACK_SORT, KEY_ARTIST_TRACK_SORT, KEY_GENRE_TRACK_SORT,
-            KEY_NOW_PLAYING_LAYOUT,
+            KEY_NOW_PLAYING_LAYOUT, KEY_VISUALIZER_MODE, KEY_VISUALIZER_PALETTE,
             // Encoded list of user-pinned File Manager folders.
             // Format is internal to getFileBrowserPinnedFolders /
             // pinFileBrowserFolder; restore round-trips the raw
@@ -1117,7 +1143,7 @@ class SettingsStore(private val settings: Settings) {
             KEY_KEEP_SCREEN_ON, KEY_AUTO_FETCH_LYRICS, KEY_HAPTICS_ENABLED,
             KEY_LISTENBRAINZ_ENABLED,
             KEY_DJ_ENABLED,
-            KEY_DRIVE_AUTO_EXIT,
+            KEY_DRIVE_AUTO_EXIT, KEY_VISUALIZER_AUTO_CYCLE,
         ).forEach { key ->
             if (settings.hasKey(key)) {
                 out[key] =
@@ -1133,7 +1159,7 @@ class SettingsStore(private val settings: Settings) {
             KEY_FONT_SCALE,
             KEY_LYRICS_SCALE,
             KEY_PLAYBACK_SPEED,
-            KEY_DJ_DUCK_FRACTION,
+            KEY_DJ_DUCK_FRACTION, KEY_VISUALIZER_INTENSITY, KEY_VISUALIZER_SPEED,
         ).forEach { key ->
             if (settings.hasKey(key)) {
                 out[key] =
@@ -1248,7 +1274,7 @@ class SettingsStore(private val settings: Settings) {
             KEY_LIB_ARTIST_SORT, KEY_LIB_ALBUM_SORT, KEY_LIB_GENRE_SORT,
             KEY_FILE_BROWSER_SORT, KEY_SEARCH_SCOPE,
             KEY_ALBUM_TRACK_SORT, KEY_ARTIST_TRACK_SORT, KEY_GENRE_TRACK_SORT,
-            KEY_NOW_PLAYING_LAYOUT,
+            KEY_NOW_PLAYING_LAYOUT, KEY_VISUALIZER_MODE, KEY_VISUALIZER_PALETTE,
             KEY_FILE_BROWSER_PINS,
             KEY_THEME_COLOR_SOURCE,
             KEY_NETPOLICY_OVERRIDE_COVERART, KEY_NETPOLICY_OVERRIDE_LYRICS,
@@ -1264,11 +1290,11 @@ class SettingsStore(private val settings: Settings) {
             KEY_KEEP_SCREEN_ON, KEY_AUTO_FETCH_LYRICS, KEY_HAPTICS_ENABLED,
             KEY_LISTENBRAINZ_ENABLED,
             KEY_DJ_ENABLED,
-            KEY_DRIVE_AUTO_EXIT,
+            KEY_DRIVE_AUTO_EXIT, KEY_VISUALIZER_AUTO_CYCLE,
             -> SettingType.BOOL
             KEY_USER_VOLUME, KEY_REPLAY_GAIN_PREAMP,
             KEY_FONT_SCALE, KEY_LYRICS_SCALE, KEY_PLAYBACK_SPEED,
-            KEY_DJ_DUCK_FRACTION,
+            KEY_DJ_DUCK_FRACTION, KEY_VISUALIZER_INTENSITY, KEY_VISUALIZER_SPEED,
             -> SettingType.FLOAT
             KEY_END_FADE_SEC, KEY_STATIONS_TILE_SIZE,
             KEY_LYRICS_SYNC_OFFSET, KEY_STATS_WINDOW_DAYS,
@@ -1322,6 +1348,11 @@ class SettingsStore(private val settings: Settings) {
         const val KEY_SUBSONIC_PASSWORD = "cloud.subsonic.password"
         const val KEY_SEARCH_SCOPE = "ui.search.scope"
         const val KEY_NOW_PLAYING_LAYOUT = "ui.now_playing.layout"
+        const val KEY_VISUALIZER_MODE = "ui.visualizer.mode"
+        const val KEY_VISUALIZER_PALETTE = "ui.visualizer.palette"
+        const val KEY_VISUALIZER_INTENSITY = "ui.visualizer.intensity"
+        const val KEY_VISUALIZER_SPEED = "ui.visualizer.speed"
+        const val KEY_VISUALIZER_AUTO_CYCLE = "ui.visualizer.autoCycle"
         const val KEY_CONNECTIVITY_POLICY = "online.connectivityPolicy"
         const val KEY_NETPOLICY_OVERRIDE_COVERART = "online.netpolicy.override.coverart"
         const val KEY_NETPOLICY_OVERRIDE_LYRICS = "online.netpolicy.override.lyrics"

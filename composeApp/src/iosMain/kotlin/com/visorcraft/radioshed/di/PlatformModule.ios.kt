@@ -109,6 +109,9 @@ actual val platformModule: Module =
         // Phase 4: audio engine stub
         single<AudioEngine> { AudioEngineIos() }
         single<EqualizerController> { NullEqualizerController() }
+        single<com.visorcraft.radioshed.audio.visualizer.VisualizerAudioSource> {
+            com.visorcraft.radioshed.audio.visualizer.UnavailableVisualizerAudioSource()
+        }
         single<TtsEngine> { NullTtsEngine() }
         single<ClipPlayer> { NullClipPlayer() }
         single<TailSilenceAnalyzer> { NullTailSilenceAnalyzer() }
