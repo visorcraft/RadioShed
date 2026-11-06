@@ -46,6 +46,7 @@ import com.visorcraft.radioshed.source.SubsonicAlbum
 import com.visorcraft.radioshed.source.SubsonicArtist
 import com.visorcraft.radioshed.source.SubsonicClient
 import com.visorcraft.radioshed.source.SubsonicServer
+import com.visorcraft.radioshed.domain.withoutBracketGroups
 import com.visorcraft.radioshed.source.SubsonicSong
 import com.visorcraft.radioshed.ui.util.formatDurationSeconds
 import com.visorcraft.radioshed.ui.util.TooltipIconButton
@@ -309,7 +310,7 @@ fun SubsonicBrowseScreen(
                                             Playable(
                                                 trackId = -1L,
                                                 uri = client.streamUrl(server, song.id),
-                                                title = song.title,
+                                                title = song.title.withoutBracketGroups(),
                                                 artist = song.artist,
                                                 album = song.album,
                                                 durationMs = song.durationSec * 1000L,
@@ -440,7 +441,7 @@ private fun SongRow(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = song.title,
+                    text = song.title.withoutBracketGroups(),
                     style = MaterialTheme.typography.bodyLarge,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,

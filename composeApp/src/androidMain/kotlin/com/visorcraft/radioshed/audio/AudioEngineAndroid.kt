@@ -13,6 +13,7 @@ import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.MoreExecutors
+import com.visorcraft.radioshed.domain.withoutBracketGroups
 import com.visorcraft.radioshed.util.crashGuard
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -607,7 +608,7 @@ private fun MediaItem.toPlayable(fallbackDurationMs: Long = 0L): Playable {
     return Playable(
         trackId = mediaId.toLongOrNull() ?: 0L,
         uri = uri,
-        title = md.title?.toString().orEmpty(),
+        title = md.title?.toString().orEmpty().withoutBracketGroups(),
         artist = md.artist?.toString(),
         album = md.albumTitle?.toString(),
         durationMs = fallbackDurationMs,

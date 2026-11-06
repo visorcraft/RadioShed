@@ -260,7 +260,7 @@ private fun DupGroupRow(
         Column(modifier = Modifier.padding(12.dp)) {
             val artist = group.artistName ?: "Unknown artist"
             Text(
-                text = "$artist — ${group.tracks.first().title}",
+                text = "$artist — ${group.tracks.first().displayTitle()}",
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,

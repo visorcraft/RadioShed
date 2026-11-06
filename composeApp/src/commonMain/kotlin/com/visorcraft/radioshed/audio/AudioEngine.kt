@@ -2,6 +2,7 @@ package com.visorcraft.radioshed.audio
 
 import com.visorcraft.radioshed.domain.CrossfadeCurve
 import com.visorcraft.radioshed.domain.Track
+import com.visorcraft.radioshed.domain.withoutBracketGroups
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -183,7 +184,7 @@ fun Track.toPlayable(
     Playable(
         trackId = id,
         uri = path,
-        title = title,
+        title = title.withoutBracketGroups(),
         artist = artistName,
         album = albumTitle,
         durationMs = durationMs,

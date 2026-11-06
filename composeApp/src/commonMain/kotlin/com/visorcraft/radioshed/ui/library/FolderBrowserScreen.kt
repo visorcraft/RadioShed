@@ -80,6 +80,7 @@ import androidx.compose.ui.unit.dp
 import com.visorcraft.radioshed.audio.AudioEngine
 import com.visorcraft.radioshed.audio.Playable
 import com.visorcraft.radioshed.data.FolderRepository
+import com.visorcraft.radioshed.domain.withoutBracketGroups
 import com.visorcraft.radioshed.data.LibraryRepository
 import com.visorcraft.radioshed.data.SettingsStore
 import com.visorcraft.radioshed.scanner.Scanner
@@ -1483,7 +1484,7 @@ private suspend fun playAudioPath(
         Playable(
             trackId = -1L,
             uri = target.path,
-            title = target.name.substringBeforeLast('.', target.name),
+            title = target.name.substringBeforeLast('.', target.name).withoutBracketGroups(),
             artist = null,
             album = null,
             durationMs = 0L,

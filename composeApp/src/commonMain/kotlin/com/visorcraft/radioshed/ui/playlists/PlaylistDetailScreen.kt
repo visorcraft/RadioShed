@@ -173,7 +173,7 @@ fun PlaylistDetailScreen(
                                                     absolutePath = t.path,
                                                     durationSec = (t.durationMs / 1000L).toInt(),
                                                     artist = artistByTrack[t.id],
-                                                    title = t.title.ifBlank { t.fileName },
+                                                    title = t.displayTitle(),
                                                 )
                                             }
                                         playlistExporter.exportM3u(name, entries)
@@ -536,7 +536,7 @@ private fun PlaylistTrackRow(
             Spacer(Modifier.size(10.dp))
             Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = track.title.ifBlank { track.fileName },
+                    text = track.displayTitle(),
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.Medium,
                     color =

@@ -692,7 +692,7 @@ private fun TrackRow(
     ) {
         Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
             Text(
-                text = track.title,
+                text = track.displayTitle(),
                 style = MaterialTheme.typography.bodyLarge,
                 color =
                     if (isCurrent) {

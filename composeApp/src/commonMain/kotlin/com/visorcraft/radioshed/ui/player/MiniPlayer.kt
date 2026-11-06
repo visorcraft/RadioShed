@@ -25,6 +25,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.OpenInFull
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
@@ -50,6 +51,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.visorcraft.radioshed.audio.AudioEngine
+import com.visorcraft.radioshed.domain.withoutBracketGroups
 import com.visorcraft.radioshed.audio.PlayerState
 import com.visorcraft.radioshed.audio.SleepTimer
 import com.visorcraft.radioshed.isDesktopHost
@@ -62,11 +64,9 @@ import org.koin.compose.koinInject
  * the [AudioEngine]. Hidden completely when nothing is playing so it
  * doesn't waste space.
  *
- * Tap the bar to expand to a full Now Playing screen — that screen
- * doesn't exist yet (Phase 6 territory), so for now [onExpand] is a
- * no-op route. Transport buttons use Unicode glyphs to avoid pulling
- * in the material-icons-extended dep just for a v1 mini-player; we'll
- * swap to proper icons when the Now Playing screen lands.
+ * Tap the bar, or the expand button at the end of the transport row,
+ * to open Now Playing. The button is focusable so a remote can reach
+ * it; the transport buttons alone are not that action.
  */
 @Composable
 fun MiniPlayer(
@@ -204,7 +204,7 @@ fun MiniPlayer(
                     verticalArrangement = Arrangement.Center,
                 ) {
                     Text(
-                        text = playable.title.ifBlank { "Unknown title" },
+                        text = playable.title.withoutBracketGroups().ifBlank { "Unknown title" },
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Medium,
                         maxLines = 1,
@@ -224,7 +224,7 @@ fun MiniPlayer(
                                 remember(state, playable.trackId, priorityCount) {
                                     stationPlayback.upcoming(1).firstOrNull()
                                 }
-                            next?.title?.ifBlank { null }?.let { "Next: $it" }
+                            next?.displayTitle()?.ifBlank { null }?.let { "Next: $it" }
                         } else {
                             null
                         }
@@ -281,6 +281,11 @@ fun MiniPlayer(
                     icon = Icons.Filled.SkipNext,
                     contentDesc = "Next",
                     onClick = { stationPlayback.skipNext() },
+                )
+                TransportIconButton(
+                    icon = Icons.Filled.OpenInFull,
+                    contentDesc = "Now playing",
+                    onClick = onExpand,
                 )
             }
         }

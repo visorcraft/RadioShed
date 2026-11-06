@@ -30,7 +30,33 @@ data class Track(
     val isAvailable: Boolean = true,
     val addedAt: Long,
     val updatedAt: Long,
-)
+) {
+    /** Title for display. Square-bracket groups such as YouTube ids are hidden. */
+    fun displayTitle(): String = title.ifBlank { fileName }.withoutBracketGroups()
+}
+
+private val bracketGroup = Regex("""\[[^\[\]]*\]""")
+
+/**
+ * Remove square-bracket groups and the extra space they leave.
+ * Parentheses stay, because those are often part of the title.
+ * A title that is only a bracket group is returned unchanged.
+ */
+fun String.withoutBracketGroups(): String {
+    if ('[' !in this) return this
+    var work = this
+    repeat(4) {
+        val next = bracketGroup.replace(work, "")
+        if (next == work) return@repeat
+        work = next
+    }
+    val cleaned =
+        work
+            .replace(Regex("""\s+\."""), ".")
+            .replace(Regex("""[ \t]{2,}"""), " ")
+            .trim()
+    return cleaned.ifBlank { trim() }
+}
 
 @Serializable
 data class Tag(val key: String, val value: String, val position: Int = 0)

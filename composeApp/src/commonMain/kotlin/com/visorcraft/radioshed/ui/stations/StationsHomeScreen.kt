@@ -97,6 +97,7 @@ import com.visorcraft.radioshed.data.StationRepository
 import com.visorcraft.radioshed.domain.PlayOrder
 import com.visorcraft.radioshed.domain.Station
 import com.visorcraft.radioshed.domain.Track
+import com.visorcraft.radioshed.domain.withoutBracketGroups
 import com.visorcraft.radioshed.stations.StationPlayback
 import com.visorcraft.radioshed.ui.util.TooltipIconButton
 import com.visorcraft.radioshed.ui.util.onRightClick
@@ -701,7 +702,7 @@ fun StationsHomeScreen(
                                 ContinueListeningCard(
                                     station = active,
                                     isPlaying = playerState == PlayerState.Playing,
-                                    trackTitle = nowPlaying?.title,
+                                    trackTitle = nowPlaying?.title?.withoutBracketGroups(),
                                     trackArtist = nowPlaying?.artist,
                                     artworkUri = nowPlaying?.artworkUri,
                                     onTap = onOpenNowPlaying,
@@ -718,7 +719,10 @@ fun StationsHomeScreen(
                             item(span = { GridItemSpan(maxLineSpan) }) {
                                 RecentlyPlayedRow(
                                     stations = recentToShow,
-                                    onPlay = { id -> scope.launch { stationPlayback.playStation(id) } },
+                                    onPlay = { id ->
+                                        stationPlayback.playStation(id)
+                                        onOpenNowPlaying()
+                                    },
                                 )
                             }
                         }
@@ -733,7 +737,10 @@ fun StationsHomeScreen(
                             item(span = { GridItemSpan(maxLineSpan) }) {
                                 MostPlayedRow(
                                     stations = mostPlayed,
-                                    onPlay = { id -> scope.launch { stationPlayback.playStation(id) } },
+                                    onPlay = { id ->
+                                        stationPlayback.playStation(id)
+                                        onOpenNowPlaying()
+                                    },
                                 )
                             }
                         }
@@ -842,7 +849,8 @@ fun StationsHomeScreen(
                                     statsLine = skipRateLine,
                                     collageArtwork = stationCollages[station.id].orEmpty(),
                                     onPlay = {
-                                        scope.launch { stationPlayback.playStation(station.id) }
+                                        stationPlayback.playStation(station.id)
+                                        onOpenNowPlaying()
                                     },
                                     onLongPress = { actionsForStationId = station.id },
                                 )
@@ -856,7 +864,8 @@ fun StationsHomeScreen(
                                     statsLine = skipRateLine,
                                     collageArtwork = stationCollages[station.id].orEmpty(),
                                     onPlay = {
-                                        scope.launch { stationPlayback.playStation(station.id) }
+                                        stationPlayback.playStation(station.id)
+                                        onOpenNowPlaying()
                                     },
                                     onEdit = { actionsForStationId = station.id },
                                 )
@@ -1516,7 +1525,7 @@ private fun RecentlyAddedTile(
         }
         Spacer(Modifier.size(6.dp))
         Text(
-            text = track.title.ifBlank { track.fileName },
+            text = track.displayTitle(),
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.Medium,
             color = MaterialTheme.colorScheme.onBackground,

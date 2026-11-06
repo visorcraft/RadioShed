@@ -585,7 +585,7 @@ private fun AlbumTrackRow(
             Spacer(Modifier.size(8.dp))
             Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = track.title.ifBlank { track.fileName },
+                    text = track.displayTitle(),
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.Medium,
                     color =

@@ -23,6 +23,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -30,12 +31,20 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.visorcraft.radioshed.BuildInfo
+import com.visorcraft.radioshed.audio.AudioEngine
 import com.visorcraft.radioshed.data.FolderRepository
 import com.visorcraft.radioshed.getPlatform
 import org.jetbrains.compose.resources.painterResource
@@ -59,9 +68,12 @@ fun HomeScreen(
     onSearch: () -> Unit,
     onStations: () -> Unit,
     onSettings: () -> Unit,
+    onOpenNowPlaying: () -> Unit,
     folderRepo: FolderRepository = koinInject(),
+    audioEngine: AudioEngine = koinInject(),
 ) {
     val folders by folderRepo.observeAll().collectAsStateWithLifecycle(initialValue = emptyList())
+    val nowPlaying by audioEngine.nowPlaying.collectAsStateWithLifecycle()
     val totalTracks = folders.sumOf { it.trackCount }
     val folderWord = if (folders.size == 1) "folder" else "folders"
     val trackWord = if (totalTracks == 1L) "track" else "tracks"
@@ -176,8 +188,11 @@ fun HomeScreen(
                             title = "Stations",
                             subtitle = "Built-in presets + your own — tap to play",
                             onClick = onStations,
-                            primary = true,
                             compact = isShort,
+                            requestInitialFocus = true,
+                            // Up from the top card has nowhere to go. When a
+                            // track is loaded, that key opens Now Playing.
+                            onDirectionUp = if (nowPlaying != null) onOpenNowPlaying else null,
                         )
                         NavCard(
                             title = "Library",
@@ -217,40 +232,57 @@ private fun NavCard(
     title: String,
     subtitle: String,
     badge: String? = null,
-    primary: Boolean = false,
     compact: Boolean = false,
+    requestInitialFocus: Boolean = false,
+    onDirectionUp: (() -> Unit)? = null,
     onClick: () -> Unit,
 ) {
     // Remote / D-pad focus has no cursor. The resting ripple is easy to
-    // miss across a room, so a focused card takes the stronger fill and
-    // a high-contrast ring. Touch does not leave the ring up: leaving
-    // this screen disposes it, and coming back starts unfocused.
+    // miss across a room, so only the focused card takes the stronger
+    // fill and a high-contrast ring. A card is not highlighted just
+    // because it is the first item.
     var focused by remember { mutableStateOf(false) }
+    val focusRequester = remember { FocusRequester() }
+    // Home opens with nothing focused, so the remote has no active card
+    // until the first Down. Stations is the default.
+    LaunchedEffect(requestInitialFocus) {
+        if (requestInitialFocus) focusRequester.requestFocus()
+    }
     val shape = RoundedCornerShape(16.dp)
-    val emphasized = focused || primary
-    val strong = focused && primary
     val container =
-        when {
-            strong -> MaterialTheme.colorScheme.primary
-            emphasized -> MaterialTheme.colorScheme.primaryContainer
+        if (focused) {
+            MaterialTheme.colorScheme.primaryContainer
+        } else {
             // `surface` is barely distinguishable from `background` on
-            // the dark theme. `surfaceContainerHigh` keeps the card
-            // visible without competing with the Stations card.
-            else -> MaterialTheme.colorScheme.surfaceContainerHigh
+            // the dark theme.
+            MaterialTheme.colorScheme.surfaceContainerHigh
         }
     val content =
-        when {
-            strong -> MaterialTheme.colorScheme.onPrimary
-            emphasized -> MaterialTheme.colorScheme.onPrimaryContainer
-            else -> MaterialTheme.colorScheme.onSurface
+        if (focused) {
+            MaterialTheme.colorScheme.onPrimaryContainer
+        } else {
+            MaterialTheme.colorScheme.onSurface
         }
     val ring = if (focused) MaterialTheme.colorScheme.onBackground else Color.Transparent
     Card(
         modifier =
             Modifier
                 .fillMaxWidth()
+                .onPreviewKeyEvent { event ->
+                    if (
+                        onDirectionUp != null &&
+                        event.type == KeyEventType.KeyDown &&
+                        event.key == Key.DirectionUp
+                    ) {
+                        onDirectionUp()
+                        true
+                    } else {
+                        false
+                    }
+                }
                 .onFocusChanged { focused = it.isFocused }
                 .border(width = 4.dp, color = ring, shape = shape)
+                .focusRequester(focusRequester)
                 .clickable(onClick = onClick),
         colors = CardDefaults.cardColors(containerColor = container),
         shape = shape,
@@ -275,14 +307,14 @@ private fun NavCard(
             Text(
                 subtitle,
                 style = MaterialTheme.typography.bodySmall,
-                color = content.copy(alpha = if (emphasized) 0.8f else 0.6f),
+                color = content.copy(alpha = if (focused) 0.8f else 0.6f),
             )
             badge?.let {
                 Spacer(Modifier.height(8.dp))
                 Text(
                     it,
                     style = MaterialTheme.typography.labelSmall,
-                    color = content.copy(alpha = if (emphasized) 0.6f else 0.5f),
+                    color = content.copy(alpha = if (focused) 0.6f else 0.5f),
                 )
             }
         }

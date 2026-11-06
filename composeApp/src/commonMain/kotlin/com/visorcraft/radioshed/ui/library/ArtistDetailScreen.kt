@@ -425,7 +425,7 @@ private fun ArtistTrackRow(
             Spacer(Modifier.size(10.dp))
             Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = track.title.ifBlank { track.fileName },
+                    text = track.displayTitle(),
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.Medium,
                     color =

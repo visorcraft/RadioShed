@@ -227,7 +227,7 @@ fun HistoryScreen(
                                                 val track = trackById[e.trackId]
                                                 com.visorcraft.radioshed.source.HistoryCsvRow(
                                                     playedAtIso = formatIsoUtc(e.playedAt),
-                                                    title = track?.title ?: "(missing)",
+                                                    title = track?.displayTitle() ?: "(missing)",
                                                     artist = track?.id?.let { artistNames[it] },
                                                     album = track?.albumId?.let { albumTitles[it] },
                                                     stationName = e.stationName,
@@ -726,7 +726,7 @@ private fun HistoryRow(
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = track?.title?.ifBlank { track.fileName } ?: "Removed track",
+                        text = track?.displayTitle() ?: "Removed track",
                         style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.Medium,
                         color =

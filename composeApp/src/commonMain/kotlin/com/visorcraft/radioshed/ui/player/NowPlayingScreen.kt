@@ -67,6 +67,7 @@ import androidx.compose.material.icons.outlined.StarOutline
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -74,6 +75,8 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.VerticalSlider
+import androidx.compose.material3.rememberSliderState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -91,6 +94,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
@@ -102,7 +107,11 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 import com.visorcraft.radioshed.audio.AudioEngine
 import com.visorcraft.radioshed.audio.PlayerState
 import com.visorcraft.radioshed.audio.SleepTimer
@@ -110,6 +119,7 @@ import com.visorcraft.radioshed.data.LibraryRepository
 import com.visorcraft.radioshed.data.RatingRepository
 import com.visorcraft.radioshed.data.SettingsStore
 import com.visorcraft.radioshed.domain.Track
+import com.visorcraft.radioshed.domain.withoutBracketGroups
 import com.visorcraft.radioshed.stations.StationPlayback
 import com.visorcraft.radioshed.ui.playlists.AddToPlaylistSheet
 import com.visorcraft.radioshed.ui.util.dragReorderItem
@@ -180,12 +190,8 @@ fun NowPlayingScreen(
         stationRepo.observeAll()
             .map { list -> list.map { StationTriplePaneEntry(it.id, it.name, it.customSubtitle) } }
     }.collectAsStateWithLifecycle(initialValue = emptyList())
-    // Pre-mute level snapshot for the volume icon's tap-to-mute
-    // toggle. Lives at screen scope rather than inside VolumeRow so
-    // a layout-switch recomposition (Compact ↔ TwoPane on a Galaxy
-    // Fold's inner-display unfold) doesn't reset it back to 0.6 and
-    // surprise the user with a different unmute level than what
-    // they had before muting.
+    // Pre-mute level for the drive-mode transport mute button. Kept at
+    // screen scope so a layout switch does not reset the unmute level.
     var preMuteLevel by remember { mutableFloatStateOf(0.6f) }
     val sleepState by sleepTimer.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
@@ -355,8 +361,8 @@ fun NowPlayingScreen(
                 // Action bar — moved from the topBar so users coming from
                 // the main page (where the MiniPlayer lives at the bottom)
                 // don't have their navigation jump to the top mid-flight.
-                // All secondary actions (Volume on desktop, Lyrics,
-                // Shuffle, Repeat, Queue, Sleep, More) right-aligned.
+                // Volume sits immediately left of the other actions, which
+                // stay grouped at the bottom right.
                 androidx.compose.material3.Surface(
                     color = MaterialTheme.colorScheme.surface,
                     modifier = Modifier.fillMaxWidth(),
@@ -369,14 +375,11 @@ fun NowPlayingScreen(
                         horizontalArrangement = Arrangement.End,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        if (com.visorcraft.radioshed.isDesktopHost) {
-                            com.visorcraft.radioshed.ui.player.DesktopVolumeControl(
-                                volume = userVolume,
-                                onVolumeLive = { stationPlayback.previewUserVolume(it) },
-                                onVolumeCommit = { stationPlayback.commitUserVolume(it) },
-                                sliderWidth = 90.dp,
-                            )
-                        }
+                        BottomVolumeButton(
+                            volume = userVolume,
+                            onVolumeLive = { stationPlayback.previewUserVolume(it) },
+                            onVolumeCommit = { stationPlayback.commitUserVolume(it) },
+                        )
                         com.visorcraft.radioshed.ui.util.TooltipIconButton(
                             tooltip = "Lyrics",
                             onClick = onOpenLyrics,
@@ -941,7 +944,6 @@ fun NowPlayingScreen(
                         durationMs = { position.durationMs },
                         rating = rating,
                         liked = liked,
-                        volume = userVolume,
                         accent = accent,
                         stationName = currentStation?.name,
                         formatLine = formatLine,
@@ -968,8 +970,6 @@ fun NowPlayingScreen(
                             }
                         },
                         onToggleLike = onToggleLike,
-                        onVolumeLive = { stationPlayback.previewUserVolume(it) },
-                        onVolumeCommit = { stationPlayback.commitUserVolume(it) },
                         preMuteLevel = preMuteLevel,
                         onPreMuteLevelChange = { preMuteLevel = it },
                         onDislikeOnStation = {
@@ -1005,7 +1005,6 @@ fun NowPlayingScreen(
                         durationMs = { position.durationMs },
                         rating = rating,
                         liked = liked,
-                        volume = userVolume,
                         accent = accent,
                         stationName = currentStation?.name,
                         formatLine = formatLine,
@@ -1033,8 +1032,6 @@ fun NowPlayingScreen(
                             }
                         },
                         onToggleLike = onToggleLike,
-                        onVolumeLive = { stationPlayback.previewUserVolume(it) },
-                        onVolumeCommit = { stationPlayback.commitUserVolume(it) },
                         preMuteLevel = preMuteLevel,
                         onPreMuteLevelChange = { preMuteLevel = it },
                         onDislikeOnStation = {
@@ -1072,7 +1069,6 @@ fun NowPlayingScreen(
                         durationMs = { position.durationMs },
                         rating = rating,
                         liked = liked,
-                        volume = userVolume,
                         accent = accent,
                         stationName = currentStation?.name,
                         formatLine = formatLine,
@@ -1100,8 +1096,6 @@ fun NowPlayingScreen(
                             }
                         },
                         onToggleLike = onToggleLike,
-                        onVolumeLive = { stationPlayback.previewUserVolume(it) },
-                        onVolumeCommit = { stationPlayback.commitUserVolume(it) },
                         preMuteLevel = preMuteLevel,
                         onPreMuteLevelChange = { preMuteLevel = it },
                         onDislikeOnStation = {
@@ -1249,7 +1243,6 @@ private fun CompactLayout(
     durationMs: () -> Long,
     rating: Double,
     liked: Boolean,
-    volume: Float,
     accent: Color,
     stationName: String?,
     formatLine: String?,
@@ -1261,8 +1254,6 @@ private fun CompactLayout(
     onSkipFive: (() -> Unit)? = null,
     onRate: (Double) -> Unit,
     onToggleLike: () -> Unit,
-    onVolumeLive: (Float) -> Unit,
-    onVolumeCommit: (Float) -> Unit,
     preMuteLevel: Float,
     onPreMuteLevelChange: (Float) -> Unit,
     onDislikeOnStation: () -> Unit,
@@ -1336,20 +1327,6 @@ private fun CompactLayout(
             onRate = onRate,
             onToggleLike = onToggleLike,
         )
-        // In-content VolumeRow is hidden on desktop — the top-bar
-        // DesktopVolumeControl is the canonical surface there. Keeps
-        // the touch UX (Android / iOS) where the user has no
-        // hardware-key-free path to volume below the rating row.
-        if (!com.visorcraft.radioshed.isDesktopHost) {
-            Spacer(Modifier.height(8.dp))
-            VolumeRow(
-                volume = volume,
-                preMuteLevel = preMuteLevel,
-                onPreMuteLevelChange = onPreMuteLevelChange,
-                onVolumeLive = onVolumeLive,
-                onVolumeCommit = onVolumeCommit,
-            )
-        }
     }
 }
 
@@ -1361,7 +1338,6 @@ private fun TwoPaneLayout(
     durationMs: () -> Long,
     rating: Double,
     liked: Boolean,
-    volume: Float,
     accent: Color,
     stationName: String?,
     formatLine: String?,
@@ -1373,8 +1349,6 @@ private fun TwoPaneLayout(
     onSkipFive: (() -> Unit)? = null,
     onRate: (Double) -> Unit,
     onToggleLike: () -> Unit,
-    onVolumeLive: (Float) -> Unit,
-    onVolumeCommit: (Float) -> Unit,
     preMuteLevel: Float,
     onPreMuteLevelChange: (Float) -> Unit,
     onDislikeOnStation: () -> Unit,
@@ -1468,16 +1442,6 @@ private fun TwoPaneLayout(
                 onRate = onRate,
                 onToggleLike = onToggleLike,
             )
-            if (!com.visorcraft.radioshed.isDesktopHost) {
-                Spacer(Modifier.height(8.dp))
-                VolumeRow(
-                    volume = volume,
-                    preMuteLevel = preMuteLevel,
-                    onPreMuteLevelChange = onPreMuteLevelChange,
-                    onVolumeLive = onVolumeLive,
-                    onVolumeCommit = onVolumeCommit,
-                )
-            }
         }
     }
 }
@@ -1679,7 +1643,7 @@ private fun TrackInfo(
 ) {
     Column(horizontalAlignment = alignment, modifier = Modifier.fillMaxWidth()) {
         Text(
-            text = playable.title.ifBlank { "Unknown title" },
+            text = playable.title.withoutBracketGroups().ifBlank { "Unknown title" },
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onBackground,
@@ -1958,9 +1922,8 @@ private fun TransportRow(
     onForward: (deltaMs: Long) -> Unit,
     onDislikeOnStation: () -> Unit,
     driveMode: Boolean,
-    // Threaded through to DriveTransportRow's mute button so it shares the
-    // screen-scoped pre-mute snapshot with VolumeRow rather than holding a
-    // private desynced copy. Unused by the non-drive layout below.
+    // Threaded through to DriveTransportRow's mute button. Unused by the
+    // non-drive layout below.
     preMuteLevel: Float = 0.6f,
     onPreMuteLevelChange: (Float) -> Unit = {},
 ) {
@@ -2328,75 +2291,82 @@ private fun RatingRow(
 }
 
 /**
- * Slim in-app volume slider. Distinct from the hardware volume rocker
- * (which controls the system music stream); this controls the engine's
- * playback gain so users can fine-tune output without changing the
- * system level. Multiplies with ReplayGain attenuation in
- * StationPlayback.applyEffectiveVolume — a 50% slider on a track
- * with -6 dB ReplayGain ends up at ~25% engine volume.
+ * Speaker button immediately left of the other Now Playing actions.
+ * Opens a vertical engine-gain slider above itself. The hardware
+ * rocker still changes the system stream.
  */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-private fun VolumeRow(
+private fun BottomVolumeButton(
     volume: Float,
-    preMuteLevel: Float,
-    onPreMuteLevelChange: (Float) -> Unit,
     onVolumeLive: (Float) -> Unit,
     onVolumeCommit: (Float) -> Unit,
 ) {
-    // Local pending value while the user is dragging — the engine
-    // responds to onVolumeLive in real time, but the persist hop
-    // through SharedPreferences fires only on onValueChangeFinished.
-    // Without this, every frame of the drag persisted to disk:
-    // 30-60 settings writes per gesture and noticeable jank on
-    // older Android devices.
-    var dragging by remember { mutableStateOf(false) }
-    var pending by remember { mutableFloatStateOf(volume) }
-    val display = if (dragging) pending else volume
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(
-            imageVector =
-                when {
-                    display < 0.02f -> Icons.AutoMirrored.Filled.VolumeOff
-                    display < 0.5f -> Icons.AutoMirrored.Filled.VolumeDown
-                    else -> Icons.AutoMirrored.Filled.VolumeUp
-                },
-            contentDescription = "Volume",
-            modifier =
-                Modifier
-                    .size(20.dp)
-                    .clickable {
-                        val muted = volume < 0.02f
-                        if (muted) {
-                            val target = preMuteLevel.coerceAtLeast(0.1f)
-                            onVolumeLive(target)
-                            onVolumeCommit(target)
-                        } else {
-                            onPreMuteLevelChange(volume)
-                            onVolumeLive(0f)
-                            onVolumeCommit(0f)
-                        }
+    var open by remember { mutableStateOf(false) }
+    val focusRequester = remember { FocusRequester() }
+    // Tall enough to clear the button and sit above the bottom bar.
+    val popupOffsetY = with(LocalDensity.current) { (-248).dp.roundToPx() }
+    val sliderState = rememberSliderState(value = volume)
+    LaunchedEffect(sliderState) {
+        sliderState.onValueChange = { onVolumeLive(it) }
+        sliderState.onValueChangeFinished = { onVolumeCommit(sliderState.value) }
+    }
+    Box {
+        com.visorcraft.radioshed.ui.util.TooltipIconButton(
+            tooltip = "Volume",
+            onClick = { open = !open },
+        ) {
+            Icon(
+                imageVector =
+                    when {
+                        sliderState.value < 0.02f -> Icons.AutoMirrored.Filled.VolumeOff
+                        sliderState.value < 0.5f -> Icons.AutoMirrored.Filled.VolumeDown
+                        else -> Icons.AutoMirrored.Filled.VolumeUp
                     },
-            tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
-        )
-        Spacer(Modifier.width(8.dp))
-        Slider(
-            value = display,
-            onValueChange = {
-                dragging = true
-                pending = it
-                onVolumeLive(it)
-            },
-            onValueChangeFinished = {
-                onVolumeCommit(pending)
-                dragging = false
-            },
-            valueRange = 0f..1f,
-            modifier = Modifier.weight(1f),
-            colors = SliderDefaults.colors(),
-        )
+                contentDescription = "Volume",
+                tint = MaterialTheme.colorScheme.onSurface,
+            )
+        }
+        if (open) {
+            Popup(
+                alignment = Alignment.TopCenter,
+                offset = IntOffset(0, popupOffsetY),
+                onDismissRequest = {
+                    onVolumeCommit(sliderState.value)
+                    open = false
+                },
+                properties = PopupProperties(focusable = true),
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    tonalElevation = 6.dp,
+                ) {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 12.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Text(
+                            text = "Volume",
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        // reverseDirection keeps full volume at the top.
+                        VerticalSlider(
+                            state = sliderState,
+                            modifier =
+                                Modifier
+                                    .height(200.dp)
+                                    .focusRequester(focusRequester),
+                            reverseDirection = true,
+                        )
+                    }
+                }
+            }
+            LaunchedEffect(Unit) {
+                runCatching { focusRequester.requestFocus() }
+            }
+        }
     }
 }
 
@@ -2548,7 +2518,7 @@ private fun TrackInfoDialog(
                                     val result =
                                         ringtoneSetter.setAsRingtone(
                                             absolutePath = t.path,
-                                            displayName = t.title.ifBlank { t.fileName },
+                                            displayName = t.displayTitle(),
                                         )
                                     ringtoneStatus =
                                         when (result) {
@@ -2573,7 +2543,7 @@ private fun TrackInfoDialog(
                                     val ok =
                                         trackSharer.share(
                                             absolutePath = t.path,
-                                            displayName = t.title.ifBlank { t.fileName },
+                                            displayName = t.displayTitle(),
                                         )
                                     if (!ok) {
                                         ringtoneStatus = "Couldn't open share sheet."
@@ -2606,7 +2576,7 @@ private fun TrackInfoDialog(
                     val combined =
                         remember(playable.artist, t.title, t.fileName) {
                             val artistPart = playable.artist?.takeIf { it.isNotBlank() }
-                            val titlePart = t.title.ifBlank { t.fileName }
+                            val titlePart = t.displayTitle()
                             if (artistPart != null) "$artistPart – $titlePart" else titlePart
                         }
                     androidx.compose.material3.OutlinedButton(
@@ -2628,7 +2598,7 @@ private fun TrackInfoDialog(
                         onClick = {
                             val md =
                                 buildString {
-                                    appendLine("**Track:** ${t.title.ifBlank { t.fileName }}")
+                                    appendLine("**Track:** ${t.displayTitle()}")
                                     playable.artist?.takeIf { it.isNotBlank() }?.let {
                                         appendLine("**Artist:** $it")
                                     }
@@ -2752,7 +2722,7 @@ private fun TrackInfoDialog(
                     // public-domain rips). Always enabled.
                     val ytQuery =
                         run {
-                            val titlePart = t.title.ifBlank { t.fileName }
+                            val titlePart = t.displayTitle()
                             if (artistForWeb != null) "$artistForWeb $titlePart" else titlePart
                         }
                     androidx.compose.material3.OutlinedButton(
@@ -2773,7 +2743,7 @@ private fun TrackInfoDialog(
                     // Artist-only when present, falls back to the title
                     // for lone-track searches (some Bandcamp listings
                     // are by track title only).
-                    val artistOrTitle = artistForWeb ?: t.title.ifBlank { t.fileName }
+                    val artistOrTitle = artistForWeb ?: t.displayTitle()
                     androidx.compose.material3.OutlinedButton(
                         onClick = {
                             com.visorcraft.radioshed.source.openWebUrl(
@@ -3158,7 +3128,7 @@ private fun QueueBottomSheet(
                             .clickable(enabled = upcoming.isNotEmpty()) {
                                 val text =
                                     upcoming.mapIndexed { i, t ->
-                                        "${i + 1}. ${t.title.ifBlank { t.fileName }}"
+                                        "${i + 1}. ${t.displayTitle()}"
                                     }.joinToString("\n")
                                 queueHeaderClipboard(text)
                             },
@@ -3324,7 +3294,7 @@ private fun QueueTrackRow(
         }
         Spacer(Modifier.size(10.dp))
         Text(
-            text = track.title.ifBlank { track.fileName },
+            text = track.displayTitle(),
             style = MaterialTheme.typography.bodyMedium,
             color = baseColor,
             maxLines = 1,
@@ -3595,7 +3565,6 @@ private fun TriplePaneLayout(
     durationMs: () -> Long,
     rating: Double,
     liked: Boolean,
-    volume: Float,
     accent: Color,
     stationName: String?,
     formatLine: String?,
@@ -3610,8 +3579,6 @@ private fun TriplePaneLayout(
     onSkipFive: (() -> Unit)? = null,
     onRate: (Double) -> Unit,
     onToggleLike: () -> Unit,
-    onVolumeLive: (Float) -> Unit,
-    onVolumeCommit: (Float) -> Unit,
     preMuteLevel: Float,
     onPreMuteLevelChange: (Float) -> Unit,
     onDislikeOnStation: () -> Unit,
@@ -3750,16 +3717,6 @@ private fun TriplePaneLayout(
                 onRate = onRate,
                 onToggleLike = onToggleLike,
             )
-            if (!com.visorcraft.radioshed.isDesktopHost) {
-                Spacer(Modifier.height(8.dp))
-                VolumeRow(
-                    volume = volume,
-                    preMuteLevel = preMuteLevel,
-                    onPreMuteLevelChange = onPreMuteLevelChange,
-                    onVolumeLive = onVolumeLive,
-                    onVolumeCommit = onVolumeCommit,
-                )
-            }
         }
         Spacer(Modifier.width(16.dp))
         // Right third — large artwork + track / artist below it,
@@ -3785,7 +3742,7 @@ private fun TriplePaneLayout(
             )
             Spacer(Modifier.height(16.dp))
             Text(
-                text = playable.title.ifBlank { "Unknown title" },
+                text = playable.title.withoutBracketGroups().ifBlank { "Unknown title" },
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onBackground,

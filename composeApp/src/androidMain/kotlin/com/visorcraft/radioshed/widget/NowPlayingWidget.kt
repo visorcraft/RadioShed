@@ -10,6 +10,7 @@ import android.view.KeyEvent
 import android.widget.RemoteViews
 import com.visorcraft.radioshed.R
 import com.visorcraft.radioshed.audio.AudioEngine
+import com.visorcraft.radioshed.domain.withoutBracketGroups
 import com.visorcraft.radioshed.audio.PlayerState
 import com.visorcraft.radioshed.audio.RadioShedMediaSessionService
 import com.visorcraft.radioshed.widget.WidgetSupport.decodeArtworkBitmap
@@ -79,7 +80,7 @@ class NowPlayingWidget : AppWidgetProvider() {
                     val playing = engine.state.value == PlayerState.Playing
                     Snapshot(
                         title =
-                            playable?.title?.takeIf { it.isNotBlank() }
+                            playable?.title?.withoutBracketGroups()?.takeIf { it.isNotBlank() }
                                 ?: context.getString(R.string.widget_idle_title),
                         subtitle =
                             playable?.let {

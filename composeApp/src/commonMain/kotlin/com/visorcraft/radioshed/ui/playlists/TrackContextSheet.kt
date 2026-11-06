@@ -200,7 +200,7 @@ private fun MainStep(
         // resolving from the DB we render whitespace of the same
         // height so the actions don't bounce when it lands.
         Text(
-            text = track?.title?.ifBlank { track.fileName } ?: " ",
+            text = track?.displayTitle() ?: " ",
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
             maxLines = 1,
@@ -321,7 +321,7 @@ private fun MainStep(
                         ringtoneScope.launch {
                             ringtoneSetter.setAsRingtone(
                                 absolutePath = t.path,
-                                displayName = t.title.ifBlank { t.fileName },
+                                displayName = t.displayTitle(),
                             )
                         }
                     }

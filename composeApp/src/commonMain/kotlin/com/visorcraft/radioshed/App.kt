@@ -405,6 +405,7 @@ fun App(
                                 onSearch = { current = AppScreen.Search },
                                 onStations = { current = AppScreen.Stations },
                                 onSettings = { current = AppScreen.AppSettings },
+                                onOpenNowPlaying = { current = AppScreen.NowPlaying },
                             )
 
                         AppScreen.Library -> {

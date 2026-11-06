@@ -485,7 +485,7 @@ fun PlaylistsScreen(
                                     absolutePath = t.path,
                                     durationSec = (t.durationMs / 1000L).toInt(),
                                     artist = artistByTrack[t.id],
-                                    title = t.title.ifBlank { t.fileName },
+                                    title = t.displayTitle(),
                                 )
                             }
                         m3uExporter.exportM3u(target.name, entries)

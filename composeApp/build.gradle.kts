@@ -581,7 +581,10 @@ abstract class PackageSingleFileAppImageTask
                         com.visorcraft.radioshed.MainKt "${'$'}@"
                     """.trimIndent() + "\n",
                 )
-                setExecutable(true)
+                // setExecutable(true) is owner-only, so AppRun lands at 0744
+                // under a typical umask. Current appimagetool refuses to
+                // pack a script that group and other cannot execute.
+                setExecutable(true, false)
             }
             target.resolve("radioshed.desktop").writeText(
                 """

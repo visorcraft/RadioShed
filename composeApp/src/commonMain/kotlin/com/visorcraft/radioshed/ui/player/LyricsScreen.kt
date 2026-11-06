@@ -54,6 +54,7 @@ import com.visorcraft.radioshed.audio.AudioEngine
 import com.visorcraft.radioshed.data.LyricsCacheRepository
 import com.visorcraft.radioshed.data.nowMillis
 import com.visorcraft.radioshed.domain.LyricLine
+import com.visorcraft.radioshed.domain.withoutBracketGroups
 import com.visorcraft.radioshed.domain.Lyrics
 import com.visorcraft.radioshed.source.LyricsService
 import com.visorcraft.radioshed.ui.util.formatSignedFixed
@@ -152,7 +153,7 @@ fun LyricsScreen(
                 title = {
                     Column {
                         Text(
-                            nowPlaying?.title ?: "Lyrics",
+                            nowPlaying?.title?.withoutBracketGroups() ?: "Lyrics",
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.SemiBold,
                             maxLines = 1,

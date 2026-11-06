@@ -1203,7 +1203,7 @@ private fun TopTrackRow(
                 .combinedClickable(
                     onClick = onTap,
                     onLongClick = {
-                        val title = track.title.ifBlank { track.fileName }
+                        val title = track.displayTitle()
                         copyToClipboard(
                             "$title — $plays $playsLabel" +
                                 if (plays == 1L) "" else "s",
@@ -1241,7 +1241,7 @@ private fun TopTrackRow(
             Spacer(Modifier.size(10.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = track.title.ifBlank { track.fileName },
+                    text = track.displayTitle(),
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.Medium,
                     maxLines = 1,

@@ -435,7 +435,7 @@ fun LikedSongsScreen(
             title = { Text("Unlike this song?") },
             text = {
                 Text(
-                    "Removes \"${target.title.ifBlank { target.fileName }}\" " +
+                    "Removes \"${target.displayTitle()}\" " +
                         "from Liked songs. The track stays in your library.",
                 )
             },
@@ -569,7 +569,7 @@ private fun LikedSongRow(
             Spacer(Modifier.size(10.dp))
             Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = track.title.ifBlank { track.fileName },
+                    text = track.displayTitle(),
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.Medium,
                     color =

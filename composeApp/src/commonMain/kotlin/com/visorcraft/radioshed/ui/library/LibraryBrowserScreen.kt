@@ -1064,7 +1064,7 @@ private fun SongRow(
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = track.title.ifBlank { track.fileName },
+                        text = track.displayTitle(),
                         style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.Medium,
                         color =

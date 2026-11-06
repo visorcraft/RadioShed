@@ -1345,7 +1345,7 @@ class RadioShedMediaSessionService : MediaLibraryService() {
                                 tracks.map { track ->
                                     playableItem(
                                         mediaId = MEDIA_ID_TRACK_PREFIX + track.id,
-                                        title = track.title.ifBlank { track.fileName },
+                                        title = track.displayTitle(),
                                         subtitle = null,
                                     )
                                 }
@@ -1475,7 +1475,7 @@ class RadioShedMediaSessionService : MediaLibraryService() {
                                 tracks.map { track ->
                                     playableItem(
                                         mediaId = MEDIA_ID_TRACK_PREFIX + track.id,
-                                        title = track.title.ifBlank { track.fileName },
+                                        title = track.displayTitle(),
                                         subtitle = null,
                                     )
                                 }
@@ -1629,7 +1629,7 @@ class RadioShedMediaSessionService : MediaLibraryService() {
                 items +=
                     playableItem(
                         mediaId = MEDIA_ID_TRACK_PREFIX + track.id,
-                        title = track.title.ifBlank { track.fileName },
+                        title = track.displayTitle(),
                         subtitle = null,
                     )
             }

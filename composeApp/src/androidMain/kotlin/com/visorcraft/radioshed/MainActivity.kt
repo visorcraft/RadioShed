@@ -21,6 +21,7 @@ import com.visorcraft.radioshed.audio.Playable
 import com.visorcraft.radioshed.car.DriveKeyDispatcher
 import com.visorcraft.radioshed.car.resolveDriveKeyAction
 import com.visorcraft.radioshed.data.LibraryRepository
+import com.visorcraft.radioshed.domain.withoutBracketGroups
 import com.visorcraft.radioshed.data.SearchRepository
 import com.visorcraft.radioshed.data.SettingsStore
 import com.visorcraft.radioshed.stations.StationPlayback
@@ -191,7 +192,7 @@ class MainActivity : ComponentActivity() {
             Playable(
                 trackId = AD_HOC_TRACK_ID,
                 uri = uri.toString(),
-                title = title,
+                title = title.withoutBracketGroups(),
                 artist = null,
                 album = null,
                 durationMs = 0L,
