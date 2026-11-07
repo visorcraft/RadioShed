@@ -22,6 +22,18 @@
 
 ---
 
+## The app
+
+RadioShed is a full player, not only a visualizer. These frames are from the Android app on a 1080p display while a local library is playing.
+
+| | | |
+| :---: | :---: | :---: |
+| [![Home](docs/screenshots/app-home.png)](docs/screenshots/app-home.png)<br/>**Home**<br/>Stations, library, search, and settings, with the player along the bottom. | [![Stations](docs/screenshots/app-stations.png)](docs/screenshots/app-stations.png)<br/>**Stations**<br/>Built-in and custom stations, with what's playing and recently added tracks. | [![Library](docs/screenshots/app-library.png)](docs/screenshots/app-library.png)<br/>**Library**<br/>Songs, artists, albums, and genres from a folder scan. |
+| [![Artists](docs/screenshots/app-artists.png)](docs/screenshots/app-artists.png)<br/>**Artists**<br/>The scanned catalog, browsable without an account. | [![Albums](docs/screenshots/app-albums.png)](docs/screenshots/app-albums.png)<br/>**Albums**<br/>Cover grid for the local library. | [![Search](docs/screenshots/app-search.png)](docs/screenshots/app-search.png)<br/>**Search**<br/>Full-text search plus a small query language for year, artist, and album. |
+| [![Now Playing](docs/screenshots/app-now-playing.png)](docs/screenshots/app-now-playing.png)<br/>**Now Playing**<br/>Transport, ratings, volume, lyrics, and the visualizer. | [![Settings](docs/screenshots/app-settings.png)](docs/screenshots/app-settings.png)<br/>**Settings**<br/>Theme, type size, and the rest of the preferences. | [![Equalizer](docs/screenshots/app-equalizer.png)](docs/screenshots/app-equalizer.png)<br/>**Equalizer**<br/>Five bands, presets, and headphone or APO import. |
+
+---
+
 ## What is RadioShed?
 
 RadioShed is a private, station-centric music player for your own local library.
@@ -71,7 +83,8 @@ for the roadmap and [`USER_GUIDE.md`](USER_GUIDE.md) for detailed workflows.
 
 Nine distinct scenes turn playback into a living light show. The same Compose
 engine powers Android's live FFT/waveform analysis and clearly labeled ambient
-visuals on desktop. These are real renders from the app, not mockups.
+visuals on desktop. These frames were captured from the Android app while a
+track was playing.
 
 | | | |
 | :---: | :---: | :---: |

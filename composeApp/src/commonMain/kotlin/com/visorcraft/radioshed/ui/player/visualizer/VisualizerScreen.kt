@@ -69,12 +69,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -94,6 +96,7 @@ import com.visorcraft.radioshed.audio.visualizer.AmbientSignalGenerator
 import com.visorcraft.radioshed.audio.visualizer.ImpactRingPool
 import com.visorcraft.radioshed.audio.visualizer.MusicStructure
 import com.visorcraft.radioshed.audio.visualizer.MusicStructureAnalyzer
+import com.visorcraft.radioshed.audio.visualizer.playbackMeterLevels
 import com.visorcraft.radioshed.audio.visualizer.SpectralHistory
 import com.visorcraft.radioshed.audio.visualizer.VisualizerAudioSource
 import com.visorcraft.radioshed.audio.visualizer.VisualizerAudioStatus
@@ -139,8 +142,10 @@ fun VisualizerScreen(
     var speed by remember { mutableStateOf(settings.getVisualizerSpeed()) }
     var autoCycle by remember { mutableStateOf(settings.getVisualizerAutoCycle()) }
     var controlsVisible by remember { mutableStateOf(true) }
-    var menuOpen by remember { mutableStateOf(false) }
-    var interaction by remember { mutableIntStateOf(0) }
+    var modeMenu by remember { mutableStateOf(false) }
+    var paletteMenu by remember { mutableStateOf(false) }
+    var cursor by remember { mutableStateOf(VizCursor.Mode) }
+    val menuOpen = modeMenu || paletteMenu
     var sceneStartedAt by remember { mutableLongStateOf(0L) }
     val frameState = remember { mutableStateOf(VisualizerFrame.empty()) }
     val timeState = remember { mutableLongStateOf(0L) }
@@ -160,7 +165,6 @@ fun VisualizerScreen(
 
     fun revealControls() {
         controlsVisible = true
-        interaction++
     }
 
     fun selectMode(
@@ -175,7 +179,18 @@ fun VisualizerScreen(
         if (reveal) revealControls()
     }
 
-    PlatformBackHandler(onBack = onClose)
+    PlatformBackHandler {
+        when {
+            // The palette and mode menus are the thing the remote was
+            // trying to use. Close those before leaving the light show.
+            menuOpen -> {
+                modeMenu = false
+                paletteMenu = false
+            }
+            controlsVisible -> controlsVisible = false
+            else -> onClose()
+        }
+    }
     ImmersiveMode(active = true)
 
     DisposableEffect(audioSource) {
@@ -188,12 +203,9 @@ fun VisualizerScreen(
         if (!controlsVisible) focusRequester.requestFocus()
     }
     LaunchedEffect(nowPlaying?.trackId) { revealControls() }
-    LaunchedEffect(controlsVisible, interaction, menuOpen) {
-        if (controlsVisible && !menuOpen) {
-            delay(4_500L)
-            controlsVisible = false
-        }
-    }
+    // The bar stays until Back. A short auto-hide made the remote fall
+    // through to scene-changing keys, so the palette and the other
+    // controls could not be selected without leaving the visualizer.
     LaunchedEffect(autoCycle, mode, reduceMotion) {
         if (autoCycle && !reduceMotion) {
             delay(20_000L)
@@ -230,12 +242,79 @@ fun VisualizerScreen(
                         if (structure.dropped) impactRings.burst(renderTime, structure.impact)
                     }
                     structureState.value = structure
-                    vuLevels.value = floatArrayOf(bassNeedle.next(nextFrame.bass), trebleNeedle.next(nextFrame.treble))
+                    val meters = playbackMeterLevels(nextFrame)
+                    vuLevels.value = floatArrayOf(bassNeedle.next(meters[0]), trebleNeedle.next(meters[1]))
                     frameState.value = nextFrame
                     timeState.value = renderTime
                     lastRender = now
                 }
             }
+        }
+    }
+
+    fun adjustVizSlider(
+        target: VizCursor,
+        delta: Float,
+    ) {
+        if (target == VizCursor.Speed) {
+            speed = (speed + delta).coerceIn(0.25f, 2f)
+            settings.setVisualizerSpeed(speed)
+        } else {
+            intensity = (intensity + delta).coerceIn(0.25f, 2f)
+            settings.setVisualizerIntensity(intensity)
+        }
+    }
+
+    fun moveVizCursor(key: Key) {
+        when (key) {
+            Key.DirectionLeft ->
+                when (cursor) {
+                    VizCursor.Speed, VizCursor.Intensity -> adjustVizSlider(cursor, -0.05f)
+                    else -> {
+                        val index = vizTopRow.indexOf(cursor).coerceAtLeast(0)
+                        cursor = vizTopRow[(index - 1 + vizTopRow.size) % vizTopRow.size]
+                    }
+                }
+            Key.DirectionRight ->
+                when (cursor) {
+                    VizCursor.Speed, VizCursor.Intensity -> adjustVizSlider(cursor, 0.05f)
+                    else -> {
+                        val index = vizTopRow.indexOf(cursor).coerceAtLeast(0)
+                        cursor = vizTopRow[(index + 1) % vizTopRow.size]
+                    }
+                }
+            Key.DirectionDown ->
+                cursor =
+                    when (cursor) {
+                        VizCursor.Speed, VizCursor.Intensity -> cursor
+                        VizCursor.Palette, VizCursor.Auto -> VizCursor.Intensity
+                        else -> VizCursor.Speed
+                    }
+            Key.DirectionUp ->
+                cursor =
+                    when (cursor) {
+                        VizCursor.Speed -> VizCursor.Mode
+                        VizCursor.Intensity -> VizCursor.Palette
+                        else -> cursor
+                    }
+            else -> Unit
+        }
+    }
+
+    fun activateVizCursor() {
+        when (cursor) {
+            VizCursor.Previous -> stationPlayback.skipPrevious()
+            VizCursor.Play -> audioEngine.togglePlayPause()
+            VizCursor.Next -> stationPlayback.skipNext()
+            VizCursor.ModeBack -> selectMode(mode.previous())
+            VizCursor.Mode -> modeMenu = true
+            VizCursor.ModeForward -> selectMode(mode.next())
+            VizCursor.Palette -> paletteMenu = true
+            VizCursor.Auto -> {
+                autoCycle = !autoCycle
+                settings.setVisualizerAutoCycle(autoCycle)
+            }
+            VizCursor.Speed, VizCursor.Intensity -> Unit
         }
     }
 
@@ -246,23 +325,63 @@ fun VisualizerScreen(
                 .background(Color.Black)
                 .focusRequester(focusRequester)
                 .focusable()
-                .onKeyEvent { event ->
-                    if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
+                .onPreviewKeyEvent { event ->
+                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    // The menu popup is its own window. Let it take the remote
+                    // while it is open so Center actually picks the highlighted row.
+                    if (menuOpen && event.key != Key.Escape && event.key != Key.Back) {
+                        return@onPreviewKeyEvent false
+                    }
                     when (event.key) {
-                        Key.Escape -> {
-                            onClose()
+                        Key.Escape, Key.Back -> {
+                            when {
+                                menuOpen -> {
+                                    modeMenu = false
+                                    paletteMenu = false
+                                }
+                                controlsVisible -> controlsVisible = false
+                                else -> onClose()
+                            }
                             true
                         }
                         Key.Spacebar, Key.Enter, Key.DirectionCenter -> {
-                            audioEngine.togglePlayPause()
-                            revealControls()
+                            if (controlsVisible) {
+                                activateVizCursor()
+                            } else {
+                                cursor = VizCursor.Mode
+                                revealControls()
+                            }
                             true
                         }
-                        Key.DirectionLeft -> {
-                            selectMode(mode.previous())
+                        Key.DirectionLeft, Key.DirectionRight -> {
+                            if (controlsVisible) {
+                                moveVizCursor(event.key)
+                            } else {
+                                selectMode(
+                                    if (event.key == Key.DirectionLeft) mode.previous() else mode.next(),
+                                    reveal = false,
+                                )
+                            }
                             true
                         }
-                        Key.DirectionRight, Key.V -> {
+                        Key.DirectionDown -> {
+                            if (controlsVisible) {
+                                moveVizCursor(event.key)
+                            } else {
+                                cursor = VizCursor.Mode
+                                revealControls()
+                            }
+                            true
+                        }
+                        Key.DirectionUp -> {
+                            if (controlsVisible) {
+                                moveVizCursor(event.key)
+                            } else {
+                                audioEngine.setVolume((volume + 0.05f).coerceIn(0f, 1f))
+                            }
+                            true
+                        }
+                        Key.V -> {
                             selectMode(mode.next())
                             true
                         }
@@ -281,17 +400,6 @@ fun VisualizerScreen(
                         Key.H -> {
                             if (controlsVisible) controlsVisible = false else revealControls()
                             true
-                        }
-                        Key.DirectionUp, Key.DirectionDown -> {
-                            if (!controlsVisible) {
-                                val adjustment = if (event.key == Key.DirectionUp) 0.05f else -0.05f
-                                audioEngine.setVolume((volume + adjustment).coerceIn(0f, 1f))
-                                revealControls()
-                                true
-                            } else {
-                                revealControls()
-                                false
-                            }
                         }
                         else -> false
                     }
@@ -483,6 +591,7 @@ fun VisualizerScreen(
                                 stationPlayback.skipPrevious()
                                 revealControls()
                             },
+                            modifier = Modifier.vizCursor(cursor == VizCursor.Previous),
                         ) {
                             Icon(Icons.Filled.SkipPrevious, contentDescription = "Previous track", tint = Color.White)
                         }
@@ -492,7 +601,11 @@ fun VisualizerScreen(
                                 audioEngine.togglePlayPause()
                                 revealControls()
                             },
-                            modifier = Modifier.size(48.dp).background(theme.accent, CircleShape),
+                            modifier =
+                                Modifier
+                                    .vizCursor(cursor == VizCursor.Play)
+                                    .size(48.dp)
+                                    .background(theme.accent, CircleShape),
                         ) {
                             Icon(
                                 imageVector = if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
@@ -506,11 +619,16 @@ fun VisualizerScreen(
                                 stationPlayback.skipNext()
                                 revealControls()
                             },
+                            modifier = Modifier.vizCursor(cursor == VizCursor.Next),
                         ) {
                             Icon(Icons.Filled.SkipNext, contentDescription = "Next track", tint = Color.White)
                         }
                         Spacer(Modifier.width(12.dp))
-                        TooltipIconButton(tooltip = "Previous mode", onClick = { selectMode(mode.previous()) }) {
+                        TooltipIconButton(
+                            tooltip = "Previous mode",
+                            onClick = { selectMode(mode.previous()) },
+                            modifier = Modifier.vizCursor(cursor == VizCursor.ModeBack),
+                        ) {
                             Icon(
                                 Icons.AutoMirrored.Filled.KeyboardArrowLeft,
                                 contentDescription = "Previous mode",
@@ -520,17 +638,15 @@ fun VisualizerScreen(
                         ModePicker(
                             selected = mode,
                             accent = theme.accent,
+                            expanded = modeMenu,
+                            cursorOn = cursor == VizCursor.Mode,
+                            onExpandedChange = { modeMenu = it },
                             onSelect = ::selectMode,
-                            onMenuChange = { open ->
-                                menuOpen = open
-                                revealControls()
-                            },
                         )
                         TooltipIconButton(
                             tooltip = "Next mode",
-                            onClick = {
-                                selectMode(mode.next())
-                            },
+                            onClick = { selectMode(mode.next()) },
+                            modifier = Modifier.vizCursor(cursor == VizCursor.ModeForward),
                         ) {
                             Icon(
                                 Icons.AutoMirrored.Filled.KeyboardArrowRight,
@@ -541,13 +657,12 @@ fun VisualizerScreen(
                         PalettePicker(
                             selected = palette,
                             accent = theme.accent,
+                            expanded = paletteMenu,
+                            cursorOn = cursor == VizCursor.Palette,
+                            onExpandedChange = { paletteMenu = it },
                             onSelect = {
                                 palette = it
                                 settings.setVisualizerPalette(it.name)
-                                revealControls()
-                            },
-                            onMenuChange = { open ->
-                                menuOpen = open
                                 revealControls()
                             },
                         )
@@ -557,6 +672,7 @@ fun VisualizerScreen(
                                 settings.setVisualizerAutoCycle(autoCycle)
                                 revealControls()
                             },
+                            modifier = Modifier.vizCursor(cursor == VizCursor.Auto, RoundedCornerShape(50)),
                         ) {
                             Icon(
                                 Icons.Filled.Repeat,
@@ -570,7 +686,7 @@ fun VisualizerScreen(
                             )
                         }
                         Text(
-                            text = "V mode  ·  P palette  ·  H hide",
+                            text = "Center selects",
                             color = Color.White.copy(alpha = 0.38f),
                             style = MaterialTheme.typography.bodySmall,
                             modifier = Modifier.padding(horizontal = 10.dp),
@@ -596,6 +712,7 @@ fun VisualizerScreen(
                             },
                             onValueChangeFinished = { settings.setVisualizerSpeed(speed) },
                             accent = theme.accent,
+                            selected = cursor == VizCursor.Speed,
                         )
                         Spacer(Modifier.width(24.dp))
                         Icon(
@@ -614,6 +731,7 @@ fun VisualizerScreen(
                             },
                             onValueChangeFinished = { settings.setVisualizerIntensity(intensity) },
                             accent = theme.accent,
+                            selected = cursor == VizCursor.Intensity,
                         )
                     }
                 }
@@ -682,6 +800,7 @@ private fun VisualizerSlider(
     onValueChange: (Float) -> Unit,
     onValueChangeFinished: () -> Unit,
     accent: Color,
+    selected: Boolean,
 ) {
     Slider(
         value = value,
@@ -694,9 +813,43 @@ private fun VisualizerSlider(
                 activeTrackColor = accent,
                 inactiveTrackColor = Color.White.copy(alpha = 0.14f),
             ),
-        modifier = Modifier.width(180.dp).padding(horizontal = 12.dp),
+        modifier =
+            Modifier
+                .width(180.dp)
+                .padding(horizontal = 12.dp)
+                .vizCursor(selected, RoundedCornerShape(8.dp)),
     )
 }
+
+private fun Modifier.vizCursor(
+    active: Boolean,
+    shape: Shape = CircleShape,
+): Modifier = border(width = 3.dp, color = if (active) Color.White else Color.Transparent, shape = shape)
+
+private enum class VizCursor {
+    Previous,
+    Play,
+    Next,
+    ModeBack,
+    Mode,
+    ModeForward,
+    Palette,
+    Auto,
+    Speed,
+    Intensity,
+}
+
+private val vizTopRow =
+    listOf(
+        VizCursor.Previous,
+        VizCursor.Play,
+        VizCursor.Next,
+        VizCursor.ModeBack,
+        VizCursor.Mode,
+        VizCursor.ModeForward,
+        VizCursor.Palette,
+        VizCursor.Auto,
+    )
 
 @Composable
 private fun SourceBadge(
@@ -741,16 +894,15 @@ private fun SourceBadge(
 private fun ModePicker(
     selected: VisualizerMode,
     accent: Color,
+    expanded: Boolean,
+    cursorOn: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
     onSelect: (VisualizerMode) -> Unit,
-    onMenuChange: (Boolean) -> Unit,
 ) {
-    var expanded by remember { mutableStateOf(false) }
     Box {
         TextButton(
-            onClick = {
-                expanded = true
-                onMenuChange(true)
-            },
+            onClick = { onExpandedChange(true) },
+            modifier = Modifier.vizCursor(cursorOn, RoundedCornerShape(50)),
         ) {
             Icon(Icons.Filled.GraphicEq, contentDescription = null, tint = accent)
             Spacer(Modifier.width(8.dp))
@@ -758,10 +910,7 @@ private fun ModePicker(
         }
         DropdownMenu(
             expanded = expanded,
-            onDismissRequest = {
-                expanded = false
-                onMenuChange(false)
-            },
+            onDismissRequest = { onExpandedChange(false) },
         ) {
             VisualizerMode.entries.forEach { mode ->
                 DropdownMenuItem(
@@ -774,8 +923,7 @@ private fun ModePicker(
                         }
                     },
                     onClick = {
-                        expanded = false
-                        onMenuChange(false)
+                        onExpandedChange(false)
                         onSelect(mode)
                     },
                 )
@@ -788,16 +936,15 @@ private fun ModePicker(
 private fun PalettePicker(
     selected: VisualizerPalette,
     accent: Color,
+    expanded: Boolean,
+    cursorOn: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
     onSelect: (VisualizerPalette) -> Unit,
-    onMenuChange: (Boolean) -> Unit,
 ) {
-    var expanded by remember { mutableStateOf(false) }
     Box {
         TextButton(
-            onClick = {
-                expanded = true
-                onMenuChange(true)
-            },
+            onClick = { onExpandedChange(true) },
+            modifier = Modifier.vizCursor(cursorOn, RoundedCornerShape(50)),
         ) {
             Icon(Icons.Filled.Palette, contentDescription = null, tint = accent)
             Spacer(Modifier.width(6.dp))
@@ -805,10 +952,7 @@ private fun PalettePicker(
         }
         DropdownMenu(
             expanded = expanded,
-            onDismissRequest = {
-                expanded = false
-                onMenuChange(false)
-            },
+            onDismissRequest = { onExpandedChange(false) },
         ) {
             VisualizerPalette.entries.forEach { palette ->
                 DropdownMenuItem(
@@ -817,8 +961,7 @@ private fun PalettePicker(
                         Box(Modifier.size(14.dp).background(visualizerTheme(palette).accent, CircleShape))
                     },
                     onClick = {
-                        expanded = false
-                        onMenuChange(false)
+                        onExpandedChange(false)
                         onSelect(palette)
                     },
                 )
