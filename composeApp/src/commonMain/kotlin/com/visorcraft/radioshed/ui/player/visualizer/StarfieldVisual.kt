@@ -9,6 +9,7 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import com.visorcraft.radioshed.audio.visualizer.MusicStructure
 import com.visorcraft.radioshed.audio.visualizer.VisualizerFrame
+import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -88,7 +89,7 @@ internal fun DrawScope.drawStarfield(
     if (!reduceMotion && frame.beat > 0.18f) {
         val progress = 1f - frame.beat
         repeat(18) { index ->
-            val angle = index / 18.0 * 2.0 * Math.PI + index * 0.37
+            val angle = index / 18.0 * 2.0 * PI + index * 0.37
             val start = size.minDimension * (0.035f + progress * 0.20f)
             val length = size.minDimension * frame.beat * 0.045f
             val direction = Offset(cos(angle).toFloat(), sin(angle).toFloat())
