@@ -178,7 +178,7 @@ private fun DrawScope.drawSceneIntro(
     )
 }
 
-private fun DrawScope.drawAtmosphere(
+internal fun DrawScope.drawAtmosphere(
     frame: VisualizerFrame,
     theme: VisualizerTheme,
     timeMs: Long,
@@ -212,7 +212,7 @@ private fun DrawScope.drawAtmosphere(
     }
 }
 
-private fun DrawScope.drawVignette(theme: VisualizerTheme) {
+internal fun DrawScope.drawVignette(theme: VisualizerTheme) {
     val radius = maxOf(size.width, size.height) * 0.72f
     drawRect(
         brush =
